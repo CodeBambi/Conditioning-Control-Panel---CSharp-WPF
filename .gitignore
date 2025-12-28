@@ -64,3 +64,4 @@ bin/
 obj/
 .vs/
 *.user
+crash_log.txt
