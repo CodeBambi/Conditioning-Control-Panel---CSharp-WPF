@@ -112,6 +112,7 @@ namespace ConditioningControlPanel.Services
         public void Stop()
         {
             _isRunning = false;
+            _firstFlash = true; // Reset for next start
             _cancellationSource?.Cancel();
             _heartbeatTimer?.Stop();
             _schedulerTimer?.Stop();
@@ -147,8 +148,7 @@ namespace ConditioningControlPanel.Services
 
         // Approximate duration of a flash event (display time + fade + buffer)
         private const double FLASH_DURATION_SECONDS = 12.0;
-        // Additional cooldown after each flash before next can start
-        private const double FLASH_COOLDOWN_SECONDS = 10.0;
+        private bool _firstFlash = true;
 
         private void ScheduleNextFlash()
         {
@@ -157,15 +157,26 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings.Current;
             if (!settings.FlashEnabled) return;
             
-            // FlashFrequency is now flashes per HOUR (1-30)
-            // Calculate interval in seconds between flashes
-            var flashesPerHour = Math.Max(1, Math.Min(30, settings.FlashFrequency));
-            var baseInterval = 3600.0 / flashesPerHour; // seconds between flashes
+            double interval;
             
-            // Add ±20% variance for natural feel
-            var variance = baseInterval * 0.2;
-            var interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
-            interval = Math.Max(30, interval); // Minimum 30 seconds between flashes
+            // First flash happens quickly (5-15 seconds after start)
+            if (_firstFlash)
+            {
+                _firstFlash = false;
+                interval = 5 + _random.NextDouble() * 10; // 5-15 seconds
+            }
+            else
+            {
+                // FlashFrequency is now flashes per HOUR (1-45)
+                // Calculate interval in seconds between flashes
+                var flashesPerHour = Math.Max(1, Math.Min(45, settings.FlashFrequency));
+                var baseInterval = 3600.0 / flashesPerHour; // seconds between flashes
+                
+                // Add ±20% variance for natural feel
+                var variance = baseInterval * 0.2;
+                interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
+                interval = Math.Max(30, interval); // Minimum 30 seconds between flashes
+            }
             
             _schedulerTimer?.Stop();
             _schedulerTimer = new DispatcherTimer
@@ -183,7 +194,7 @@ namespace ConditioningControlPanel.Services
             };
             _schedulerTimer.Start();
             
-            App.Logger.Debug("Next flash scheduled in {Interval:F1} seconds ({Minutes:F1} minutes)", interval, interval / 60.0);
+            App.Logger.Information("Next flash scheduled in {Interval:F1} seconds ({Minutes:F1} minutes)", interval, interval / 60.0);
         }
 
         #endregion

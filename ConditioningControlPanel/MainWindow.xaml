@@ -410,9 +410,9 @@
                                            ToolTip="How many flash events occur per hour"/>
                                 <TextBlock x:Name="TxtPerMin" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="10"/>
                             </Grid>
-                            <Slider x:Name="SliderPerMin" Minimum="1" Maximum="30" Value="10" 
+                            <Slider x:Name="SliderPerMin" Minimum="1" Maximum="45" Value="10" 
                                     Margin="0,1" ValueChanged="SliderPerMin_Changed"
-                                    ToolTip="Flash events per hour (1-30)"/>
+                                    ToolTip="Flash events per hour (1-45)"/>
                             
                             <!-- Images -->
                             <Grid Margin="0,3,0,0">
