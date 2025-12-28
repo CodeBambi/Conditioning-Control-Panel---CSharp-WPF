@@ -1221,6 +1221,9 @@ namespace ConditioningControlPanel
             
             var s = App.Settings.Current;
             
+            // Track if flash frequency changed
+            var oldFlashFreq = s.FlashFrequency;
+            
             // Flash settings
             s.FlashEnabled = ChkFlashEnabled.IsChecked ?? true;
             s.FlashClickable = ChkClickable.IsChecked ?? true;
@@ -1253,6 +1256,19 @@ namespace ConditioningControlPanel
             s.MasterVolume = (int)SliderMaster.Value;
             s.AudioDuckingEnabled = ChkAudioDuck.IsChecked ?? true;
             s.DuckingLevel = (int)SliderDuck.Value;
+            
+            // Refresh services if running
+            if (_isRunning)
+            {
+                // Reschedule flash timer if frequency changed
+                if (s.FlashFrequency != oldFlashFreq)
+                {
+                    App.Flash.RefreshSchedule();
+                }
+                
+                // Refresh overlays (spiral, pink filter)
+                App.Overlay.RefreshOverlays();
+            }
         }
 
         private void UpdateStartButton()

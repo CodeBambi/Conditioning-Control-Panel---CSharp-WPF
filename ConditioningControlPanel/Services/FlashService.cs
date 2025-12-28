@@ -123,6 +123,18 @@ namespace ConditioningControlPanel.Services
             App.Logger.Information("FlashService stopped");
         }
 
+        /// <summary>
+        /// Call this when flash frequency setting changes to reschedule with new timing
+        /// </summary>
+        public void RefreshSchedule()
+        {
+            if (!_isRunning) return;
+            
+            App.Logger.Information("FlashService: Refreshing schedule with new settings");
+            _firstFlash = false; // Don't do quick first flash on refresh
+            ScheduleNextFlash();
+        }
+
         public void TriggerFlash()
         {
             if (!_isRunning || _isBusy) return;
@@ -152,10 +164,18 @@ namespace ConditioningControlPanel.Services
 
         private void ScheduleNextFlash()
         {
-            if (!_isRunning) return;
+            if (!_isRunning)
+            {
+                App.Logger.Warning("ScheduleNextFlash: Not running, skipping");
+                return;
+            }
             
             var settings = App.Settings.Current;
-            if (!settings.FlashEnabled) return;
+            if (!settings.FlashEnabled)
+            {
+                App.Logger.Warning("ScheduleNextFlash: Flash disabled, skipping");
+                return;
+            }
             
             double interval;
             
@@ -164,18 +184,22 @@ namespace ConditioningControlPanel.Services
             {
                 _firstFlash = false;
                 interval = 5 + _random.NextDouble() * 10; // 5-15 seconds
+                App.Logger.Information("First flash scheduled in {Interval:F1} seconds", interval);
             }
             else
             {
-                // FlashFrequency is now flashes per HOUR (1-45)
+                // FlashFrequency is now flashes per HOUR (1-120)
                 // Calculate interval in seconds between flashes
-                var flashesPerHour = Math.Max(1, Math.Min(45, settings.FlashFrequency));
+                var flashesPerHour = Math.Max(1, Math.Min(120, settings.FlashFrequency));
                 var baseInterval = 3600.0 / flashesPerHour; // seconds between flashes
                 
                 // Add ±20% variance for natural feel
                 var variance = baseInterval * 0.2;
                 interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
                 interval = Math.Max(30, interval); // Minimum 30 seconds between flashes
+                
+                App.Logger.Information("Next flash in {Interval:F1}s ({Minutes:F1}min) - {PerHour}/hour setting", 
+                    interval, interval / 60.0, flashesPerHour);
             }
             
             _schedulerTimer?.Stop();
@@ -186,15 +210,19 @@ namespace ConditioningControlPanel.Services
             _schedulerTimer.Tick += (s, e) =>
             {
                 _schedulerTimer?.Stop();
+                App.Logger.Information("Timer tick - IsRunning: {Running}, IsBusy: {Busy}", _isRunning, _isBusy);
+                
                 if (_isRunning && !_isBusy)
                 {
                     TriggerFlash();
                 }
+                else
+                {
+                    App.Logger.Warning("Skipped flash - IsRunning: {Running}, IsBusy: {Busy}", _isRunning, _isBusy);
+                }
                 ScheduleNextFlash();
             };
             _schedulerTimer.Start();
-            
-            App.Logger.Information("Next flash scheduled in {Interval:F1} seconds ({Minutes:F1} minutes)", interval, interval / 60.0);
         }
 
         #endregion
