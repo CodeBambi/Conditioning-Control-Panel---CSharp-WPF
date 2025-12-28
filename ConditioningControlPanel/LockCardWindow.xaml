@@ -1,0 +1,132 @@
+<Window x:Class="ConditioningControlPanel.LockCardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Lock Card"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        WindowState="Normal"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        KeyDown="Window_KeyDown"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="PinkBrush" Color="#FF69B4"/>
+        <SolidColorBrush x:Key="DarkPinkBrush" Color="#FF1493"/>
+    </Window.Resources>
+
+    <!-- Semi-transparent background -->
+    <Grid x:Name="MainGrid">
+        <Grid.Background>
+            <SolidColorBrush x:Name="BackgroundBrush" Color="#E6000000"/>
+        </Grid.Background>
+
+        <!-- Centered card -->
+        <Border x:Name="CardBorder" 
+                HorizontalAlignment="Center" 
+                VerticalAlignment="Center"
+                CornerRadius="16"
+                Padding="50,40"
+                MinWidth="500"
+                MaxWidth="700">
+            <Border.Background>
+                <SolidColorBrush x:Name="CardBackground" Color="#1A1A2E"/>
+            </Border.Background>
+            <Border.Effect>
+                <DropShadowEffect Color="#FF69B4" BlurRadius="30" ShadowDepth="0" Opacity="0.5"/>
+            </Border.Effect>
+
+            <StackPanel>
+                <!-- Lock icon and title -->
+                <TextBlock Text="🔐" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                <TextBlock x:Name="TxtTitle" Text="Type to Unlock" 
+                           FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,25">
+                    <TextBlock.Foreground>
+                        <SolidColorBrush x:Name="AccentBrush" Color="#FF69B4"/>
+                    </TextBlock.Foreground>
+                </TextBlock>
+
+                <!-- The phrase to type -->
+                <TextBlock x:Name="TxtPhrase" Text="Good girls obey"
+                           FontSize="32" FontWeight="Bold" HorizontalAlignment="Center" 
+                           Margin="0,0,0,25" TextWrapping="Wrap" TextAlignment="Center">
+                    <TextBlock.Foreground>
+                        <SolidColorBrush x:Name="PhraseBrush" Color="#FF69B4"/>
+                    </TextBlock.Foreground>
+                </TextBlock>
+
+                <!-- Input field -->
+                <Border x:Name="InputBorder" CornerRadius="8" Padding="15,12" Margin="0,0,0,20"
+                        BorderThickness="2">
+                    <Border.Background>
+                        <SolidColorBrush x:Name="InputBackground" Color="#252542"/>
+                    </Border.Background>
+                    <Border.BorderBrush>
+                        <SolidColorBrush x:Name="InputBorderBrush" Color="#FF69B4"/>
+                    </Border.BorderBrush>
+                    <TextBox x:Name="TxtInput" 
+                             Background="Transparent"
+                             BorderThickness="0"
+                             FontSize="20"
+                             TextAlignment="Center"
+                             TextChanged="TxtInput_TextChanged"
+                             MaxLength="200">
+                        <TextBox.Foreground>
+                            <SolidColorBrush x:Name="InputTextBrush" Color="White"/>
+                        </TextBox.Foreground>
+                        <TextBox.CaretBrush>
+                            <SolidColorBrush Color="#FF69B4"/>
+                        </TextBox.CaretBrush>
+                    </TextBox>
+                </Border>
+
+                <!-- Progress indicator -->
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock x:Name="TxtProgress" Grid.Column="0" Text="0 / 3" 
+                               FontSize="14" VerticalAlignment="Center" Margin="0,0,15,0">
+                        <TextBlock.Foreground>
+                            <SolidColorBrush Color="#888888"/>
+                        </TextBlock.Foreground>
+                    </TextBlock>
+
+                    <Border Grid.Column="1" Background="#404060" CornerRadius="4" Height="8">
+                        <Border x:Name="ProgressBar" Background="#FF69B4" CornerRadius="4"
+                                HorizontalAlignment="Left" Width="0"/>
+                    </Border>
+
+                    <TextBlock x:Name="TxtStrict" Grid.Column="2" Text="" 
+                               FontSize="11" VerticalAlignment="Center" Margin="15,0,0,0"
+                               Foreground="#FF6B6B"/>
+                </Grid>
+
+                <!-- Hint text -->
+                <TextBlock x:Name="TxtHint" Text="Type the phrase exactly as shown above"
+                           FontSize="11" HorizontalAlignment="Center" Margin="0,20,0,0"
+                           Foreground="#666666" FontStyle="Italic"/>
+
+                <!-- Completion message (hidden initially) -->
+                <StackPanel x:Name="CompletionPanel" Visibility="Collapsed" Margin="0,20,0,0">
+                    <TextBlock Text="✨ Good girl! ✨" FontSize="24" FontWeight="Bold" 
+                               HorizontalAlignment="Center" Foreground="#00E676"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- ESC hint (only if not strict) -->
+        <TextBlock x:Name="TxtEscHint" 
+                   Text="Press ESC to close (if allowed)"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Bottom"
+                   Margin="0,0,0,30"
+                   FontSize="11"
+                   Foreground="#444444"/>
+    </Grid>
+</Window>

@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConditioningControlPanel", "ConditioningControlPanel.csproj", "{0E7DC310-268B-2BA6-F680-87801217D968}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0E7DC310-268B-2BA6-F680-87801217D968}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E7DC310-268B-2BA6-F680-87801217D968}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E7DC310-268B-2BA6-F680-87801217D968}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E7DC310-268B-2BA6-F680-87801217D968}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {78B8C24B-72FB-4D49-9369-D7E07E9BA135}
+	EndGlobalSection
+EndGlobal

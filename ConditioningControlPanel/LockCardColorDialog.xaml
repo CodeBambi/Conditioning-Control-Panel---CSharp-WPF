@@ -1,0 +1,205 @@
+<Window x:Class="ConditioningControlPanel.LockCardColorDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Lock Card Colors" 
+        Height="700" Width="600"
+        WindowStartupLocation="CenterOwner"
+        Background="#1A1A2E"
+        ResizeMode="NoResize">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="PinkBrush" Color="#FF69B4"/>
+        <SolidColorBrush x:Key="DarkPinkBrush" Color="#FF1493"/>
+        <SolidColorBrush x:Key="PanelBgBrush" Color="#252542"/>
+        <SolidColorBrush x:Key="TextLightBrush" Color="#E0E0E0"/>
+
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="15,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource DarkPinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#404060"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#505080"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ColorButton" TargetType="Button">
+            <Setter Property="Width" Value="40"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="5" 
+                                BorderBrush="#606080" BorderThickness="2">
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="🎨 Lock Card Colors" 
+                   Foreground="{StaticResource PinkBrush}" 
+                   FontSize="18" FontWeight="Bold" Margin="0,0,0,20"/>
+
+        <!-- Color Settings -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,20">
+            
+            <!-- Background Color -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Background" Foreground="{StaticResource TextLightBrush}" 
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnBgColor" Grid.Column="1" Style="{StaticResource ColorButton}"
+                        Click="BtnBgColor_Click" ToolTip="Click to change background color"/>
+            </Grid>
+
+            <!-- Text Color (Phrase) -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Phrase Text" Foreground="{StaticResource TextLightBrush}" 
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnTextColor" Grid.Column="1" Style="{StaticResource ColorButton}"
+                        Click="BtnTextColor_Click" ToolTip="Click to change phrase text color"/>
+            </Grid>
+
+            <!-- Input Background Color -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Input Background" Foreground="{StaticResource TextLightBrush}" 
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnInputBgColor" Grid.Column="1" Style="{StaticResource ColorButton}"
+                        Click="BtnInputBgColor_Click" ToolTip="Click to change input field background"/>
+            </Grid>
+
+            <!-- Input Text Color -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Input Text" Foreground="{StaticResource TextLightBrush}" 
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnInputTextColor" Grid.Column="1" Style="{StaticResource ColorButton}"
+                        Click="BtnInputTextColor_Click" ToolTip="Click to change input text color"/>
+            </Grid>
+
+            <!-- Accent Color -->
+            <Grid Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Accent / Progress" Foreground="{StaticResource TextLightBrush}" 
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnAccentColor" Grid.Column="1" Style="{StaticResource ColorButton}"
+                        Click="BtnAccentColor_Click" ToolTip="Click to change accent color (progress bar, borders)"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- Preview -->
+        <Border Grid.Row="2" x:Name="PreviewBorder" Background="#1A1A2E" CornerRadius="8" 
+                Padding="20" Margin="0,0,0,20">
+            <StackPanel VerticalAlignment="Center">
+                <!-- Title -->
+                <TextBlock Text="🔐 Type to Unlock" Foreground="#FF69B4" FontSize="14" 
+                           HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                
+                <!-- Phrase to type -->
+                <TextBlock x:Name="PreviewPhrase" Text="Good girls obey" 
+                           FontSize="22" FontWeight="Bold"
+                           HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                
+                <!-- Input field preview -->
+                <Border x:Name="PreviewInputBorder" Background="#252542" CornerRadius="6" 
+                        Padding="15,10" Margin="0,0,0,15" BorderThickness="2">
+                    <TextBlock x:Name="PreviewInputText" Text="Good girls ob|" 
+                               FontSize="16" HorizontalAlignment="Center"/>
+                </Border>
+                
+                <!-- Progress indicator -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock x:Name="PreviewProgress" Text="1 / 3" FontSize="12" Margin="0,0,10,0"/>
+                    <Border Background="#404060" CornerRadius="3" Width="100" Height="6">
+                        <Border x:Name="PreviewProgressBar" Background="#FF69B4" CornerRadius="3" 
+                                Width="33" HorizontalAlignment="Left"/>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Buttons -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="1" Content="Cancel" Style="{StaticResource SecondaryButton}" 
+                    Margin="0,0,10,0" Click="BtnCancel_Click"/>
+            <Button Grid.Column="2" Content="Save" Style="{StaticResource ActionButton}" 
+                    Click="BtnSave_Click"/>
+        </Grid>
+    </Grid>
+</Window>

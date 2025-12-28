@@ -1,0 +1,1370 @@
+<Window x:Class="ConditioningControlPanel.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Conditioning Dashboard" 
+        Height="960" Width="1280"
+        MinHeight="860" MinWidth="1100"
+        Background="#1A1A2E"
+        Icon="pack://application:,,,/Resources/app.ico"
+        WindowStartupLocation="Manual"
+        >
+
+    <Window.Resources>
+        <!-- Colors -->
+        <Color x:Key="PinkColor">#FF69B4</Color>
+        <Color x:Key="DarkPink">#FF1493</Color>
+        <Color x:Key="PanelBg">#252542</Color>
+        <Color x:Key="DarkerBg">#1A1A2E</Color>
+        <Color x:Key="TextLight">#E0E0E0</Color>
+        <Color x:Key="TextMuted">#808080</Color>
+        
+        <SolidColorBrush x:Key="PinkBrush" Color="{StaticResource PinkColor}"/>
+        <SolidColorBrush x:Key="DarkPinkBrush" Color="{StaticResource DarkPink}"/>
+        <SolidColorBrush x:Key="PanelBgBrush" Color="{StaticResource PanelBg}"/>
+        <SolidColorBrush x:Key="DarkerBgBrush" Color="{StaticResource DarkerBg}"/>
+        <SolidColorBrush x:Key="TextLightBrush" Color="{StaticResource TextLight}"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMuted}"/>
+
+        <!-- Custom Tooltip Style -->
+        <Style TargetType="ToolTip">
+            <Setter Property="Background" Value="#1A1A2E"/>
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Placement" Value="Mouse"/>
+            <Setter Property="HasDropShadow" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <Border.Effect>
+                                <DropShadowEffect Color="Black" BlurRadius="8" Opacity="0.5" ShadowDepth="2"/>
+                            </Border.Effect>
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Toggle Switch Style -->
+        <Style x:Key="ToggleStyle" TargetType="CheckBox">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid>
+                            <Border x:Name="track" Width="44" Height="22" CornerRadius="11" 
+                                    Background="#404060" Cursor="Hand"/>
+                            <Border x:Name="thumb" Width="18" Height="18" CornerRadius="9" 
+                                    Background="White" HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="track" Property="Background" Value="{StaticResource PinkBrush}"/>
+                                <Setter TargetName="thumb" Property="Margin" Value="24,0,0,0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Pink Button Style -->
+        <Style x:Key="PinkButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Padding" Value="20,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource DarkPinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Outline Button Style -->
+        <Style x:Key="OutlineButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="15,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#30FF69B4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Slider Style -->
+        <Style x:Key="PinkSlider" TargetType="Slider">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid>
+                            <Border Height="4" Background="#404060" CornerRadius="2" VerticalAlignment="Center"/>
+                            <Border Height="4" Background="{StaticResource PinkBrush}" CornerRadius="2" 
+                                    VerticalAlignment="Center" HorizontalAlignment="Left"
+                                    Width="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, 
+                                            Converter={StaticResource SliderWidthConverter}}"/>
+                            <Track x:Name="PART_Track">
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate>
+                                                <Ellipse Width="16" Height="16" Fill="{StaticResource PinkBrush}" Cursor="Hand"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Section Panel Style -->
+        <Style x:Key="SectionPanel" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource PanelBgBrush}"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="9"/>
+            <Setter Property="Margin" Value="0,0,0,9"/>
+        </Style>
+
+        <!-- Section Header Style -->
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <!-- Label Style -->
+        <Style x:Key="SettingLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Value Label Style -->
+        <Style x:Key="ValueLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header Bar -->
+        <Border Grid.Row="0" Background="{StaticResource PanelBgBrush}" Padding="15,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Title -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="💗" FontSize="20" Margin="0,0,8,0"/>
+                    <TextBlock Text="Conditioning Dashboard" Foreground="White" FontSize="18" FontWeight="Bold"/>
+                </StackPanel>
+
+                <!-- Tab Buttons -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="BtnSettings" Content="⚙️ Settings" Style="{StaticResource PinkButton}" 
+                            Margin="5,0" Click="BtnSettings_Click"/>
+                    <Button x:Name="BtnPresets" Content="📋 Presets" Style="{StaticResource OutlineButton}" 
+                            Margin="5,0" Click="BtnPresets_Click"/>
+                    <Button x:Name="BtnProgression" Content="📊 Progression" Style="{StaticResource OutlineButton}" 
+                            Margin="5,0" Click="BtnProgression_Click"/>
+                </StackPanel>
+
+                <!-- Level Display + Presets Dropdown -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <ComboBox x:Name="CmbPresets" Width="140" Margin="0,0,15,0" 
+                              SelectionChanged="CmbPresets_SelectionChanged"
+                              ToolTip="Quick-load a preset"/>
+                    <TextBlock Text="⭐" FontSize="16" Margin="0,0,5,0"/>
+                    <TextBlock x:Name="TxtPlayerTitle" Text="Beginner Bimbo" Foreground="White" 
+                               FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <Border Background="{StaticResource PinkBrush}" CornerRadius="12" Padding="10,4">
+                        <TextBlock x:Name="TxtLevel" Text="Lvl 1" Foreground="White" FontWeight="Bold" FontSize="12"/>
+                    </Border>
+                    
+                    <!-- Window Controls -->
+                    <Button x:Name="BtnMinimize" Content="─" Width="30" Height="30" Margin="15,0,0,0"
+                            Background="Transparent" Foreground="White" BorderThickness="0"
+                            Click="BtnMinimize_Click" FontSize="14"/>
+                    <Button x:Name="BtnMaximize" Content="☐" Width="30" Height="30"
+                            Background="Transparent" Foreground="White" BorderThickness="0"
+                            Click="BtnMaximize_Click" FontSize="14"/>
+                    <Button x:Name="BtnClose" Content="✕" Width="30" Height="30"
+                            Background="Transparent" Foreground="White" BorderThickness="0"
+                            Click="BtnClose_Click" FontSize="14"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- XP Progress Bar -->
+        <Grid Grid.Row="1" Margin="15,10,15,5">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="TxtLevelLabel" Grid.Column="0" Text="LVL 1" Foreground="{StaticResource PinkBrush}" 
+                       FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <Border Grid.Column="1" Background="#404060" CornerRadius="4" Height="8">
+                <Border x:Name="XPBar" Background="{StaticResource PinkBrush}" CornerRadius="4" 
+                        HorizontalAlignment="Left" Width="100"/>
+            </Border>
+            <TextBlock x:Name="TxtXP" Grid.Column="2" Text="0 / 70 XP" Foreground="{StaticResource TextMutedBrush}" 
+                       FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+        </Grid>
+
+        <!-- Main Content - Settings Tab -->
+        <Grid x:Name="SettingsTab" Grid.Row="2" Margin="10,5,10,2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="320"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- LEFT COLUMN -->
+            <ScrollViewer Grid.Column="0" Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="5">
+                <StackPanel>
+                    
+                    <!-- Flash Images Section -->
+                    <Border Style="{StaticResource SectionPanel}" Padding="10,8">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="⚡ Flash Images" Margin="0,0,0,2"
+                                       ToolTip="Random images that flash on screen periodically"/>
+                            
+                            <!-- Enable -->
+                            <Grid Margin="0,1">
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
+                                           ToolTip="Turn flash images on or off"/>
+                                <CheckBox x:Name="ChkFlashEnabled" Style="{StaticResource ToggleStyle}" 
+                                          HorizontalAlignment="Right" IsChecked="True"
+                                          ToolTip="Enable/disable flash images"/>
+                            </Grid>
+                            
+                            <!-- Clickable -->
+                            <Grid Margin="0,1">
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Clickable"
+                                           ToolTip="Allow clicking on images to dismiss them"/>
+                                <CheckBox x:Name="ChkClickable" Style="{StaticResource ToggleStyle}" 
+                                          HorizontalAlignment="Right" IsChecked="True"
+                                          ToolTip="When enabled, clicking an image will dismiss it"/>
+                            </Grid>
+                            
+                            <!-- Corruption -->
+                            <Grid Margin="0,1">
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="🐙 Corruption"
+                                           ToolTip="Clicking images spawns more instead of dismissing"/>
+                                <CheckBox x:Name="ChkCorruption" Style="{StaticResource ToggleStyle}" 
+                                          HorizontalAlignment="Right"
+                                          ToolTip="When enabled, clicking images spawns additional images (hydra mode)"/>
+                            </Grid>
+                            
+                            <!-- Per Min -->
+                            <Grid Margin="0,3,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Per Min"
+                                           ToolTip="How many flash events occur per minute"/>
+                                <TextBlock x:Name="TxtPerMin" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="2"/>
+                            </Grid>
+                            <Slider x:Name="SliderPerMin" Minimum="1" Maximum="10" Value="2" 
+                                    Margin="0,1" ValueChanged="SliderPerMin_Changed"
+                                    ToolTip="Flash events per minute"/>
+                            
+                            <!-- Images -->
+                            <Grid Margin="0,3,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Images"
+                                           ToolTip="Number of images shown per flash event"/>
+                                <TextBlock x:Name="TxtImages" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="5"/>
+                            </Grid>
+                            <Slider x:Name="SliderImages" Minimum="1" Maximum="15" Value="5" 
+                                    Margin="0,1" ValueChanged="SliderImages_Changed"
+                                    ToolTip="Images per flash event"/>
+                            
+                            <!-- Max On Screen -->
+                            <Grid Margin="0,3,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Max On Screen"
+                                           ToolTip="Maximum images displayed simultaneously"/>
+                                <TextBlock x:Name="TxtMaxOnScreen" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="20"/>
+                            </Grid>
+                            <Slider x:Name="SliderMaxOnScreen" Minimum="5" Maximum="20" Value="20" 
+                                    Margin="0,1" ValueChanged="SliderMaxOnScreen_Changed"
+                                    ToolTip="Maximum images on screen at once"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Visuals Section -->
+                    <Border Style="{StaticResource SectionPanel}" Padding="10,8">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="👁️ Visuals" Margin="0,0,0,2"
+                                       ToolTip="Visual appearance settings for flash images"/>
+                            
+                            <!-- Size -->
+                            <Grid Margin="0,1,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Size"
+                                           ToolTip="Scale of flash images (100% = original size)"/>
+                                <TextBlock x:Name="TxtSize" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="100%"/>
+                            </Grid>
+                            <Slider x:Name="SliderSize" Minimum="50" Maximum="250" Value="100" 
+                                    Margin="0,1" ValueChanged="SliderSize_Changed"
+                                    ToolTip="Image size percentage (50% - 250%)"/>
+                            
+                            <!-- Opacity -->
+                            <Grid Margin="0,3,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Opacity"
+                                           ToolTip="Transparency of flash images"/>
+                                <TextBlock x:Name="TxtOpacity" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="100%"/>
+                            </Grid>
+                            <Slider x:Name="SliderOpacity" Minimum="10" Maximum="100" Value="100" 
+                                    Margin="0,1" ValueChanged="SliderOpacity_Changed"
+                                    ToolTip="Image opacity (10% = very transparent, 100% = solid)"/>
+                            
+                            <!-- Fade -->
+                            <Grid Margin="0,3,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Fade"
+                                           ToolTip="Fade in/out animation duration"/>
+                                <TextBlock x:Name="TxtFade" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="50%"/>
+                            </Grid>
+                            <Slider x:Name="SliderFade" Minimum="0" Maximum="100" Value="50" 
+                                    Margin="0,1" ValueChanged="SliderFade_Changed"
+                                    ToolTip="Fade animation speed (0% = instant, 100% = slow fade)"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Logo -->
+                    <Border Background="Transparent" Padding="0" Height="255" Margin="0,0,0,5">
+                        <Image x:Name="ImgLogo" Stretch="Uniform" 
+                               HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Border>
+
+                    <!-- START Button -->
+                    <Button x:Name="BtnStart" Style="{StaticResource PinkButton}" 
+                            Height="50" FontSize="18" Margin="0,5" Click="BtnStart_Click"
+                            ToolTip="Start/Stop the conditioning engine">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="▶" Margin="0,0,10,0"/>
+                            <TextBlock Text="START"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Save / Exit Buttons -->
+                    <Grid Margin="0,5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Content="💾 Save" Style="{StaticResource PinkButton}" 
+                                Margin="0,0,5,0" Click="BtnSave_Click"
+                                ToolTip="Save all settings to disk"/>
+                        <Button Grid.Column="1" Content="🚪 Exit" Background="#FF6B6B" Foreground="White"
+                                FontWeight="Bold" Padding="15,10" Click="BtnExit_Click"
+                                ToolTip="Exit the application completely">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- MIDDLE COLUMN -->
+            <ScrollViewer Grid.Column="1" Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="5">
+                <StackPanel>
+                    
+                    <!-- Mandatory Video Section -->
+                    <Border Style="{StaticResource SectionPanel}">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="🎬 Mandatory Video"
+                                           ToolTip="Fullscreen videos that play periodically"/>
+                                <Button x:Name="BtnTestVideo" Content="▶ Test" Style="{StaticResource OutlineButton}" 
+                                        HorizontalAlignment="Right" Padding="10,4" Click="BtnTestVideo_Click"
+                                        ToolTip="Test play a random video"/>
+                            </Grid>
+                            
+                            <!-- Enable + Strict Lock on same row -->
+                            <Grid Margin="0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                    <CheckBox x:Name="ChkVideoEnabled" Style="{StaticResource ToggleStyle}"
+                                              ToolTip="Enable mandatory video playback"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Enable" Margin="8,0,0,0"
+                                               ToolTip="Turn mandatory videos on or off"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="⚠️ Strict" Foreground="#FFB347" Margin="0,0,8,0"
+                                               ToolTip="⚠️ DANGEROUS: Cannot skip or close videos"/>
+                                    <CheckBox x:Name="ChkStrictLock" Style="{StaticResource ToggleStyle}" 
+                                              Checked="ChkStrictLock_Checked"
+                                              ToolTip="⚠️ When enabled, videos cannot be skipped or closed"/>
+                                </StackPanel>
+                            </Grid>
+                            
+                            <!-- Per Hour -->
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Per Hour"
+                                           ToolTip="How many videos play per hour"/>
+                                <TextBlock x:Name="TxtPerHour" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="2"/>
+                            </Grid>
+                            <Slider x:Name="SliderPerHour" Minimum="1" Maximum="20" Value="2" 
+                                    Margin="0,4" ValueChanged="SliderPerHour_Changed"
+                                    ToolTip="Videos per hour"/>
+
+                            <!-- Mini-Game Sub-Section -->
+                            <Border Background="#1E1E3A" CornerRadius="8" Padding="10,8" Margin="0,8,0,0"
+                                    ToolTip="Attention checks during video playback">
+                                <StackPanel>
+                                    <TextBlock Text="🎯 Mini-Game" Foreground="{StaticResource PinkBrush}" 
+                                               FontSize="12" FontWeight="Bold" Margin="0,0,0,6"
+                                               ToolTip="Click targets that appear during videos to prove attention"/>
+                                    
+                                    <Grid Margin="0,2">
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
+                                                   ToolTip="Enable attention check targets during videos"/>
+                                        <CheckBox x:Name="ChkMiniGameEnabled" Style="{StaticResource ToggleStyle}" 
+                                                  HorizontalAlignment="Right"
+                                                  ToolTip="Show clickable targets during video playback"/>
+                                    </Grid>
+                                    
+                                    <Grid Margin="0,6,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="60"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Targets"
+                                                   ToolTip="Number of targets to click per video"/>
+                                        <Slider Grid.Column="1" x:Name="SliderTargets" Minimum="1" Maximum="10" Value="3" 
+                                                Margin="10,0" ValueChanged="SliderTargets_Changed"
+                                                ToolTip="Required target clicks"/>
+                                        <TextBlock x:Name="TxtTargets" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="3"/>
+                                    </Grid>
+                                    
+                                    <Grid Margin="0,4,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="60"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Duration"
+                                                   ToolTip="How long each target stays visible (seconds)"/>
+                                        <Slider Grid.Column="1" x:Name="SliderDuration" Minimum="1" Maximum="15" Value="5" 
+                                                Margin="10,0" ValueChanged="SliderDuration_Changed"
+                                                ToolTip="Target visibility duration"/>
+                                        <TextBlock x:Name="TxtDuration" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="5"/>
+                                    </Grid>
+                                    
+                                    <Grid Margin="0,4,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="60"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Size"
+                                                   ToolTip="Target size in pixels"/>
+                                        <Slider Grid.Column="1" x:Name="SliderTargetSize" Minimum="30" Maximum="150" Value="70" 
+                                                Margin="10,0" ValueChanged="SliderTargetSize_Changed"
+                                                ToolTip="Target button size"/>
+                                        <TextBlock x:Name="TxtTargetSize" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="70"/>
+                                    </Grid>
+                                    
+                                    <Button Content="📝 Manage" Style="{StaticResource PinkButton}" 
+                                            Margin="0,8,0,0" Click="BtnManageAttention_Click"
+                                            ToolTip="Manage attention check phrases"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Subliminals Section -->
+                    <Border Style="{StaticResource SectionPanel}">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="💭 Subliminals"
+                                           ToolTip="Brief text messages that flash on screen"/>
+                                <Button Content="⚙️" Style="{StaticResource OutlineButton}" 
+                                        HorizontalAlignment="Right" Padding="6,4" Click="BtnSubliminalSettings_Click"
+                                        ToolTip="Advanced subliminal settings"/>
+                            </Grid>
+                            
+                            <!-- Enable -->
+                            <Grid Margin="0,4">
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
+                                           ToolTip="Turn subliminal messages on or off"/>
+                                <CheckBox x:Name="ChkSubliminalEnabled" Style="{StaticResource ToggleStyle}" 
+                                          HorizontalAlignment="Right"
+                                          ToolTip="Enable/disable subliminal text flashes"/>
+                            </Grid>
+                            
+                            <!-- Per Min -->
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Per Min"
+                                           ToolTip="How many subliminal messages per minute"/>
+                                <Slider Grid.Column="1" x:Name="SliderSubPerMin" Minimum="1" Maximum="30" Value="5" 
+                                        Margin="10,0" ValueChanged="SliderSubPerMin_Changed"
+                                        ToolTip="Messages per minute"/>
+                                <TextBlock x:Name="TxtSubPerMin" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="5"/>
+                            </Grid>
+                            
+                            <!-- Frames -->
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Frames"
+                                           ToolTip="How long each message displays (in frames)"/>
+                                <Slider Grid.Column="1" x:Name="SliderFrames" Minimum="1" Maximum="10" Value="2" 
+                                        Margin="10,0" ValueChanged="SliderFrames_Changed"
+                                        ToolTip="Display duration in frames (lower = faster flash)"/>
+                                <TextBlock x:Name="TxtFrames" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="2"/>
+                            </Grid>
+                            
+                            <!-- Opacity -->
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Opacity"
+                                           ToolTip="Visibility of subliminal text"/>
+                                <Slider Grid.Column="1" x:Name="SliderSubOpacity" Minimum="10" Maximum="100" Value="80" 
+                                        Margin="10,0" ValueChanged="SliderSubOpacity_Changed"
+                                        ToolTip="Text opacity (lower = more subtle)"/>
+                                <TextBlock x:Name="TxtSubOpacity" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="80%"/>
+                            </Grid>
+                            
+                            <Button Content="📝 Messages" Style="{StaticResource PinkButton}" 
+                                    Margin="0,8,0,0" Click="BtnManageMessages_Click"
+                                    ToolTip="Edit the list of subliminal messages"/>
+
+                            <!-- Audio Whispers -->
+                            <Grid Margin="0,12,0,4">
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="🔊 Audio Whispers"
+                                           ToolTip="Whispered audio version of subliminal messages"/>
+                                <CheckBox x:Name="ChkAudioWhispers" Style="{StaticResource ToggleStyle}" 
+                                          HorizontalAlignment="Right"
+                                          ToolTip="Enable audio whispers of messages"/>
+                            </Grid>
+                            
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="40"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Volume"
+                                           ToolTip="Whisper volume level"/>
+                                <Slider Grid.Column="1" x:Name="SliderWhisperVol" Minimum="0" Maximum="100" Value="50" 
+                                        Margin="10,0" ValueChanged="SliderWhisperVol_Changed"
+                                        ToolTip="Audio whisper volume"/>
+                                <TextBlock x:Name="TxtWhisperVol" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="50%"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- System Section -->
+                    <Border Style="{StaticResource SectionPanel}" Padding="9,9,9,5">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="⚙️ System" Margin="0,0,0,6"
+                                           ToolTip="Application behavior and startup settings"/>
+                                <Button Content="📂 Assets" Style="{StaticResource OutlineButton}" 
+                                        HorizontalAlignment="Right" Padding="10,4" Click="BtnOpenAssets_Click"
+                                        ToolTip="Open the Assets folder containing images and videos"/>
+                            </Grid>
+                            
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                
+                                <!-- Row 1 -->
+                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
+                                            ToolTip="Enable content on multiple monitors">
+                                    <CheckBox x:Name="ChkDualMon" Style="{StaticResource ToggleStyle}"
+                                              ToolTip="Show overlays and flashes on all monitors"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Dual Mon" Margin="8,0,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
+                                            ToolTip="Auto-start with Windows">
+                                    <CheckBox x:Name="ChkWinStart" Style="{StaticResource ToggleStyle}"
+                                              ToolTip="Launch app automatically when Windows starts"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Win Start" Margin="8,0,0,0"/>
+                                </StackPanel>
+                                
+                                <!-- Row 2 -->
+                                <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
+                                            ToolTip="Play video immediately on app launch">
+                                    <CheckBox x:Name="ChkVidLaunch" Style="{StaticResource ToggleStyle}"
+                                              ToolTip="Force a mandatory video when the app opens"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Vid Launch" Margin="8,0,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
+                                            ToolTip="Auto-start engine when app launches">
+                                    <CheckBox x:Name="ChkAutoRun" Style="{StaticResource ToggleStyle}"
+                                              ToolTip="Automatically start the engine when the app opens"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Auto Run" Margin="8,0,0,0"/>
+                                </StackPanel>
+                                
+                                <!-- Row 3 -->
+                                <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
+                                            ToolTip="Start minimized to system tray">
+                                    <CheckBox x:Name="ChkStartHidden" Style="{StaticResource ToggleStyle}"
+                                              ToolTip="Launch app minimized to tray (hidden)"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Start Hidden" Margin="8,0,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
+                                            ToolTip="⚠️ DANGEROUS: Disable panic key completely">
+                                    <CheckBox x:Name="ChkNoPanic" Style="{StaticResource ToggleStyle}"
+                                              Checked="ChkNoPanic_Checked"
+                                              ToolTip="⚠️ Disables the panic key - use with caution!"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="⚠️ No Panic" Margin="8,0,0,0" Foreground="#FF6B6B"/>
+                                </StackPanel>
+                            </Grid>
+                            
+                            <!-- Panic Key Configuration -->
+                            <Grid Margin="0,8,0,0">
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Panic Key" VerticalAlignment="Center"
+                                           ToolTip="Emergency stop key - press once to stop, twice to exit"/>
+                                <Button x:Name="BtnPanicKey" Content="🔑 Escape" 
+                                        Style="{StaticResource OutlineButton}" 
+                                        HorizontalAlignment="Right" Padding="10,4"
+                                        Click="BtnPanicKey_Click" ToolTip="Click to change the panic key"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Banner - spans left and middle columns at bottom -->
+            <Border Grid.Column="0" Grid.ColumnSpan="2" Grid.Row="1" 
+                    Background="{StaticResource PanelBgBrush}" CornerRadius="8" 
+                    Padding="12,10" Margin="5,2,5,0">
+                <TextBlock Text="✨ Good girls condition daily ✨" 
+                           Foreground="{StaticResource PinkBrush}" 
+                           FontSize="14" FontStyle="Italic"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+
+            <!-- RIGHT COLUMN -->
+            <Grid Grid.Column="2" Grid.RowSpan="2" Margin="5">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                
+                <!-- Browser Section -->
+                <Border Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="0,0,0,5">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Browser Header -->
+                        <Grid Grid.Row="0" Margin="0,0,0,8">
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="🌐 Browser" Margin="0"/>
+                            <TextBlock x:Name="TxtBrowserStatus" Text="● Loading..." 
+                                       Foreground="{StaticResource PinkBrush}" FontSize="11"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        
+                        <!-- Browser Container -->
+                        <Border Grid.Row="1" Background="#1E1E3A" CornerRadius="6" ClipToBounds="True" MinHeight="300">
+                            <Grid x:Name="BrowserContainer">
+                                <!-- WebView2 will be added here programmatically -->
+                                <TextBlock x:Name="BrowserLoadingText" 
+                                           Text="🌐 Connecting to Bambi Cloud..." 
+                                           Foreground="#808080" FontSize="12"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+                
+                <!-- Audio Section -->
+                <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="0,5,0,0">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="🔊 Audio"
+                                   ToolTip="Audio volume and ducking settings"/>
+                        
+                        <!-- Master Volume -->
+                        <Grid Margin="0,5,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="40"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="Master"
+                                       ToolTip="Master volume for all audio"/>
+                            <Slider Grid.Column="1" x:Name="SliderMaster" Minimum="0" Maximum="100" Value="50" 
+                                    Margin="10,0" ValueChanged="SliderMaster_Changed"
+                                    ToolTip="Overall audio volume level"/>
+                            <TextBlock x:Name="TxtMaster" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="50%"/>
+                        </Grid>
+                        
+                        <!-- Audio Duck -->
+                        <Grid Margin="0,10,0,5">
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="Audio Duck"
+                                       ToolTip="Lower system volume during video playback"/>
+                            <CheckBox x:Name="ChkAudioDuck" Style="{StaticResource ToggleStyle}" 
+                                      HorizontalAlignment="Right" IsChecked="True"
+                                      ToolTip="Automatically reduce other app volumes during videos"/>
+                        </Grid>
+                        
+                        <!-- Duck % -->
+                        <Grid Margin="0,5,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="40"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="Duck %"
+                                       ToolTip="How much to reduce other audio"/>
+                            <Slider Grid.Column="1" x:Name="SliderDuck" Minimum="0" Maximum="100" Value="80" 
+                                    Margin="10,0" ValueChanged="SliderDuck_Changed"
+                                    ToolTip="Ducking percentage (80% = reduce other audio to 20%)"/>
+                            <TextBlock x:Name="TxtDuck" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="80%"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- Presets Tab (Hidden by default) -->
+        <Grid x:Name="PresetsTab" Grid.Row="2" Margin="10,5,10,10" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="350"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            
+            <!-- Presets List -->
+            <Border Grid.Column="0" Style="{StaticResource SectionPanel}" Margin="5">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top">
+                        <Grid>
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="📋 Presets"/>
+                            <Button x:Name="BtnNewPreset" Content="➕ New" Style="{StaticResource OutlineButton}" 
+                                    HorizontalAlignment="Right" Padding="10,4" Click="BtnNewPreset_Click"/>
+                        </Grid>
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                        <StackPanel x:Name="PresetsList"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+            
+            <!-- Preset Preview -->
+            <Border Grid.Column="1" Style="{StaticResource SectionPanel}" Margin="5">
+                <StackPanel>
+                    <TextBlock x:Name="TxtPresetDetailName" Text="Select a Preset" Foreground="White" 
+                               FontSize="18" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtPresetDetailDesc" Text="Click on a preset to see details" 
+                               Foreground="#888888" FontSize="12" Margin="0,5,0,15" TextWrapping="Wrap"/>
+                    
+                    <!-- Preview Details -->
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="15" Margin="0,0,0,15">
+                        <StackPanel>
+                            <TextBlock Text="⚡ Flash" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock x:Name="TxtPreviewFlash" Text="--" Foreground="#AAAAAA" FontSize="11" Margin="0,3,0,10"/>
+                            
+                            <TextBlock Text="🎬 Video" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock x:Name="TxtPreviewVideo" Text="--" Foreground="#AAAAAA" FontSize="11" Margin="0,3,0,10"/>
+                            
+                            <TextBlock Text="💭 Subliminal" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock x:Name="TxtPreviewSubliminal" Text="--" Foreground="#AAAAAA" FontSize="11" Margin="0,3,0,10"/>
+                            
+                            <TextBlock Text="🔊 Audio" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock x:Name="TxtPreviewAudio" Text="--" Foreground="#AAAAAA" FontSize="11" Margin="0,3,0,10"/>
+                            
+                            <TextBlock Text="🌀 Overlays" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock x:Name="TxtPreviewOverlays" Text="--" Foreground="#AAAAAA" FontSize="11" Margin="0,3,0,10"/>
+                            
+                            <TextBlock Text="⚙️ Advanced" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="12"/>
+                            <TextBlock x:Name="TxtPreviewAdvanced" Text="--" Foreground="#AAAAAA" FontSize="11" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    
+                    <!-- Action Buttons -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button x:Name="BtnLoadPreset" Content="📥 Load" Style="{StaticResource PinkButton}" 
+                                Margin="5" Padding="20,10" IsEnabled="False" Click="BtnLoadPreset_Click"/>
+                        <Button x:Name="BtnSaveOverPreset" Content="💾 Save Over" Style="{StaticResource OutlineButton}" 
+                                Margin="5" Padding="20,10" IsEnabled="False" Click="BtnSaveOverPreset_Click"/>
+                        <Button x:Name="BtnDeletePreset" Content="🗑️ Delete" Background="#FF6B6B" Foreground="White"
+                                Margin="5" Padding="20,10" IsEnabled="False" Click="BtnDeletePreset_Click">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Progression Tab (Hidden by default) -->
+        <Grid x:Name="ProgressionTab" Grid.Row="2" Margin="10,5,10,10" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Unlockables -->
+            <Border Grid.Column="0" Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="🎁 Unlockables"/>
+                    
+                    <!-- Spiral Overlay - Lvl 10 -->
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                        <Grid>
+                            <!-- Locked State -->
+                            <StackPanel x:Name="SpiralLocked" Visibility="Visible">
+                                <Grid>
+                                    <TextBlock Text="🌀 Spiral Overlay" Foreground="#666666" FontWeight="Bold"/>
+                                    <TextBlock Text="🔒 Lvl 10" Foreground="#666666" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Reach Level 10 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Spiral Overlay Feature" Foreground="#888888" 
+                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            
+                            <!-- Unlocked State -->
+                            <StackPanel x:Name="SpiralUnlocked" Visibility="Collapsed">
+                                <Grid>
+                                    <TextBlock Text="🌀 Spiral Overlay" Foreground="White" FontWeight="Bold"/>
+                                    <TextBlock Text="✓ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
+                                               ToolTip="Enable/disable spiral overlay on all monitors"/>
+                                    <CheckBox x:Name="ChkSpiralEnabled" Style="{StaticResource ToggleStyle}" 
+                                              HorizontalAlignment="Right"
+                                              ToolTip="Show hypnotic spiral overlay"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="40"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Opacity"
+                                               ToolTip="Spiral transparency level"/>
+                                    <Slider Grid.Column="1" x:Name="SliderSpiralOpacity" Minimum="5" Maximum="50" Value="15" 
+                                            Margin="10,0" ValueChanged="SliderSpiralOpacity_Changed"
+                                            ToolTip="Spiral opacity (5% - 50%)"/>
+                                    <TextBlock x:Name="TxtSpiralOpacity" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="15%"/>
+                                </Grid>
+                                <Button Content="📁 Select GIF" Style="{StaticResource OutlineButton}" 
+                                        Margin="0,10,0,0" Click="BtnSelectSpiral_Click"
+                                        ToolTip="Choose a spiral GIF animation"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Pink Filter - Lvl 10 -->
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                        <Grid>
+                            <!-- Locked State -->
+                            <StackPanel x:Name="PinkFilterLocked" Visibility="Visible">
+                                <Grid>
+                                    <TextBlock Text="💗 Pink Filter" Foreground="#666666" FontWeight="Bold"/>
+                                    <TextBlock Text="🔒 Lvl 10" Foreground="#666666" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Reach Level 10 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Pink Filter Feature" Foreground="#888888" 
+                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            
+                            <!-- Unlocked State -->
+                            <StackPanel x:Name="PinkFilterUnlocked" Visibility="Collapsed">
+                                <Grid>
+                                    <TextBlock Text="💗 Pink Filter" Foreground="White" FontWeight="Bold"/>
+                                    <TextBlock Text="✓ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
+                                               ToolTip="Enable/disable pink tint overlay"/>
+                                    <CheckBox x:Name="ChkPinkFilterEnabled" Style="{StaticResource ToggleStyle}" 
+                                              HorizontalAlignment="Right"
+                                              ToolTip="Apply pink color filter to all monitors"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="40"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Opacity"
+                                               ToolTip="Pink filter intensity"/>
+                                    <Slider Grid.Column="1" x:Name="SliderPinkOpacity" Minimum="5" Maximum="50" Value="10" 
+                                            Margin="10,0" ValueChanged="SliderPinkOpacity_Changed"
+                                            ToolTip="Filter opacity (5% - 50%)"/>
+                                    <TextBlock x:Name="TxtPinkOpacity" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="10%"/>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Bubble Pop - Lvl 20 -->
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                        <Grid>
+                            <!-- Locked State -->
+                            <StackPanel x:Name="BubblesLocked" Visibility="Visible">
+                                <Grid>
+                                    <TextBlock Text="🫧 Bubble Pop" Foreground="#666666" FontWeight="Bold"/>
+                                    <TextBlock Text="🔒 Lvl 20" Foreground="#666666" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Reach Level 20 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Bubble Pop Game" Foreground="#888888" 
+                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            
+                            <!-- Unlocked State -->
+                            <StackPanel x:Name="BubblesUnlocked" Visibility="Collapsed">
+                                <Grid>
+                                    <TextBlock Text="🫧 Bubble Pop" Foreground="White" FontWeight="Bold"/>
+                                    <TextBlock Text="✓ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
+                                               ToolTip="Enable/disable bubble pop mini-game"/>
+                                    <CheckBox x:Name="ChkBubblesEnabled" Style="{StaticResource ToggleStyle}" 
+                                              HorizontalAlignment="Right"
+                                              ToolTip="Pop bubbles to earn XP!"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="40"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Per Min"
+                                               ToolTip="Bubbles spawned per minute"/>
+                                    <Slider Grid.Column="1" x:Name="SliderBubbleFreq" Minimum="1" Maximum="15" Value="5" 
+                                            Margin="10,0" ValueChanged="SliderBubbleFreq_Changed"
+                                            ToolTip="Bubble spawn rate"/>
+                                    <TextBlock x:Name="TxtBubbleFreq" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="5"/>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Lock Card - Lvl 35 -->
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                        <Grid>
+                            <!-- Locked State -->
+                            <StackPanel x:Name="LockCardLocked" Visibility="Visible">
+                                <Grid>
+                                    <TextBlock Text="🔐 Lock Card" Foreground="#666666" FontWeight="Bold"/>
+                                    <TextBlock Text="🔒 Lvl 35" Foreground="#666666" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Reach Level 35 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Lock Card Feature" Foreground="#888888" 
+                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            
+                            <!-- Unlocked State -->
+                            <StackPanel x:Name="LockCardUnlocked" Visibility="Collapsed">
+                                <Grid>
+                                    <TextBlock Text="🔐 Lock Card" Foreground="White" FontWeight="Bold"/>
+                                    <TextBlock Text="✓ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
+                                               ToolTip="Enable lock card interruptions"/>
+                                    <CheckBox x:Name="ChkLockCardEnabled" Style="{StaticResource ToggleStyle}" 
+                                              HorizontalAlignment="Right" Checked="ChkLockCardEnabled_Changed" Unchecked="ChkLockCardEnabled_Changed"
+                                              ToolTip="Show lock cards that require typing phrases"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="40"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Per Hour"
+                                               ToolTip="Lock cards per hour"/>
+                                    <Slider Grid.Column="1" x:Name="SliderLockCardFreq" Minimum="1" Maximum="10" Value="2" 
+                                            Margin="10,0" ValueChanged="SliderLockCardFreq_Changed"
+                                            ToolTip="How often lock cards appear"/>
+                                    <TextBlock x:Name="TxtLockCardFreq" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="2"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="40"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Repeats"
+                                               ToolTip="Times to type the phrase"/>
+                                    <Slider Grid.Column="1" x:Name="SliderLockCardRepeats" Minimum="1" Maximum="10" Value="3" 
+                                            Margin="10,0" ValueChanged="SliderLockCardRepeats_Changed"
+                                            ToolTip="How many times you must type the phrase"/>
+                                    <TextBlock x:Name="TxtLockCardRepeats" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="3x"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="⚠️ Strict"
+                                               ToolTip="Cannot escape lock cards"/>
+                                    <CheckBox x:Name="ChkLockCardStrict" Style="{StaticResource ToggleStyle}" 
+                                              HorizontalAlignment="Right" Checked="ChkLockCardStrict_Checked"
+                                              ToolTip="When enabled, you MUST complete the lock card"/>
+                                </Grid>
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <Button Content="📝 Phrases" Style="{StaticResource OutlineButton}" 
+                                            Padding="10,5" Margin="0,0,5,0" Click="BtnManageLockCardPhrases_Click"
+                                            ToolTip="Edit lock card phrases"/>
+                                    <Button Content="🎨 Colors" Style="{StaticResource OutlineButton}" 
+                                            Padding="10,5" Margin="0,0,5,0" Click="BtnLockCardSettings_Click"
+                                            ToolTip="Customize colors"/>
+                                    <Button Content="▶ Test" Style="{StaticResource PinkButton}" 
+                                            Padding="10,5" Click="BtnTestLockCard_Click"
+                                            ToolTip="Test a lock card now"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Level 50 - Coming Soon -->
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                        <StackPanel x:Name="Level50Locked">
+                            <Grid>
+                                <TextBlock Text="🚀 Coming Soon" Foreground="#666666" FontWeight="Bold"/>
+                                <TextBlock Text="🔒 Lvl 50" Foreground="#666666" HorizontalAlignment="Right"/>
+                            </Grid>
+                            <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Text="Reach Level 50 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                               FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="??? Mystery Feature ???" Foreground="#888888" 
+                                               FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Scheduler -->
+            <Border Grid.Column="1" Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="📅 Scheduler"/>
+                    
+                    <!-- Scheduler Enable with explanation -->
+                    <Grid Margin="0,5">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="Enable Scheduler"/>
+                            <TextBlock Text="ⓘ" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
+                                       ToolTip="Auto-starts the engine at Start time and auto-stops at End time on selected days"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkSchedulerEnabled" Style="{StaticResource ToggleStyle}" 
+                                  HorizontalAlignment="Right"
+                                  ToolTip="When enabled, the engine will automatically start and stop based on the schedule below"/>
+                    </Grid>
+                    
+                    <!-- Time Range -->
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="Active Hours" Margin="0,8,0,5"
+                               ToolTip="The time window when the engine will be active"/>
+                    <Grid ToolTip="Start Time → End Time. Engine auto-starts at start time and auto-stops at end time">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtStartTime" Grid.Column="0" Text="16:00" Background="#1E1E3A" 
+                                 Foreground="White" BorderBrush="{StaticResource PinkBrush}" 
+                                 Padding="10,8" FontSize="14" TextAlignment="Center"
+                                 ToolTip="Start time (24h format) - Engine will auto-start at this time"/>
+                        <TextBlock Grid.Column="1" Text="→" Foreground="White" FontSize="16" 
+                                   Margin="10,0" VerticalAlignment="Center"/>
+                        <TextBox x:Name="TxtEndTime" Grid.Column="2" Text="22:00" Background="#1E1E3A" 
+                                 Foreground="White" BorderBrush="{StaticResource PinkBrush}" 
+                                 Padding="10,8" FontSize="14" TextAlignment="Center"
+                                 ToolTip="End time (24h format) - Engine will auto-stop at this time"/>
+                    </Grid>
+                    
+                    <!-- Days -->
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="Active Days" Margin="0,8,0,5"
+                               ToolTip="Select which days of the week the scheduler is active"/>
+                    <WrapPanel>
+                        <CheckBox x:Name="ChkMon" Content="Mon" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Monday"/>
+                        <CheckBox x:Name="ChkTue" Content="Tue" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Tuesday"/>
+                        <CheckBox x:Name="ChkWed" Content="Wed" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Wednesday"/>
+                        <CheckBox x:Name="ChkThu" Content="Thu" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Thursday"/>
+                        <CheckBox x:Name="ChkFri" Content="Fri" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Friday"/>
+                        <CheckBox x:Name="ChkSat" Content="Sat" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Saturday"/>
+                        <CheckBox x:Name="ChkSun" Content="Sun" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Sunday"/>
+                    </WrapPanel>
+                    
+                    <!-- Intensity Ramp -->
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="Intensity Ramp" Margin="0,8,0,5"
+                               ToolTip="Gradually increase intensity over time from base values to maximum"/>
+                    <Grid Margin="0,5">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="Enable Ramp"/>
+                            <TextBlock Text="ⓘ" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
+                                       ToolTip="Linked settings will gradually increase from their base value to (base × multiplier) over the duration"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkRampEnabled" Style="{StaticResource ToggleStyle}" 
+                                  HorizontalAlignment="Right"
+                                  ToolTip="Enable gradual intensity increase over time"/>
+                    </Grid>
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="Duration"
+                                   ToolTip="How long until intensity reaches maximum"/>
+                        <Slider Grid.Column="1" x:Name="SliderRampDuration" Minimum="10" Maximum="180" Value="60" 
+                                Margin="10,0" ValueChanged="SliderRampDuration_Changed"
+                                ToolTip="Ramp duration in minutes"/>
+                        <TextBlock x:Name="TxtRampDuration" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="60 min"/>
+                    </Grid>
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="70"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{StaticResource SettingLabel}" Text="Multiplier"
+                                   ToolTip="Final intensity = Base value × Multiplier"/>
+                        <Slider Grid.Column="1" x:Name="SliderMultiplier" Minimum="1" Maximum="3" Value="1.5" 
+                                Margin="10,0" ValueChanged="SliderMultiplier_Changed"
+                                ToolTip="Maximum intensity multiplier (e.g., 2x means double the base values)"/>
+                        <TextBlock x:Name="TxtMultiplier" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="1.5x"/>
+                    </Grid>
+                    
+                    <!-- End Session at Ramp End -->
+                    <Grid Margin="0,8,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="End at Ramp Complete"/>
+                            <TextBlock Text="ⓘ" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
+                                       ToolTip="Automatically stop the engine when the intensity ramp reaches its end"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkEndAtRamp" Style="{StaticResource ToggleStyle}" 
+                                  HorizontalAlignment="Right"
+                                  ToolTip="Stop the session automatically when ramp duration completes"/>
+                    </Grid>
+                    
+                    <!-- Ramp Links -->
+                    <TextBlock Style="{StaticResource SettingLabel}" Text="Link to Ramp" Margin="0,10,0,6" Foreground="{StaticResource PinkBrush}"
+                               ToolTip="Select which settings should scale with the intensity ramp"/>
+                    <Border Background="#1E1E3A" CornerRadius="6" Padding="10,8"
+                            ToolTip="Checked items will gradually increase from base to (base × multiplier)">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            
+                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,2">
+                                <CheckBox x:Name="ChkRampLinkFlash" Style="{StaticResource ToggleStyle}"
+                                          ToolTip="Link flash image opacity to ramp"/>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Flash α" Margin="6,0,0,0" FontSize="11"
+                                           ToolTip="Flash image opacity"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,2">
+                                <CheckBox x:Name="ChkRampLinkSpiral" Style="{StaticResource ToggleStyle}"
+                                          ToolTip="Link spiral overlay opacity to ramp"/>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Spiral α" Margin="6,0,0,0" FontSize="11"
+                                           ToolTip="Spiral overlay opacity"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,6,0,2">
+                                <CheckBox x:Name="ChkRampLinkPink" Style="{StaticResource ToggleStyle}"
+                                          ToolTip="Link pink filter opacity to ramp"/>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Pink α" Margin="6,0,0,0" FontSize="11"
+                                           ToolTip="Pink filter opacity"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,6,0,2">
+                                <CheckBox x:Name="ChkRampLinkMaster" Style="{StaticResource ToggleStyle}"
+                                          ToolTip="Link master volume to ramp"/>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Master 🔊" Margin="6,0,0,0" FontSize="11"
+                                           ToolTip="Master audio volume"/>
+                            </StackPanel>
+                            
+                            <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,6,0,2">
+                                <CheckBox x:Name="ChkRampLinkSubAudio" Style="{StaticResource ToggleStyle}"
+                                          ToolTip="Link subliminal audio volume to ramp"/>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Sub 🔊" Margin="6,0,0,0" FontSize="11"
+                                           ToolTip="Subliminal whisper volume"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+                </ScrollViewer>
+            </Border>
+            
+            <!-- Coming Soon: Feature 1 -->
+            <Border Grid.Column="0" Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5" MinHeight="120">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="🚧" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock Text="Achievements" Foreground="{StaticResource PinkBrush}" 
+                               FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Coming Soon" Foreground="#666666" 
+                               FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                    <TextBlock Text="Earn badges and track milestones" Foreground="#888888" 
+                               FontSize="11" HorizontalAlignment="Center" Margin="0,3,0,0" FontStyle="Italic"/>
+                </StackPanel>
+            </Border>
+            
+            <!-- Coming Soon: Feature 2 -->
+            <Border Grid.Column="1" Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5" MinHeight="120">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="🎭" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock Text="Personas" Foreground="{StaticResource PinkBrush}" 
+                               FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Coming Soon" Foreground="#666666" 
+                               FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                    <TextBlock Text="Custom conditioning profiles" Foreground="#888888" 
+                               FontSize="11" HorizontalAlignment="Center" Margin="0,3,0,0" FontStyle="Italic"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+    </Grid>
+</Window>

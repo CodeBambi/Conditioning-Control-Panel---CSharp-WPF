@@ -1,0 +1,66 @@
+# Build outputs
+bin/
+obj/
+publish/
+release/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# VS Code
+.vscode/
+
+# User data (don't commit personal settings or content)
+settings.json
+logs/
+
+# Asset folders (users add their own content)
+assets/images/*
+assets/sounds/*
+assets/startle_videos/*
+assets/sub_audio/*
+assets/backgrounds/*
+
+# Keep the asset folder structure
+!assets/images/.gitkeep
+!assets/sounds/.gitkeep
+!assets/startle_videos/.gitkeep
+!assets/sub_audio/.gitkeep
+!assets/backgrounds/.gitkeep
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+
+# Rider
+.idea/
+
+# NuGet
+*.nupkg
+packages/
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+# Test results
+[Tt]est[Rr]esult*/
+*.trx
+
+# Build & Release Artifacts
+release/
+publish/
+bin/
+obj/
+.vs/
+*.user
