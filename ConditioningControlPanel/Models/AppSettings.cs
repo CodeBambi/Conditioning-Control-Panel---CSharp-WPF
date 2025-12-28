@@ -70,11 +70,11 @@ namespace ConditioningControlPanel.Models
             set { _flashEnabled = value; OnPropertyChanged(); }
         }
 
-        private int _flashFrequency = 10; // Flashes per hour (1-120)
+        private int _flashFrequency = 10; // Flashes per hour (1-180)
         public int FlashFrequency
         {
             get => _flashFrequency;
-            set { _flashFrequency = Math.Clamp(value, 1, 120); OnPropertyChanged(); }
+            set { _flashFrequency = Math.Clamp(value, 1, 180); OnPropertyChanged(); }
         }
 
         private bool _flashClickable = true;

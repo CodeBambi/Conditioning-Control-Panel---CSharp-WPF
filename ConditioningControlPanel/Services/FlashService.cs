@@ -188,9 +188,9 @@ namespace ConditioningControlPanel.Services
             }
             else
             {
-                // FlashFrequency is now flashes per HOUR (1-120)
+                // FlashFrequency is now flashes per HOUR (1-180)
                 // Calculate interval in seconds between flashes
-                var flashesPerHour = Math.Max(1, Math.Min(120, settings.FlashFrequency));
+                var flashesPerHour = Math.Max(1, Math.Min(180, settings.FlashFrequency));
                 var baseInterval = 3600.0 / flashesPerHour; // seconds between flashes
                 
                 // Add ±20% variance for natural feel

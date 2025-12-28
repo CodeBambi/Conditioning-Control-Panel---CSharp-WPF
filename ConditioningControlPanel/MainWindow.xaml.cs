@@ -109,6 +109,7 @@ namespace ConditioningControlPanel
                 var soundPaths = new[]
                 {
                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "lvlup.mp3"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "sounds", "lvlup.mp3"),
                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Audio", "lvlup.mp3"),
                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lvlup.mp3"),
                 };
@@ -125,7 +126,7 @@ namespace ConditioningControlPanel
                         return;
                     }
                 }
-                App.Logger?.Debug("Level up sound not found");
+                App.Logger?.Debug("Level up sound not found in any of: {Paths}", string.Join(", ", soundPaths));
             }
             catch (Exception ex)
             {
