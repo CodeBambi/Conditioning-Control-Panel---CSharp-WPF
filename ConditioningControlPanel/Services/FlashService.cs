@@ -25,6 +25,19 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class FlashService : IDisposable
     {
+        #region Win32 Interop (Hide from Alt+Tab)
+        
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+        
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+        
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+        
+        #endregion
+        
         #region Fields
 
         private readonly Random _random = new();
@@ -144,21 +157,15 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings.Current;
             if (!settings.FlashEnabled) return;
             
-            // flash_freq = flashes per minute
-            // Account for flash duration + cooldown when calculating interval
-            // Total time per flash cycle = FLASH_DURATION + FLASH_COOLDOWN = 22 seconds
-            // If user wants 2 flashes/min, we need at least 44 seconds, leaving 16 seconds to distribute
+            // FlashFrequency is now flashes per HOUR (1-30)
+            // Calculate interval in seconds between flashes
+            var flashesPerHour = Math.Max(1, Math.Min(30, settings.FlashFrequency));
+            var baseInterval = 3600.0 / flashesPerHour; // seconds between flashes
             
-            var baseFreq = Math.Max(0.5, settings.FlashFrequency);
-            var timePerFlash = FLASH_DURATION_SECONDS + FLASH_COOLDOWN_SECONDS; // ~22 seconds per flash
-            var totalFlashTime = baseFreq * timePerFlash;
-            var availableTime = Math.Max(5, 60.0 - totalFlashTime); // Time available for extra gaps
-            var baseInterval = (availableTime / baseFreq) + FLASH_COOLDOWN_SECONDS; // Add cooldown to interval
-            
-            // Add ±20% variance
+            // Add ±20% variance for natural feel
             var variance = baseInterval * 0.2;
             var interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
-            interval = Math.Max(15, interval); // Minimum 15 seconds between flashes
+            interval = Math.Max(30, interval); // Minimum 30 seconds between flashes
             
             _schedulerTimer?.Stop();
             _schedulerTimer = new DispatcherTimer
@@ -176,7 +183,7 @@ namespace ConditioningControlPanel.Services
             };
             _schedulerTimer.Start();
             
-            App.Logger.Debug("Next flash scheduled in {Interval:F1} seconds", interval);
+            App.Logger.Debug("Next flash scheduled in {Interval:F1} seconds ({Minutes:F1} minutes)", interval, interval / 60.0);
         }
 
         #endregion
@@ -488,8 +495,17 @@ namespace ConditioningControlPanel.Services
                 WindowStyle = WindowStyle.None,
                 Topmost = true,
                 ShowInTaskbar = false,
+                ShowActivated = false, // Don't steal focus
                 Background = System.Windows.Media.Brushes.Black,
                 ResizeMode = ResizeMode.NoResize
+            };
+            
+            // Hide from Alt+Tab by making it a tool window
+            window.SourceInitialized += (s, e) =>
+            {
+                var helper = new System.Windows.Interop.WindowInteropHelper(window);
+                int exStyle = GetWindowLong(helper.Handle, GWL_EXSTYLE);
+                SetWindowLong(helper.Handle, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
             };
 
             // Create image control

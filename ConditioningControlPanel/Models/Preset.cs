@@ -118,7 +118,7 @@ namespace ConditioningControlPanel.Models
                     Description = "Very mild settings for beginners. Relaxed pace with minimal intensity.",
                     IsDefault = true,
                     FlashEnabled = true,
-                    FlashFrequency = 1,
+                    FlashFrequency = 5, // 5 per hour = every 12 minutes
                     SimultaneousImages = 3,
                     FlashOpacity = 60,
                     FadeDuration = 60,
@@ -142,7 +142,7 @@ namespace ConditioningControlPanel.Models
                     Description = "Light conditioning with occasional flashes. Good for daily use.",
                     IsDefault = true,
                     FlashEnabled = true,
-                    FlashFrequency = 2,
+                    FlashFrequency = 10, // 10 per hour = every 6 minutes
                     SimultaneousImages = 5,
                     FlashOpacity = 80,
                     FadeDuration = 40,
@@ -166,7 +166,7 @@ namespace ConditioningControlPanel.Models
                     Description = "Medium intensity with visual focus. Dreamy pink aesthetic.",
                     IsDefault = true,
                     FlashEnabled = true,
-                    FlashFrequency = 2,
+                    FlashFrequency = 15, // 15 per hour = every 4 minutes
                     SimultaneousImages = 6,
                     FlashOpacity = 90,
                     FadeDuration = 30,
@@ -193,7 +193,7 @@ namespace ConditioningControlPanel.Models
                     Description = "Higher intensity training. More frequent triggers and reinforcement.",
                     IsDefault = true,
                     FlashEnabled = true,
-                    FlashFrequency = 4,
+                    FlashFrequency = 20, // 20 per hour = every 3 minutes
                     SimultaneousImages = 8,
                     FlashOpacity = 100,
                     FadeDuration = 25,
@@ -231,7 +231,7 @@ namespace ConditioningControlPanel.Models
                     Description = "Maximum intensity preset. For experienced users seeking deeper conditioning.",
                     IsDefault = true,
                     FlashEnabled = true,
-                    FlashFrequency = 5,
+                    FlashFrequency = 30, // 30 per hour = every 2 minutes
                     SimultaneousImages = 10,
                     HydraLimit = 15,
                     FlashOpacity = 100,
