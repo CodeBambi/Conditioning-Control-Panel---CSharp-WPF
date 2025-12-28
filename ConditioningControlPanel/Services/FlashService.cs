@@ -134,6 +134,8 @@ namespace ConditioningControlPanel.Services
 
         // Approximate duration of a flash event (display time + fade + buffer)
         private const double FLASH_DURATION_SECONDS = 12.0;
+        // Additional cooldown after each flash before next can start
+        private const double FLASH_COOLDOWN_SECONDS = 10.0;
 
         private void ScheduleNextFlash()
         {
@@ -143,20 +145,20 @@ namespace ConditioningControlPanel.Services
             if (!settings.FlashEnabled) return;
             
             // flash_freq = flashes per minute
-            // We need to account for flash duration when calculating interval
-            // If user wants 2 flashes/min, and each flash takes ~12 seconds,
-            // then we have 60 - (2 * 12) = 36 seconds of "downtime" to distribute
-            // So interval between flashes = 36 / 2 = 18 seconds
+            // Account for flash duration + cooldown when calculating interval
+            // Total time per flash cycle = FLASH_DURATION + FLASH_COOLDOWN = 22 seconds
+            // If user wants 2 flashes/min, we need at least 44 seconds, leaving 16 seconds to distribute
             
             var baseFreq = Math.Max(0.5, settings.FlashFrequency);
-            var totalFlashTime = baseFreq * FLASH_DURATION_SECONDS; // Total time spent flashing
-            var availableTime = Math.Max(10, 60.0 - totalFlashTime); // Time available for gaps
-            var baseInterval = availableTime / baseFreq; // Time between flash events
+            var timePerFlash = FLASH_DURATION_SECONDS + FLASH_COOLDOWN_SECONDS; // ~22 seconds per flash
+            var totalFlashTime = baseFreq * timePerFlash;
+            var availableTime = Math.Max(5, 60.0 - totalFlashTime); // Time available for extra gaps
+            var baseInterval = (availableTime / baseFreq) + FLASH_COOLDOWN_SECONDS; // Add cooldown to interval
             
-            // Add ±30% variance
-            var variance = baseInterval * 0.3;
+            // Add ±20% variance
+            var variance = baseInterval * 0.2;
             var interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
-            interval = Math.Max(5, interval); // Minimum 5 seconds between flashes
+            interval = Math.Max(15, interval); // Minimum 15 seconds between flashes
             
             _schedulerTimer?.Stop();
             _schedulerTimer = new DispatcherTimer
