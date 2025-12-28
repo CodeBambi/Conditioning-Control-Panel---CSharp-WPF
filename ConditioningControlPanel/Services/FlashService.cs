@@ -132,6 +132,9 @@ namespace ConditioningControlPanel.Services
 
         #region Scheduling
 
+        // Approximate duration of a flash event (display time + fade + buffer)
+        private const double FLASH_DURATION_SECONDS = 12.0;
+
         private void ScheduleNextFlash()
         {
             if (!_isRunning) return;
@@ -140,13 +143,20 @@ namespace ConditioningControlPanel.Services
             if (!settings.FlashEnabled) return;
             
             // flash_freq = flashes per minute
+            // We need to account for flash duration when calculating interval
+            // If user wants 2 flashes/min, and each flash takes ~12 seconds,
+            // then we have 60 - (2 * 12) = 36 seconds of "downtime" to distribute
+            // So interval between flashes = 36 / 2 = 18 seconds
+            
             var baseFreq = Math.Max(0.5, settings.FlashFrequency);
-            var baseInterval = 60.0 / baseFreq; // seconds between flashes
+            var totalFlashTime = baseFreq * FLASH_DURATION_SECONDS; // Total time spent flashing
+            var availableTime = Math.Max(10, 60.0 - totalFlashTime); // Time available for gaps
+            var baseInterval = availableTime / baseFreq; // Time between flash events
             
             // Add ±30% variance
             var variance = baseInterval * 0.3;
             var interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
-            interval = Math.Max(3, interval); // Minimum 3 seconds
+            interval = Math.Max(5, interval); // Minimum 5 seconds between flashes
             
             _schedulerTimer?.Stop();
             _schedulerTimer = new DispatcherTimer
@@ -163,6 +173,8 @@ namespace ConditioningControlPanel.Services
                 ScheduleNextFlash();
             };
             _schedulerTimer.Start();
+            
+            App.Logger.Debug("Next flash scheduled in {Interval:F1} seconds", interval);
         }
 
         #endregion
@@ -741,12 +753,17 @@ namespace ConditioningControlPanel.Services
             var targetWidth = Math.Max(50, (int)(origWidth * ratio));
             var targetHeight = Math.Max(50, (int)(origHeight * ratio));
 
-            // Random position within monitor bounds
-            var maxX = Math.Max(1, monitor.Width - targetWidth);
-            var maxY = Math.Max(1, monitor.Height - targetHeight);
+            // Add margin to keep images fully on screen (account for window chrome and DPI)
+            var margin = 50;
+            var maxX = Math.Max(1, monitor.Width - targetWidth - margin);
+            var maxY = Math.Max(1, monitor.Height - targetHeight - margin);
             
-            var x = monitor.X + _random.Next(0, maxX);
-            var y = monitor.Y + _random.Next(0, maxY);
+            // Ensure we don't start at negative positions
+            var minX = margin;
+            var minY = margin;
+            
+            var x = monitor.X + minX + _random.Next(0, Math.Max(1, maxX - minX));
+            var y = monitor.Y + minY + _random.Next(0, Math.Max(1, maxY - minY));
 
             return new ImageGeometry
             {
