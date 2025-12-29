@@ -1283,24 +1283,148 @@
                         </Grid>
                     </Border>
 
-                    <!-- Coming Soon - Lvl 50 -->
+                    <!-- Bubble Count Game - Lvl 50 -->
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
                         <Grid>
-                            <!-- Locked State (always shown for now) -->
+                            <!-- Locked State -->
                             <StackPanel x:Name="Level50Locked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="✨ Mystery Feature" Foreground="#666666" FontWeight="Bold"/>
+                                    <TextBlock Text="🫧 Bubble Count" Foreground="#666666" FontWeight="Bold"/>
                                     <TextBlock Text="🔒 Lvl 50" Foreground="#666666" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
                                     <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🚧" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                        <TextBlock Text="Coming Soon" Foreground="{StaticResource PinkBrush}" 
+                                        <TextBlock Text="🫧" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Bubble Count Challenge" Foreground="{StaticResource PinkBrush}" 
                                                    FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Something special awaits..." Foreground="#888888" 
+                                        <TextBlock Text="Count the bubbles to earn XP!" Foreground="#888888" 
                                                    FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0" FontStyle="Italic"/>
                                     </StackPanel>
                                 </Border>
+                            </StackPanel>
+                            
+                            <!-- Unlocked State -->
+                            <StackPanel x:Name="Level50Unlocked" Visibility="Collapsed">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🫧 Bubble Count" Foreground="{StaticResource PinkBrush}" FontWeight="Bold"/>
+                                        <TextBlock Text="✓ Lvl 50" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkBubbleCountEnabled" Style="{StaticResource ToggleStyle}" 
+                                              HorizontalAlignment="Right"
+                                              Checked="ChkBubbleCountEnabled_Changed" Unchecked="ChkBubbleCountEnabled_Changed"/>
+                                </Grid>
+                                
+                                <StackPanel x:Name="BubbleCountSettings" Margin="0,10,0,0">
+                                    <!-- Per Hour -->
+                                    <Grid Margin="0,3,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Per Hour"
+                                                   ToolTip="How often the bubble count challenge appears"/>
+                                        <TextBlock x:Name="TxtBubbleCountFreq" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="2"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderBubbleCountFreq" Minimum="1" Maximum="10" Value="2" 
+                                            Margin="0,1" ValueChanged="SliderBubbleCountFreq_Changed"
+                                            ToolTip="Challenges per hour (1-10)"/>
+                                    
+                                    <!-- Difficulty -->
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Difficulty"/>
+                                        <ComboBox x:Name="CmbBubbleCountDifficulty" Grid.Column="1" 
+                                                  Width="100" Background="#1E1E3A" Foreground="White"
+                                                  SelectionChanged="CmbBubbleCountDifficulty_Changed">
+                                            <ComboBoxItem Content="Easy" Tag="0"/>
+                                            <ComboBoxItem Content="Medium" Tag="1" IsSelected="True"/>
+                                            <ComboBoxItem Content="Hard" Tag="2"/>
+                                        </ComboBox>
+                                    </Grid>
+                                    
+                                    <!-- Strict Lock -->
+                                    <Grid Margin="0,8,0,0">
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Strict Lock"
+                                                   ToolTip="Prevent closing until correctly answered"/>
+                                        <CheckBox x:Name="ChkBubbleCountStrict" Style="{StaticResource ToggleStyle}" 
+                                                  HorizontalAlignment="Right"
+                                                  Checked="ChkBubbleCountStrict_Changed" Unchecked="ChkBubbleCountStrict_Changed"/>
+                                    </Grid>
+                                    
+                                    <!-- Test Button -->
+                                    <Button Content="🎮 Test Now" 
+                                            Background="#40FFFFFF" Foreground="White" 
+                                            BorderThickness="0" Padding="10,5" Margin="0,10,0,0"
+                                            Cursor="Hand" Click="BtnTestBubbleCount_Click"
+                                            ToolTip="Trigger a bubble count challenge now"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Bouncing Text - Lvl 60 -->
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                        <Grid>
+                            <!-- Locked State -->
+                            <StackPanel x:Name="Level60Locked" Visibility="Visible">
+                                <Grid>
+                                    <TextBlock Text="📺 Bouncing Text" Foreground="#666666" FontWeight="Bold"/>
+                                    <TextBlock Text="🔒 Lvl 60" Foreground="#666666" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="📺" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="DVD Screensaver Style" Foreground="{StaticResource PinkBrush}" 
+                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Bouncing text across your screen!" Foreground="#888888" 
+                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0" FontStyle="Italic"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            
+                            <!-- Unlocked State -->
+                            <StackPanel x:Name="Level60Unlocked" Visibility="Collapsed">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="📺 Bouncing Text" Foreground="{StaticResource PinkBrush}" FontWeight="Bold"/>
+                                        <TextBlock Text="✓ Lvl 60" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkBouncingTextEnabled" Style="{StaticResource ToggleStyle}" 
+                                              HorizontalAlignment="Right"
+                                              Checked="ChkBouncingTextEnabled_Changed" Unchecked="ChkBouncingTextEnabled_Changed"/>
+                                </Grid>
+                                
+                                <StackPanel x:Name="BouncingTextSettings" Margin="0,10,0,0">
+                                    <!-- Speed -->
+                                    <Grid Margin="0,3,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Speed"
+                                                   ToolTip="How fast the text bounces"/>
+                                        <TextBlock x:Name="TxtBouncingTextSpeed" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="5"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderBouncingTextSpeed" Minimum="1" Maximum="10" Value="5" 
+                                            Margin="0,1" ValueChanged="SliderBouncingTextSpeed_Changed"
+                                            ToolTip="Bounce speed (1=slow, 10=fast)"/>
+                                    
+                                    <!-- XP Info -->
+                                    <TextBlock Text="💰 +10 XP per bounce!" 
+                                               Foreground="#50C878" FontSize="12" 
+                                               HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                                    
+                                    <!-- Edit Phrases -->
+                                    <Button Content="✏️ Edit Phrases" 
+                                            Background="#40FFFFFF" Foreground="White" 
+                                            BorderThickness="0" Padding="10,5" Margin="0,10,0,0"
+                                            Cursor="Hand" Click="BtnEditBouncingText_Click"
+                                            ToolTip="Customize the bouncing text phrases"/>
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
                     </Border>

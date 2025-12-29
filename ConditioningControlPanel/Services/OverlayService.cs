@@ -193,7 +193,8 @@ public class OverlayService : IDisposable
     {
         try
         {
-            var dpiScale = GetDpiScale();
+            // Get DPI scale for THIS specific screen
+            var dpiScale = GetDpiScaleForScreen(screen);
 
             var window = new Window
             {
@@ -202,6 +203,8 @@ public class OverlayService : IDisposable
                 Background = Brushes.Transparent,
                 Topmost = true,
                 ShowInTaskbar = false,
+                ShowActivated = false, // Don't steal focus
+                Focusable = false,
                 IsHitTestVisible = false,
                 Left = screen.Bounds.X / dpiScale,
                 Top = screen.Bounds.Y / dpiScale,
@@ -225,6 +228,10 @@ public class OverlayService : IDisposable
             };
             
             window.Show();
+            
+            App.Logger?.Debug("Pink filter created for {Screen} at {X},{Y} size {W}x{H} (DPI scale: {DPI})", 
+                screen.DeviceName, window.Left, window.Top, window.Width, window.Height, dpiScale);
+            
             return window;
         }
         catch (Exception ex)
@@ -328,7 +335,8 @@ public class OverlayService : IDisposable
     {
         try
         {
-            var dpiScale = GetDpiScale();
+            // Get DPI scale for THIS specific screen
+            var dpiScale = GetDpiScaleForScreen(screen);
 
             var window = new Window
             {
@@ -337,6 +345,8 @@ public class OverlayService : IDisposable
                 Background = Brushes.Transparent,
                 Topmost = true,
                 ShowInTaskbar = false,
+                ShowActivated = false, // Don't steal focus
+                Focusable = false,
                 IsHitTestVisible = false,
                 Left = screen.Bounds.X / dpiScale,
                 Top = screen.Bounds.Y / dpiScale,
@@ -385,6 +395,9 @@ public class OverlayService : IDisposable
 
             window.Show();
             
+            App.Logger?.Debug("Spiral created for {Screen} at {X},{Y} size {W}x{H} (DPI scale: {DPI})", 
+                screen.DeviceName, window.Left, window.Top, window.Width, window.Height, dpiScale);
+            
             // Start playing after window is shown
             media.Play();
 
@@ -431,6 +444,41 @@ public class OverlayService : IDisposable
 
     #region Helpers
 
+    /// <summary>
+    /// Get DPI scale for a specific screen using its bounds
+    /// This handles multi-monitor setups with different scaling per monitor
+    /// </summary>
+    private double GetDpiScaleForScreen(System.Windows.Forms.Screen screen)
+    {
+        try
+        {
+            // Try to get per-monitor DPI using Win32 API
+            var hwnd = IntPtr.Zero;
+            
+            // Get DPI for the monitor this screen is on
+            uint dpiX = 96, dpiY = 96;
+            var hMonitor = MonitorFromPoint(new POINT { X = screen.Bounds.X + 1, Y = screen.Bounds.Y + 1 }, 2);
+            
+            if (hMonitor != IntPtr.Zero)
+            {
+                // Try GetDpiForMonitor (Windows 8.1+)
+                var result = GetDpiForMonitor(hMonitor, 0, out dpiX, out dpiY);
+                if (result == 0)
+                {
+                    return dpiX / 96.0;
+                }
+            }
+            
+            // Fallback to system DPI
+            using var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero);
+            return g.DpiX / 96.0;
+        }
+        catch
+        {
+            return 1.0;
+        }
+    }
+
     private double GetDpiScale()
     {
         try
@@ -467,6 +515,16 @@ public class OverlayService : IDisposable
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+
+    // Per-monitor DPI support (Windows 8.1+)
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct POINT { public int X; public int Y; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+    [System.Runtime.InteropServices.DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
     #endregion
 

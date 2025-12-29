@@ -708,6 +708,75 @@ namespace ConditioningControlPanel.Models
         }
         #endregion
 
+        #region Bubble Count Game (Unlocks Lv.50)
+
+        private bool _bubbleCountEnabled = false;
+        public bool BubbleCountEnabled
+        {
+            get => _bubbleCountEnabled;
+            set { _bubbleCountEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _bubbleCountFrequency = 2; // Games per hour (1-10)
+        public int BubbleCountFrequency
+        {
+            get => _bubbleCountFrequency;
+            set { _bubbleCountFrequency = Math.Clamp(value, 1, 10); OnPropertyChanged(); }
+        }
+
+        private int _bubbleCountDifficulty = 1; // 0=Easy, 1=Medium, 2=Hard
+        public int BubbleCountDifficulty
+        {
+            get => _bubbleCountDifficulty;
+            set { _bubbleCountDifficulty = Math.Clamp(value, 0, 2); OnPropertyChanged(); }
+        }
+
+        private bool _bubbleCountStrictLock = false;
+        public bool BubbleCountStrictLock
+        {
+            get => _bubbleCountStrictLock;
+            set { _bubbleCountStrictLock = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region Bouncing Text (Unlocks Lv.60)
+
+        private bool _bouncingTextEnabled = false;
+        public bool BouncingTextEnabled
+        {
+            get => _bouncingTextEnabled;
+            set { _bouncingTextEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _bouncingTextSpeed = 5; // 1-10
+        public int BouncingTextSpeed
+        {
+            get => _bouncingTextSpeed;
+            set { _bouncingTextSpeed = Math.Clamp(value, 1, 10); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, bool> _bouncingTextPool = new()
+        {
+            { "GOOD GIRL", true },
+            { "OBEY", true },
+            { "SUBMIT", true },
+            { "BIMBO", true },
+            { "EMPTY", true },
+            { "MINDLESS", true },
+            { "OBEDIENT", true },
+            { "PRETTY", true },
+            { "PINK", true },
+            { "DROP", true }
+        };
+        public Dictionary<string, bool> BouncingTextPool
+        {
+            get => _bouncingTextPool;
+            set { _bouncingTextPool = value ?? new(); OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Pink Filter (Unlocks Lv.10)
 
         private bool _pinkFilterEnabled = false;

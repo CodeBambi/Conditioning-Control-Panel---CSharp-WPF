@@ -260,6 +260,8 @@ namespace ConditioningControlPanel.Services
                 Background = bgTransparent ? Brushes.Transparent : new SolidColorBrush(bgColor),
                 Topmost = true,
                 ShowInTaskbar = false,
+                ShowActivated = false, // Don't steal focus from Lock Card
+                Focusable = false,
                 Left = left,
                 Top = top,
                 Width = width,

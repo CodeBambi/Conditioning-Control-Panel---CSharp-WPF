@@ -929,6 +929,18 @@ namespace ConditioningControlPanel
                 App.LockCard.Start();
             }
             
+            // Start bubble count game service (requires level 50)
+            if (settings.PlayerLevel >= 50 && settings.BubbleCountEnabled)
+            {
+                App.BubbleCount.Start();
+            }
+            
+            // Start bouncing text service (requires level 60)
+            if (settings.PlayerLevel >= 60 && settings.BouncingTextEnabled)
+            {
+                App.BouncingText.Start();
+            }
+            
             // Start ramp timer if enabled
             if (settings.IntensityRampEnabled)
             {
@@ -940,8 +952,8 @@ namespace ConditioningControlPanel
             _isRunning = true;
             UpdateStartButton();
             
-            App.Logger?.Information("Engine started - Overlay: {Overlay}, Bubbles: {Bubbles}, LockCard: {LockCard}", 
-                App.Overlay.IsRunning, App.Bubbles.IsRunning, App.LockCard.IsRunning);
+            App.Logger?.Information("Engine started - Overlay: {Overlay}, Bubbles: {Bubbles}, LockCard: {LockCard}, BubbleCount: {BubbleCount}", 
+                App.Overlay.IsRunning, App.Bubbles.IsRunning, App.LockCard.IsRunning, App.BubbleCount.IsRunning);
         }
 
         private void StopEngine()
@@ -952,6 +964,8 @@ namespace ConditioningControlPanel
             App.Overlay.Stop();
             App.Bubbles.Stop();
             App.LockCard.Stop();
+            App.BubbleCount.Stop();
+            App.BouncingText.Stop();
             App.Audio.Unduck();
             
             // Stop ramp timer and reset sliders
@@ -1622,8 +1636,15 @@ namespace ConditioningControlPanel
             LockCardLocked.Visibility = level35Unlocked ? Visibility.Collapsed : Visibility.Visible;
             LockCardUnlocked.Visibility = level35Unlocked ? Visibility.Visible : Visibility.Collapsed;
             
-            // Level 50: Coming Soon (always show locked state for now)
-            Level50Locked.Visibility = Visibility.Visible;
+            // Level 50 unlocks: Bubble Count Game
+            var level50Unlocked = level >= 50;
+            Level50Locked.Visibility = level50Unlocked ? Visibility.Collapsed : Visibility.Visible;
+            Level50Unlocked.Visibility = level50Unlocked ? Visibility.Visible : Visibility.Collapsed;
+            
+            // Level 60 unlocks: Bouncing Text
+            var level60Unlocked = level >= 60;
+            Level60Locked.Visibility = level60Unlocked ? Visibility.Collapsed : Visibility.Visible;
+            Level60Unlocked.Visibility = level60Unlocked ? Visibility.Visible : Visibility.Collapsed;
         }
 
         #endregion
@@ -1850,6 +1871,116 @@ namespace ConditioningControlPanel
             TxtLockCardRepeats.Text = $"{(int)e.NewValue}x";
             ApplySettingsLive();
         }
+
+        #region Bubble Count (Level 50)
+
+        private void ChkBubbleCountEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            
+            var isEnabled = ChkBubbleCountEnabled.IsChecked ?? false;
+            App.Settings.Current.BubbleCountEnabled = isEnabled;
+            
+            // Immediately update service if engine is running
+            if (_isRunning)
+            {
+                if (isEnabled && App.Settings.Current.PlayerLevel >= 50)
+                {
+                    App.BubbleCount.Start();
+                }
+                else
+                {
+                    App.BubbleCount.Stop();
+                }
+                App.Logger?.Information("Bubble Count toggled: {Enabled}", isEnabled);
+            }
+        }
+
+        private void SliderBubbleCountFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtBubbleCountFreq == null) return;
+            TxtBubbleCountFreq.Text = ((int)e.NewValue).ToString();
+            App.Settings.Current.BubbleCountFrequency = (int)e.NewValue;
+            
+            if (_isRunning)
+            {
+                App.BubbleCount.RefreshSchedule();
+            }
+        }
+
+        private void CmbBubbleCountDifficulty_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_isLoading || CmbBubbleCountDifficulty.SelectedItem == null) return;
+            
+            var item = CmbBubbleCountDifficulty.SelectedItem as System.Windows.Controls.ComboBoxItem;
+            if (item?.Tag != null && int.TryParse(item.Tag.ToString(), out int difficulty))
+            {
+                App.Settings.Current.BubbleCountDifficulty = difficulty;
+            }
+        }
+
+        private void ChkBubbleCountStrict_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.BubbleCountStrictLock = ChkBubbleCountStrict.IsChecked ?? false;
+        }
+
+        private void BtnTestBubbleCount_Click(object sender, RoutedEventArgs e)
+        {
+            App.BubbleCount.TriggerGame();
+        }
+
+        #endregion
+
+        #region Bouncing Text (Level 60)
+
+        private void ChkBouncingTextEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            
+            var isEnabled = ChkBouncingTextEnabled.IsChecked ?? false;
+            App.Settings.Current.BouncingTextEnabled = isEnabled;
+            
+            // Immediately update service if engine is running
+            if (_isRunning)
+            {
+                if (isEnabled && App.Settings.Current.PlayerLevel >= 60)
+                {
+                    App.BouncingText.Start();
+                }
+                else
+                {
+                    App.BouncingText.Stop();
+                }
+                App.Logger?.Information("Bouncing Text toggled: {Enabled}", isEnabled);
+            }
+        }
+
+        private void SliderBouncingTextSpeed_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtBouncingTextSpeed == null) return;
+            TxtBouncingTextSpeed.Text = ((int)e.NewValue).ToString();
+            App.Settings.Current.BouncingTextSpeed = (int)e.NewValue;
+            
+            if (_isRunning)
+            {
+                App.BouncingText.Refresh();
+            }
+        }
+
+        private void BtnEditBouncingText_Click(object sender, RoutedEventArgs e)
+        {
+            var editor = new TextEditorDialog("Bouncing Text Phrases", App.Settings.Current.BouncingTextPool);
+            editor.Owner = this;
+            
+            if (editor.ShowDialog() == true && editor.ResultData != null)
+            {
+                App.Settings.Current.BouncingTextPool = editor.ResultData;
+                App.Logger?.Information("Bouncing text phrases updated: {Count} items", editor.ResultData.Count);
+            }
+        }
+
+        #endregion
 
         private void SliderRampDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
