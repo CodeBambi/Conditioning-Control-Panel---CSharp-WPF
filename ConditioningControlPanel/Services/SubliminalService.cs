@@ -270,6 +270,7 @@ namespace ConditioningControlPanel.Services
             {
                 win.Show();
                 _activeWindows.Add(win);
+                ForceTopmost(win);
             }
             
             // Animate all windows simultaneously
@@ -277,6 +278,19 @@ namespace ConditioningControlPanel.Services
             {
                 AnimateSubliminal(win, targetOpacity, durationMs);
             }
+        }
+
+        /// <summary>
+        /// Force window to stay on top even over fullscreen apps
+        /// </summary>
+        private void ForceTopmost(Window window)
+        {
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            catch { }
         }
 
         private Window CreateSubliminalWindow(System.Windows.Forms.Screen screen, string text, 
@@ -476,6 +490,8 @@ namespace ConditioningControlPanel.Services
         private const int WS_EX_TRANSPARENT = 0x00000020;
         private const uint SWP_NOACTIVATE = 0x0010;
         private const uint SWP_SHOWWINDOW = 0x0040;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]

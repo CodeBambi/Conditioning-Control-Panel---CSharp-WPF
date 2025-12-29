@@ -839,6 +839,11 @@
                                 </StackPanel>
                             </Grid>
                             
+                            <!-- Gaming Tip -->
+                            <TextBlock Text="💡 Use 'Borderless Windowed' mode in games for overlays" 
+                                       Foreground="#808090" FontSize="10" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       ToolTip="Exclusive fullscreen games block all overlays. Use Borderless Windowed mode instead."/>
+                            
                             <!-- Panic Key Configuration -->
                             <Grid Margin="0,8,0,0">
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="Panic Key" VerticalAlignment="Center"

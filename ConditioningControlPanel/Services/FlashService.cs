@@ -515,6 +515,9 @@ namespace ConditioningControlPanel.Services
 
             window.Show();
             
+            // Force topmost even over fullscreen apps
+            ForceTopmost(window);
+            
             lock (_lockObj)
             {
                 _activeWindows.Add(window);
@@ -945,6 +948,17 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        private void ForceTopmost(Window window)
+        {
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, 
+                    NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+            }
+            catch { }
+        }
+
         private void CloseAllWindows()
         {
             List<FlashWindow> windowsCopy;
@@ -1027,12 +1041,20 @@ namespace ConditioningControlPanel.Services
         public const int WS_EX_LAYERED = 0x00080000;
         public const int WS_EX_TOOLWINDOW = 0x00000080;
         public const int WS_EX_NOACTIVATE = 0x08000000;
+        
+        public const uint SWP_NOMOVE = 0x0002;
+        public const uint SWP_NOSIZE = 0x0001;
+        public const uint SWP_NOACTIVATE = 0x0010;
+        public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern int GetWindowLong(IntPtr hwnd, int index);
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
     }
 
     #endregion
