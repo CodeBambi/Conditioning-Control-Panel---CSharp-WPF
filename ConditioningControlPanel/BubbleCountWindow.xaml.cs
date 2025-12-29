@@ -84,6 +84,14 @@ namespace ConditioningControlPanel
             // Key handler
             KeyDown += OnKeyDown;
             
+            // Hide from Alt+Tab
+            SourceInitialized += (s, e) =>
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+            };
+            
             // Register window
             _allWindows.Add(this);
             
@@ -608,5 +616,18 @@ namespace ConditioningControlPanel
             _lifeTimer.Stop();
             _animTimer.Stop();
         }
+    }
+
+    // Win32 for BubbleCountWindow
+    public partial class BubbleCountWindow
+    {
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hwnd, int index);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
     }
 }

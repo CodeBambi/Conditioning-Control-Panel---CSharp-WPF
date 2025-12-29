@@ -510,6 +510,9 @@ namespace ConditioningControlPanel.Services
                 MakeClickThrough(window);
             }
 
+            // Hide from Alt+Tab for ALL flash windows
+            HideFromAltTab(window);
+
             window.Show();
             
             lock (_lockObj)
@@ -924,6 +927,24 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        private void HideFromAltTab(Window window)
+        {
+            try
+            {
+                window.SourceInitialized += (s, e) =>
+                {
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                    var extendedStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
+                    NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE,
+                        extendedStyle | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE);
+                };
+            }
+            catch (Exception ex)
+            {
+                App.Logger.Debug("Could not hide window from Alt+Tab: {Error}", ex.Message);
+            }
+        }
+
         private void CloseAllWindows()
         {
             List<FlashWindow> windowsCopy;
@@ -1004,6 +1025,8 @@ namespace ConditioningControlPanel.Services
         public const int GWL_EXSTYLE = -20;
         public const int WS_EX_TRANSPARENT = 0x00000020;
         public const int WS_EX_LAYERED = 0x00080000;
+        public const int WS_EX_TOOLWINDOW = 0x00000080;
+        public const int WS_EX_NOACTIVATE = 0x08000000;
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern int GetWindowLong(IntPtr hwnd, int index);

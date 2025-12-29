@@ -130,6 +130,12 @@ namespace ConditioningControlPanel.Services
                 {
                     Application.Current.Dispatcher.Invoke(() => ShowSubliminalVisuals(text));
                 });
+                
+                // If "Bambi Freeze" was played, follow up with "Bambi Reset"
+                if (text.Equals("Bambi Freeze", StringComparison.OrdinalIgnoreCase))
+                {
+                    ScheduleBambiReset();
+                }
             }
             else
             {
@@ -138,6 +144,39 @@ namespace ConditioningControlPanel.Services
             
             // Add XP
             App.Progression?.AddXP(1);
+        }
+
+        /// <summary>
+        /// Schedule Bambi Reset to follow Bambi Freeze after a delay
+        /// </summary>
+        private void ScheduleBambiReset()
+        {
+            // Wait 2-4 seconds then show Bambi Reset
+            var delay = _random.Next(2000, 4000);
+            Task.Delay(delay).ContinueWith(_ =>
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    var resetText = "Bambi Reset";
+                    string? resetAudio = FindLinkedAudio(resetText);
+                    
+                    if (resetAudio != null && App.Settings.Current.SubAudioEnabled)
+                    {
+                        App.Audio.Duck(App.Settings.Current.DuckingLevel);
+                        PlayWhisperAudio(resetAudio);
+                        Task.Delay(300).ContinueWith(_ =>
+                        {
+                            Application.Current.Dispatcher.Invoke(() => ShowSubliminalVisuals(resetText));
+                        });
+                    }
+                    else
+                    {
+                        ShowSubliminalVisuals(resetText);
+                    }
+                    
+                    App.Logger?.Debug("Bambi Reset triggered after Bambi Freeze");
+                });
+            });
         }
 
         private string? FindLinkedAudio(string text)

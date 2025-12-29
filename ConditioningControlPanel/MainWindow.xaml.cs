@@ -70,6 +70,9 @@ namespace ConditioningControlPanel
             UpdateUI();
             _isLoading = false;
             
+            // Show welcome dialog on first launch
+            WelcomeDialog.ShowIfNeeded();
+            
             // Initialize scheduler timer (checks every 30 seconds)
             _schedulerTimer = new DispatcherTimer
             {
@@ -1344,8 +1347,11 @@ namespace ConditioningControlPanel
             ChkFlashAudio.IsChecked = s.FlashAudioEnabled;
             SliderFlashDuration.IsEnabled = !s.FlashAudioEnabled;
             SliderFlashDuration.Opacity = s.FlashAudioEnabled ? 0.5 : 1.0;
-            TxtAudioWarning.Visibility = s.FlashAudioEnabled ? Visibility.Collapsed : Visibility.Visible;
-            SliderPerMin.Maximum = s.FlashAudioEnabled ? 180 : 30;
+            
+            // Set audio link state based on frequency
+            _isLoading = false;
+            UpdateAudioLinkState();
+            _isLoading = true;
 
             // Video
             ChkVideoEnabled.IsChecked = s.MandatoryVideosEnabled;
@@ -1665,6 +1671,7 @@ namespace ConditioningControlPanel
         {
             if (_isLoading || TxtPerMin == null) return;
             TxtPerMin.Text = ((int)e.NewValue).ToString();
+            UpdateAudioLinkState();
             ApplySettingsLive();
         }
 
@@ -1723,22 +1730,31 @@ namespace ConditioningControlPanel
             
             // Show/hide warning
             TxtAudioWarning.Visibility = isEnabled ? Visibility.Collapsed : Visibility.Visible;
-            
-            // Enforce 30/hour limit when audio is disabled
-            if (!isEnabled && SliderPerMin.Value > 30)
-            {
-                SliderPerMin.Value = 30;
-                App.Settings.Current.FlashFrequency = 30;
-            }
-            
-            // Update slider maximum
-            UpdateFlashFrequencyLimit();
         }
 
-        private void UpdateFlashFrequencyLimit()
+        private void UpdateAudioLinkState()
         {
-            var audioEnabled = ChkFlashAudio.IsChecked ?? true;
-            SliderPerMin.Maximum = audioEnabled ? 180 : 30;
+            if (_isLoading) return;
+            
+            var flashFreq = (int)SliderPerMin.Value;
+            
+            // If flashes > 30, force audio OFF and disable checkbox
+            if (flashFreq > 30)
+            {
+                ChkFlashAudio.IsChecked = false;
+                ChkFlashAudio.IsEnabled = false;
+                App.Settings.Current.FlashAudioEnabled = false;
+                SliderFlashDuration.IsEnabled = true;
+                SliderFlashDuration.Opacity = 1.0;
+                TxtAudioWarning.Visibility = Visibility.Visible;
+                TxtAudioWarning.Text = "⚠️ Audio disabled when >30 flashes/hour";
+            }
+            else
+            {
+                ChkFlashAudio.IsEnabled = true;
+                TxtAudioWarning.Text = "⚠️ Max 30 flashes/hour when disabled";
+                TxtAudioWarning.Visibility = (ChkFlashAudio.IsChecked ?? true) ? Visibility.Collapsed : Visibility.Visible;
+            }
         }
 
         private void SliderPerHour_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
