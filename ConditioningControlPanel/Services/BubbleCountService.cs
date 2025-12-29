@@ -126,9 +126,8 @@ public class BubbleCountService : IDisposable
                 // Determine difficulty settings
                 var difficulty = (Difficulty)settings.BubbleCountDifficulty;
                 
-                // Show the game window
-                var gameWindow = new BubbleCountWindow(videoPath, difficulty, settings.BubbleCountStrictLock, OnGameComplete);
-                gameWindow.Show();
+                // Show the game on all monitors
+                BubbleCountWindow.ShowOnAllMonitors(videoPath, difficulty, settings.BubbleCountStrictLock, OnGameComplete);
             }
             catch (Exception ex)
             {

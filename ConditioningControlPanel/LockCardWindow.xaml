@@ -72,7 +72,9 @@
                              FontSize="20"
                              TextAlignment="Center"
                              TextChanged="TxtInput_TextChanged"
-                             MaxLength="200">
+                             MaxLength="200"
+                             ContextMenu="{x:Null}"
+                             AllowDrop="False">
                         <TextBox.Foreground>
                             <SolidColorBrush x:Name="InputTextBrush" Color="White"/>
                         </TextBox.Foreground>

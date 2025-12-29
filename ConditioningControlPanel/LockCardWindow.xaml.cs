@@ -27,6 +27,11 @@ namespace ConditioningControlPanel
         private static string _sharedInput = "";
 
         /// <summary>
+        /// Check if any lock card window is currently open
+        /// </summary>
+        public static bool IsAnyOpen() => _allWindows.Count > 0;
+
+        /// <summary>
         /// Create a lock card window for a specific screen
         /// </summary>
         /// <param name="phrase">The phrase to type</param>
@@ -182,6 +187,15 @@ namespace ConditioningControlPanel
             if (_strictMode && e.Key == Key.System && e.SystemKey == Key.F4)
             {
                 e.Handled = true;
+            }
+            
+            // Prevent Ctrl+C, Ctrl+V, Ctrl+X (no cheating!)
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (e.Key == Key.C || e.Key == Key.V || e.Key == Key.X || e.Key == Key.A)
+                {
+                    e.Handled = true;
+                }
             }
         }
 

@@ -58,12 +58,23 @@ namespace ConditioningControlPanel.Services
             _isRunning = false;
             _scheduler?.Stop();
             _attentionTimer?.Stop();
+            
+            // Force cleanup of any playing video
+            _videoPlaying = false;
+            _strictActive = false;
             Cleanup();
+            
+            App.Logger?.Information("VideoService stopped");
         }
 
         public void TriggerVideo()
         {
-            if (_videoPlaying) return;
+            // Force close any stuck/existing video windows first
+            if (_videoPlaying || _windows.Count > 0)
+            {
+                App.Logger?.Warning("VideoService: Forcing cleanup of existing video before triggering new one");
+                ForceCleanup();
+            }
             
             var path = GetNextVideo();
             if (string.IsNullOrEmpty(path))
@@ -73,6 +84,20 @@ namespace ConditioningControlPanel.Services
             }
             
             PlayVideo(path, App.Settings.Current.StrictLockEnabled);
+        }
+
+        /// <summary>
+        /// Force cleanup without scheduling next - used for panic key and preventing stacking
+        /// </summary>
+        public void ForceCleanup()
+        {
+            _videoPlaying = false;
+            _strictActive = false;
+            CloseAll();
+            App.Audio?.Unduck();
+            App.Audio?.ResumeBackgroundMusic();
+            _penalties = 0;
+            App.Logger?.Information("VideoService: Force cleanup completed");
         }
 
         private void ScheduleNext()
@@ -113,19 +138,22 @@ namespace ConditioningControlPanel.Services
                 var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
                 var secondaries = allScreens.Where(s => !s.Primary).ToList();
 
-                // Create secondary screens first (give them head start)
+                // Create primary screen with the actual MediaElement
+                var (primaryWin, primaryMedia) = CreatePrimaryVideoWindow(path, primary, strict);
+                _windows.Add(primaryWin);
+
+                // Create secondary screens that mirror the primary MediaElement
                 if (App.Settings.Current.DualMonitorEnabled)
                 {
                     foreach (var scr in secondaries)
                     {
-                        var win = CreateFullscreenVideoWindow(path, scr, strict, withAudio: false);
+                        var win = CreateMirrorVideoWindow(primaryMedia, scr, strict);
                         _windows.Add(win);
                     }
                 }
 
-                // Create primary screen
-                var primaryWin = CreateFullscreenVideoWindow(path, primary, strict, withAudio: true);
-                _windows.Add(primaryWin);
+                // Now play
+                primaryMedia.Play();
 
                 if (App.Settings.Current.AttentionChecksEnabled)
                     SetupAttention();
@@ -136,19 +164,19 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Creates a fullscreen video window on the specified screen.
+        /// Creates the primary video window with the actual MediaElement.
         /// </summary>
-        private Window CreateFullscreenVideoWindow(string path, Screen screen, bool strict, bool withAudio)
+        private (Window win, MediaElement media) CreatePrimaryVideoWindow(string path, Screen screen, bool strict)
         {
             var win = new Window
             {
                 WindowStyle = WindowStyle.None,
                 ResizeMode = ResizeMode.NoResize,
                 ShowInTaskbar = false,
+                ShowActivated = true,
                 Topmost = true,
                 Background = Brushes.Black,
                 WindowStartupLocation = WindowStartupLocation.Manual,
-                // Position on target screen first
                 Left = screen.Bounds.X + 100,
                 Top = screen.Bounds.Y + 100,
                 Width = 400,
@@ -162,27 +190,23 @@ namespace ConditioningControlPanel.Services
                 Stretch = Stretch.Uniform,
                 HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
-                Volume = withAudio ? App.Settings.Current.MasterVolume / 100.0 : 0,
-                IsMuted = !withAudio
+                Volume = App.Settings.Current.MasterVolume / 100.0
             };
 
-            if (withAudio)
+            mediaElement.MediaOpened += (s, e) =>
             {
-                mediaElement.MediaOpened += (s, e) =>
-                {
-                    if (mediaElement.NaturalDuration.HasTimeSpan)
-                        _duration = mediaElement.NaturalDuration.TimeSpan.TotalSeconds;
-                };
-                
-                mediaElement.MediaEnded += (s, e) => 
-                    Application.Current.Dispatcher.BeginInvoke(OnEnded);
-                
-                mediaElement.MediaFailed += (s, e) =>
-                {
-                    App.Logger.Error("Media failed: {Error}", e.ErrorException?.Message);
-                    Application.Current.Dispatcher.BeginInvoke(OnEnded);
-                };
-            }
+                if (mediaElement.NaturalDuration.HasTimeSpan)
+                    _duration = mediaElement.NaturalDuration.TimeSpan.TotalSeconds;
+            };
+            
+            mediaElement.MediaEnded += (s, e) => 
+                Application.Current.Dispatcher.BeginInvoke(OnEnded);
+            
+            mediaElement.MediaFailed += (s, e) =>
+            {
+                App.Logger.Error("Media failed: {Error}", e.ErrorException?.Message);
+                Application.Current.Dispatcher.BeginInvoke(OnEnded);
+            };
 
             var grid = new Grid { Background = Brushes.Black };
             grid.Children.Add(mediaElement);
@@ -194,11 +218,76 @@ namespace ConditioningControlPanel.Services
             win.WindowState = WindowState.Maximized;
             win.Activate();
 
-            // Load and play
+            // Load source
             mediaElement.Source = new Uri(path);
-            mediaElement.Play();
 
-            App.Logger.Debug("Video window on: {Screen} (audio: {Audio})", screen.DeviceName, withAudio);
+            App.Logger.Debug("Primary video window on: {Screen}", screen.DeviceName);
+            return (win, mediaElement);
+        }
+
+        /// <summary>
+        /// Creates a mirror window that displays the same video using VisualBrush.
+        /// This avoids the decoder creating a separate decode stream.
+        /// </summary>
+        private Window CreateMirrorVideoWindow(MediaElement sourceMedia, Screen screen, bool strict)
+        {
+            var win = new Window
+            {
+                WindowStyle = WindowStyle.None,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+                ShowActivated = false,
+                Topmost = true,
+                Background = Brushes.Black,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = screen.Bounds.X + 100,
+                Top = screen.Bounds.Y + 100,
+                Width = 400,
+                Height = 300
+            };
+
+            // Use VisualBrush to mirror the primary MediaElement
+            var visualBrush = new VisualBrush
+            {
+                Visual = sourceMedia,
+                Stretch = Stretch.Uniform,
+                AlignmentX = AlignmentX.Center,
+                AlignmentY = AlignmentY.Center
+            };
+
+            var rectangle = new System.Windows.Shapes.Rectangle
+            {
+                Fill = visualBrush,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch
+            };
+
+            var grid = new Grid { Background = Brushes.Black };
+            grid.Children.Add(rectangle);
+            win.Content = grid;
+
+            SetupStrictHandlers(win, strict);
+
+            win.Show();
+            win.WindowState = WindowState.Maximized;
+
+            App.Logger.Debug("Mirror video window on: {Screen}", screen.DeviceName);
+            return win;
+        }
+
+        /// <summary>
+        /// Creates a fullscreen video window on the specified screen.
+        /// Kept for backward compatibility.
+        /// </summary>
+        private Window CreateFullscreenVideoWindow(string path, Screen screen, bool strict, bool withAudio)
+        {
+            var (win, media) = CreatePrimaryVideoWindow(path, screen, strict);
+            if (!withAudio)
+            {
+                media.Volume = 0;
+                media.IsMuted = true;
+            }
+            media.Play();
             return win;
         }
 

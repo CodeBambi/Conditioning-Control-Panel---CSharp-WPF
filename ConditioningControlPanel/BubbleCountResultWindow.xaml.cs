@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -8,23 +9,40 @@ namespace ConditioningControlPanel
 {
     /// <summary>
     /// Result window for bubble counting - enter the number, 3 attempts, then mercy card
+    /// Multi-monitor support
     /// </summary>
     public partial class BubbleCountResultWindow : Window
     {
         private readonly int _correctAnswer;
         private readonly bool _strictMode;
         private readonly Action<bool> _onComplete;
+        private readonly System.Windows.Forms.Screen _screen;
+        private readonly bool _isPrimary;
         
         private int _attemptsRemaining = 3;
         private bool _isCompleted = false;
+        
+        // Multi-monitor support
+        private static List<BubbleCountResultWindow> _allWindows = new();
+        private static string _sharedInput = "";
 
-        public BubbleCountResultWindow(int correctAnswer, bool strictMode, Action<bool> onComplete)
+        public BubbleCountResultWindow(int correctAnswer, bool strictMode, Action<bool> onComplete,
+            System.Windows.Forms.Screen? screen = null, bool isPrimary = true)
         {
             InitializeComponent();
             
             _correctAnswer = correctAnswer;
             _strictMode = strictMode;
             _onComplete = onComplete;
+            _screen = screen ?? System.Windows.Forms.Screen.PrimaryScreen!;
+            _isPrimary = isPrimary;
+            
+            // Position on screen
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Left = _screen.Bounds.X + 100;
+            Top = _screen.Bounds.Y + 100;
+            Width = 400;
+            Height = 300;
             
             // Setup UI
             UpdateAttemptsDisplay();
@@ -35,12 +53,28 @@ namespace ConditioningControlPanel
                 TxtEscHint.Visibility = Visibility.Collapsed;
             }
             
-            // Focus input
-            Loaded += (s, e) => TxtAnswer.Focus();
+            // Non-primary windows are read-only
+            if (!_isPrimary)
+            {
+                TxtAnswer.IsReadOnly = true;
+                TxtAnswer.Focusable = false;
+                BtnSubmit.IsEnabled = false;
+            }
+            
+            // Register window
+            _allWindows.Add(this);
+            
+            // Focus input on primary
+            Loaded += (s, e) => 
+            {
+                WindowState = WindowState.Maximized;
+                if (_isPrimary) TxtAnswer.Focus();
+            };
             
             // Key handlers
             KeyDown += OnKeyDown;
             TxtAnswer.KeyDown += OnInputKeyDown;
+            TxtAnswer.TextChanged += OnTextChanged;
             
             // Only allow numbers
             TxtAnswer.PreviewTextInput += (s, e) =>
@@ -49,9 +83,50 @@ namespace ConditioningControlPanel
             };
         }
 
+        /// <summary>
+        /// Show result window on all monitors
+        /// </summary>
+        public static void ShowOnAllMonitors(int correctAnswer, bool strictMode, Action<bool> onComplete)
+        {
+            _allWindows.Clear();
+            _sharedInput = "";
+            
+            var settings = App.Settings.Current;
+            var screens = settings.DualMonitorEnabled 
+                ? System.Windows.Forms.Screen.AllScreens 
+                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+            
+            var primary = screens.FirstOrDefault(s => s.Primary) ?? screens[0];
+            
+            // Create secondary windows first
+            foreach (var screen in screens.Where(s => s != primary))
+            {
+                var window = new BubbleCountResultWindow(correctAnswer, strictMode, onComplete, screen, false);
+                window.Show();
+            }
+            
+            // Create primary window
+            var primaryWindow = new BubbleCountResultWindow(correctAnswer, strictMode, onComplete, primary, true);
+            primaryWindow.Show();
+            primaryWindow.Activate();
+        }
+
+        private void OnTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (!_isPrimary) return;
+            
+            _sharedInput = TxtAnswer.Text;
+            
+            // Sync to all windows
+            foreach (var window in _allWindows.Where(w => w != this))
+            {
+                window.TxtAnswer.Text = _sharedInput;
+            }
+        }
+
         private void OnInputKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Enter)
+            if (e.Key == Key.Enter && _isPrimary)
             {
                 CheckAnswer();
                 e.Handled = true;
@@ -62,13 +137,13 @@ namespace ConditioningControlPanel
         {
             if (e.Key == Key.Escape && !_strictMode && !_isCompleted)
             {
-                Complete(false);
+                CompleteAll(false);
             }
         }
 
         private void BtnSubmit_Click(object sender, RoutedEventArgs e)
         {
-            CheckAnswer();
+            if (_isPrimary) CheckAnswer();
         }
 
         private void CheckAnswer()
@@ -77,7 +152,7 @@ namespace ConditioningControlPanel
             
             if (!int.TryParse(TxtAnswer.Text.Trim(), out int answer))
             {
-                ShowFeedback("Please enter a number!", Colors.Orange);
+                ShowFeedbackOnAll("Please enter a number!", Colors.Orange);
                 TxtAnswer.Clear();
                 TxtAnswer.Focus();
                 return;
@@ -86,9 +161,8 @@ namespace ConditioningControlPanel
             if (answer == _correctAnswer)
             {
                 // Correct!
-                ShowFeedback("🎉 CORRECT! +100 XP 🎉", Color.FromRgb(50, 205, 50));
-                BtnSubmit.IsEnabled = false;
-                TxtAnswer.IsEnabled = false;
+                ShowFeedbackOnAll("🎉 CORRECT! +100 XP 🎉", Color.FromRgb(50, 205, 50));
+                DisableInputOnAll();
                 
                 // Delay then complete
                 var timer = new System.Windows.Threading.DispatcherTimer
@@ -98,7 +172,7 @@ namespace ConditioningControlPanel
                 timer.Tick += (s, e) =>
                 {
                     timer.Stop();
-                    Complete(true);
+                    CompleteAll(true);
                 };
                 timer.Start();
             }
@@ -106,7 +180,7 @@ namespace ConditioningControlPanel
             {
                 // Wrong answer
                 _attemptsRemaining--;
-                UpdateAttemptsDisplay();
+                UpdateAttemptsOnAll();
                 
                 if (_attemptsRemaining <= 0)
                 {
@@ -117,18 +191,39 @@ namespace ConditioningControlPanel
                 {
                     // Give hint
                     string hint = answer < _correctAnswer ? "Too low! Try higher." : "Too high! Try lower.";
-                    ShowFeedback($"❌ {hint}", Color.FromRgb(255, 107, 107));
+                    ShowFeedbackOnAll($"❌ {hint}", Color.FromRgb(255, 107, 107));
                     TxtAnswer.Clear();
                     TxtAnswer.Focus();
                 }
             }
         }
 
-        private void ShowFeedback(string message, Color color)
+        private void ShowFeedbackOnAll(string message, Color color)
         {
-            TxtFeedback.Text = message;
-            TxtFeedback.Foreground = new SolidColorBrush(color);
-            TxtFeedback.Visibility = Visibility.Visible;
+            foreach (var window in _allWindows)
+            {
+                window.TxtFeedback.Text = message;
+                window.TxtFeedback.Foreground = new SolidColorBrush(color);
+                window.TxtFeedback.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void UpdateAttemptsOnAll()
+        {
+            foreach (var window in _allWindows)
+            {
+                window._attemptsRemaining = _attemptsRemaining;
+                window.UpdateAttemptsDisplay();
+            }
+        }
+
+        private void DisableInputOnAll()
+        {
+            foreach (var window in _allWindows)
+            {
+                window.BtnSubmit.IsEnabled = false;
+                window.TxtAnswer.IsEnabled = false;
+            }
         }
 
         private void UpdateAttemptsDisplay()
@@ -149,56 +244,75 @@ namespace ConditioningControlPanel
         private void ShowMercyCard()
         {
             _isCompleted = true;
-            Hide();
             
-            // Get a mercy phrase
+            // Hide all result windows
+            foreach (var window in _allWindows)
+            {
+                window._isCompleted = true;
+                window.Hide();
+            }
+            
+            // Bambi Sleep themed mercy phrases (no answer included!)
             var mercyPhrases = new[]
             {
-                "I need to pay more attention",
-                "I will count more carefully next time",
-                "Bubbles are my friends",
-                "I love counting bubbles",
-                "Practice makes perfect"
+                "Bambi needs to focus",
+                "Good girls pay attention",
+                "Bambi will try harder",
+                "Empty and obedient",
+                "Bambi loves bubbles",
+                "Dumb dolls count slowly",
+                "Bambi is learning",
+                "Good girls don't think"
             };
             
             var random = new Random();
             var phrase = mercyPhrases[random.Next(mercyPhrases.Length)];
             
-            // Show mercy lock card with the correct answer as a hint
-            var mercyWindow = new LockCardWindow(
-                $"{phrase} (The answer was {_correctAnswer})",
+            // Show mercy lock card (no answer in phrase!)
+            LockCardWindow.ShowOnAllMonitors(
+                phrase,
                 2, // Type twice
                 _strictMode);
             
-            mercyWindow.Closed += (s, e) =>
+            // After lock card closes, complete
+            // Note: LockCardWindow handles its own close, we just complete after a delay
+            var timer = new System.Windows.Threading.DispatcherTimer
             {
-                Complete(false);
+                Interval = TimeSpan.FromMilliseconds(500)
             };
-            
-            LockCardWindow.ShowOnAllMonitors(
-                $"{phrase} (The answer was {_correctAnswer})",
-                2,
-                _strictMode);
+            timer.Tick += (s, e) =>
+            {
+                timer.Stop();
+                // Check if lock card is still open
+                if (LockCardWindow.IsAnyOpen())
+                {
+                    timer.Start(); // Keep checking
+                }
+                else
+                {
+                    CompleteAll(false);
+                }
+            };
+            timer.Start();
         }
 
-        private void Complete(bool success)
+        private void CompleteAll(bool success)
         {
-            if (_isCompleted && !success) 
+            foreach (var window in _allWindows.ToArray())
             {
-                // Already completed via mercy card
-                Close();
-                _onComplete?.Invoke(false);
-                return;
+                window._isCompleted = true;
+                try { window.Close(); } catch { }
             }
+            _allWindows.Clear();
             
-            _isCompleted = true;
-            Close();
             _onComplete?.Invoke(success);
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            if (!_isCompleted)
+            _allWindows.Remove(this);
+            
+            if (!_isCompleted && _isPrimary)
             {
                 _onComplete?.Invoke(false);
             }

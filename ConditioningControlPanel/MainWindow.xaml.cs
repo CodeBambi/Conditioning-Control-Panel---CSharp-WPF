@@ -1922,7 +1922,29 @@ namespace ConditioningControlPanel
         private void ChkBubbleCountStrict_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            App.Settings.Current.BubbleCountStrictLock = ChkBubbleCountStrict.IsChecked ?? false;
+            
+            var isEnabled = ChkBubbleCountStrict.IsChecked ?? false;
+            
+            // Show warning when enabling strict mode
+            if (isEnabled)
+            {
+                var confirmed = WarningDialog.ShowDoubleWarning(this,
+                    "Strict Bubble Count",
+                    "• You will NOT be able to skip the bubble count challenge\n" +
+                    "• You MUST answer correctly to dismiss\n" +
+                    "• After 3 wrong attempts, a mercy lock card appears\n" +
+                    "• This can be very restrictive!");
+                
+                if (!confirmed)
+                {
+                    _isLoading = true;
+                    ChkBubbleCountStrict.IsChecked = false;
+                    _isLoading = false;
+                    return;
+                }
+            }
+            
+            App.Settings.Current.BubbleCountStrictLock = isEnabled;
         }
 
         private void BtnTestBubbleCount_Click(object sender, RoutedEventArgs e)
