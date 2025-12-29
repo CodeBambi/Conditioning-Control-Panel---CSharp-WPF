@@ -130,6 +130,20 @@ namespace ConditioningControlPanel.Models
             set { _fadeDuration = Math.Clamp(value, 0, 200); OnPropertyChanged(); }
         }
 
+        private bool _flashAudioEnabled = true; // Link flash duration to audio
+        public bool FlashAudioEnabled
+        {
+            get => _flashAudioEnabled;
+            set { _flashAudioEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _flashDuration = 5; // Duration in seconds when audio is disabled (1-30)
+        public int FlashDuration
+        {
+            get => _flashDuration;
+            set { _flashDuration = Math.Clamp(value, 1, 30); OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Mandatory Videos

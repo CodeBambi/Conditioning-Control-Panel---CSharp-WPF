@@ -25,19 +25,6 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class FlashService : IDisposable
     {
-        #region Win32 Interop (Hide from Alt+Tab)
-        
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-        
-        [System.Runtime.InteropServices.DllImport("user32.dll")]
-        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-        
-        private const int GWL_EXSTYLE = -20;
-        private const int WS_EX_TOOLWINDOW = 0x00000080;
-        
-        #endregion
-        
         #region Fields
 
         private readonly Random _random = new();
@@ -112,7 +99,6 @@ namespace ConditioningControlPanel.Services
         public void Stop()
         {
             _isRunning = false;
-            _firstFlash = true; // Reset for next start
             _cancellationSource?.Cancel();
             _heartbeatTimer?.Stop();
             _schedulerTimer?.Stop();
@@ -121,18 +107,6 @@ namespace ConditioningControlPanel.Services
             CloseAllWindows();
             
             App.Logger.Information("FlashService stopped");
-        }
-
-        /// <summary>
-        /// Call this when flash frequency setting changes to reschedule with new timing
-        /// </summary>
-        public void RefreshSchedule()
-        {
-            if (!_isRunning) return;
-            
-            App.Logger.Information("FlashService: Refreshing schedule with new settings");
-            _firstFlash = false; // Don't do quick first flash on refresh
-            ScheduleNextFlash();
         }
 
         public void TriggerFlash()
@@ -154,53 +128,34 @@ namespace ConditioningControlPanel.Services
             App.Logger.Information("Assets reloaded");
         }
 
+        /// <summary>
+        /// Refresh the flash schedule when frequency changes
+        /// </summary>
+        public void RefreshSchedule()
+        {
+            if (!_isRunning) return;
+            ScheduleNextFlash();
+        }
+
         #endregion
 
         #region Scheduling
 
-        // Approximate duration of a flash event (display time + fade + buffer)
-        private const double FLASH_DURATION_SECONDS = 12.0;
-        private bool _firstFlash = true;
-
         private void ScheduleNextFlash()
         {
-            if (!_isRunning)
-            {
-                App.Logger.Warning("ScheduleNextFlash: Not running, skipping");
-                return;
-            }
+            if (!_isRunning) return;
             
             var settings = App.Settings.Current;
-            if (!settings.FlashEnabled)
-            {
-                App.Logger.Warning("ScheduleNextFlash: Flash disabled, skipping");
-                return;
-            }
+            if (!settings.FlashEnabled) return;
             
-            double interval;
+            // flash_freq = flashes per minute
+            var baseFreq = Math.Max(0.5, settings.FlashFrequency);
+            var baseInterval = 60.0 / baseFreq; // seconds between flashes
             
-            // First flash happens quickly (5-15 seconds after start)
-            if (_firstFlash)
-            {
-                _firstFlash = false;
-                interval = 5 + _random.NextDouble() * 10; // 5-15 seconds
-                App.Logger.Information("First flash scheduled in {Interval:F1} seconds", interval);
-            }
-            else
-            {
-                // FlashFrequency is now flashes per HOUR (1-180)
-                // Calculate interval in seconds between flashes
-                var flashesPerHour = Math.Max(1, Math.Min(180, settings.FlashFrequency));
-                var baseInterval = 3600.0 / flashesPerHour; // seconds between flashes
-                
-                // Add ±20% variance for natural feel
-                var variance = baseInterval * 0.2;
-                interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
-                interval = Math.Max(30, interval); // Minimum 30 seconds between flashes
-                
-                App.Logger.Information("Next flash in {Interval:F1}s ({Minutes:F1}min) - {PerHour}/hour setting", 
-                    interval, interval / 60.0, flashesPerHour);
-            }
+            // Add ±30% variance
+            var variance = baseInterval * 0.3;
+            var interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
+            interval = Math.Max(3, interval); // Minimum 3 seconds
             
             _schedulerTimer?.Stop();
             _schedulerTimer = new DispatcherTimer
@@ -210,15 +165,9 @@ namespace ConditioningControlPanel.Services
             _schedulerTimer.Tick += (s, e) =>
             {
                 _schedulerTimer?.Stop();
-                App.Logger.Information("Timer tick - IsRunning: {Running}, IsBusy: {Busy}", _isRunning, _isBusy);
-                
                 if (_isRunning && !_isBusy)
                 {
                     TriggerFlash();
-                }
-                else
-                {
-                    App.Logger.Warning("Skipped flash - IsRunning: {Running}, IsBusy: {Busy}", _isRunning, _isBusy);
                 }
                 ScheduleNextFlash();
             };
@@ -420,10 +369,10 @@ namespace ConditioningControlPanel.Services
             }
 
             var settings = App.Settings.Current;
-            double duration = 5.0;
+            double duration = settings.FlashDuration; // Default to manual duration setting
 
-            // Play sound ONLY ONCE per flash event (not for hydra spawns)
-            if (!_soundPlayingForCurrentFlash && !isMultiplication && !string.IsNullOrEmpty(soundPath) && File.Exists(soundPath))
+            // Play sound ONLY ONCE per flash event (not for hydra spawns) - only if audio enabled
+            if (settings.FlashAudioEnabled && !_soundPlayingForCurrentFlash && !isMultiplication && !string.IsNullOrEmpty(soundPath) && File.Exists(soundPath))
             {
                 try
                 {
@@ -534,17 +483,8 @@ namespace ConditioningControlPanel.Services
                 WindowStyle = WindowStyle.None,
                 Topmost = true,
                 ShowInTaskbar = false,
-                ShowActivated = false, // Don't steal focus
                 Background = System.Windows.Media.Brushes.Black,
                 ResizeMode = ResizeMode.NoResize
-            };
-            
-            // Hide from Alt+Tab by making it a tool window
-            window.SourceInitialized += (s, e) =>
-            {
-                var helper = new System.Windows.Interop.WindowInteropHelper(window);
-                int exStyle = GetWindowLong(helper.Handle, GWL_EXSTYLE);
-                SetWindowLong(helper.Handle, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
             };
 
             // Create image control
@@ -810,17 +750,12 @@ namespace ConditioningControlPanel.Services
             var targetWidth = Math.Max(50, (int)(origWidth * ratio));
             var targetHeight = Math.Max(50, (int)(origHeight * ratio));
 
-            // Add margin to keep images fully on screen (account for window chrome and DPI)
-            var margin = 50;
-            var maxX = Math.Max(1, monitor.Width - targetWidth - margin);
-            var maxY = Math.Max(1, monitor.Height - targetHeight - margin);
+            // Random position within monitor bounds
+            var maxX = Math.Max(1, monitor.Width - targetWidth);
+            var maxY = Math.Max(1, monitor.Height - targetHeight);
             
-            // Ensure we don't start at negative positions
-            var minX = margin;
-            var minY = margin;
-            
-            var x = monitor.X + minX + _random.Next(0, Math.Max(1, maxX - minX));
-            var y = monitor.Y + minY + _random.Next(0, Math.Max(1, maxY - minY));
+            var x = monitor.X + _random.Next(0, maxX);
+            var y = monitor.Y + _random.Next(0, maxY);
 
             return new ImageGeometry
             {

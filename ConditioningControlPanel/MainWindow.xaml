@@ -491,6 +491,34 @@
                             <Slider x:Name="SliderFade" Minimum="0" Maximum="100" Value="50" 
                                     Margin="0,1" ValueChanged="SliderFade_Changed"
                                     ToolTip="Fade animation speed (0% = instant, 100% = slow fade)"/>
+                            
+                            <!-- Flash Duration -->
+                            <Grid Margin="0,5,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Duration"
+                                           ToolTip="How long flash images stay on screen"/>
+                                <TextBlock x:Name="TxtFlashDuration" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="5s"/>
+                            </Grid>
+                            <Slider x:Name="SliderFlashDuration" Minimum="1" Maximum="30" Value="5" 
+                                    Margin="0,1" ValueChanged="SliderFlashDuration_Changed"
+                                    ToolTip="Flash display duration in seconds (1-30)"/>
+                            
+                            <!-- Link to Audio - Prominent styling -->
+                            <Border Background="#3D2D4D" CornerRadius="6" Padding="10" Margin="0,8,0,0">
+                                <StackPanel>
+                                    <CheckBox x:Name="ChkFlashAudio" IsChecked="True"
+                                              Checked="ChkFlashAudio_Changed" Unchecked="ChkFlashAudio_Changed"
+                                              ToolTip="When enabled, flash duration matches the audio file length">
+                                        <TextBlock Text="🔊 Link to Audio Trigger" FontSize="14" FontWeight="SemiBold"/>
+                                    </CheckBox>
+                                    <TextBlock x:Name="TxtAudioWarning" Text="⚠️ Max 30 flashes/hour when disabled" 
+                                               Foreground="#FFB347" FontSize="11" Margin="20,4,0,0"
+                                               Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
 

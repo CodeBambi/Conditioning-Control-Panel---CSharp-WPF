@@ -1272,6 +1272,10 @@ namespace ConditioningControlPanel
             s.AudioDuckingEnabled = ChkAudioDuck.IsChecked ?? true;
             s.DuckingLevel = (int)SliderDuck.Value;
             
+            // Overlay settings
+            s.SpiralOpacity = (int)SliderSpiralOpacity.Value;
+            s.PinkFilterOpacity = (int)SliderPinkOpacity.Value;
+            
             // Refresh services if running
             if (_isRunning)
             {
@@ -1336,6 +1340,12 @@ namespace ConditioningControlPanel
             SliderSize.Value = s.ImageScale;
             SliderOpacity.Value = s.FlashOpacity;
             SliderFade.Value = s.FadeDuration;
+            SliderFlashDuration.Value = s.FlashDuration;
+            ChkFlashAudio.IsChecked = s.FlashAudioEnabled;
+            SliderFlashDuration.IsEnabled = !s.FlashAudioEnabled;
+            SliderFlashDuration.Opacity = s.FlashAudioEnabled ? 0.5 : 1.0;
+            TxtAudioWarning.Visibility = s.FlashAudioEnabled ? Visibility.Collapsed : Visibility.Visible;
+            SliderPerMin.Maximum = s.FlashAudioEnabled ? 180 : 30;
 
             // Video
             ChkVideoEnabled.IsChecked = s.MandatoryVideosEnabled;
@@ -1691,6 +1701,44 @@ namespace ConditioningControlPanel
             if (_isLoading || TxtFade == null) return;
             TxtFade.Text = $"{(int)e.NewValue}%";
             ApplySettingsLive();
+        }
+
+        private void SliderFlashDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtFlashDuration == null) return;
+            TxtFlashDuration.Text = $"{(int)e.NewValue}s";
+            App.Settings.Current.FlashDuration = (int)e.NewValue;
+        }
+
+        private void ChkFlashAudio_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            
+            var isEnabled = ChkFlashAudio.IsChecked ?? true;
+            App.Settings.Current.FlashAudioEnabled = isEnabled;
+            
+            // Enable/disable duration slider based on audio link
+            SliderFlashDuration.IsEnabled = !isEnabled;
+            SliderFlashDuration.Opacity = isEnabled ? 0.5 : 1.0;
+            
+            // Show/hide warning
+            TxtAudioWarning.Visibility = isEnabled ? Visibility.Collapsed : Visibility.Visible;
+            
+            // Enforce 30/hour limit when audio is disabled
+            if (!isEnabled && SliderPerMin.Value > 30)
+            {
+                SliderPerMin.Value = 30;
+                App.Settings.Current.FlashFrequency = 30;
+            }
+            
+            // Update slider maximum
+            UpdateFlashFrequencyLimit();
+        }
+
+        private void UpdateFlashFrequencyLimit()
+        {
+            var audioEnabled = ChkFlashAudio.IsChecked ?? true;
+            SliderPerMin.Maximum = audioEnabled ? 180 : 30;
         }
 
         private void SliderPerHour_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

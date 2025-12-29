@@ -94,6 +94,8 @@ public class OverlayService : IDisposable
             {
                 if (_pinkFilterWindows.Count == 0)
                     StartPinkFilter();
+                else
+                    UpdatePinkFilterOpacity(); // Update opacity if already running
             }
             else
             {
@@ -105,6 +107,8 @@ public class OverlayService : IDisposable
             {
                 if (_spiralWindows.Count == 0)
                     StartSpiral();
+                else
+                    UpdateSpiralOpacity(); // Update opacity if already running
             }
             else
             {
@@ -193,8 +197,27 @@ public class OverlayService : IDisposable
     {
         try
         {
-            // Get DPI scale for THIS specific screen
-            var dpiScale = GetDpiScaleForScreen(screen);
+            // Get the actual DPI for THIS specific monitor
+            double monitorDpi = GetMonitorDpi(screen);
+            double primaryDpi = GetPrimaryMonitorDpi();
+            
+            // WPF uses primary monitor DPI for coordinate system
+            // We need to convert physical pixels to WPF units
+            double scale = primaryDpi / 96.0;
+            
+            double left = screen.Bounds.X / scale;
+            double top = screen.Bounds.Y / scale;
+            double width = screen.Bounds.Width / scale;
+            double height = screen.Bounds.Height / scale;
+
+            // Apply exponential curve for finer control at low values
+            var actualOpacity = Math.Pow(opacity / 100.0, 2);
+
+            var pinkOverlay = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                Opacity = actualOpacity
+            };
 
             var window = new Window
             {
@@ -203,34 +226,28 @@ public class OverlayService : IDisposable
                 Background = Brushes.Transparent,
                 Topmost = true,
                 ShowInTaskbar = false,
-                ShowActivated = false, // Don't steal focus
+                ShowActivated = false,
                 Focusable = false,
                 IsHitTestVisible = false,
-                Left = screen.Bounds.X / dpiScale,
-                Top = screen.Bounds.Y / dpiScale,
-                Width = screen.Bounds.Width / dpiScale,
-                Height = screen.Bounds.Height / dpiScale,
-                WindowState = WindowState.Normal
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = left,
+                Top = top,
+                Width = width,
+                Height = height,
+                Content = pinkOverlay
             };
-
-            var pinkOverlay = new Border
-            {
-                Background = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
-                Opacity = opacity / 100.0
-            };
-
-            window.Content = pinkOverlay;
             
-            // Set extended window styles after window is created
             window.SourceInitialized += (s, e) =>
             {
-                MakeClickThrough(window);
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
             };
             
             window.Show();
             
-            App.Logger?.Debug("Pink filter created for {Screen} at {X},{Y} size {W}x{H} (DPI scale: {DPI})", 
-                screen.DeviceName, window.Left, window.Top, window.Width, window.Height, dpiScale);
+            App.Logger?.Debug("Pink filter for {Screen} at {X},{Y} size {W}x{H} (MonitorDPI:{MonDpi}, PrimaryDPI:{PriDpi})", 
+                screen.DeviceName, left, top, width, height, monitorDpi, primaryDpi);
             
             return window;
         }
@@ -253,7 +270,8 @@ public class OverlayService : IDisposable
 
     private void UpdatePinkFilterOpacity()
     {
-        var opacity = App.Settings.Current.PinkFilterOpacity / 100.0;
+        // Apply exponential curve for finer control at low values
+        var opacity = Math.Pow(App.Settings.Current.PinkFilterOpacity / 100.0, 2);
         foreach (var window in _pinkFilterWindows)
         {
             if (window.Content is Border border)
@@ -335,34 +353,28 @@ public class OverlayService : IDisposable
     {
         try
         {
-            // Get DPI scale for THIS specific screen
-            var dpiScale = GetDpiScaleForScreen(screen);
+            // Get the actual DPI for THIS specific monitor
+            double monitorDpi = GetMonitorDpi(screen);
+            double primaryDpi = GetPrimaryMonitorDpi();
+            
+            // WPF uses primary monitor DPI for coordinate system
+            double scale = primaryDpi / 96.0;
+            
+            double left = screen.Bounds.X / scale;
+            double top = screen.Bounds.Y / scale;
+            double width = screen.Bounds.Width / scale;
+            double height = screen.Bounds.Height / scale;
 
-            var window = new Window
-            {
-                WindowStyle = WindowStyle.None,
-                AllowsTransparency = true,
-                Background = Brushes.Transparent,
-                Topmost = true,
-                ShowInTaskbar = false,
-                ShowActivated = false, // Don't steal focus
-                Focusable = false,
-                IsHitTestVisible = false,
-                Left = screen.Bounds.X / dpiScale,
-                Top = screen.Bounds.Y / dpiScale,
-                Width = screen.Bounds.Width / dpiScale,
-                Height = screen.Bounds.Height / dpiScale,
-                WindowState = WindowState.Normal
-            };
-
-            // Use MediaElement for all media types (works for GIF, MP4, etc.)
+            // Apply exponential curve for finer control at low values
+            var actualOpacity = Math.Pow(opacity / 100.0, 2);
+            
             var media = new MediaElement
             {
                 Source = new Uri(spiralPath),
                 LoadedBehavior = MediaState.Manual,
                 UnloadedBehavior = MediaState.Manual,
                 Stretch = Stretch.UniformToFill,
-                Opacity = opacity / 100.0,
+                Opacity = actualOpacity,
                 Volume = 0 // Mute spiral videos/gifs
             };
             
@@ -386,20 +398,36 @@ public class OverlayService : IDisposable
                 });
             };
             
-            window.Content = media;
+            var window = new Window
+            {
+                WindowStyle = WindowStyle.None,
+                AllowsTransparency = true,
+                Background = Brushes.Transparent,
+                Topmost = true,
+                ShowInTaskbar = false,
+                ShowActivated = false,
+                Focusable = false,
+                IsHitTestVisible = false,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = left,
+                Top = top,
+                Width = width,
+                Height = height,
+                Content = media
+            };
 
             window.SourceInitialized += (s, e) =>
             {
-                MakeClickThrough(window);
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
             };
 
             window.Show();
-            
-            App.Logger?.Debug("Spiral created for {Screen} at {X},{Y} size {W}x{H} (DPI scale: {DPI})", 
-                screen.DeviceName, window.Left, window.Top, window.Width, window.Height, dpiScale);
-            
-            // Start playing after window is shown
             media.Play();
+            
+            App.Logger?.Debug("Spiral for {Screen} at {X},{Y} size {W}x{H} (MonitorDPI:{MonDpi}, PrimaryDPI:{PriDpi})", 
+                screen.DeviceName, left, top, width, height, monitorDpi, primaryDpi);
 
             return (window, media);
         }
@@ -433,7 +461,8 @@ public class OverlayService : IDisposable
 
     private void UpdateSpiralOpacity()
     {
-        var opacity = App.Settings.Current.SpiralOpacity / 100.0;
+        // Apply exponential curve for finer control at low values
+        var opacity = Math.Pow(App.Settings.Current.SpiralOpacity / 100.0, 2);
         foreach (var media in _spiralMediaElements)
         {
             media.Opacity = opacity;
@@ -443,6 +472,44 @@ public class OverlayService : IDisposable
     #endregion
 
     #region Helpers
+
+    /// <summary>
+    /// Get DPI for a specific monitor
+    /// </summary>
+    private double GetMonitorDpi(System.Windows.Forms.Screen screen)
+    {
+        try
+        {
+            var hMonitor = MonitorFromPoint(new POINT { X = screen.Bounds.X + 1, Y = screen.Bounds.Y + 1 }, 2);
+            if (hMonitor != IntPtr.Zero)
+            {
+                var result = GetDpiForMonitor(hMonitor, 0, out uint dpiX, out uint dpiY);
+                if (result == 0)
+                {
+                    return dpiX;
+                }
+            }
+        }
+        catch { }
+        return 96.0;
+    }
+
+    /// <summary>
+    /// Get DPI for the primary monitor
+    /// </summary>
+    private double GetPrimaryMonitorDpi()
+    {
+        try
+        {
+            var primary = System.Windows.Forms.Screen.PrimaryScreen;
+            if (primary != null)
+            {
+                return GetMonitorDpi(primary);
+            }
+        }
+        catch { }
+        return 96.0;
+    }
 
     /// <summary>
     /// Get DPI scale for a specific screen using its bounds
@@ -509,6 +576,8 @@ public class OverlayService : IDisposable
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TRANSPARENT = 0x00000020;
     private const int WS_EX_LAYERED = 0x00080000;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int GetWindowLong(IntPtr hwnd, int index);
@@ -525,6 +594,15 @@ public class OverlayService : IDisposable
 
     [System.Runtime.InteropServices.DllImport("shcore.dll")]
     private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+    // SetWindowPos for positioning windows in physical pixels
+    private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    private const uint SWP_SHOWWINDOW = 0x0040;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_FRAMECHANGED = 0x0020;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
     #endregion
 

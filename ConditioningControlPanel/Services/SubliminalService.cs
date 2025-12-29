@@ -244,15 +244,16 @@ namespace ConditioningControlPanel.Services
             double targetOpacity, Color bgColor, Color textColor, 
             Color borderColor, bool bgTransparent)
         {
-            // Get DPI scaling for this screen
-            double dpiScale = GetDpiScale(screen);
+            // Get primary monitor DPI - WPF uses this for coordinate system
+            double primaryDpi = GetPrimaryMonitorDpi();
+            double scale = primaryDpi / 96.0;
             
-            // Calculate actual pixel positions (accounting for DPI)
-            double left = screen.Bounds.X / dpiScale;
-            double top = screen.Bounds.Y / dpiScale;
-            double width = screen.Bounds.Width / dpiScale;
-            double height = screen.Bounds.Height / dpiScale;
-            
+            // Convert physical pixels to WPF units
+            double left = screen.Bounds.X / scale;
+            double top = screen.Bounds.Y / scale;
+            double width = screen.Bounds.Width / scale;
+            double height = screen.Bounds.Height / scale;
+
             var win = new Window
             {
                 WindowStyle = WindowStyle.None,
@@ -260,8 +261,10 @@ namespace ConditioningControlPanel.Services
                 Background = bgTransparent ? Brushes.Transparent : new SolidColorBrush(bgColor),
                 Topmost = true,
                 ShowInTaskbar = false,
-                ShowActivated = false, // Don't steal focus from Lock Card
+                ShowActivated = false,
                 Focusable = false,
+                IsHitTestVisible = false,
+                WindowStartupLocation = WindowStartupLocation.Manual,
                 Left = left,
                 Top = top,
                 Width = width,
@@ -307,24 +310,47 @@ namespace ConditioningControlPanel.Services
 
             win.Content = canvas;
             
+            // Set window styles to hide from Alt+Tab and prevent focus
+            win.SourceInitialized += (s, e) =>
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle;
+                var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT);
+            };
+            
             return win;
         }
 
-        private double GetDpiScale(System.Windows.Forms.Screen screen)
+        private double GetPrimaryMonitorDpi()
         {
             try
             {
-                // Try to get DPI for the specific screen
-                using (var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero))
+                var primary = System.Windows.Forms.Screen.PrimaryScreen;
+                if (primary != null)
                 {
-                    return g.DpiX / 96.0;
+                    var hMonitor = MonitorFromPoint(new POINT { X = primary.Bounds.X + 1, Y = primary.Bounds.Y + 1 }, 2);
+                    if (hMonitor != IntPtr.Zero)
+                    {
+                        var result = GetDpiForMonitor(hMonitor, 0, out uint dpiX, out uint dpiY);
+                        if (result == 0)
+                        {
+                            return dpiX;
+                        }
+                    }
                 }
             }
-            catch
-            {
-                return 1.0;
-            }
+            catch { }
+            return 96.0;
         }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct POINT { public int X; public int Y; }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+        [System.Runtime.InteropServices.DllImport("shcore.dll")]
+        private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
         private TextBlock CreateTextBlock(string text, double fontSize, Color color)
         {
@@ -402,5 +428,26 @@ namespace ConditioningControlPanel.Services
             Stop();
             StopAudio();
         }
+
+        #region Win32
+
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+        private const int WS_EX_NOACTIVATE = 0x08000000;
+        private const int WS_EX_TRANSPARENT = 0x00000020;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_SHOWWINDOW = 0x0040;
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hwnd, int index);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        #endregion
     }
 }
