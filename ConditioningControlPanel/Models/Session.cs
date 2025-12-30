@@ -57,11 +57,11 @@ namespace ConditioningControlPanel.Models
         {
             return Difficulty switch
             {
-                SessionDifficulty.Easy => "⭐ Easy",
-                SessionDifficulty.Medium => "⭐⭐ Medium",
-                SessionDifficulty.Hard => "⭐⭐⭐ Hard",
+                SessionDifficulty.Easy => "⭐ Easy",
+                SessionDifficulty.Medium => "⭐⭐ Medium",
+                SessionDifficulty.Hard => "⭐⭐⭐ Hard",
                 SessionDifficulty.Extreme => "💀 Extreme",
-                _ => "⭐ Easy"
+                _ => "⭐ Easy"
             };
         }
         
@@ -105,6 +105,7 @@ You don't need to do anything special. Just... let it happen. 💗",
                 // Audio Whispers
                 AudioWhispersEnabled = true,
                 WhisperVolume = 12,
+                AudioDuckLevel = 40, // 40% ducking for morning session
                 
                 // Bouncing Text
                 BouncingTextEnabled = true,
@@ -131,7 +132,12 @@ You don't need to do anything special. Just... let it happen. 💗",
                 SpiralEnabled = false,
                 LockCardEnabled = false,
                 BubbleCountEnabled = false,
-                MiniGameEnabled = false
+                MiniGameEnabled = false,
+                
+                // Mind Wipe (Easy = base 1, escalates every 5 min)
+                MindWipeEnabled = true,
+                MindWipeBaseMultiplier = 1,
+                MindWipeVolume = 40
             },
             
             Phases = new List<SessionPhase>
@@ -166,7 +172,7 @@ The conditioning works while you play. Subtle at first, then slowly building. By
 
 Just play your game. Let everything else happen on its own.
 
-⚠️ Set your game to Borderless Windowed mode for the full experience!
+⚠ Set your game to Borderless Windowed mode for the full experience!
 
 💗 Good luck, Gamer Girl...",
             
@@ -191,6 +197,7 @@ Just play your game. Let everything else happen on its own.
                 // Audio Whispers - barely audible, under game audio
                 AudioWhispersEnabled = true,
                 WhisperVolume = 12,
+                AudioDuckLevel = 55, // 55% ducking for gaming session
                 
                 // Bouncing Text
                 BouncingTextEnabled = true,
@@ -226,7 +233,12 @@ Just play your game. Let everything else happen on its own.
                 MandatoryVideosEnabled = false,
                 LockCardEnabled = false,
                 BubbleCountEnabled = false,
-                MiniGameEnabled = false
+                MiniGameEnabled = false,
+                
+                // Mind Wipe (Medium = base 2, escalates every 5 min)
+                MindWipeEnabled = true,
+                MindWipeBaseMultiplier = 2,
+                MindWipeVolume = 45
             },
             
             Phases = new List<SessionPhase>
@@ -384,6 +396,7 @@ Just play your game. Let everything else happen on its own.
         // Audio
         public bool AudioWhispersEnabled { get; set; }
         public int WhisperVolume { get; set; } = 50;
+        public int AudioDuckLevel { get; set; } = 100; // 0-100%, how much to duck other audio
         
         // Bouncing Text
         public bool BouncingTextEnabled { get; set; }
@@ -422,6 +435,11 @@ Just play your game. Let everything else happen on its own.
         public bool LockCardEnabled { get; set; }
         public bool BubbleCountEnabled { get; set; }
         public bool MiniGameEnabled { get; set; }
+        
+        // Mind Wipe (escalating audio during sessions)
+        public bool MindWipeEnabled { get; set; }
+        public int MindWipeBaseMultiplier { get; set; } = 1; // Starting frequency multiplier (Easy=1, Medium=2, Hard=3)
+        public int MindWipeVolume { get; set; } = 50; // Volume for this session
     }
     
     public enum CornerPosition

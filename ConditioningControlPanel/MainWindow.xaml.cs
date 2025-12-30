@@ -665,7 +665,7 @@ namespace ConditioningControlPanel
                 SessionDetailScroller.Visibility = Visibility.Visible;
                 SessionButtonsPanel.Visibility = Visibility.Visible;
                 SessionSpoilerPanel.Visibility = Visibility.Collapsed;
-                BtnRevealSpoilers.Content = "👁️ Reveal Details";
+                BtnRevealSpoilers.Content = "👁 Reveal Details";
                 
                 // Find the session
                 var sessions = Models.Session.GetAllSessions();
@@ -713,7 +713,7 @@ namespace ConditioningControlPanel
                     
                     // Enable/disable start button
                     BtnStartSession.IsEnabled = _selectedSession.IsAvailable;
-                    BtnStartSession.Content = _selectedSession.IsAvailable ? "▶️ Start Session" : "🔒 Coming Soon";
+                    BtnStartSession.Content = _selectedSession.IsAvailable ? "▶ Start Session" : "🔒 Coming Soon";
                 }
             }
         }
@@ -764,13 +764,13 @@ namespace ConditioningControlPanel
             {
                 // Hide spoilers
                 SessionSpoilerPanel.Visibility = Visibility.Collapsed;
-                BtnRevealSpoilers.Content = "👁️ Reveal Details";
+                BtnRevealSpoilers.Content = "👁 Reveal Details";
                 return;
             }
             
             // Sequential warnings
             var warning1 = ShowStyledDialog(
-                "⚠️ Spoiler Warning",
+                "⚠ Spoiler Warning",
                 "Are you sure you want to see the session details?\n\n" +
                 "Part of the magic is not knowing what's coming...\n" +
                 "The experience works best when you surrender to the unknown.\n\n" +
@@ -790,7 +790,7 @@ namespace ConditioningControlPanel
             if (!warning2) return;
             
             var warning3 = ShowStyledDialog(
-                "🔓 Final Confirmation",
+                "🏁 Final Confirmation",
                 "You're choosing to see the details.\n" +
                 "That's okay - some girls like to know.\n\n" +
                 "Show the spoilers?",
@@ -799,7 +799,7 @@ namespace ConditioningControlPanel
             if (warning3)
             {
                 SessionSpoilerPanel.Visibility = Visibility.Visible;
-                BtnRevealSpoilers.Content = "🙈 Hide Details";
+                BtnRevealSpoilers.Content = "😎 Hide Details";
             }
         }
         
@@ -908,7 +908,7 @@ namespace ConditioningControlPanel
                 "Your current settings will be temporarily replaced.\n" +
                 "They will be restored when the session ends.\n\n" +
                 "Ready to begin?",
-                "▶️ Start Session", "Not yet");
+                "▶ Start Session", "Not yet");
                 
             if (confirmed)
             {
@@ -1269,7 +1269,7 @@ namespace ConditioningControlPanel
                     var elapsed = _sessionEngine.ElapsedTime;
                     
                     var confirmed = ShowStyledDialog(
-                        "⚠️ Stop Session?",
+                        "⚠ Stop Session?",
                         $"You're currently in a session:\n" +
                         $"{session?.Icon} {session?.Name}\n\n" +
                         $"Time elapsed: {elapsed.Minutes:D2}:{elapsed.Seconds:D2}\n\n" +
@@ -1706,6 +1706,13 @@ namespace ConditioningControlPanel
                         new TextBlock { Text = "STOP" }
                     }
                 };
+                
+                // Also update Presets tab button using direct reference
+                if (BtnPresetsStart != null)
+                {
+                    BtnPresetsStart.Background = new SolidColorBrush(Color.FromRgb(255, 107, 107)); // Red
+                    BtnPresetsStart.Content = "⏹ Stop";
+                }
             }
             else
             {
@@ -1719,7 +1726,31 @@ namespace ConditioningControlPanel
                         new TextBlock { Text = "START" }
                     }
                 };
+                
+                // Also update Presets tab button
+                if (BtnPresetsStart != null)
+                {
+                    BtnPresetsStart.Background = FindResource("PinkBrush") as SolidColorBrush;
+                    BtnPresetsStart.Content = "▶ Start";
+                }
             }
+        }
+        
+        /// <summary>
+        /// Find a visual child by name in the visual tree
+        /// </summary>
+        private static T? FindVisualChild<T>(DependencyObject parent, string name) where T : FrameworkElement
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T element && element.Name == name)
+                    return element;
+                var result = FindVisualChild<T>(child, name);
+                if (result != null)
+                    return result;
+            }
+            return null;
         }
 
         #endregion
@@ -1793,6 +1824,11 @@ namespace ConditioningControlPanel
             SliderLockCardFreq.Value = s.LockCardFrequency;
             SliderLockCardRepeats.Value = s.LockCardRepeats;
             ChkLockCardStrict.IsChecked = s.LockCardStrict;
+            
+            // Mind Wipe
+            ChkMindWipeEnabled.IsChecked = s.MindWipeEnabled;
+            SliderMindWipeFreq.Value = s.MindWipeFrequency;
+            SliderMindWipeVolume.Value = s.MindWipeVolume;
 
             // Scheduler
             ChkSchedulerEnabled.IsChecked = s.SchedulerEnabled;
@@ -1860,6 +1896,8 @@ namespace ConditioningControlPanel
             if (TxtBubbleFreq != null) TxtBubbleFreq.Text = ((int)SliderBubbleFreq.Value).ToString();
             if (TxtLockCardFreq != null) TxtLockCardFreq.Text = ((int)SliderLockCardFreq.Value).ToString();
             if (TxtLockCardRepeats != null) TxtLockCardRepeats.Text = $"{(int)SliderLockCardRepeats.Value}x";
+            if (TxtMindWipeFreq != null) TxtMindWipeFreq.Text = $"{(int)SliderMindWipeFreq.Value}/h";
+            if (TxtMindWipeVolume != null) TxtMindWipeVolume.Text = $"{(int)SliderMindWipeVolume.Value}%";
             
             // Scheduler sliders
             if (TxtRampDuration != null) TxtRampDuration.Text = $"{(int)SliderRampDuration.Value} min";
@@ -2060,6 +2098,11 @@ namespace ConditioningControlPanel
             var level60Unlocked = level >= 60;
             Level60Locked.Visibility = level60Unlocked ? Visibility.Collapsed : Visibility.Visible;
             Level60Unlocked.Visibility = level60Unlocked ? Visibility.Visible : Visibility.Collapsed;
+            
+            // Level 75 unlocks: Mind Wipe
+            var level75Unlocked = level >= 75;
+            MindWipeLocked.Visibility = level75Unlocked ? Visibility.Collapsed : Visibility.Visible;
+            MindWipeUnlocked.Visibility = level75Unlocked ? Visibility.Visible : Visibility.Collapsed;
         }
 
         #endregion
@@ -2146,12 +2189,12 @@ namespace ConditioningControlPanel
                 SliderFlashDuration.IsEnabled = true;
                 SliderFlashDuration.Opacity = 1.0;
                 TxtAudioWarning.Visibility = Visibility.Visible;
-                TxtAudioWarning.Text = "⚠️ Audio off >30/h";
+                TxtAudioWarning.Text = "⚠ Audio off >30/h";
             }
             else
             {
                 ChkFlashAudio.IsEnabled = true;
-                TxtAudioWarning.Text = "⚠️ Max 30/h";
+                TxtAudioWarning.Text = "⚠ Max 30/h";
                 TxtAudioWarning.Visibility = (ChkFlashAudio.IsChecked ?? true) ? Visibility.Collapsed : Visibility.Visible;
             }
         }
@@ -2463,6 +2506,61 @@ namespace ConditioningControlPanel
                 App.Settings.Current.BouncingTextPool = editor.ResultData;
                 App.Logger?.Information("Bouncing text phrases updated: {Count} items", editor.ResultData.Count);
             }
+        }
+
+        #endregion
+
+        #region Mind Wipe (Lvl 75)
+
+        private void ChkMindWipeEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            
+            var isEnabled = ChkMindWipeEnabled.IsChecked ?? false;
+            App.Settings.Current.MindWipeEnabled = isEnabled;
+            
+            // Immediately update service if engine is running (non-session mode)
+            if (_isRunning && _sessionEngine?.CurrentSession == null)
+            {
+                if (isEnabled && App.Settings.Current.PlayerLevel >= 75)
+                {
+                    App.MindWipe.Start(App.Settings.Current.MindWipeFrequency, App.Settings.Current.MindWipeVolume / 100.0);
+                }
+                else
+                {
+                    App.MindWipe.Stop();
+                }
+                App.Logger?.Information("Mind Wipe toggled: {Enabled}", isEnabled);
+            }
+        }
+
+        private void SliderMindWipeFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtMindWipeFreq == null) return;
+            TxtMindWipeFreq.Text = $"{(int)e.NewValue}/h";
+            App.Settings.Current.MindWipeFrequency = (int)e.NewValue;
+            
+            if (_isRunning)
+            {
+                App.MindWipe.UpdateSettings(App.Settings.Current.MindWipeFrequency, App.Settings.Current.MindWipeVolume / 100.0);
+            }
+        }
+
+        private void SliderMindWipeVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtMindWipeVolume == null) return;
+            TxtMindWipeVolume.Text = $"{(int)e.NewValue}%";
+            App.Settings.Current.MindWipeVolume = (int)e.NewValue;
+            
+            if (_isRunning)
+            {
+                App.MindWipe.UpdateSettings(App.Settings.Current.MindWipeFrequency, App.Settings.Current.MindWipeVolume / 100.0);
+            }
+        }
+
+        private void BtnTestMindWipe_Click(object sender, RoutedEventArgs e)
+        {
+            App.MindWipe.TriggerOnce();
         }
 
         #endregion

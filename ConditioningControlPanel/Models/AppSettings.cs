@@ -841,6 +841,31 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Mind Wipe (Unlocks Lv.75)
+
+        private bool _mindWipeEnabled = false;
+        public bool MindWipeEnabled
+        {
+            get => _mindWipeEnabled;
+            set { _mindWipeEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _mindWipeFrequency = 6; // 1-30 per hour
+        public int MindWipeFrequency
+        {
+            get => _mindWipeFrequency;
+            set { _mindWipeFrequency = Math.Clamp(value, 1, 30); OnPropertyChanged(); }
+        }
+
+        private int _mindWipeVolume = 50; // 0-100%
+        public int MindWipeVolume
+        {
+            get => _mindWipeVolume;
+            set { _mindWipeVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Validation
 
         /// <summary>
@@ -887,22 +912,22 @@ namespace ConditioningControlPanel.Models
 
             if (StrictLockEnabled && !PanicKeyEnabled)
             {
-                warnings.Add("⚠️ STRICT LOCK + NO PANIC KEY: You will NOT be able to exit videos!");
+                warnings.Add("⚠ STRICT LOCK + NO PANIC KEY: You will NOT be able to exit videos!");
             }
 
             if (StrictLockEnabled && VideosPerHour > 10)
             {
-                warnings.Add("⚠️ High video frequency with strict lock enabled");
+                warnings.Add("⚠ High video frequency with strict lock enabled");
             }
 
             if (CorruptionMode && HydraLimit > 15)
             {
-                warnings.Add("⚠️ Hydra mode with high limit may cause performance issues");
+                warnings.Add("⚠ Hydra mode with high limit may cause performance issues");
             }
 
             if (!PanicKeyEnabled)
             {
-                warnings.Add("⚠️ Panic key (ESC) is disabled - you cannot emergency stop!");
+                warnings.Add("⚠ Panic key (ESC) is disabled - you cannot emergency stop!");
             }
 
             return warnings;

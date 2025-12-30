@@ -301,7 +301,7 @@
 
                 <!-- Tab Buttons -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button x:Name="BtnSettings" Content="⚙️ Settings" Style="{StaticResource PinkButton}" 
+                    <Button x:Name="BtnSettings" Content="⚙ Settings" Style="{StaticResource PinkButton}" 
                             Margin="5,0" Click="BtnSettings_Click"/>
                     <Button x:Name="BtnPresets" Content="📋 Presets" Style="{StaticResource OutlineButton}" 
                             Margin="5,0" Click="BtnPresets_Click"/>
@@ -408,7 +408,7 @@
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
                     
-                    <TextBlock Text="⭐" FontSize="16" Margin="0,0,5,0"/>
+                    <TextBlock Text="⭐" FontSize="16" Margin="0,0,5,0"/>
                     <TextBlock x:Name="TxtPlayerTitle" Text="Beginner Bimbo" Foreground="White" 
                                FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     <Border Background="{StaticResource PinkBrush}" CornerRadius="12" Padding="10,4">
@@ -515,7 +515,7 @@
                     <Border Style="{StaticResource SectionPanel}" Padding="10,6"
                             ToolTip="Visual appearance settings for flash images.&#x0a;Customize size, transparency, and animations.">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="👁️ Visuals" Margin="0,0,0,2"/>
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="👁 Visuals" Margin="0,0,0,2"/>
                             
                             <!-- Size / Opacity in two columns -->
                             <Grid Margin="0,2,0,0">
@@ -556,9 +556,9 @@
                                     ToolTip="When enabled, flash duration matches audio length.&#x0a;Disable to use manual duration slider.&#x0a;Audio disabled automatically above 30 flashes/hour.">
                                 <Grid>
                                     <CheckBox x:Name="ChkFlashAudio" IsChecked="True" Checked="ChkFlashAudio_Changed" Unchecked="ChkFlashAudio_Changed">
-                                        <TextBlock Text="🔊 Link to Audio Trigger" FontSize="12" FontWeight="SemiBold"/>
+                                        <TextBlock Text="📊 Link to Audio Trigger" FontSize="12" FontWeight="SemiBold"/>
                                     </CheckBox>
-                                    <TextBlock x:Name="TxtAudioWarning" Text="⚠️ Max 30/h" Foreground="#FFB347" FontSize="10" 
+                                    <TextBlock x:Name="TxtAudioWarning" Text="⚠ Max 30/h" Foreground="#FFB347" FontSize="10" 
                                                HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed"/>
                                 </Grid>
                             </Border>
@@ -612,9 +612,9 @@
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable" Margin="6,0,15,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                            ToolTip="⚠️ STRICT MODE: Videos cannot be skipped!&#x0a;You must watch the entire video.&#x0a;Use with caution.">
+                                            ToolTip="⚠ STRICT MODE: Videos cannot be skipped!&#x0a;You must watch the entire video.&#x0a;Use with caution.">
                                     <CheckBox x:Name="ChkStrictLock" Style="{StaticResource ToggleStyle}" Checked="ChkStrictLock_Checked"/>
-                                    <TextBlock Style="{StaticResource SettingLabel}" Text="⚠️ Strict" Foreground="#FFB347" Margin="6,0,15,0"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="⚠ Strict" Foreground="#FFB347" Margin="6,0,15,0"/>
                                 </StackPanel>
                                 <Slider Grid.Column="2" x:Name="SliderPerHour" Minimum="1" Maximum="20" Value="2" ValueChanged="SliderPerHour_Changed"
                                         ToolTip="Videos per hour"/>
@@ -666,7 +666,7 @@
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="💭 Subliminals"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <Button Content="⚙️" Style="{StaticResource OutlineButton}" Padding="6,3" Click="BtnSubliminalSettings_Click" Margin="0,0,8,0"
+                                    <Button Content="⚙" Style="{StaticResource OutlineButton}" Padding="6,3" Click="BtnSubliminalSettings_Click" Margin="0,0,8,0"
                                             ToolTip="Advanced subliminal visual settings"/>
                                     <CheckBox x:Name="ChkSubliminalEnabled" Style="{StaticResource ToggleStyle}"
                                               ToolTip="Enable/disable subliminal messages"/>
@@ -701,7 +701,7 @@
                             <Grid Margin="0,12,0,0" ToolTip="Play whispered audio when messages appear.&#x0a;Add audio files matching message text&#x0a;to assets/whispers folder.">
                                 <StackPanel Orientation="Horizontal">
                                     <CheckBox x:Name="ChkAudioWhispers" Style="{StaticResource ToggleStyle}"/>
-                                    <TextBlock Style="{StaticResource SettingLabel}" Text="🔊 Audio Whispers" Margin="6,0,0,0"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="📊 Audio Whispers" Margin="6,0,0,0"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Slider x:Name="SliderWhisperVol" Minimum="0" Maximum="100" Value="50" Width="100" ValueChanged="SliderWhisperVol_Changed"/>
@@ -716,8 +716,8 @@
                             ToolTip="Application behavior and startup settings.">
                         <StackPanel>
                             <Grid>
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="⚙️ System"/>
-                                <Button Content="📂 Assets" Style="{StaticResource OutlineButton}" 
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="⚙ System"/>
+                                <Button Content="📚 Assets" Style="{StaticResource OutlineButton}" 
                                         HorizontalAlignment="Right" Padding="10,4" Click="BtnOpenAssets_Click"
                                         ToolTip="Open assets folder (images, videos, sounds)"/>
                             </Grid>
@@ -761,9 +761,9 @@
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Start Hidden" Margin="6,0,0,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
-                                            ToolTip="⚠️ DANGER: Completely disables panic key!&#x0a;You won't be able to emergency stop.&#x0a;Use with extreme caution.">
+                                            ToolTip="⚠ DANGER: Completely disables panic key!&#x0a;You won't be able to emergency stop.&#x0a;Use with extreme caution.">
                                     <CheckBox x:Name="ChkNoPanic" Style="{StaticResource ToggleStyle}" Checked="ChkNoPanic_Checked"/>
-                                    <TextBlock Style="{StaticResource SettingLabel}" Text="⚠️ No Panic" Margin="6,0,0,0" Foreground="#FF6B6B"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="⚠ No Panic" Margin="6,0,0,0" Foreground="#FF6B6B"/>
                                 </StackPanel>
                             </Grid>
                             
@@ -858,7 +858,7 @@
                 <!-- Audio Section -->
                 <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="0,5,0,0">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="🔊 Audio"
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="📊 Audio"
                                    ToolTip="Audio volume and ducking settings"/>
                         
                         <!-- Master Volume -->
@@ -1002,7 +1002,7 @@
                                                     <TextBlock Text="30 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                                 <Border Background="#2A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="⭐ +50 XP" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                    <TextBlock Text="⭐ +50 XP" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Text="Gentle passive conditioning for your morning routine" 
@@ -1035,7 +1035,7 @@
                                                     <TextBlock Text="45 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                                 <Border Background="#3A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="⭐⭐ +100 XP" Foreground="#FFD700" FontSize="9" FontWeight="Bold"/>
+                                                    <TextBlock Text="⭐⭐ +100 XP" Foreground="#FFD700" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Text="Background conditioning while you game" 
@@ -1137,13 +1137,13 @@
                             <TextBlock Text="💭 Subliminals" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailSubliminal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                             
-                            <TextBlock Text="🔊 Audio" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <TextBlock Text="📊 Audio" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailAudio" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                             
                             <TextBlock Text="🌀 Overlays" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailOverlays" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                             
-                            <TextBlock Text="🔐 Advanced" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <TextBlock Text="📐 Advanced" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailAdvanced" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                         </StackPanel>
                     </ScrollViewer>
@@ -1159,7 +1159,7 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                                        <TextBlock Text="⏱️ Duration" Foreground="#808090" FontSize="10" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="⏱ Duration" Foreground="#808090" FontSize="10" HorizontalAlignment="Center"/>
                                         <TextBlock x:Name="TxtSessionDuration" Text="30 minutes" Foreground="White" 
                                                    FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
                                     </StackPanel>
@@ -1174,7 +1174,7 @@
                             <!-- Difficulty Badge -->
                             <Border x:Name="DifficultyBadge" Background="#2A2A4A" CornerRadius="6" Padding="8,4" 
                                     Margin="0,0,0,12" HorizontalAlignment="Center">
-                                <TextBlock x:Name="TxtSessionDifficulty" Text="⭐ Easy" Foreground="#FFD700" 
+                                <TextBlock x:Name="TxtSessionDifficulty" Text="⭐ Easy" Foreground="#FFD700" 
                                            FontSize="12" FontWeight="Bold"/>
                             </Border>
                             
@@ -1188,7 +1188,7 @@
                                     Margin="0,0,0,12" Visibility="Collapsed">
                                 <StackPanel>
                                     <Grid>
-                                        <TextBlock Text="🖼️ Corner GIF" Foreground="{StaticResource PinkBrush}" 
+                                        <TextBlock Text="🖼 Corner GIF" Foreground="{StaticResource PinkBrush}" 
                                                    FontWeight="Bold" FontSize="11"/>
                                         <CheckBox x:Name="ChkCornerGifEnabled" Style="{StaticResource ToggleStyle}" 
                                                   HorizontalAlignment="Right" Checked="ChkCornerGifEnabled_Changed" 
@@ -1211,13 +1211,13 @@
                                                 <RowDefinition Height="Auto"/>
                                                 <RowDefinition Height="Auto"/>
                                             </Grid.RowDefinitions>
-                                            <RadioButton x:Name="RbCornerTL" Content="↖️ Top-Left" Foreground="White" 
+                                            <RadioButton x:Name="RbCornerTL" Content="↖ Top-Left" Foreground="White" 
                                                          GroupName="CornerPos" Margin="0,2" FontSize="10"/>
-                                            <RadioButton x:Name="RbCornerTR" Grid.Column="1" Content="↗️ Top-Right" 
+                                            <RadioButton x:Name="RbCornerTR" Grid.Column="1" Content="↗ Top-Right" 
                                                          Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10"/>
-                                            <RadioButton x:Name="RbCornerBL" Grid.Row="1" Content="↙️ Bottom-Left" 
+                                            <RadioButton x:Name="RbCornerBL" Grid.Row="1" Content="↙ Bottom-Left" 
                                                          Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10" IsChecked="True"/>
-                                            <RadioButton x:Name="RbCornerBR" Grid.Row="1" Grid.Column="1" Content="↘️ Bottom-Right" 
+                                            <RadioButton x:Name="RbCornerBR" Grid.Row="1" Grid.Column="1" Content="↘ Bottom-Right" 
                                                          Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10"/>
                                         </Grid>
                                     </StackPanel>
@@ -1236,15 +1236,15 @@
                             </Border>
                             
                             <!-- Reveal Spoilers Button -->
-                            <Button x:Name="BtnRevealSpoilers" Content="👁️ Reveal Details" 
+                            <Button x:Name="BtnRevealSpoilers" Content="👁 Reveal Details" 
                                     Style="{StaticResource OutlineButton}" Padding="12,8" FontSize="12"
                                     Click="BtnRevealSpoilers_Click" Margin="0,0,0,12"
-                                    ToolTip="⚠️ This will show all session settings - spoils the surprise!"/>
+                                    ToolTip="⚠ This will show all session settings - spoils the surprise!"/>
                             
                             <!-- Spoiler Content (Hidden by default) -->
                             <StackPanel x:Name="SessionSpoilerPanel" Visibility="Collapsed">
                                 <Border Background="#301520" CornerRadius="6" Padding="10" Margin="0,0,0,12">
-                                    <TextBlock Text="⚠️ SPOILERS BELOW ⚠️" Foreground="#FF6B6B" FontSize="12" 
+                                    <TextBlock Text="⚠ SPOILERS BELOW ⚠" Foreground="#FF6B6B" FontSize="12" 
                                                FontWeight="Bold" HorizontalAlignment="Center"/>
                                 </Border>
                                 
@@ -1254,7 +1254,7 @@
                                 <TextBlock Text="💭 Subliminals" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="TxtSessionSubliminal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10"/>
                                 
-                                <TextBlock Text="🔊 Audio" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <TextBlock Text="📊 Audio" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="TxtSessionAudio" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10"/>
                                 
                                 <TextBlock Text="🌀 Overlays" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
@@ -1263,7 +1263,7 @@
                                 <TextBlock Text="📺 Extras" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="TxtSessionExtras" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 
-                                <TextBlock Text="⏱️ Timeline" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <TextBlock Text="⏱ Timeline" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="TxtSessionTimeline" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
                             </StackPanel>
                         </StackPanel>
@@ -1281,7 +1281,7 @@
                             <Button x:Name="BtnSaveOverPreset" Grid.Column="0" Content="💾 Save" 
                                     Style="{StaticResource OutlineButton}" Margin="0,0,3,0" Padding="10,8"
                                     Click="BtnSaveOverPreset_Click" IsEnabled="False" FontSize="12"/>
-                            <Button x:Name="BtnDeletePreset" Grid.Column="1" Content="🗑️ Delete" 
+                            <Button x:Name="BtnDeletePreset" Grid.Column="1" Content="🗑 Delete" 
                                     Style="{StaticResource OutlineButton}" Margin="3,0,0,0" Padding="10,8"
                                     Click="BtnDeletePreset_Click" IsEnabled="False" FontSize="12"/>
                         </Grid>
@@ -1289,7 +1289,7 @@
                     
                     <!-- Session Action Buttons -->
                     <StackPanel Grid.Row="2" x:Name="SessionButtonsPanel" Margin="0,10,0,0" Visibility="Collapsed">
-                        <Button x:Name="BtnStartSession" Content="▶️ Start Session" Style="{StaticResource PinkButton}"
+                        <Button x:Name="BtnStartSession" Content="▶ Start Session" Style="{StaticResource PinkButton}"
                                 Padding="12,12" FontSize="14" Click="BtnStartSession_Click"/>
                     </StackPanel>
                 </Grid>
@@ -1312,7 +1312,7 @@
                     </StackPanel>
                     
                     <!-- Buttons on right -->
-                    <Button Grid.Column="1" Content="▶️ Start" Style="{StaticResource PinkButton}"
+                    <Button x:Name="BtnPresetsStart" Grid.Column="1" Content="▶ Start" Style="{StaticResource PinkButton}"
                             Padding="20,10" FontSize="13" Margin="0,0,10,0"
                             Click="BtnStart_Click" ToolTip="Start the conditioning engine"/>
                     <Button Grid.Column="2" Content="💾 Save" Style="{StaticResource OutlineButton}"
@@ -1369,7 +1369,7 @@
                             <StackPanel x:Name="SpiralUnlocked" Visibility="Collapsed">
                                 <Grid>
                                     <TextBlock Text="🌀 Spiral Overlay" Foreground="White" FontWeight="Bold"/>
-                                    <TextBlock Text="✓ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
@@ -1424,7 +1424,7 @@
                             <StackPanel x:Name="PinkFilterUnlocked" Visibility="Collapsed">
                                 <Grid>
                                     <TextBlock Text="💗 Pink Filter" Foreground="White" FontWeight="Bold"/>
-                                    <TextBlock Text="✓ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
@@ -1476,7 +1476,7 @@
                             <StackPanel x:Name="BubblesUnlocked" Visibility="Collapsed">
                                 <Grid>
                                     <TextBlock Text="🫧 Bubble Pop" Foreground="White" FontWeight="Bold"/>
-                                    <TextBlock Text="✓ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
@@ -1510,7 +1510,7 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="LockCardLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="🔐 Lock Card" Foreground="#666666" FontWeight="Bold"/>
+                                    <TextBlock Text="📐 Lock Card" Foreground="#666666" FontWeight="Bold"/>
                                     <TextBlock Text="🔒 Lvl 35" Foreground="#666666" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
@@ -1527,13 +1527,13 @@
                             <!-- Unlocked State -->
                             <StackPanel x:Name="LockCardUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock Text="🔐 Lock Card" Foreground="White" FontWeight="Bold"/>
+                                    <TextBlock Text="📐 Lock Card" Foreground="White" FontWeight="Bold"/>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                         <Button Content="▶ Test" Style="{StaticResource OutlineButton}" 
                                                 Padding="10,4" FontSize="11" Margin="0,0,8,0"
                                                 Click="BtnTestLockCard_Click"
                                                 ToolTip="Test a lock card now"/>
-                                        <TextBlock Text="✓ Unlocked" Foreground="#00E676" VerticalAlignment="Center"/>
+                                        <TextBlock Text="✔ Unlocked" Foreground="#00E676" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
@@ -1575,7 +1575,7 @@
                                                ToolTip="Prevent ESC key from closing the lock card"/>
                                     <CheckBox x:Name="ChkLockCardStrict" Style="{StaticResource ToggleStyle}" 
                                               HorizontalAlignment="Right" Checked="ChkLockCardStrict_Checked"
-                                              ToolTip="⚠️ Cannot escape - must complete typing!"/>
+                                              ToolTip="⚠ Cannot escape - must complete typing!"/>
                                 </Grid>
                                 <Grid Margin="0,10,0,0">
                                     <Grid.ColumnDefinitions>
@@ -1585,7 +1585,7 @@
                                     <Button Grid.Column="0" Content="📝 Manage Phrases" Style="{StaticResource OutlineButton}" 
                                             Margin="0,0,5,0" Click="BtnManageLockCardPhrases_Click"
                                             ToolTip="Edit phrases that must be typed"/>
-                                    <Button Grid.Column="1" Content="⚙️" Style="{StaticResource OutlineButton}" 
+                                    <Button Grid.Column="1" Content="⚙" Style="{StaticResource OutlineButton}" 
                                             Width="40" Click="BtnLockCardSettings_Click"
                                             ToolTip="Customize lock card colors"/>
                                 </Grid>
@@ -1619,7 +1619,7 @@
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="🫧 Bubble Count" Foreground="{StaticResource PinkBrush}" FontWeight="Bold"/>
-                                        <TextBlock Text="✓ Lvl 50" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
+                                        <TextBlock Text="✔ Lvl 50" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
                                     </StackPanel>
                                     <CheckBox x:Name="ChkBubbleCountEnabled" Style="{StaticResource ToggleStyle}" 
                                               HorizontalAlignment="Right"
@@ -1703,7 +1703,7 @@
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="📺 Bouncing Text" Foreground="{StaticResource PinkBrush}" FontWeight="Bold"/>
-                                        <TextBlock Text="✓ Lvl 60" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
+                                        <TextBlock Text="✔ Lvl 60" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
                                     </StackPanel>
                                     <CheckBox x:Name="ChkBouncingTextEnabled" Style="{StaticResource ToggleStyle}" 
                                               HorizontalAlignment="Right"
@@ -1731,11 +1731,96 @@
                                                HorizontalAlignment="Center" Margin="0,8,0,0"/>
                                     
                                     <!-- Edit Phrases -->
-                                    <Button Content="✏️ Edit Phrases" 
+                                    <Button Content="✏ Edit Phrases" 
                                             Background="#40FFFFFF" Foreground="White" 
                                             BorderThickness="0" Padding="10,5" Margin="0,10,0,0"
                                             Cursor="Hand" Click="BtnEditBouncingText_Click"
                                             ToolTip="Customize the bouncing text phrases"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Mind Wipe - Lvl 75 -->
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                            ToolTip="Random mind wipe audio effects!&#x0a;Escalates in frequency during sessions.&#x0a;Unlocks at Level 75.">
+                        <Grid>
+                            <!-- Locked State -->
+                            <StackPanel x:Name="MindWipeLocked" Visibility="Visible">
+                                <Grid>
+                                    <TextBlock Text="🧠 Mind Wipe" Foreground="#666666" FontWeight="Bold"/>
+                                    <TextBlock Text="🔒 Lvl 75" Foreground="#666666" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="🧠" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Mind Wipe Audio" Foreground="{StaticResource PinkBrush}" 
+                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Random audio to wipe your thoughts!" Foreground="#888888" 
+                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0" FontStyle="Italic"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                            
+                            <!-- Unlocked State -->
+                            <StackPanel x:Name="MindWipeUnlocked" Visibility="Collapsed">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🧠 Mind Wipe" Foreground="{StaticResource PinkBrush}" FontWeight="Bold"/>
+                                        <TextBlock Text="✔ Lvl 75" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkMindWipeEnabled" Style="{StaticResource ToggleStyle}" 
+                                              HorizontalAlignment="Right"
+                                              Checked="ChkMindWipeEnabled_Changed" Unchecked="ChkMindWipeEnabled_Changed"/>
+                                </Grid>
+                                
+                                <StackPanel x:Name="MindWipeSettings" Margin="0,10,0,0">
+                                    <!-- Frequency -->
+                                    <Grid Margin="0,3,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Frequency"
+                                                   ToolTip="How many times per hour (outside sessions)"/>
+                                        <TextBlock x:Name="TxtMindWipeFreq" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="6/h"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderMindWipeFreq" Minimum="1" Maximum="30" Value="6" 
+                                            Margin="0,1" ValueChanged="SliderMindWipeFreq_Changed"
+                                            ToolTip="Mind wipe frequency (1-30 per hour)"/>
+                                    
+                                    <!-- Volume -->
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Volume"
+                                                   ToolTip="Mind wipe audio volume (independent of other audio)"/>
+                                        <TextBlock x:Name="TxtMindWipeVolume" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="50%"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderMindWipeVolume" Minimum="0" Maximum="100" Value="50" 
+                                            Margin="0,1" ValueChanged="SliderMindWipeVolume_Changed"
+                                            ToolTip="Volume level (0-100%)"/>
+                                    
+                                    <!-- Session Info -->
+                                    <Border Background="#2A2A4A" CornerRadius="4" Padding="8" Margin="0,10,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="📈 Session Mode" Foreground="{StaticResource PinkBrush}" 
+                                                       FontWeight="Bold" FontSize="11"/>
+                                            <TextBlock Text="Escalates every 5 minutes!" Foreground="#888888" 
+                                                       FontSize="11" Margin="0,2,0,0"/>
+                                            <TextBlock Text="Easy: 1→2→3... | Medium: 2→3→4... | Hard: 3→4→5..." 
+                                                       Foreground="#666666" FontSize="10" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                    
+                                    <!-- Test Button -->
+                                    <Button Content="🔊 Test Now" 
+                                            Background="#40FFFFFF" Foreground="White" 
+                                            BorderThickness="0" Padding="10,5" Margin="0,10,0,0"
+                                            Cursor="Hand" Click="BtnTestMindWipe_Click"
+                                            ToolTip="Play a mind wipe sound now"/>
                                 </StackPanel>
                             </StackPanel>
                         </Grid>
@@ -1756,7 +1841,7 @@
                     <Grid Margin="0,5">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource SettingLabel}" Text="Enable Scheduler"/>
-                            <TextBlock Text="ⓘ" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
+                            <TextBlock Text="℘" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
                                        ToolTip="Auto-starts the engine at Start time and auto-stops at End time on selected days"/>
                         </StackPanel>
                         <CheckBox x:Name="ChkSchedulerEnabled" Style="{StaticResource ToggleStyle}" 
@@ -1804,7 +1889,7 @@
                     <Grid Margin="0,5">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource SettingLabel}" Text="Enable Ramp"/>
-                            <TextBlock Text="ⓘ" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
+                            <TextBlock Text="℘" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
                                        ToolTip="Linked settings will gradually increase from their base value to (base × multiplier) over the duration"/>
                         </StackPanel>
                         <CheckBox x:Name="ChkRampEnabled" Style="{StaticResource ToggleStyle}" 
@@ -1842,7 +1927,7 @@
                     <Grid Margin="0,8,0,0">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource SettingLabel}" Text="End at Ramp Complete"/>
-                            <TextBlock Text="ⓘ" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
+                            <TextBlock Text="℘" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
                                        ToolTip="Automatically stop the engine when the intensity ramp reaches its end"/>
                         </StackPanel>
                         <CheckBox x:Name="ChkEndAtRamp" Style="{StaticResource ToggleStyle}" 
@@ -1888,14 +1973,14 @@
                             <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,6,0,2">
                                 <CheckBox x:Name="ChkRampLinkMaster" Style="{StaticResource ToggleStyle}"
                                           ToolTip="Link master volume to ramp"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Master 🔊" Margin="6,0,0,0" FontSize="11"
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Master 📊" Margin="6,0,0,0" FontSize="11"
                                            ToolTip="Master audio volume"/>
                             </StackPanel>
                             
                             <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,6,0,2">
                                 <CheckBox x:Name="ChkRampLinkSubAudio" Style="{StaticResource ToggleStyle}"
                                           ToolTip="Link subliminal audio volume to ramp"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Sub 🔊" Margin="6,0,0,0" FontSize="11"
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Sub 📊" Margin="6,0,0,0" FontSize="11"
                                            ToolTip="Subliminal whisper volume"/>
                             </StackPanel>
                         </Grid>

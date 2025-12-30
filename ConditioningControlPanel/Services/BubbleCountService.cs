@@ -25,6 +25,7 @@ public class BubbleCountService : IDisposable
     private string _videosPath = "";
     
     public bool IsRunning => _isRunning;
+    public bool IsBusy => _isBusy;
     
     public event EventHandler? GameCompleted;
     public event EventHandler? GameFailed;
@@ -110,30 +111,37 @@ public class BubbleCountService : IDisposable
         
         _isBusy = true;
         
-        Application.Current.Dispatcher.BeginInvoke(() =>
+        // Trigger Bambi Freeze subliminal+audio BEFORE bubble count game
+        App.Subliminal?.TriggerBambiFreeze();
+        
+        // Small delay to let the freeze effect register before game starts
+        Task.Delay(800).ContinueWith(_ =>
         {
-            try
+            Application.Current.Dispatcher.BeginInvoke(() =>
             {
-                // Get a random video
-                var videoPath = GetRandomVideo();
-                if (string.IsNullOrEmpty(videoPath))
+                try
                 {
-                    App.Logger?.Warning("BubbleCountService: No videos found");
-                    _isBusy = false;
-                    return;
+                    // Get a random video
+                    var videoPath = GetRandomVideo();
+                    if (string.IsNullOrEmpty(videoPath))
+                    {
+                        App.Logger?.Warning("BubbleCountService: No videos found");
+                        _isBusy = false;
+                        return;
+                    }
+                    
+                    // Determine difficulty settings
+                    var difficulty = (Difficulty)settings.BubbleCountDifficulty;
+                    
+                    // Show the game on all monitors
+                    BubbleCountWindow.ShowOnAllMonitors(videoPath, difficulty, settings.BubbleCountStrictLock, OnGameComplete);
                 }
-                
-                // Determine difficulty settings
-                var difficulty = (Difficulty)settings.BubbleCountDifficulty;
-                
-                // Show the game on all monitors
-                BubbleCountWindow.ShowOnAllMonitors(videoPath, difficulty, settings.BubbleCountStrictLock, OnGameComplete);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "Failed to start bubble count game");
-                _isBusy = false;
-            }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Failed to start bubble count game");
+                    _isBusy = false;
+                }
+            });
         });
     }
 

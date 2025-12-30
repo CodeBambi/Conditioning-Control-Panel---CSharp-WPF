@@ -57,7 +57,7 @@
             </StackPanel>
             
             <!-- Button -->
-            <Button Grid.Row="3" Content="💕 Let's Begin!" Click="BtnBegin_Click" Cursor="Hand">
+            <Button Grid.Row="3" Content="💜 Let's Begin!" Click="BtnBegin_Click" Cursor="Hand">
                 <Button.Style>
                     <Style TargetType="Button">
                         <Setter Property="Background" Value="#FF69B4"/>

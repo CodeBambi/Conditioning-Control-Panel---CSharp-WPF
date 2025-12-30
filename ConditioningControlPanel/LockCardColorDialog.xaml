@@ -163,7 +163,7 @@
                 Padding="20" Margin="0,0,0,20">
             <StackPanel VerticalAlignment="Center">
                 <!-- Title -->
-                <TextBlock Text="🔐 Type to Unlock" Foreground="#FF69B4" FontSize="14" 
+                <TextBlock Text="📐 Type to Unlock" Foreground="#FF69B4" FontSize="14" 
                            HorizontalAlignment="Center" Margin="0,0,0,15"/>
                 
                 <!-- Phrase to type -->

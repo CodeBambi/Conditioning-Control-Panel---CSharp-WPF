@@ -148,9 +148,9 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings.Current;
             if (!settings.FlashEnabled) return;
             
-            // flash_freq = flashes per minute
-            var baseFreq = Math.Max(0.5, settings.FlashFrequency);
-            var baseInterval = 60.0 / baseFreq; // seconds between flashes
+            // flash_freq = flashes per HOUR (1-180)
+            var baseFreq = Math.Max(1, settings.FlashFrequency);
+            var baseInterval = 3600.0 / baseFreq; // seconds between flashes
             
             // Add ±30% variance
             var variance = baseInterval * 0.3;
@@ -702,16 +702,20 @@ namespace ConditioningControlPanel.Services
         {
             var monitors = new List<MonitorInfo>();
             
+            // Get DPI scale factor to convert physical pixels to WPF DIPs
+            var dpiScale = GetDpiScale();
+            
             try
             {
                 foreach (var screen in Screen.AllScreens)
                 {
+                    // Convert from physical pixels to WPF device-independent pixels
                     monitors.Add(new MonitorInfo
                     {
-                        X = screen.Bounds.X,
-                        Y = screen.Bounds.Y,
-                        Width = screen.Bounds.Width,
-                        Height = screen.Bounds.Height,
+                        X = (int)(screen.Bounds.X / dpiScale),
+                        Y = (int)(screen.Bounds.Y / dpiScale),
+                        Width = (int)(screen.Bounds.Width / dpiScale),
+                        Height = (int)(screen.Bounds.Height / dpiScale),
                         IsPrimary = screen.Primary
                     });
                 }
@@ -723,6 +727,7 @@ namespace ConditioningControlPanel.Services
 
             if (monitors.Count == 0)
             {
+                // SystemParameters already returns DIPs, so no conversion needed
                 monitors.Add(new MonitorInfo
                 {
                     X = 0,
@@ -741,6 +746,35 @@ namespace ConditioningControlPanel.Services
             }
 
             return monitors;
+        }
+        
+        private double GetDpiScale()
+        {
+            try
+            {
+                var mainWindow = System.Windows.Application.Current?.MainWindow;
+                if (mainWindow != null)
+                {
+                    var source = PresentationSource.FromVisual(mainWindow);
+                    if (source?.CompositionTarget != null)
+                    {
+                        return source.CompositionTarget.TransformToDevice.M11;
+                    }
+                }
+            }
+            catch { }
+            
+            // Fallback: try to get from system
+            try
+            {
+                using (var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero))
+                {
+                    return g.DpiX / 96.0;
+                }
+            }
+            catch { }
+            
+            return 1.0; // Default to no scaling
         }
 
         private ImageGeometry CalculateGeometry(int origWidth, int origHeight, MonitorInfo monitor, double scale)

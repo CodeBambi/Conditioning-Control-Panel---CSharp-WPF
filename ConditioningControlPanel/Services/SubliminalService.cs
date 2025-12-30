@@ -147,6 +147,45 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Trigger a Bambi Freeze subliminal with audio - used before videos and bubble count games
+        /// </summary>
+        public void TriggerBambiFreeze()
+        {
+            if (!_isRunning && !App.Settings.Current.SubliminalEnabled)
+            {
+                // Still allow Bambi Freeze even if subliminals are disabled - it's a special trigger
+                App.Logger?.Debug("Triggering Bambi Freeze (subliminals disabled but special trigger allowed)");
+            }
+            
+            var text = "Bambi Freeze";
+            string? audioPath = FindLinkedAudio(text);
+            
+            if (audioPath != null)
+            {
+                // Duck other audio, play whisper, then show visual
+                App.Audio?.Duck(App.Settings.Current.DuckingLevel);
+                PlayWhisperAudio(audioPath);
+                
+                // Slight delay before showing visual
+                Task.Delay(300).ContinueWith(_ => 
+                {
+                    Application.Current.Dispatcher.Invoke(() => ShowSubliminalVisuals(text));
+                });
+                
+                // Schedule Bambi Reset after freeze
+                ScheduleBambiReset();
+                
+                App.Logger?.Information("Bambi Freeze triggered with audio");
+            }
+            else
+            {
+                // No audio file, just show visual
+                ShowSubliminalVisuals(text);
+                App.Logger?.Information("Bambi Freeze triggered (no audio file found)");
+            }
+        }
+
+        /// <summary>
         /// Schedule Bambi Reset to follow Bambi Freeze after a delay
         /// </summary>
         private void ScheduleBambiReset()

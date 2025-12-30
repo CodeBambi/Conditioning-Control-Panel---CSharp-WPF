@@ -20,7 +20,7 @@
             
             <!-- Title -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,18">
-                <TextBlock x:Name="TxtIcon" Text="⚠️" FontSize="32" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                <TextBlock x:Name="TxtIcon" Text="⚠" FontSize="32" VerticalAlignment="Center" Margin="0,0,14,0"/>
                 <TextBlock x:Name="TxtTitle" Text="Warning" Foreground="#FF69B4" FontSize="24" FontWeight="Bold" VerticalAlignment="Center"/>
             </StackPanel>
             
@@ -41,7 +41,7 @@
                                         <Grid>
                                             <Border x:Name="border" Width="24" Height="24" CornerRadius="4" 
                                                     Background="#252542" BorderBrush="#FF69B4" BorderThickness="2" Cursor="Hand"/>
-                                            <TextBlock x:Name="check" Text="✓" Foreground="#FF69B4" FontSize="16" 
+                                            <TextBlock x:Name="check" Text="✔" Foreground="#FF69B4" FontSize="16" 
                                                        FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                        Visibility="Collapsed"/>
                                         </Grid>

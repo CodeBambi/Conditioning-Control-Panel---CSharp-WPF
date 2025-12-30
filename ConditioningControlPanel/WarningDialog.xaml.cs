@@ -40,9 +40,9 @@ namespace ConditioningControlPanel
         /// </summary>
         public static bool ShowDoubleWarning(Window owner, string feature, string consequences)
         {
-            var title = $"⚠️ Enable {feature}?";
+            var title = $"⚠ Enable {feature}?";
             var message = $"You are about to enable {feature}.\n\n" +
-                         $"⚠️ CONSEQUENCES:\n{consequences}\n\n" +
+                         $"⚠ CONSEQUENCES:\n{consequences}\n\n" +
                          "This is a DANGEROUS setting. Are you absolutely sure?";
             
             var dialog = new WarningDialog(title, message, $"I understand enabling {feature} is dangerous")

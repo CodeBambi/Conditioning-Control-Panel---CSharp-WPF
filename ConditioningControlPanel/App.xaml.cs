@@ -21,6 +21,7 @@ namespace ConditioningControlPanel
         public static LockCardService LockCard { get; private set; } = null!;
         public static BubbleCountService BubbleCount { get; private set; } = null!;
         public static BouncingTextService BouncingText { get; private set; } = null!;
+        public static MindWipeService MindWipe { get; private set; } = null!;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -46,6 +47,7 @@ namespace ConditioningControlPanel
             Directory.CreateDirectory(Path.Combine(assetsPath, "startle_videos"));
             Directory.CreateDirectory(Path.Combine(assetsPath, "backgrounds"));
             Directory.CreateDirectory(Path.Combine(assetsPath, "sub_audio"));
+            Directory.CreateDirectory(Path.Combine(assetsPath, "mindwipe"));
 
             // Initialize services
             Settings = new SettingsService();
@@ -59,6 +61,7 @@ namespace ConditioningControlPanel
             LockCard = new LockCardService();
             BubbleCount = new BubbleCountService();
             BouncingText = new BouncingTextService();
+            MindWipe = new MindWipeService();
 
             Logger.Information("Services initialized");
 
@@ -79,6 +82,7 @@ namespace ConditioningControlPanel
             LockCard?.Dispose();
             BubbleCount?.Dispose();
             BouncingText?.Dispose();
+            MindWipe?.Dispose();
             Audio?.Dispose();
             Settings?.Save();
 

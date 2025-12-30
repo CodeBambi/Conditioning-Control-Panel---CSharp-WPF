@@ -83,7 +83,25 @@ namespace ConditioningControlPanel.Services
                 return;
             }
             
-            PlayVideo(path, App.Settings.Current.StrictLockEnabled);
+            // Trigger Bambi Freeze subliminal+audio BEFORE video, but only if no minigame is active
+            if (App.BubbleCount == null || !App.BubbleCount.IsBusy)
+            {
+                App.Subliminal?.TriggerBambiFreeze();
+                
+                // Small delay to let the freeze effect register before video starts
+                Task.Delay(800).ContinueWith(_ =>
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        PlayVideo(path, App.Settings.Current.StrictLockEnabled);
+                    });
+                });
+            }
+            else
+            {
+                // Minigame is active, just play video without freeze
+                PlayVideo(path, App.Settings.Current.StrictLockEnabled);
+            }
         }
 
         /// <summary>
@@ -409,7 +427,7 @@ namespace ConditioningControlPanel.Services
                 if (_penalties >= 3 && settings.MercySystemEnabled)
                     ShowMessage("BAMBI GETS MERCY", 2500, Cleanup);
                 else
-                    ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😈" : "DUMB BAMBI!\nTRY AGAIN", 2000, () =>
+                    ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😜" : "DUMB BAMBI!\nTRY AGAIN", 2000, () =>
                     {
                         CloseAll();
                         _hits = 0;

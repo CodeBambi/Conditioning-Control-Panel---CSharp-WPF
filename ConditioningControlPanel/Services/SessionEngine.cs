@@ -108,6 +108,13 @@ namespace ConditioningControlPanel.Services
                 ShowCornerGif(session.Settings);
             }
             
+            // Start Mind Wipe if enabled (escalating frequency)
+            if (session.Settings.MindWipeEnabled)
+            {
+                App.MindWipe.Volume = session.Settings.MindWipeVolume / 100.0;
+                App.MindWipe.StartSession(session.Settings.MindWipeBaseMultiplier);
+            }
+            
             // Start main timer (updates every second)
             _mainTimer = new DispatcherTimer
             {
@@ -146,6 +153,9 @@ namespace ConditioningControlPanel.Services
             
             // Close corner GIF
             CloseCornerGif();
+            
+            // Stop Mind Wipe
+            App.MindWipe?.Stop();
             
             // Restore original settings
             RestoreSettings();
@@ -376,6 +386,9 @@ namespace ConditioningControlPanel.Services
             _savedSettings.SubAudioEnabled = current.SubAudioEnabled;
             _savedSettings.SubAudioVolume = current.SubAudioVolume;
             
+            _savedSettings.AudioDuckingEnabled = current.AudioDuckingEnabled;
+            _savedSettings.DuckingLevel = current.DuckingLevel;
+            
             _savedSettings.PinkFilterEnabled = current.PinkFilterEnabled;
             _savedSettings.PinkFilterOpacity = current.PinkFilterOpacity;
             
@@ -388,10 +401,15 @@ namespace ConditioningControlPanel.Services
             _savedSettings.BouncingTextEnabled = current.BouncingTextEnabled;
             _savedSettings.BouncingTextSpeed = current.BouncingTextSpeed;
             
+            // Save bouncing text pool (deep copy)
+            _savedBouncingTextPool = new Dictionary<string, bool>(current.BouncingTextPool);
+            
             _savedSettings.MandatoryVideosEnabled = current.MandatoryVideosEnabled;
             _savedSettings.LockCardEnabled = current.LockCardEnabled;
             _savedSettings.BubbleCountEnabled = current.BubbleCountEnabled;
         }
+        
+        private Dictionary<string, bool>? _savedBouncingTextPool;
         
         private void ApplySessionSettings(SessionSettings settings)
         {
@@ -424,12 +442,35 @@ namespace ConditioningControlPanel.Services
                 current.SubAudioVolume = settings.WhisperVolume;
             }
             
-            // Bouncing Text
+            // Audio Ducking - apply session-specific duck level
+            if (settings.AudioDuckLevel > 0)
+            {
+                current.AudioDuckingEnabled = true;
+                current.DuckingLevel = settings.AudioDuckLevel;
+            }
+            
+            // Bouncing Text - override phrases with session-specific ones
             current.BouncingTextEnabled = settings.BouncingTextEnabled;
             if (settings.BouncingTextEnabled)
             {
                 current.BouncingTextSpeed = settings.BouncingTextSpeed;
-                // Note: Phrases are stored in BouncingTextPool dictionary, not a simple list
+                
+                // Override the bouncing text pool with session phrases
+                if (settings.BouncingTextPhrases.Count > 0)
+                {
+                    // Disable all existing phrases
+                    var keys = current.BouncingTextPool.Keys.ToList();
+                    foreach (var key in keys)
+                    {
+                        current.BouncingTextPool[key] = false;
+                    }
+                    
+                    // Add/enable session phrases
+                    foreach (var phrase in settings.BouncingTextPhrases)
+                    {
+                        current.BouncingTextPool[phrase] = true;
+                    }
+                }
             }
             
             // Pink Filter (delayed start - don't enable yet if delayed)
@@ -485,6 +526,9 @@ namespace ConditioningControlPanel.Services
             current.SubAudioEnabled = _savedSettings.SubAudioEnabled;
             current.SubAudioVolume = _savedSettings.SubAudioVolume;
             
+            current.AudioDuckingEnabled = _savedSettings.AudioDuckingEnabled;
+            current.DuckingLevel = _savedSettings.DuckingLevel;
+            
             current.PinkFilterEnabled = _savedSettings.PinkFilterEnabled;
             current.PinkFilterOpacity = _savedSettings.PinkFilterOpacity;
             
@@ -496,6 +540,17 @@ namespace ConditioningControlPanel.Services
             
             current.BouncingTextEnabled = _savedSettings.BouncingTextEnabled;
             current.BouncingTextSpeed = _savedSettings.BouncingTextSpeed;
+            
+            // Restore bouncing text pool
+            if (_savedBouncingTextPool != null)
+            {
+                current.BouncingTextPool.Clear();
+                foreach (var kvp in _savedBouncingTextPool)
+                {
+                    current.BouncingTextPool[kvp.Key] = kvp.Value;
+                }
+                _savedBouncingTextPool = null;
+            }
             
             current.MandatoryVideosEnabled = _savedSettings.MandatoryVideosEnabled;
             current.LockCardEnabled = _savedSettings.LockCardEnabled;
@@ -517,29 +572,32 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
                 
-                var screen = System.Windows.Forms.Screen.PrimaryScreen;
-                if (screen == null) return;
+                var gifSize = 60; // Small size for corner GIF
+                var margin = 10; // Margin from screen edge
                 
-                var gifSize = 120; // Size of corner GIF
+                // Use WPF's SystemParameters for accurate screen dimensions (already in device-independent pixels)
+                var screenWidth = SystemParameters.PrimaryScreenWidth;
+                var screenHeight = SystemParameters.PrimaryScreenHeight;
+                var workAreaHeight = SystemParameters.WorkArea.Height; // Excludes taskbar
                 
                 double left = 0, top = 0;
                 switch (settings.CornerGifPosition)
                 {
                     case CornerPosition.TopLeft:
-                        left = 10;
-                        top = 10;
+                        left = margin;
+                        top = margin;
                         break;
                     case CornerPosition.TopRight:
-                        left = screen.WorkingArea.Width - gifSize - 10;
-                        top = 10;
+                        left = screenWidth - gifSize - margin;
+                        top = margin;
                         break;
                     case CornerPosition.BottomLeft:
-                        left = 10;
-                        top = screen.WorkingArea.Height - gifSize - 10;
+                        left = margin;
+                        top = workAreaHeight - gifSize - margin; // Use work area to avoid taskbar
                         break;
                     case CornerPosition.BottomRight:
-                        left = screen.WorkingArea.Width - gifSize - 10;
-                        top = screen.WorkingArea.Height - gifSize - 10;
+                        left = screenWidth - gifSize - margin;
+                        top = workAreaHeight - gifSize - margin; // Use work area to avoid taskbar
                         break;
                 }
                 
@@ -554,7 +612,7 @@ namespace ConditioningControlPanel.Services
                     Height = gifSize,
                     Left = left,
                     Top = top,
-                    Opacity = settings.CornerGifOpacity / 100.0
+                    Opacity = settings.CornerGifOpacity / 100.0 // Very low opacity (default 18%)
                 };
                 
                 // Use WebBrowser control for GIF animation (works better than Image)
@@ -581,7 +639,8 @@ namespace ConditioningControlPanel.Services
                 // Make click-through
                 MakeWindowClickThrough(_cornerGifWindow);
                 
-                App.Logger?.Information("Corner GIF shown at {Position}: {Path}", settings.CornerGifPosition, settings.CornerGifPath);
+                App.Logger?.Information("Corner GIF shown at {Position}: {Path} (pos: {Left},{Top}, size: {Size}px, opacity: {Opacity}%)", 
+                    settings.CornerGifPosition, settings.CornerGifPath, left, top, gifSize, settings.CornerGifOpacity);
             }
             catch (Exception ex)
             {
