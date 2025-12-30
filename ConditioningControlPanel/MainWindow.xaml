@@ -967,93 +967,95 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         
-                        <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
                             <TextBlock Style="{StaticResource SectionHeader}" Text="🎯 Sessions"/>
-                            <Border Background="#404060" CornerRadius="4" Padding="6,2" HorizontalAlignment="Right">
-                                <TextBlock Text="COMING SOON" Foreground="#808090" FontSize="9" FontWeight="Bold"/>
-                            </Border>
                         </Grid>
                         
                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                             <StackPanel x:Name="SessionsPanel">
-                                <!-- Placeholder for future sessions feature -->
-                                <Border Background="#1E1E3A" CornerRadius="6" Padding="15" Margin="0,0,0,6">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🚀" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                                        <TextBlock Text="Sessions Coming Soon!" Foreground="{StaticResource PinkBrush}" 
-                                                   FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Guided conditioning experiences with timed phases, goals, and rewards." 
-                                                   Foreground="#808090" FontSize="11" TextAlignment="Center" 
-                                                   Margin="0,5,0,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                </Border>
-                                
-                                <!-- Session type previews (placeholders) -->
-                                <TextBlock Text="Preview of upcoming session types:" Foreground="#606080" 
-                                           FontSize="10" Margin="0,8,0,6"/>
-                                
-                                <Border Background="#252540" CornerRadius="5" Padding="10,8" Margin="0,0,0,4" Opacity="0.6"
-                                        Cursor="Hand" x:Name="SessionQuick" MouseLeftButtonUp="SessionCard_Click" Tag="quick">
+                                <!-- Morning Drift - Available -->
+                                <Border Background="#2A2A4A" CornerRadius="6" Padding="12,10" Margin="0,0,0,6"
+                                        Cursor="Hand" x:Name="SessionMorningDrift" MouseLeftButtonUp="SessionCard_Click" Tag="morning_drift">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="BorderBrush" Value="#404060"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
                                     <Grid>
                                         <StackPanel>
-                                            <TextBlock Text="⏱️ Quick Session" Foreground="#909090" FontWeight="SemiBold" FontSize="11"/>
-                                            <TextBlock Text="5-10 minute focused conditioning burst" 
-                                                       Foreground="#505060" FontSize="9" Margin="0,1,0,0"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🌅 Morning Drift" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
+                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
+                                                    <TextBlock Text="30 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="Gentle passive conditioning for your morning routine" 
+                                                       Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
-                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="#404050" FontSize="14"/>
+                                        <TextBlock Text="▶" HorizontalAlignment="Right" VerticalAlignment="Center" 
+                                                   Foreground="{StaticResource PinkBrush}" FontSize="18"/>
                                     </Grid>
                                 </Border>
                                 
-                                <Border Background="#252540" CornerRadius="5" Padding="10,8" Margin="0,0,0,4" Opacity="0.6"
-                                        Cursor="Hand" x:Name="SessionDeep" MouseLeftButtonUp="SessionCard_Click" Tag="deep">
+                                <!-- Coming Soon Sessions -->
+                                <TextBlock Text="More sessions coming soon:" Foreground="#707090" 
+                                           FontSize="11" Margin="0,14,0,8"/>
+                                
+                                <Border Background="#252540" CornerRadius="6" Padding="12,10" Margin="0,0,0,5" Opacity="0.5"
+                                        Cursor="Hand" x:Name="SessionDeepDive" MouseLeftButtonUp="SessionCard_Click" Tag="deep_dive">
                                     <Grid>
                                         <StackPanel>
-                                            <TextBlock Text="🌙 Deep Dive" Foreground="#909090" FontWeight="SemiBold" FontSize="11"/>
-                                            <TextBlock Text="30-60 minute immersive experience" 
-                                                       Foreground="#505060" FontSize="9" Margin="0,1,0,0"/>
+                                            <TextBlock Text="🌙 Deep Dive" Foreground="#808080" FontWeight="SemiBold" FontSize="12"/>
+                                            <TextBlock Text="60 minute immersive experience" 
+                                                       Foreground="#606070" FontSize="10" Margin="0,2,0,0"/>
                                         </StackPanel>
                                         <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="#404050" FontSize="14"/>
+                                                   Foreground="#505060" FontSize="16"/>
                                     </Grid>
                                 </Border>
                                 
-                                <Border Background="#252540" CornerRadius="5" Padding="10,8" Margin="0,0,0,4" Opacity="0.6"
-                                        Cursor="Hand" x:Name="SessionRandom" MouseLeftButtonUp="SessionCard_Click" Tag="random">
+                                <Border Background="#252540" CornerRadius="6" Padding="12,10" Margin="0,0,0,5" Opacity="0.5"
+                                        Cursor="Hand" x:Name="SessionBambiTime" MouseLeftButtonUp="SessionCard_Click" Tag="bambi_time">
                                     <Grid>
                                         <StackPanel>
-                                            <TextBlock Text="🎲 Random Challenge" Foreground="#909090" FontWeight="SemiBold" FontSize="11"/>
-                                            <TextBlock Text="Surprise session with random parameters" 
-                                                       Foreground="#505060" FontSize="9" Margin="0,1,0,0"/>
+                                            <TextBlock Text="💗 Bambi Time" Foreground="#808080" FontWeight="SemiBold" FontSize="12"/>
+                                            <TextBlock Text="Full surrender experience" 
+                                                       Foreground="#606070" FontSize="10" Margin="0,2,0,0"/>
                                         </StackPanel>
                                         <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="#404050" FontSize="14"/>
+                                                   Foreground="#505060" FontSize="16"/>
                                     </Grid>
                                 </Border>
                                 
-                                <Border Background="#252540" CornerRadius="5" Padding="10,8" Margin="0,0,0,4" Opacity="0.6"
-                                        Cursor="Hand" x:Name="SessionProgressive" MouseLeftButtonUp="SessionCard_Click" Tag="progressive">
+                                <Border Background="#252540" CornerRadius="6" Padding="12,10" Margin="0,0,0,5" Opacity="0.5"
+                                        Cursor="Hand" x:Name="SessionRandomDrop" MouseLeftButtonUp="SessionCard_Click" Tag="random_drop">
                                     <Grid>
                                         <StackPanel>
-                                            <TextBlock Text="📈 Progressive" Foreground="#909090" FontWeight="SemiBold" FontSize="11"/>
-                                            <TextBlock Text="Intensity increases over time" 
-                                                       Foreground="#505060" FontSize="9" Margin="0,1,0,0"/>
+                                            <TextBlock Text="🎲 Random Drop" Foreground="#808080" FontWeight="SemiBold" FontSize="12"/>
+                                            <TextBlock Text="Surprise settings, let go of control" 
+                                                       Foreground="#606070" FontSize="10" Margin="0,2,0,0"/>
                                         </StackPanel>
                                         <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="#404050" FontSize="14"/>
+                                                   Foreground="#505060" FontSize="16"/>
                                     </Grid>
                                 </Border>
                                 
-                                <Border Background="#252540" CornerRadius="5" Padding="10,8" Margin="0,0,0,4" Opacity="0.6"
-                                        Cursor="Hand" x:Name="SessionGoal" MouseLeftButtonUp="SessionCard_Click" Tag="goal">
+                                <Border Background="#252540" CornerRadius="6" Padding="12,10" Margin="0,0,0,5" Opacity="0.5"
+                                        Cursor="Hand" x:Name="SessionEdgeWalk" MouseLeftButtonUp="SessionCard_Click" Tag="edge_walk">
                                     <Grid>
                                         <StackPanel>
-                                            <TextBlock Text="🎯 Goal-Based" Foreground="#909090" FontWeight="SemiBold" FontSize="11"/>
-                                            <TextBlock Text="Complete objectives to finish session" 
-                                                       Foreground="#505060" FontSize="9" Margin="0,1,0,0"/>
+                                            <TextBlock Text="📈 Edge Walk" Foreground="#808080" FontWeight="SemiBold" FontSize="12"/>
+                                            <TextBlock Text="Progressive intensity climb" 
+                                                       Foreground="#606070" FontSize="10" Margin="0,2,0,0"/>
                                         </StackPanel>
                                         <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="#404050" FontSize="14"/>
+                                                   Foreground="#505060" FontSize="16"/>
                                     </Grid>
                                 </Border>
                             </StackPanel>
@@ -1072,53 +1074,121 @@
                     </Grid.RowDefinitions>
                     
                     <!-- Header -->
-                    <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                    <StackPanel Grid.Row="0" Margin="0,0,0,12">
                         <TextBlock x:Name="TxtDetailTitle" Text="Select a Preset" 
-                                   Foreground="{StaticResource PinkBrush}" FontSize="16" FontWeight="Bold"/>
+                                   Foreground="{StaticResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
                         <TextBlock x:Name="TxtDetailSubtitle" Text="Click on a preset or session to see details" 
-                                   Foreground="#808090" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                   Foreground="#909090" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
                     </StackPanel>
                     
-                    <!-- Details Content -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <!-- Details Content - Preset View -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" x:Name="PresetDetailScroller">
                         <StackPanel x:Name="DetailContentPanel">
                             <!-- Preset details will show here -->
-                            <TextBlock Text="⚡ Flash Images" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtDetailFlash" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
+                            <TextBlock Text="⚡ Flash Images" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="TxtDetailFlash" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                             
-                            <TextBlock Text="🎬 Mandatory Videos" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtDetailVideo" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
+                            <TextBlock Text="🎬 Mandatory Videos" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="TxtDetailVideo" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                             
-                            <TextBlock Text="💭 Subliminals" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtDetailSubliminal" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
+                            <TextBlock Text="💭 Subliminals" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="TxtDetailSubliminal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                             
-                            <TextBlock Text="🔊 Audio" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtDetailAudio" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
+                            <TextBlock Text="🔊 Audio" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="TxtDetailAudio" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                             
-                            <TextBlock Text="🌀 Overlays" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtDetailOverlays" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
+                            <TextBlock Text="🌀 Overlays" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="TxtDetailOverlays" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                             
-                            <TextBlock Text="🔐 Advanced" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBlock x:Name="TxtDetailAdvanced" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
+                            <TextBlock Text="🔐 Advanced" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="TxtDetailAdvanced" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                         </StackPanel>
                     </ScrollViewer>
                     
-                    <!-- Action Buttons -->
-                    <StackPanel Grid.Row="2" x:Name="DetailButtonsPanel" Margin="0,10,0,0">
+                    <!-- Details Content - Session View (Spoiler-Free) -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" x:Name="SessionDetailScroller" Visibility="Collapsed">
+                        <StackPanel x:Name="SessionDetailPanel">
+                            <!-- Session Duration -->
+                            <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,0,0,12">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="⏱️" FontSize="20" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtSessionDuration" Text="30 minutes" Foreground="White" 
+                                               FontSize="16" FontWeight="Bold" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            
+                            <!-- Spoiler-Free Description -->
+                            <TextBlock x:Name="TxtSessionDescription" TextWrapping="Wrap" Foreground="#C0C0C0" FontSize="12" 
+                                       LineHeight="20" Margin="0,0,0,16"
+                                       Text="Let the morning carry you away..."/>
+                            
+                            <!-- Spoiler Warning -->
+                            <Border Background="#2A2040" CornerRadius="8" Padding="12" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <TextBlock Text="🎁 Mystery Experience" Foreground="{StaticResource PinkBrush}" 
+                                               FontWeight="Bold" FontSize="13" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="The magic works best when you don't know what's coming..." 
+                                               Foreground="#808090" FontSize="11" TextAlignment="Center" 
+                                               Margin="0,6,0,0" FontStyle="Italic"/>
+                                </StackPanel>
+                            </Border>
+                            
+                            <!-- Reveal Spoilers Button -->
+                            <Button x:Name="BtnRevealSpoilers" Content="👁️ Reveal Details" 
+                                    Style="{StaticResource OutlineButton}" Padding="12,8" FontSize="12"
+                                    Click="BtnRevealSpoilers_Click" Margin="0,0,0,12"
+                                    ToolTip="⚠️ This will show all session settings - spoils the surprise!"/>
+                            
+                            <!-- Spoiler Content (Hidden by default) -->
+                            <StackPanel x:Name="SessionSpoilerPanel" Visibility="Collapsed">
+                                <Border Background="#301520" CornerRadius="6" Padding="10" Margin="0,0,0,12">
+                                    <TextBlock Text="⚠️ SPOILERS BELOW ⚠️" Foreground="#FF6B6B" FontSize="12" 
+                                               FontWeight="Bold" HorizontalAlignment="Center"/>
+                                </Border>
+                                
+                                <TextBlock Text="⚡ Flash Images" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <TextBlock x:Name="TxtSessionFlash" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                
+                                <TextBlock Text="💭 Subliminals" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <TextBlock x:Name="TxtSessionSubliminal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10"/>
+                                
+                                <TextBlock Text="🔊 Audio" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <TextBlock x:Name="TxtSessionAudio" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10"/>
+                                
+                                <TextBlock Text="🌀 Overlays" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <TextBlock x:Name="TxtSessionOverlays" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                
+                                <TextBlock Text="📺 Extras" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <TextBlock x:Name="TxtSessionExtras" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                
+                                <TextBlock Text="⏱️ Timeline" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <TextBlock x:Name="TxtSessionTimeline" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                    
+                    <!-- Preset Action Buttons -->
+                    <StackPanel Grid.Row="2" x:Name="PresetButtonsPanel" Margin="0,10,0,0">
                         <Button x:Name="BtnLoadPreset" Content="📥 Load Preset" Style="{StaticResource PinkButton}"
-                                Margin="0,0,0,6" Padding="10,8" Click="BtnLoadPreset_Click" IsEnabled="False"/>
+                                Margin="0,0,0,6" Padding="12,10" FontSize="13" Click="BtnLoadPreset_Click" IsEnabled="False"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Button x:Name="BtnSaveOverPreset" Grid.Column="0" Content="💾 Save" 
-                                    Style="{StaticResource OutlineButton}" Margin="0,0,3,0" Padding="8,6"
-                                    Click="BtnSaveOverPreset_Click" IsEnabled="False" FontSize="11"/>
+                                    Style="{StaticResource OutlineButton}" Margin="0,0,3,0" Padding="10,8"
+                                    Click="BtnSaveOverPreset_Click" IsEnabled="False" FontSize="12"/>
                             <Button x:Name="BtnDeletePreset" Grid.Column="1" Content="🗑️ Delete" 
-                                    Style="{StaticResource OutlineButton}" Margin="3,0,0,0" Padding="8,6"
-                                    Click="BtnDeletePreset_Click" IsEnabled="False" FontSize="11"/>
+                                    Style="{StaticResource OutlineButton}" Margin="3,0,0,0" Padding="10,8"
+                                    Click="BtnDeletePreset_Click" IsEnabled="False" FontSize="12"/>
                         </Grid>
+                    </StackPanel>
+                    
+                    <!-- Session Action Buttons -->
+                    <StackPanel Grid.Row="2" x:Name="SessionButtonsPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                        <Button x:Name="BtnStartSession" Content="▶️ Start Session" Style="{StaticResource PinkButton}"
+                                Padding="12,12" FontSize="14" Click="BtnStartSession_Click"/>
                     </StackPanel>
                 </Grid>
             </Border>

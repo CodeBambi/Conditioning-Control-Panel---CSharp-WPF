@@ -609,9 +609,16 @@ namespace ConditioningControlPanel
         private void SelectPreset(Models.Preset preset)
         {
             _selectedPreset = preset;
+            _selectedSession = null;
             
             // Update cards UI
             RefreshPresetsList();
+            
+            // Show preset panel, hide session panel
+            PresetDetailScroller.Visibility = Visibility.Visible;
+            PresetButtonsPanel.Visibility = Visibility.Visible;
+            SessionDetailScroller.Visibility = Visibility.Collapsed;
+            SessionButtonsPanel.Visibility = Visibility.Collapsed;
             
             // Update detail panel
             TxtDetailTitle.Text = preset.Name;
@@ -649,42 +656,208 @@ namespace ConditioningControlPanel
                 _selectedPreset = null;
                 RefreshPresetsList();
                 
-                // Show session info in detail panel
-                BtnLoadPreset.IsEnabled = false;
-                BtnSaveOverPreset.IsEnabled = false;
-                BtnDeletePreset.IsEnabled = false;
+                // Hide preset panel, show session panel
+                PresetDetailScroller.Visibility = Visibility.Collapsed;
+                PresetButtonsPanel.Visibility = Visibility.Collapsed;
+                SessionDetailScroller.Visibility = Visibility.Visible;
+                SessionButtonsPanel.Visibility = Visibility.Visible;
+                SessionSpoilerPanel.Visibility = Visibility.Collapsed;
+                BtnRevealSpoilers.Content = "👁️ Reveal Details";
                 
-                switch (sessionType)
+                // Find the session
+                var sessions = Models.Session.GetAllSessions();
+                _selectedSession = sessions.FirstOrDefault(s => s.Id == sessionType);
+                
+                if (_selectedSession != null)
                 {
-                    case "quick":
-                        TxtDetailTitle.Text = "⏱️ Quick Session";
-                        TxtDetailSubtitle.Text = "5-10 minute focused conditioning burst. Perfect for a quick reinforcement break.";
-                        break;
-                    case "deep":
-                        TxtDetailTitle.Text = "🌙 Deep Dive";
-                        TxtDetailSubtitle.Text = "30-60 minute immersive experience. Full conditioning with progressive intensity.";
-                        break;
-                    case "random":
-                        TxtDetailTitle.Text = "🎲 Random Challenge";
-                        TxtDetailSubtitle.Text = "Surprise session with randomized parameters. You won't know what's coming!";
-                        break;
-                    case "progressive":
-                        TxtDetailTitle.Text = "📈 Progressive";
-                        TxtDetailSubtitle.Text = "Starts gentle and gradually increases intensity over time.";
-                        break;
-                    case "goal":
-                        TxtDetailTitle.Text = "🎯 Goal-Based";
-                        TxtDetailSubtitle.Text = "Complete specific objectives to finish the session. Earn bonus XP!";
-                        break;
+                    TxtDetailTitle.Text = $"{_selectedSession.Icon} {_selectedSession.Name}";
+                    TxtDetailSubtitle.Text = _selectedSession.IsAvailable ? "" : "🔒 Coming Soon";
+                    TxtSessionDuration.Text = $"{_selectedSession.DurationMinutes} minutes";
+                    TxtSessionDescription.Text = _selectedSession.Description;
+                    
+                    // Populate spoiler details
+                    TxtSessionFlash.Text = _selectedSession.GetSpoilerFlash();
+                    TxtSessionSubliminal.Text = _selectedSession.GetSpoilerSubliminal();
+                    TxtSessionAudio.Text = _selectedSession.GetSpoilerAudio();
+                    TxtSessionOverlays.Text = _selectedSession.GetSpoilerOverlays();
+                    TxtSessionExtras.Text = _selectedSession.GetSpoilerExtras();
+                    TxtSessionTimeline.Text = _selectedSession.GetSpoilerTimeline();
+                    
+                    // Enable/disable start button
+                    BtnStartSession.IsEnabled = _selectedSession.IsAvailable;
+                    BtnStartSession.Content = _selectedSession.IsAvailable ? "▶️ Start Session" : "🔒 Coming Soon";
                 }
-                
-                TxtDetailFlash.Text = "🔒 Coming Soon";
-                TxtDetailVideo.Text = "🔒 Coming Soon";
-                TxtDetailSubliminal.Text = "🔒 Coming Soon";
-                TxtDetailAudio.Text = "🔒 Coming Soon";
-                TxtDetailOverlays.Text = "🔒 Coming Soon";
-                TxtDetailAdvanced.Text = "🔒 Coming Soon";
             }
+        }
+        
+        private Models.Session? _selectedSession;
+        
+        private void BtnRevealSpoilers_Click(object sender, RoutedEventArgs e)
+        {
+            if (SessionSpoilerPanel.Visibility == Visibility.Visible)
+            {
+                // Hide spoilers
+                SessionSpoilerPanel.Visibility = Visibility.Collapsed;
+                BtnRevealSpoilers.Content = "👁️ Reveal Details";
+                return;
+            }
+            
+            // Sequential warnings
+            var warning1 = ShowStyledDialog(
+                "⚠️ Spoiler Warning",
+                "Are you sure you want to see the session details?\n\n" +
+                "Part of the magic is not knowing what's coming...\n" +
+                "The experience works best when you surrender to the unknown.\n\n" +
+                "Do you really want to spoil the surprise?",
+                "Yes, show me", "No, keep the mystery");
+                
+            if (!warning1) return;
+            
+            var warning2 = ShowStyledDialog(
+                "💗 Second Warning",
+                "Good girls trust the process...\n\n" +
+                "You're about to see exactly what will happen.\n" +
+                "Once you know, you can't un-know.\n\n" +
+                "Last chance to keep the mystery alive.",
+                "Continue anyway", "You're right, nevermind");
+                
+            if (!warning2) return;
+            
+            var warning3 = ShowStyledDialog(
+                "🔓 Final Confirmation",
+                "You're choosing to see the details.\n" +
+                "That's okay - some girls like to know.\n\n" +
+                "Show the spoilers?",
+                "Show spoilers", "Keep it secret");
+                
+            if (warning3)
+            {
+                SessionSpoilerPanel.Visibility = Visibility.Visible;
+                BtnRevealSpoilers.Content = "🙈 Hide Details";
+            }
+        }
+        
+        private bool ShowStyledDialog(string title, string message, string yesText, string noText)
+        {
+            var dialog = new Window
+            {
+                Title = title,
+                Width = 400,
+                Height = 280,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStyle = WindowStyle.None,
+                AllowsTransparency = true,
+                Background = System.Windows.Media.Brushes.Transparent
+            };
+            
+            var border = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(26, 26, 46)),
+                BorderBrush = FindResource("PinkBrush") as SolidColorBrush,
+                BorderThickness = new Thickness(2),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(20)
+            };
+            
+            var mainStack = new StackPanel();
+            
+            // Title
+            mainStack.Children.Add(new TextBlock
+            {
+                Text = title,
+                Foreground = FindResource("PinkBrush") as SolidColorBrush,
+                FontSize = 18,
+                FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 15)
+            });
+            
+            // Message
+            mainStack.Children.Add(new TextBlock
+            {
+                Text = message,
+                Foreground = Brushes.White,
+                FontSize = 13,
+                TextWrapping = TextWrapping.Wrap,
+                TextAlignment = TextAlignment.Center,
+                LineHeight = 20,
+                Margin = new Thickness(0, 0, 0, 20)
+            });
+            
+            // Buttons
+            var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+            
+            bool result = false;
+            
+            var yesBtn = new Button
+            {
+                Content = yesText,
+                Background = FindResource("PinkBrush") as SolidColorBrush,
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(20, 10, 20, 10),
+                Margin = new Thickness(0, 0, 10, 0),
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                Cursor = Cursors.Hand
+            };
+            yesBtn.Click += (s, ev) => { result = true; dialog.Close(); };
+            
+            var noBtn = new Button
+            {
+                Content = noText,
+                Background = new SolidColorBrush(Color.FromRgb(60, 60, 80)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(20, 10, 20, 10),
+                FontSize = 12,
+                Cursor = Cursors.Hand
+            };
+            noBtn.Click += (s, ev) => { result = false; dialog.Close(); };
+            
+            buttonPanel.Children.Add(yesBtn);
+            buttonPanel.Children.Add(noBtn);
+            mainStack.Children.Add(buttonPanel);
+            
+            border.Child = mainStack;
+            dialog.Content = border;
+            dialog.ShowDialog();
+            
+            return result;
+        }
+        
+        private void BtnStartSession_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedSession == null || !_selectedSession.IsAvailable) return;
+            
+            var confirmed = ShowStyledDialog(
+                $"🌅 Start {_selectedSession.Name}?",
+                $"Duration: {_selectedSession.DurationMinutes} minutes\n\n" +
+                "Your current settings will be temporarily replaced.\n" +
+                "They will be restored when the session ends.\n\n" +
+                "Ready to begin?",
+                "▶️ Start Session", "Not yet");
+                
+            if (confirmed)
+            {
+                StartSession(_selectedSession);
+            }
+        }
+        
+        private void StartSession(Models.Session session)
+        {
+            // TODO: Implement full session engine
+            // For now, show a placeholder message
+            ShowStyledDialog(
+                $"🌅 {session.Name}",
+                $"Session starting!\n\n" +
+                $"Duration: {session.DurationMinutes} minutes\n\n" +
+                "(Full session engine coming in next update)",
+                "OK", "");
+                
+            App.Logger?.Information("Started session: {Name}", session.Name);
         }
 
         private void LoadPreset(Models.Preset preset)
