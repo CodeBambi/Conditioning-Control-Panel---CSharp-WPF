@@ -27,10 +27,11 @@ public class BouncingTextService : IDisposable
     private double _minX, _minY, _maxX, _maxY;
     private Color _currentColor;
     
-    // Text size
-    private const int FONT_SIZE = 48;
+    // Text size - base size that gets scaled by settings
+    private const int BASE_FONT_SIZE = 48;
     private double _textWidth = 200;
     private double _textHeight = 60;
+    private int _currentFontSize = BASE_FONT_SIZE;
     
     public bool IsRunning => _isRunning;
     
@@ -56,6 +57,11 @@ public class BouncingTextService : IDisposable
         }
         
         _isRunning = true;
+        
+        // Calculate font size based on settings (50-300% of base)
+        _currentFontSize = (int)(BASE_FONT_SIZE * settings.BouncingTextSize / 100.0);
+        _textWidth = _currentFontSize * 4; // Approximate width
+        _textHeight = _currentFontSize * 1.5; // Approximate height
         
         // Get random text from pool
         SelectRandomText();
@@ -152,7 +158,7 @@ public class BouncingTextService : IDisposable
         
         foreach (var screen in screens)
         {
-            var window = new BouncingTextWindow(screen);
+            var window = new BouncingTextWindow(screen, _currentFontSize);
             window.Show();
             _windows.Add(window);
         }
@@ -283,6 +289,21 @@ public class BouncingTextService : IDisposable
         var scale = targetSpeed / Math.Max(0.1, currentSpeed);
         _velX *= scale;
         _velY *= scale;
+        
+        // Check if font size changed - if so, restart to recreate windows
+        var newFontSize = (int)(BASE_FONT_SIZE * settings.BouncingTextSize / 100.0);
+        if (newFontSize != _currentFontSize)
+        {
+            _currentFontSize = newFontSize;
+            _textWidth = _currentFontSize * 4;
+            _textHeight = _currentFontSize * 1.5;
+            
+            // Update font size in all windows
+            foreach (var window in _windows)
+            {
+                window.UpdateFontSize(_currentFontSize);
+            }
+        }
     }
 
     public void Dispose()
@@ -300,7 +321,7 @@ internal class BouncingTextWindow : Window
     private readonly System.Windows.Forms.Screen _screen;
     private readonly double _dpiScale;
 
-    public BouncingTextWindow(System.Windows.Forms.Screen screen)
+    public BouncingTextWindow(System.Windows.Forms.Screen screen, int fontSize = 48)
     {
         _screen = screen;
         _dpiScale = GetDpiScale();
@@ -323,7 +344,7 @@ internal class BouncingTextWindow : Window
         // Create text block
         _textBlock = new TextBlock
         {
-            FontSize = 48,
+            FontSize = fontSize,
             FontWeight = FontWeights.Bold,
             Foreground = Brushes.HotPink,
             Effect = new System.Windows.Media.Effects.DropShadowEffect
@@ -347,6 +368,11 @@ internal class BouncingTextWindow : Window
     {
         _textBlock.Text = text;
         _textBlock.Foreground = new SolidColorBrush(color);
+    }
+
+    public void UpdateFontSize(int fontSize)
+    {
+        _textBlock.FontSize = fontSize;
     }
 
     public void UpdatePosition(double x, double y)

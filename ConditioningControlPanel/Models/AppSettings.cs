@@ -770,6 +770,13 @@ namespace ConditioningControlPanel.Models
             set { _bouncingTextSpeed = Math.Clamp(value, 1, 10); OnPropertyChanged(); }
         }
 
+        private int _bouncingTextSize = 100; // 50-300%
+        public int BouncingTextSize
+        {
+            get => _bouncingTextSize;
+            set { _bouncingTextSize = Math.Clamp(value, 50, 300); OnPropertyChanged(); }
+        }
+
         private Dictionary<string, bool> _bouncingTextPool = new()
         {
             { "GOOD GIRL", true },
@@ -850,11 +857,11 @@ namespace ConditioningControlPanel.Models
             set { _mindWipeEnabled = value; OnPropertyChanged(); }
         }
 
-        private int _mindWipeFrequency = 6; // 1-30 per hour
+        private int _mindWipeFrequency = 6; // 1-180 per hour
         public int MindWipeFrequency
         {
             get => _mindWipeFrequency;
-            set { _mindWipeFrequency = Math.Clamp(value, 1, 30); OnPropertyChanged(); }
+            set { _mindWipeFrequency = Math.Clamp(value, 1, 180); OnPropertyChanged(); }
         }
 
         private int _mindWipeVolume = 50; // 0-100%
@@ -862,6 +869,13 @@ namespace ConditioningControlPanel.Models
         {
             get => _mindWipeVolume;
             set { _mindWipeVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        private bool _mindWipeLoop = false; // Loop single track in background
+        public bool MindWipeLoop
+        {
+            get => _mindWipeLoop;
+            set { _mindWipeLoop = value; OnPropertyChanged(); }
         }
 
         #endregion

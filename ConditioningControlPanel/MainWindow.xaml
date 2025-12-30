@@ -1046,6 +1046,72 @@
                                     </Grid>
                                 </Border>
                                 
+                                <!-- The Distant Doll - Available -->
+                                <Border Background="#2A2A4A" CornerRadius="6" Padding="12,10" Margin="0,0,0,6"
+                                        Cursor="Hand" x:Name="SessionDistantDoll" MouseLeftButtonUp="SessionCard_Click" Tag="distant_doll">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="BorderBrush" Value="#404060"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid>
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🛋️ The Distant Doll" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
+                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
+                                                    <TextBlock Text="45 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
+                                                <Border Background="#2A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
+                                                    <TextBlock Text="⭐ +75 XP" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="Passive couch session - no audio ducking" 
+                                                       Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="▶" HorizontalAlignment="Right" VerticalAlignment="Center" 
+                                                   Foreground="{StaticResource PinkBrush}" FontSize="18"/>
+                                    </Grid>
+                                </Border>
+                                
+                                <!-- Good Girls Don't Cum - Available -->
+                                <Border Background="#2A2A4A" CornerRadius="6" Padding="12,10" Margin="0,0,0,6"
+                                        Cursor="Hand" x:Name="SessionGoodGirls" MouseLeftButtonUp="SessionCard_Click" Tag="good_girls_dont_cum">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="BorderBrush" Value="#404060"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid>
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🔒 Good Girls Don't Cum" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
+                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
+                                                    <TextBlock Text="60 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
+                                                <Border Background="#4A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
+                                                    <TextBlock Text="⭐⭐⭐ +200 XP" Foreground="#FFA500" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="Denial session - heavy pink fog conditioning" 
+                                                       Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="▶" HorizontalAlignment="Right" VerticalAlignment="Center" 
+                                                   Foreground="{StaticResource PinkBrush}" FontSize="18"/>
+                                    </Grid>
+                                </Border>
+                                
                                 <!-- Coming Soon Sessions -->
                                 <TextBlock Text="More sessions coming soon:" Foreground="#707090" 
                                            FontSize="11" Margin="0,14,0,8"/>
@@ -1725,6 +1791,20 @@
                                             Margin="0,1" ValueChanged="SliderBouncingTextSpeed_Changed"
                                             ToolTip="Bounce speed (1=slow, 10=fast)"/>
                                     
+                                    <!-- Size -->
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Size"
+                                                   ToolTip="Text size (50% to 300%)"/>
+                                        <TextBlock x:Name="TxtBouncingTextSize" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="100%"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderBouncingTextSize" Minimum="50" Maximum="300" Value="100" 
+                                            Margin="0,1" ValueChanged="SliderBouncingTextSize_Changed"
+                                            ToolTip="Text size (50%=small, 100%=normal, 300%=huge)"/>
+                                    
                                     <!-- XP Info -->
                                     <TextBlock Text="💰 +10 XP per bounce!" 
                                                Foreground="#50C878" FontSize="12" 
@@ -1785,9 +1865,9 @@
                                                    ToolTip="How many times per hour (outside sessions)"/>
                                         <TextBlock x:Name="TxtMindWipeFreq" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="6/h"/>
                                     </Grid>
-                                    <Slider x:Name="SliderMindWipeFreq" Minimum="1" Maximum="30" Value="6" 
+                                    <Slider x:Name="SliderMindWipeFreq" Minimum="1" Maximum="180" Value="6" 
                                             Margin="0,1" ValueChanged="SliderMindWipeFreq_Changed"
-                                            ToolTip="Mind wipe frequency (1-30 per hour)"/>
+                                            ToolTip="Mind wipe frequency (1-180 per hour)"/>
                                     
                                     <!-- Volume -->
                                     <Grid Margin="0,8,0,0">
@@ -1802,6 +1882,15 @@
                                     <Slider x:Name="SliderMindWipeVolume" Minimum="0" Maximum="100" Value="50" 
                                             Margin="0,1" ValueChanged="SliderMindWipeVolume_Changed"
                                             ToolTip="Volume level (0-100%)"/>
+                                    
+                                    <!-- Loop Toggle -->
+                                    <Grid Margin="0,10,0,0">
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="🔁 Loop in Background"
+                                                   ToolTip="Continuously loop a single track instead of random triggers"/>
+                                        <CheckBox x:Name="ChkMindWipeLoop" Style="{StaticResource ToggleStyle}" 
+                                                  HorizontalAlignment="Right"
+                                                  Checked="ChkMindWipeLoop_Changed" Unchecked="ChkMindWipeLoop_Changed"/>
+                                    </Grid>
                                     
                                     <!-- Session Info -->
                                     <Border Background="#2A2A4A" CornerRadius="4" Padding="8" Margin="0,10,0,0">

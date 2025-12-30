@@ -48,6 +48,10 @@ namespace ConditioningControlPanel.Services
         private double _currentPinkOpacity;
         private double _currentSpiralOpacity;
         
+        // Randomized start times (±3 min from session defaults)
+        private double _randomizedPinkStartMinute;
+        private double _randomizedSpiralStartMinute;
+        
         // Corner GIF window (for Gamer Girl session)
         private Window? _cornerGifWindow;
         
@@ -87,6 +91,9 @@ namespace ConditioningControlPanel.Services
             
             // Save current settings to restore later
             SaveCurrentSettings();
+            
+            // Randomize delayed start times (±3 minutes from session defaults)
+            RandomizeStartTimes(session);
             
             // Apply session settings
             ApplySessionSettings(session.Settings);
@@ -246,21 +253,33 @@ namespace ConditioningControlPanel.Services
         {
             if (_currentSession == null) return;
             var settings = _currentSession.Settings;
+            var progress = elapsedMinutes / totalMinutes;
             
             // Flash opacity ramp
             if (settings.FlashEnabled && settings.FlashOpacity != settings.FlashOpacityEnd)
             {
-                var progress = elapsedMinutes / totalMinutes;
                 _currentFlashOpacity = Lerp(settings.FlashOpacity, settings.FlashOpacityEnd, progress);
-                // Apply to flash service
                 App.Settings.Current.FlashOpacity = (int)_currentFlashOpacity;
             }
             
-            // Pink filter ramp (only after start minute)
-            if (settings.PinkFilterEnabled && elapsedMinutes >= settings.PinkFilterStartMinute)
+            // Flash frequency ramp (for sessions like Good Girls Don't Cum)
+            if (settings.FlashEnabled && settings.FlashPerHour != settings.FlashPerHourEnd)
             {
-                var pinkDuration = totalMinutes - settings.PinkFilterStartMinute;
-                var pinkProgress = (elapsedMinutes - settings.PinkFilterStartMinute) / pinkDuration;
+                var currentFreq = Lerp(settings.FlashPerHour, settings.FlashPerHourEnd, progress);
+                App.Settings.Current.FlashFrequency = (int)currentFreq;
+            }
+            
+            // Flash scale (apply once at start if set)
+            if (settings.FlashEnabled && settings.FlashScale != 100)
+            {
+                App.Settings.Current.ImageScale = settings.FlashScale;
+            }
+            
+            // Pink filter ramp (only after randomized start minute)
+            if (settings.PinkFilterEnabled && elapsedMinutes >= _randomizedPinkStartMinute)
+            {
+                var pinkDuration = totalMinutes - _randomizedPinkStartMinute;
+                var pinkProgress = (elapsedMinutes - _randomizedPinkStartMinute) / pinkDuration;
                 pinkProgress = Math.Clamp(pinkProgress, 0, 1);
                 _currentPinkOpacity = Lerp(settings.PinkFilterStartOpacity, settings.PinkFilterEndOpacity, pinkProgress);
                 // Apply to overlay service
@@ -268,11 +287,11 @@ namespace ConditioningControlPanel.Services
                 _mainWindow.UpdatePinkFilterOpacity((int)_currentPinkOpacity);
             }
             
-            // Spiral ramp (only after start minute)
-            if (settings.SpiralEnabled && elapsedMinutes >= settings.SpiralStartMinute)
+            // Spiral ramp (only after randomized start minute)
+            if (settings.SpiralEnabled && elapsedMinutes >= _randomizedSpiralStartMinute)
             {
-                var spiralDuration = totalMinutes - settings.SpiralStartMinute;
-                var spiralProgress = (elapsedMinutes - settings.SpiralStartMinute) / spiralDuration;
+                var spiralDuration = totalMinutes - _randomizedSpiralStartMinute;
+                var spiralProgress = (elapsedMinutes - _randomizedSpiralStartMinute) / spiralDuration;
                 spiralProgress = Math.Clamp(spiralProgress, 0, 1);
                 _currentSpiralOpacity = Lerp(settings.SpiralOpacity, settings.SpiralOpacityEnd, spiralProgress);
                 // Apply to overlay service
@@ -286,27 +305,71 @@ namespace ConditioningControlPanel.Services
             if (_currentSession == null) return;
             var settings = _currentSession.Settings;
             
-            // Pink filter delayed start
+            // Pink filter delayed start (use randomized time)
             if (settings.PinkFilterEnabled && !App.Settings.Current.PinkFilterEnabled)
             {
-                if (elapsedMinutes >= settings.PinkFilterStartMinute)
+                if (elapsedMinutes >= _randomizedPinkStartMinute)
                 {
                     App.Settings.Current.PinkFilterEnabled = true;
                     _mainWindow.EnablePinkFilter(true);
-                    App.Logger?.Information("Pink filter activated at {Minutes} minutes", elapsedMinutes);
+                    App.Logger?.Information("Pink filter activated at {Minutes:F1} minutes (target was {Target:F1})", 
+                        elapsedMinutes, _randomizedPinkStartMinute);
                 }
             }
             
-            // Spiral delayed start
+            // Spiral delayed start (use randomized time, but only if path exists!)
             if (settings.SpiralEnabled && !App.Settings.Current.SpiralEnabled)
             {
-                if (elapsedMinutes >= settings.SpiralStartMinute)
+                // Check if spiral path exists before trying to enable
+                if (string.IsNullOrEmpty(App.Settings.Current.SpiralPath))
+                {
+                    App.Logger?.Warning("Spiral enabled in session but no spiral file selected - skipping");
+                    // Disable in session to prevent repeated warnings
+                    settings.SpiralEnabled = false;
+                    return;
+                }
+                
+                if (elapsedMinutes >= _randomizedSpiralStartMinute)
                 {
                     App.Settings.Current.SpiralEnabled = true;
                     _mainWindow.EnableSpiral(true);
-                    App.Logger?.Information("Spiral activated at {Minutes} minutes", elapsedMinutes);
+                    App.Logger?.Information("Spiral activated at {Minutes:F1} minutes (target was {Target:F1})", 
+                        elapsedMinutes, _randomizedSpiralStartMinute);
                 }
             }
+        }
+        
+        /// <summary>
+        /// Randomizes delayed start times by ±3 minutes (clamped to valid range)
+        /// </summary>
+        private void RandomizeStartTimes(Session session)
+        {
+            var settings = session.Settings;
+            
+            // Randomize pink filter start (±3 min, min 0)
+            if (settings.PinkFilterEnabled && settings.PinkFilterStartMinute > 0)
+            {
+                var offset = (_random.NextDouble() * 6) - 3; // -3 to +3
+                _randomizedPinkStartMinute = Math.Max(0, settings.PinkFilterStartMinute + offset);
+            }
+            else
+            {
+                _randomizedPinkStartMinute = settings.PinkFilterStartMinute;
+            }
+            
+            // Randomize spiral start (±3 min, min 0)
+            if (settings.SpiralEnabled && settings.SpiralStartMinute > 0)
+            {
+                var offset = (_random.NextDouble() * 6) - 3; // -3 to +3
+                _randomizedSpiralStartMinute = Math.Max(0, settings.SpiralStartMinute + offset);
+            }
+            else
+            {
+                _randomizedSpiralStartMinute = settings.SpiralStartMinute;
+            }
+            
+            App.Logger?.Debug("Randomized start times - Pink: {Pink:F1}min, Spiral: {Spiral:F1}min",
+                _randomizedPinkStartMinute, _randomizedSpiralStartMinute);
         }
         
         private void ScheduleBubbleBursts(Session session)
@@ -378,6 +441,7 @@ namespace ConditioningControlPanel.Services
             _savedSettings.FlashOpacity = current.FlashOpacity;
             _savedSettings.FlashClickable = current.FlashClickable;
             _savedSettings.FlashAudioEnabled = current.FlashAudioEnabled;
+            _savedSettings.ImageScale = current.ImageScale;
             
             _savedSettings.SubliminalEnabled = current.SubliminalEnabled;
             _savedSettings.SubliminalFrequency = current.SubliminalFrequency;
@@ -518,6 +582,7 @@ namespace ConditioningControlPanel.Services
             current.FlashOpacity = _savedSettings.FlashOpacity;
             current.FlashClickable = _savedSettings.FlashClickable;
             current.FlashAudioEnabled = _savedSettings.FlashAudioEnabled;
+            current.ImageScale = _savedSettings.ImageScale;
             
             current.SubliminalEnabled = _savedSettings.SubliminalEnabled;
             current.SubliminalFrequency = _savedSettings.SubliminalFrequency;

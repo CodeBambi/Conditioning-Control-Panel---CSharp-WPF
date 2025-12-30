@@ -90,6 +90,7 @@ You don't need to do anything special. Just... let it happen. 💗",
                 // Flash Images
                 FlashEnabled = true,
                 FlashPerHour = 12,
+                FlashPerHourEnd = 12, // No frequency ramping
                 FlashImages = 2,
                 FlashOpacity = 30,
                 FlashOpacityEnd = 30,
@@ -181,6 +182,7 @@ Just play your game. Let everything else happen on its own.
                 // Flash Images - very subtle, small, infrequent
                 FlashEnabled = true,
                 FlashPerHour = 4, // Only ~4 per hour (1 every 15 min)
+                FlashPerHourEnd = 4, // No frequency ramping
                 FlashImages = 1, // Single image at a time
                 FlashOpacity = 20, // Very transparent
                 FlashOpacityEnd = 35, // Slight ramp
@@ -252,7 +254,184 @@ Just play your game. Let everything else happen on its own.
         };
 
         /// <summary>
+        /// The Distant Doll - Passive couch session for watching videos
+        /// Duration: 45 minutes, Difficulty: Easy
+        /// </summary>
+        public static Session DistantDoll { get; } = new Session
+        {
+            Id = "distant_doll",
+            Name = "The Distant Doll",
+            Icon = "🛋️",
+            DurationMinutes = 45,
+            IsAvailable = true,
+            Difficulty = SessionDifficulty.Easy,
+            BonusXP = 75,
+            Description = "No need to get up, sweetheart. Stay comfortable, soft, and empty. Everything is designed to be viewed from a distance while your mind drifts away. Perfect for turning your relaxation time into a passive reprogramming session.",
+            
+            Settings = new SessionSettings
+            {
+                // Flash Images - Relaxed pace, large format for distance viewing
+                FlashEnabled = true,
+                FlashPerHour = 30,
+                FlashPerHourEnd = 30, // No frequency ramping
+                FlashImages = 3,
+                FlashOpacity = 35,
+                FlashOpacityEnd = 35,
+                FlashScale = 150, // Large for distance viewing
+                FlashClickable = false, // Ghost mode
+                FlashAudioEnabled = false, // Silent flashes
+                
+                // Subliminals - Low frequency
+                SubliminalEnabled = true,
+                SubliminalPerMin = 2,
+                SubliminalFrames = 2,
+                SubliminalOpacity = 60,
+                
+                // Audio Whispers - Low volume background
+                AudioWhispersEnabled = true,
+                WhisperVolume = 15,
+                AudioDuckLevel = 0, // NO audio ducking - video volume stays normal
+                
+                // Pink Filter - Delayed start, ramps to 35%
+                PinkFilterEnabled = true,
+                PinkFilterStartMinute = 7, // Random ±3 will make it 5-10
+                PinkFilterStartOpacity = 5,
+                PinkFilterEndOpacity = 35,
+                
+                // Spiral - Delayed start, subtle
+                SpiralEnabled = true,
+                SpiralStartMinute = 12, // Random ±3 will make it 10-15
+                SpiralOpacity = 5,
+                SpiralOpacityEnd = 15,
+                
+                // Bubbles - Rare visual-only bursts
+                BubblesEnabled = true,
+                BubblesIntermittent = true,
+                BubblesClickable = false, // Visual only
+                BubblesBurstCount = 5, // ~5 times in 45 min
+                BubblesPerBurst = 3,
+                BubblesGapMin = 7,
+                BubblesGapMax = 12,
+                
+                // Mind Wipe - Low volume, escalating
+                MindWipeEnabled = true,
+                MindWipeBaseMultiplier = 1, // Easy start
+                MindWipeVolume = 12,
+                
+                // All interactions DISABLED
+                MandatoryVideosEnabled = false,
+                LockCardEnabled = false,
+                BubbleCountEnabled = false,
+                MiniGameEnabled = false,
+                BouncingTextEnabled = false
+            },
+            
+            Phases = new List<SessionPhase>
+            {
+                new() { StartMinute = 0, Name = "Settling In", Description = "Get comfortable on the couch..." },
+                new() { StartMinute = 7, Name = "Pink Creeping", Description = "The pink fog begins to form" },
+                new() { StartMinute = 12, Name = "Spiral Dreams", Description = "Gentle spirals join the view" },
+                new() { StartMinute = 25, Name = "Deep Drift", Description = "Mind wipes increasing, drifting deeper" },
+                new() { StartMinute = 40, Name = "Empty Doll", Description = "Completely passive, completely pretty" },
+                new() { StartMinute = 45, Name = "Complete", Description = "Such a good doll 💗" }
+            }
+        };
+
+        /// <summary>
+        /// Good Girls Don't Cum - Denial/edging session with heavy conditioning
+        /// Duration: 60 minutes, Difficulty: Hard
+        /// </summary>
+        public static Session GoodGirlsDontCum { get; } = new Session
+        {
+            Id = "good_girls_dont_cum",
+            Name = "Good Girls Don't Cum",
+            Icon = "🔒",
+            DurationMinutes = 60,
+            IsAvailable = true,
+            Difficulty = SessionDifficulty.Hard,
+            BonusXP = 200,
+            Description = "A good Bambi doesn't need hands. A good Bambi doesn't need release. Your only purpose is to sit prettily and let the pink fog consume you. The video is just background noise; the real content is your denial. And remember not to touch that clitty, Good Girls Don't Cum.",
+            
+            Settings = new SessionSettings
+            {
+                // Flash Images - Starts slow, RAMPS UP to block view
+                FlashEnabled = true,
+                FlashPerHour = 180, // 3 bursts/min start
+                FlashPerHourEnd = 600, // 10 bursts/min end
+                FlashImages = 3,
+                FlashOpacity = 35,
+                FlashOpacityEnd = 90, // Blocks view at end
+                FlashScale = 100,
+                FlashClickable = false, // Ghost mode
+                FlashAudioEnabled = false, // Silent - denial is quiet
+                
+                // Subliminals - Frequent
+                SubliminalEnabled = true,
+                SubliminalPerMin = 4,
+                SubliminalFrames = 3,
+                SubliminalOpacity = 70,
+                
+                // Audio Whispers
+                AudioWhispersEnabled = true,
+                WhisperVolume = 15,
+                AudioDuckLevel = 50, // 50% ducking - video gets quieter
+                
+                // Pink Filter - Heavy, from start
+                PinkFilterEnabled = true,
+                PinkFilterStartMinute = 0, // Immediate
+                PinkFilterStartOpacity = 10,
+                PinkFilterEndOpacity = 50, // Very heavy pink
+                
+                // Spiral - Delayed, ramps high
+                SpiralEnabled = true,
+                SpiralStartMinute = 5,
+                SpiralOpacity = 5,
+                SpiralOpacityEnd = 30, // Strong spiral
+                
+                // Bouncing Text - Denial phrases
+                BouncingTextEnabled = true,
+                BouncingTextSpeed = 4,
+                BouncingTextPhrases = new List<string> 
+                { 
+                    "BIMBO DOLL", 
+                    "GOOD GIRLS DONT CUM", 
+                    "LISTEN AND OBEY", 
+                    "BAMBI CLIT LOCK", 
+                    "GOOD GIRL",
+                    "NO TOUCHING",
+                    "DENIED 💗"
+                },
+                
+                // Mind Wipe - Starts at 2/min, escalates
+                MindWipeEnabled = true,
+                MindWipeBaseMultiplier = 2, // Medium start (2 per 5min block)
+                MindWipeVolume = 25,
+                
+                // NO bubbles - no touching allowed!
+                BubblesEnabled = false,
+                
+                // Other interactions disabled
+                MandatoryVideosEnabled = false,
+                LockCardEnabled = false,
+                BubbleCountEnabled = false,
+                MiniGameEnabled = false
+            },
+            
+            Phases = new List<SessionPhase>
+            {
+                new() { StartMinute = 0, Name = "Denial Begins", Description = "Hands off. Eyes forward. Mind empty." },
+                new() { StartMinute = 5, Name = "Spiral Starts", Description = "The spiral draws you in deeper..." },
+                new() { StartMinute = 15, Name = "Building", Description = "Flash images increasing, pink deepening" },
+                new() { StartMinute = 30, Name = "Half Way", Description = "You're doing so well. Don't touch." },
+                new() { StartMinute = 45, Name = "Overwhelming", Description = "Images blocking view, mind melting" },
+                new() { StartMinute = 55, Name = "Final Push", Description = "Maximum intensity. Stay denied." },
+                new() { StartMinute = 60, Name = "Complete", Description = "Good girl. You didn't cum. 🔒" }
+            }
+        };
+
+        /// <summary>
         /// Gets all sessions including placeholders
+        /// </summary>
         /// </summary>
         public static List<Session> GetAllSessions()
         {
@@ -260,6 +439,8 @@ Just play your game. Let everything else happen on its own.
             {
                 MorningDrift,
                 GamerGirl,
+                DistantDoll,
+                GoodGirlsDontCum,
                 new Session
                 {
                     Id = "deep_dive",
@@ -380,9 +561,11 @@ Just play your game. Let everything else happen on its own.
         // Flash Images
         public bool FlashEnabled { get; set; }
         public int FlashPerHour { get; set; } = 10;
+        public int FlashPerHourEnd { get; set; } = 10; // For frequency ramping
         public int FlashImages { get; set; } = 2;
         public int FlashOpacity { get; set; } = 100;
         public int FlashOpacityEnd { get; set; } = 100; // For ramping
+        public int FlashScale { get; set; } = 100; // Image scale percentage
         public bool FlashClickable { get; set; } = true;
         public bool FlashAudioEnabled { get; set; } = true;
         public bool FlashSmallSize { get; set; } = false; // Smaller images for gaming

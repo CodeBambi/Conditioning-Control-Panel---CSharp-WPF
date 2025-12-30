@@ -1690,6 +1690,9 @@ namespace ConditioningControlPanel
                 // Refresh overlays (spiral, pink filter)
                 App.Overlay.RefreshOverlays();
             }
+            
+            // Save settings to disk
+            App.Settings.Save();
         }
 
         private void UpdateStartButton()
@@ -1829,6 +1832,10 @@ namespace ConditioningControlPanel
             ChkMindWipeEnabled.IsChecked = s.MindWipeEnabled;
             SliderMindWipeFreq.Value = s.MindWipeFrequency;
             SliderMindWipeVolume.Value = s.MindWipeVolume;
+            ChkMindWipeLoop.IsChecked = s.MindWipeLoop;
+            
+            // Bouncing Text Size (add if not already loaded above)
+            SliderBouncingTextSize.Value = s.BouncingTextSize;
 
             // Scheduler
             ChkSchedulerEnabled.IsChecked = s.SchedulerEnabled;
@@ -1896,6 +1903,7 @@ namespace ConditioningControlPanel
             if (TxtBubbleFreq != null) TxtBubbleFreq.Text = ((int)SliderBubbleFreq.Value).ToString();
             if (TxtLockCardFreq != null) TxtLockCardFreq.Text = ((int)SliderLockCardFreq.Value).ToString();
             if (TxtLockCardRepeats != null) TxtLockCardRepeats.Text = $"{(int)SliderLockCardRepeats.Value}x";
+            if (TxtBouncingTextSize != null) TxtBouncingTextSize.Text = $"{(int)SliderBouncingTextSize.Value}%";
             if (TxtMindWipeFreq != null) TxtMindWipeFreq.Text = $"{(int)SliderMindWipeFreq.Value}/h";
             if (TxtMindWipeVolume != null) TxtMindWipeVolume.Text = $"{(int)SliderMindWipeVolume.Value}%";
             
@@ -2494,6 +2502,20 @@ namespace ConditioningControlPanel
             {
                 App.BouncingText.Refresh();
             }
+            App.Settings.Save();
+        }
+
+        private void SliderBouncingTextSize_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtBouncingTextSize == null) return;
+            TxtBouncingTextSize.Text = $"{(int)e.NewValue}%";
+            App.Settings.Current.BouncingTextSize = (int)e.NewValue;
+            
+            if (_isRunning)
+            {
+                App.BouncingText.Refresh();
+            }
+            App.Settings.Save();
         }
 
         private void BtnEditBouncingText_Click(object sender, RoutedEventArgs e)
@@ -2505,6 +2527,7 @@ namespace ConditioningControlPanel
             {
                 App.Settings.Current.BouncingTextPool = editor.ResultData;
                 App.Logger?.Information("Bouncing text phrases updated: {Count} items", editor.ResultData.Count);
+                App.Settings.Save();
             }
         }
 
@@ -2532,6 +2555,7 @@ namespace ConditioningControlPanel
                 }
                 App.Logger?.Information("Mind Wipe toggled: {Enabled}", isEnabled);
             }
+            App.Settings.Save();
         }
 
         private void SliderMindWipeFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -2544,6 +2568,7 @@ namespace ConditioningControlPanel
             {
                 App.MindWipe.UpdateSettings(App.Settings.Current.MindWipeFrequency, App.Settings.Current.MindWipeVolume / 100.0);
             }
+            App.Settings.Save();
         }
 
         private void SliderMindWipeVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -2556,6 +2581,28 @@ namespace ConditioningControlPanel
             {
                 App.MindWipe.UpdateSettings(App.Settings.Current.MindWipeFrequency, App.Settings.Current.MindWipeVolume / 100.0);
             }
+            App.Settings.Save();
+        }
+
+        private void ChkMindWipeLoop_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            
+            var isLooping = ChkMindWipeLoop.IsChecked ?? false;
+            App.Settings.Current.MindWipeLoop = isLooping;
+            
+            // Start/stop loop immediately
+            if (isLooping)
+            {
+                App.MindWipe.StartLoop(App.Settings.Current.MindWipeVolume / 100.0);
+            }
+            else
+            {
+                App.MindWipe.StopLoop();
+            }
+            
+            App.Settings.Save();
+            App.Logger?.Information("Mind Wipe loop toggled: {Looping}", isLooping);
         }
 
         private void BtnTestMindWipe_Click(object sender, RoutedEventArgs e)
