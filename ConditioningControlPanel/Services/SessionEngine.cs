@@ -651,13 +651,13 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
                 
-                var gifSize = 60; // Small size for corner GIF
-                var margin = 10; // Margin from screen edge
+                var gifSize = 80; // Slightly larger for visibility
+                var margin = 15; // Margin from screen edge
                 
-                // Use WPF's SystemParameters for accurate screen dimensions (already in device-independent pixels)
+                // Use WPF's SystemParameters for accurate screen dimensions
                 var screenWidth = SystemParameters.PrimaryScreenWidth;
                 var screenHeight = SystemParameters.PrimaryScreenHeight;
-                var workAreaHeight = SystemParameters.WorkArea.Height; // Excludes taskbar
+                var workAreaHeight = SystemParameters.WorkArea.Height;
                 
                 double left = 0, top = 0;
                 switch (settings.CornerGifPosition)
@@ -672,11 +672,11 @@ namespace ConditioningControlPanel.Services
                         break;
                     case CornerPosition.BottomLeft:
                         left = margin;
-                        top = workAreaHeight - gifSize - margin; // Use work area to avoid taskbar
+                        top = workAreaHeight - gifSize - margin;
                         break;
                     case CornerPosition.BottomRight:
                         left = screenWidth - gifSize - margin;
-                        top = workAreaHeight - gifSize - margin; // Use work area to avoid taskbar
+                        top = workAreaHeight - gifSize - margin;
                         break;
                 }
                 
@@ -687,32 +687,33 @@ namespace ConditioningControlPanel.Services
                     Background = System.Windows.Media.Brushes.Transparent,
                     Topmost = true,
                     ShowInTaskbar = false,
+                    ShowActivated = false,
                     Width = gifSize,
                     Height = gifSize,
                     Left = left,
                     Top = top,
-                    Opacity = settings.CornerGifOpacity / 100.0 // Very low opacity (default 18%)
+                    Opacity = settings.CornerGifOpacity / 100.0
                 };
                 
-                // Use WebBrowser control for GIF animation (works better than Image)
-                var browser = new System.Windows.Controls.WebBrowser();
-                var html = $@"
-                    <html>
-                    <head><style>
-                        body {{ margin: 0; padding: 0; overflow: hidden; background: transparent; }}
-                        img {{ width: 100%; height: 100%; object-fit: contain; }}
-                    </style></head>
-                    <body>
-                        <img src='file:///{settings.CornerGifPath.Replace("\\", "/")}' />
-                    </body>
-                    </html>";
-                
-                _cornerGifWindow.Content = browser;
-                _cornerGifWindow.Loaded += (s, e) =>
+                // Use MediaElement for GIF animation (better than WebBrowser for transparency)
+                var mediaElement = new System.Windows.Controls.MediaElement
                 {
-                    browser.NavigateToString(html);
+                    Source = new Uri(settings.CornerGifPath),
+                    LoadedBehavior = System.Windows.Controls.MediaState.Play,
+                    UnloadedBehavior = System.Windows.Controls.MediaState.Manual,
+                    Stretch = System.Windows.Media.Stretch.Uniform,
+                    Width = gifSize,
+                    Height = gifSize
                 };
                 
+                // Loop the GIF
+                mediaElement.MediaEnded += (s, e) =>
+                {
+                    mediaElement.Position = TimeSpan.Zero;
+                    mediaElement.Play();
+                };
+                
+                _cornerGifWindow.Content = mediaElement;
                 _cornerGifWindow.Show();
                 
                 // Make click-through

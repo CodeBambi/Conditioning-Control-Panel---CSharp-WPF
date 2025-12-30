@@ -225,7 +225,7 @@
         <!-- Section Header Style -->
         <Style x:Key="SectionHeader" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="15"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
         </Style>
@@ -233,14 +233,14 @@
         <!-- Label Style -->
         <Style x:Key="SettingLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
         <!-- Value Label Style -->
         <Style x:Key="ValueLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="HorizontalAlignment" Value="Right"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -1417,12 +1417,12 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="SpiralLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="🌀 Spiral Overlay" Foreground="#666666" FontWeight="Bold"/>
-                                    <TextBlock Text="🔒 Lvl 10" Foreground="#666666" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="🌀 Spiral Overlay" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="🔒 Lvl 10" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
                                     <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="🔒" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
                                         <TextBlock Text="Reach Level 10 to Unlock" Foreground="{StaticResource PinkBrush}" 
                                                    FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
                                         <TextBlock Text="Spiral Overlay Feature" Foreground="#888888" 
@@ -1434,8 +1434,8 @@
                             <!-- Unlocked State -->
                             <StackPanel x:Name="SpiralUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock Text="🌀 Spiral Overlay" Foreground="White" FontWeight="Bold"/>
-                                    <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="🌀 Spiral Overlay" Foreground="White" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
@@ -1472,12 +1472,12 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="PinkFilterLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="💗 Pink Filter" Foreground="#666666" FontWeight="Bold"/>
-                                    <TextBlock Text="🔒 Lvl 10" Foreground="#666666" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="💗 Pink Filter" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="🔒 Lvl 10" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
                                     <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="🔒" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
                                         <TextBlock Text="Reach Level 10 to Unlock" Foreground="{StaticResource PinkBrush}" 
                                                    FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
                                         <TextBlock Text="Pink Filter Feature" Foreground="#888888" 
@@ -1489,8 +1489,8 @@
                             <!-- Unlocked State -->
                             <StackPanel x:Name="PinkFilterUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock Text="💗 Pink Filter" Foreground="White" FontWeight="Bold"/>
-                                    <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="💗 Pink Filter" Foreground="White" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
@@ -1524,12 +1524,12 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="BubblesLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="🫧 Bubble Pop" Foreground="#666666" FontWeight="Bold"/>
-                                    <TextBlock Text="🔒 Lvl 20" Foreground="#666666" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="🫧 Bubble Pop" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="🔒 Lvl 20" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
                                     <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="🔒" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
                                         <TextBlock Text="Reach Level 20 to Unlock" Foreground="{StaticResource PinkBrush}" 
                                                    FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
                                         <TextBlock Text="Bubble Pop Game" Foreground="#888888" 
@@ -1541,8 +1541,8 @@
                             <!-- Unlocked State -->
                             <StackPanel x:Name="BubblesUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock Text="🫧 Bubble Pop" Foreground="White" FontWeight="Bold"/>
-                                    <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="🫧 Bubble Pop" Foreground="White" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable"
@@ -1577,11 +1577,11 @@
                             <StackPanel x:Name="LockCardLocked" Visibility="Visible">
                                 <Grid>
                                     <TextBlock Text="📐 Lock Card" Foreground="#666666" FontWeight="Bold"/>
-                                    <TextBlock Text="🔒 Lvl 35" Foreground="#666666" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="🔒 Lvl 35" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
                                     <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                        <TextBlock Text="🔒" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
                                         <TextBlock Text="Reach Level 35 to Unlock" Foreground="{StaticResource PinkBrush}" 
                                                    FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
                                         <TextBlock Text="Type-to-Unlock Screen Lock" Foreground="#888888" 
@@ -1667,7 +1667,7 @@
                             <StackPanel x:Name="Level50Locked" Visibility="Visible">
                                 <Grid>
                                     <TextBlock Text="🫧 Bubble Count" Foreground="#666666" FontWeight="Bold"/>
-                                    <TextBlock Text="🔒 Lvl 50" Foreground="#666666" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="🔒 Lvl 50" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
                                     <StackPanel HorizontalAlignment="Center">
@@ -1751,7 +1751,7 @@
                             <StackPanel x:Name="Level60Locked" Visibility="Visible">
                                 <Grid>
                                     <TextBlock Text="📺 Bouncing Text" Foreground="#666666" FontWeight="Bold"/>
-                                    <TextBlock Text="🔒 Lvl 60" Foreground="#666666" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="🔒 Lvl 60" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
                                     <StackPanel HorizontalAlignment="Center">
@@ -1828,8 +1828,8 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="MindWipeLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="🧠 Mind Wipe" Foreground="#666666" FontWeight="Bold"/>
-                                    <TextBlock Text="🔒 Lvl 75" Foreground="#666666" HorizontalAlignment="Right"/>
+                                    <TextBlock Text="🧠 Mind Wipe" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="🔒 Lvl 75" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
                                     <StackPanel HorizontalAlignment="Center">
@@ -1846,7 +1846,7 @@
                             <StackPanel x:Name="MindWipeUnlocked" Visibility="Collapsed">
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="🧠 Mind Wipe" Foreground="{StaticResource PinkBrush}" FontWeight="Bold"/>
+                                        <TextBlock Text="🧠 Mind Wipe" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
                                         <TextBlock Text="✔ Lvl 75" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
                                     </StackPanel>
                                     <CheckBox x:Name="ChkMindWipeEnabled" Style="{StaticResource ToggleStyle}" 
