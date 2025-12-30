@@ -1136,13 +1136,16 @@
             </Grid.RowDefinitions>
 
             <!-- Unlockables -->
-            <Border Grid.Column="0" Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5">
+            <Border Grid.Column="0" Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5"
+                    ToolTip="Features that unlock as you level up.&#x0a;Keep conditioning to earn XP and unlock new features!">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Style="{StaticResource SectionHeader}" Text="🎁 Unlockables"/>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="🎁 Unlockables"
+                               ToolTip="Level-gated features - higher levels unlock more!"/>
                     
                     <!-- Spiral Overlay - Lvl 10 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                            ToolTip="Hypnotic spiral animation overlay.&#x0a;Covers all screens with customizable opacity.&#x0a;Unlocks at Level 10.">
                         <Grid>
                             <!-- Locked State -->
                             <StackPanel x:Name="SpiralLocked" Visibility="Visible">
@@ -1196,7 +1199,8 @@
                     </Border>
 
                     <!-- Pink Filter - Lvl 10 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                            ToolTip="Pink color tint overlay for all screens.&#x0a;Subtle or intense, you choose!&#x0a;Unlocks at Level 10.">
                         <Grid>
                             <!-- Locked State -->
                             <StackPanel x:Name="PinkFilterLocked" Visibility="Visible">
@@ -1247,7 +1251,8 @@
                     </Border>
 
                     <!-- Bubble Pop - Lvl 20 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                            ToolTip="Pop floating bubbles to earn XP!&#x0a;Fun mini-game that spawns periodically.&#x0a;Unlocks at Level 20.">
                         <Grid>
                             <!-- Locked State -->
                             <StackPanel x:Name="BubblesLocked" Visibility="Visible">
@@ -1298,7 +1303,8 @@
                     </Border>
 
                     <!-- Lock Card - Lvl 35 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                            ToolTip="Screen lock that requires typing phrases.&#x0a;Reinforces conditioning through repetition.&#x0a;Unlocks at Level 35.">
                         <Grid>
                             <!-- Locked State -->
                             <StackPanel x:Name="LockCardLocked" Visibility="Visible">
@@ -1387,7 +1393,8 @@
                     </Border>
 
                     <!-- Bubble Count Game - Lvl 50 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                            ToolTip="Count the bubbles challenge!&#x0a;Memory and attention test for bonus XP.&#x0a;Unlocks at Level 50.">
                         <Grid>
                             <!-- Locked State -->
                             <StackPanel x:Name="Level50Locked" Visibility="Visible">
@@ -1470,7 +1477,8 @@
                     </Border>
 
                     <!-- Bouncing Text - Lvl 60 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5">
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                            ToolTip="DVD screensaver-style bouncing text!&#x0a;Customizable phrases bounce across screen.&#x0a;Unlocks at Level 60.">
                         <Grid>
                             <!-- Locked State -->
                             <StackPanel x:Name="Level60Locked" Visibility="Visible">
@@ -1536,10 +1544,12 @@
             </Border>
 
             <!-- Scheduler -->
-            <Border Grid.Column="1" Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5">
+            <Border Grid.Column="1" Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5"
+                    ToolTip="Automate your conditioning schedule.&#x0a;Set times and days for automatic start/stop.">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Style="{StaticResource SectionHeader}" Text="📅 Scheduler"/>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="📅 Scheduler"
+                               ToolTip="Configure automatic scheduling for conditioning sessions"/>
                     
                     <!-- Scheduler Enable with explanation -->
                     <Grid Margin="0,5">
@@ -1689,37 +1699,15 @@
                             </StackPanel>
                         </Grid>
                     </Border>
-                    
-                    <!-- Social Box - Coming Soon -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="15" Margin="0,15,0,0">
-                        <StackPanel>
-                            <Grid Margin="0,0,0,10">
-                                <TextBlock Text="💬 Community" Foreground="{StaticResource PinkBrush}" 
-                                           FontWeight="Bold" FontSize="14"/>
-                                <TextBlock Text="Coming Soon" Foreground="#666666" FontSize="10"
-                                           HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                            </Grid>
-                            <Border Background="#2A2A4A" CornerRadius="6" Padding="20,25">
-                                <StackPanel HorizontalAlignment="Center">
-                                    <TextBlock Text="🌐" FontSize="28" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                    <TextBlock Text="Social Features" Foreground="White" 
-                                               FontWeight="Bold" FontSize="13" HorizontalAlignment="Center"/>
-                                    <TextBlock Text="Connect with other users" Foreground="#888888" 
-                                               FontSize="11" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                                    <TextBlock Text="Share progress &amp; compete" Foreground="#666666" 
-                                               FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0" FontStyle="Italic"/>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
                 </ScrollViewer>
             </Border>
             
-            <!-- Coming Soon: Feature 1 -->
-            <Border Grid.Column="0" Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5" MinHeight="120">
+            <!-- Coming Soon: Achievements -->
+            <Border Grid.Column="0" Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5" MinHeight="120"
+                    ToolTip="Coming Soon: Track your milestones and earn badges!">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="🚧" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock Text="🏆" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                     <TextBlock Text="Achievements" Foreground="{StaticResource PinkBrush}" 
                                FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
                     <TextBlock Text="Coming Soon" Foreground="#666666" 
@@ -1729,15 +1717,16 @@
                 </StackPanel>
             </Border>
             
-            <!-- Coming Soon: Feature 2 -->
-            <Border Grid.Column="1" Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5" MinHeight="120">
+            <!-- Coming Soon: Community -->
+            <Border Grid.Column="1" Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5" MinHeight="120"
+                    ToolTip="Coming Soon: Connect with other users!">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="🎭" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                    <TextBlock Text="Personas" Foreground="{StaticResource PinkBrush}" 
+                    <TextBlock Text="🌐" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock Text="Community" Foreground="{StaticResource PinkBrush}" 
                                FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
                     <TextBlock Text="Coming Soon" Foreground="#666666" 
                                FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/>
-                    <TextBlock Text="Custom conditioning profiles" Foreground="#888888" 
+                    <TextBlock Text="Connect, share &amp; compete" Foreground="#888888" 
                                FontSize="11" HorizontalAlignment="Center" Margin="0,3,0,0" FontStyle="Italic"/>
                 </StackPanel>
             </Border>
