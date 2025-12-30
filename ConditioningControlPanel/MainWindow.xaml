@@ -906,29 +906,36 @@
 
         <!-- Presets Tab (Hidden by default) -->
         <Grid x:Name="PresetsTab" Grid.Row="3" Margin="10,5,10,10" Visibility="Collapsed">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="280"/>
-            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
             
-            <!-- Left Side: Presets and Sessions -->
-            <Grid Grid.Column="0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+            <!-- Main Content -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="280"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Left Side: Presets and Sessions -->
+                <Grid Grid.Column="0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
 
-                <!-- Top Section: Preset Cards Row -->
-                <Border Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5,5,5,0" Padding="10">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="📋 Presets" Margin="0,0,0,8"/>
-                        
-                        <!-- Horizontal Scrolling Preset Cards -->
-                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                            <StackPanel Orientation="Horizontal">
-                                <!-- Preset Cards Container -->
-                                <StackPanel x:Name="PresetCardsPanel" Orientation="Horizontal">
-                                    <!-- Preset cards will be generated here dynamically -->
+                    <!-- Top Section: Preset Cards Row -->
+                    <Border Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5,5,5,0" Padding="10">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="📋 Presets" Margin="0,0,0,8"/>
+                            
+                            <!-- Horizontal Scrolling Preset Cards -->
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                <StackPanel Orientation="Horizontal">
+                                    <!-- Preset Cards Container -->
+                                    <StackPanel x:Name="PresetCardsPanel" Orientation="Horizontal">
+                                        <!-- Preset cards will be generated here dynamically -->
                                 </StackPanel>
                                 
                                 <!-- Fixed "New Preset" Card -->
@@ -994,8 +1001,44 @@
                                                 <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
                                                     <TextBlock Text="30 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
+                                                <Border Background="#2A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
+                                                    <TextBlock Text="⭐ +50 XP" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
                                             </StackPanel>
                                             <TextBlock Text="Gentle passive conditioning for your morning routine" 
+                                                       Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="▶" HorizontalAlignment="Right" VerticalAlignment="Center" 
+                                                   Foreground="{StaticResource PinkBrush}" FontSize="18"/>
+                                    </Grid>
+                                </Border>
+                                
+                                <!-- Gamer Girl - Available -->
+                                <Border Background="#2A2A4A" CornerRadius="6" Padding="12,10" Margin="0,0,0,6"
+                                        Cursor="Hand" x:Name="SessionGamerGirl" MouseLeftButtonUp="SessionCard_Click" Tag="gamer_girl">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="BorderBrush" Value="#404060"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Grid>
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🎮 Gamer Girl" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
+                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
+                                                    <TextBlock Text="45 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
+                                                <Border Background="#3A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
+                                                    <TextBlock Text="⭐⭐ +100 XP" Foreground="#FFD700" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="Background conditioning while you game" 
                                                        Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
                                         <TextBlock Text="▶" HorizontalAlignment="Right" VerticalAlignment="Center" 
@@ -1108,19 +1151,78 @@
                     <!-- Details Content - Session View (Spoiler-Free) -->
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" x:Name="SessionDetailScroller" Visibility="Collapsed">
                         <StackPanel x:Name="SessionDetailPanel">
-                            <!-- Session Duration -->
+                            <!-- Session Duration & Difficulty -->
                             <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,0,0,12">
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                    <TextBlock Text="⏱️" FontSize="20" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="TxtSessionDuration" Text="30 minutes" Foreground="White" 
-                                               FontSize="16" FontWeight="Bold" Margin="10,0,0,0" VerticalAlignment="Center"/>
-                                </StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                        <TextBlock Text="⏱️ Duration" Foreground="#808090" FontSize="10" HorizontalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtSessionDuration" Text="30 minutes" Foreground="White" 
+                                                   FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                        <TextBlock Text="🏆 Reward" Foreground="#808090" FontSize="10" HorizontalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtSessionXP" Text="+50 XP" Foreground="#90EE90" 
+                                                   FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            
+                            <!-- Difficulty Badge -->
+                            <Border x:Name="DifficultyBadge" Background="#2A2A4A" CornerRadius="6" Padding="8,4" 
+                                    Margin="0,0,0,12" HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtSessionDifficulty" Text="⭐ Easy" Foreground="#FFD700" 
+                                           FontSize="12" FontWeight="Bold"/>
                             </Border>
                             
                             <!-- Spoiler-Free Description -->
                             <TextBlock x:Name="TxtSessionDescription" TextWrapping="Wrap" Foreground="#C0C0C0" FontSize="12" 
                                        LineHeight="20" Margin="0,0,0,16"
                                        Text="Let the morning carry you away..."/>
+                            
+                            <!-- Corner GIF Option (shown for Gamer Girl session) -->
+                            <Border x:Name="CornerGifOptionPanel" Background="#252540" CornerRadius="6" Padding="10" 
+                                    Margin="0,0,0,12" Visibility="Collapsed">
+                                <StackPanel>
+                                    <Grid>
+                                        <TextBlock Text="🖼️ Corner GIF" Foreground="{StaticResource PinkBrush}" 
+                                                   FontWeight="Bold" FontSize="11"/>
+                                        <CheckBox x:Name="ChkCornerGifEnabled" Style="{StaticResource ToggleStyle}" 
+                                                  HorizontalAlignment="Right" Checked="ChkCornerGifEnabled_Changed" 
+                                                  Unchecked="ChkCornerGifEnabled_Changed"/>
+                                    </Grid>
+                                    <TextBlock x:Name="TxtCornerGifDesc" Text="Place a subtle GIF in a screen corner" 
+                                               Foreground="#808090" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    
+                                    <StackPanel x:Name="CornerGifSettings" Visibility="Collapsed" Margin="0,8,0,0">
+                                        <Button x:Name="BtnSelectCornerGif" Content="📁 Select GIF" 
+                                                Style="{StaticResource OutlineButton}" Padding="8,6" FontSize="10"
+                                                Margin="0,0,0,8" Click="BtnSelectCornerGif_Click"/>
+                                        <TextBlock Text="Position:" Foreground="#909090" FontSize="10" Margin="0,0,0,4"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <RadioButton x:Name="RbCornerTL" Content="↖️ Top-Left" Foreground="White" 
+                                                         GroupName="CornerPos" Margin="0,2" FontSize="10"/>
+                                            <RadioButton x:Name="RbCornerTR" Grid.Column="1" Content="↗️ Top-Right" 
+                                                         Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10"/>
+                                            <RadioButton x:Name="RbCornerBL" Grid.Row="1" Content="↙️ Bottom-Left" 
+                                                         Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10" IsChecked="True"/>
+                                            <RadioButton x:Name="RbCornerBR" Grid.Row="1" Grid.Column="1" Content="↘️ Bottom-Right" 
+                                                         Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
                             
                             <!-- Spoiler Warning -->
                             <Border Background="#2A2040" CornerRadius="8" Padding="12" Margin="0,0,0,12">
@@ -1190,6 +1292,35 @@
                         <Button x:Name="BtnStartSession" Content="▶️ Start Session" Style="{StaticResource PinkButton}"
                                 Padding="12,12" FontSize="14" Click="BtnStartSession_Click"/>
                     </StackPanel>
+                </Grid>
+            </Border>
+            </Grid>
+            
+            <!-- Bottom Bar: Start/Save/Exit Buttons -->
+            <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5,8,5,0" Padding="15,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Status text on left -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtPresetsStatus" Text="Ready to start" Foreground="#808090" FontSize="12"/>
+                    </StackPanel>
+                    
+                    <!-- Buttons on right -->
+                    <Button Grid.Column="1" Content="▶️ Start" Style="{StaticResource PinkButton}"
+                            Padding="20,10" FontSize="13" Margin="0,0,10,0"
+                            Click="BtnStart_Click" ToolTip="Start the conditioning engine"/>
+                    <Button Grid.Column="2" Content="💾 Save" Style="{StaticResource OutlineButton}"
+                            Padding="16,10" FontSize="13" Margin="0,0,10,0"
+                            Click="BtnSave_Click" ToolTip="Save current settings"/>
+                    <Button Grid.Column="3" Content="🚪 Exit" Style="{StaticResource OutlineButton}"
+                            Padding="16,10" FontSize="13"
+                            Click="BtnExit_Click" ToolTip="Exit the application"/>
                 </Grid>
             </Border>
         </Grid>

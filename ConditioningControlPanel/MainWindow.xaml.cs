@@ -26,6 +26,9 @@ namespace ConditioningControlPanel
         private int _panicPressCount = 0;
         private DateTime _lastPanicTime = DateTime.MinValue;
         
+        // Session Engine
+        private SessionEngine? _sessionEngine;
+        
         // Ramp tracking
         private DispatcherTimer? _rampTimer;
         private DateTime _rampStartTime;
@@ -673,7 +676,32 @@ namespace ConditioningControlPanel
                     TxtDetailTitle.Text = $"{_selectedSession.Icon} {_selectedSession.Name}";
                     TxtDetailSubtitle.Text = _selectedSession.IsAvailable ? "" : "🔒 Coming Soon";
                     TxtSessionDuration.Text = $"{_selectedSession.DurationMinutes} minutes";
+                    TxtSessionXP.Text = $"+{_selectedSession.BonusXP} XP";
+                    TxtSessionDifficulty.Text = _selectedSession.GetDifficultyText();
                     TxtSessionDescription.Text = _selectedSession.Description;
+                    
+                    // Update XP color based on difficulty
+                    TxtSessionXP.Foreground = _selectedSession.Difficulty switch
+                    {
+                        Models.SessionDifficulty.Easy => new SolidColorBrush(Color.FromRgb(144, 238, 144)), // Light green
+                        Models.SessionDifficulty.Medium => new SolidColorBrush(Color.FromRgb(255, 215, 0)), // Gold
+                        Models.SessionDifficulty.Hard => new SolidColorBrush(Color.FromRgb(255, 165, 0)), // Orange
+                        Models.SessionDifficulty.Extreme => new SolidColorBrush(Color.FromRgb(255, 99, 71)), // Tomato
+                        _ => new SolidColorBrush(Color.FromRgb(144, 238, 144))
+                    };
+                    
+                    // Show corner GIF option if applicable
+                    if (_selectedSession.HasCornerGifOption)
+                    {
+                        CornerGifOptionPanel.Visibility = Visibility.Visible;
+                        TxtCornerGifDesc.Text = _selectedSession.CornerGifDescription;
+                        ChkCornerGifEnabled.IsChecked = false;
+                        CornerGifSettings.Visibility = Visibility.Collapsed;
+                    }
+                    else
+                    {
+                        CornerGifOptionPanel.Visibility = Visibility.Collapsed;
+                    }
                     
                     // Populate spoiler details
                     TxtSessionFlash.Text = _selectedSession.GetSpoilerFlash();
@@ -691,6 +719,44 @@ namespace ConditioningControlPanel
         }
         
         private Models.Session? _selectedSession;
+        
+        private void ChkCornerGifEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (ChkCornerGifEnabled.IsChecked == true)
+            {
+                CornerGifSettings.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                CornerGifSettings.Visibility = Visibility.Collapsed;
+            }
+        }
+        
+        private void BtnSelectCornerGif_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Select Corner GIF",
+                Filter = "GIF files (*.gif)|*.gif|All files (*.*)|*.*",
+                InitialDirectory = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "images")
+            };
+            
+            if (dialog.ShowDialog() == true)
+            {
+                _selectedCornerGifPath = dialog.FileName;
+                BtnSelectCornerGif.Content = $"📁 {System.IO.Path.GetFileName(dialog.FileName)}";
+            }
+        }
+        
+        private string _selectedCornerGifPath = "";
+        
+        private Models.CornerPosition GetSelectedCornerPosition()
+        {
+            if (RbCornerTL.IsChecked == true) return Models.CornerPosition.TopLeft;
+            if (RbCornerTR.IsChecked == true) return Models.CornerPosition.TopRight;
+            if (RbCornerBR.IsChecked == true) return Models.CornerPosition.BottomRight;
+            return Models.CornerPosition.BottomLeft;
+        }
         
         private void BtnRevealSpoilers_Click(object sender, RoutedEventArgs e)
         {
@@ -743,7 +809,7 @@ namespace ConditioningControlPanel
             {
                 Title = title,
                 Width = 400,
-                Height = 280,
+                Height = string.IsNullOrEmpty(noText) ? 260 : 280,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Owner = this,
                 ResizeMode = ResizeMode.NoResize,
@@ -798,27 +864,31 @@ namespace ConditioningControlPanel
                 Foreground = Brushes.White,
                 BorderThickness = new Thickness(0),
                 Padding = new Thickness(20, 10, 20, 10),
-                Margin = new Thickness(0, 0, 10, 0),
+                Margin = new Thickness(0, 0, string.IsNullOrEmpty(noText) ? 0 : 10, 0),
                 FontSize = 12,
                 FontWeight = FontWeights.Bold,
                 Cursor = Cursors.Hand
             };
             yesBtn.Click += (s, ev) => { result = true; dialog.Close(); };
-            
-            var noBtn = new Button
-            {
-                Content = noText,
-                Background = new SolidColorBrush(Color.FromRgb(60, 60, 80)),
-                Foreground = Brushes.White,
-                BorderThickness = new Thickness(0),
-                Padding = new Thickness(20, 10, 20, 10),
-                FontSize = 12,
-                Cursor = Cursors.Hand
-            };
-            noBtn.Click += (s, ev) => { result = false; dialog.Close(); };
-            
             buttonPanel.Children.Add(yesBtn);
-            buttonPanel.Children.Add(noBtn);
+            
+            // Only add cancel button if noText is provided
+            if (!string.IsNullOrEmpty(noText))
+            {
+                var noBtn = new Button
+                {
+                    Content = noText,
+                    Background = new SolidColorBrush(Color.FromRgb(60, 60, 80)),
+                    Foreground = Brushes.White,
+                    BorderThickness = new Thickness(0),
+                    Padding = new Thickness(20, 10, 20, 10),
+                    FontSize = 12,
+                    Cursor = Cursors.Hand
+                };
+                noBtn.Click += (s, ev) => { result = false; dialog.Close(); };
+                buttonPanel.Children.Add(noBtn);
+            }
+            
             mainStack.Children.Add(buttonPanel);
             
             border.Child = mainStack;
@@ -846,18 +916,126 @@ namespace ConditioningControlPanel
             }
         }
         
-        private void StartSession(Models.Session session)
+        private async void StartSession(Models.Session session)
         {
-            // TODO: Implement full session engine
-            // For now, show a placeholder message
-            ShowStyledDialog(
-                $"🌅 {session.Name}",
-                $"Session starting!\n\n" +
-                $"Duration: {session.DurationMinutes} minutes\n\n" +
-                "(Full session engine coming in next update)",
-                "OK", "");
+            // Apply corner GIF settings if enabled
+            if (session.HasCornerGifOption && ChkCornerGifEnabled.IsChecked == true)
+            {
+                session.Settings.CornerGifEnabled = true;
+                session.Settings.CornerGifPath = _selectedCornerGifPath;
+                session.Settings.CornerGifPosition = GetSelectedCornerPosition();
+            }
+            
+            // Initialize session engine if needed
+            if (_sessionEngine == null)
+            {
+                _sessionEngine = new SessionEngine(this);
+                _sessionEngine.SessionCompleted += OnSessionCompleted;
+                _sessionEngine.ProgressUpdated += OnSessionProgressUpdated;
+                _sessionEngine.PhaseChanged += OnSessionPhaseChanged;
+            }
+            
+            try
+            {
+                // Start the engine if not already running
+                if (!_isRunning)
+                {
+                    BtnStart_Click(this, new RoutedEventArgs());
+                }
                 
-            App.Logger?.Information("Started session: {Name}", session.Name);
+                // Start the session
+                await _sessionEngine.StartSessionAsync(session);
+                
+                // Update UI to show session is running
+                TxtPresetsStatus.Text = $"🎯 {session.Name} running... {session.DurationMinutes}:00 remaining";
+                
+                App.Logger?.Information("Started session: {Name} ({Difficulty}, +{XP} XP)", 
+                    session.Name, session.Difficulty, session.BonusXP);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to start session");
+                ShowStyledDialog("Error", $"Failed to start session:\n{ex.Message}", "OK", "");
+            }
+        }
+        
+        private void OnSessionCompleted(object? sender, SessionCompletedEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                // Award XP
+                App.Progression.AddXP(e.XPEarned);
+                
+                // Show completion window
+                var completeWindow = new SessionCompleteWindow(e.Session, e.Duration, e.XPEarned);
+                completeWindow.Owner = this;
+                completeWindow.ShowDialog();
+                
+                // Update status
+                TxtPresetsStatus.Text = "Ready to start";
+                
+                App.Logger?.Information("Session {Name} completed, awarded {XP} XP", e.Session.Name, e.XPEarned);
+            });
+        }
+        
+        private void OnSessionProgressUpdated(object? sender, SessionProgressEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (_sessionEngine?.CurrentSession != null)
+                {
+                    var remaining = e.Remaining;
+                    TxtPresetsStatus.Text = $"🎯 {_sessionEngine.CurrentSession.Name} running... " +
+                        $"{remaining.Minutes:D2}:{remaining.Seconds:D2} remaining ({e.ProgressPercent:F0}%)";
+                }
+            });
+        }
+        
+        private void OnSessionPhaseChanged(object? sender, SessionPhaseChangedEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                App.Logger?.Information("Session phase: {Phase} - {Description}", e.Phase.Name, e.Phase.Description);
+            });
+        }
+        
+        // Methods called by SessionEngine to control features
+        public void ApplySessionSettings()
+        {
+            _isLoading = true;
+            LoadSettings();
+            _isLoading = false;
+        }
+        
+        public void UpdatePinkFilterOpacity(int opacity)
+        {
+            App.Settings.Current.PinkFilterOpacity = opacity;
+        }
+        
+        public void UpdateSpiralOpacity(int opacity)
+        {
+            App.Settings.Current.SpiralOpacity = opacity;
+        }
+        
+        public void EnablePinkFilter(bool enabled)
+        {
+            App.Settings.Current.PinkFilterEnabled = enabled;
+        }
+        
+        public void EnableSpiral(bool enabled)
+        {
+            App.Settings.Current.SpiralEnabled = enabled;
+        }
+        
+        public void SetBubblesActive(bool active, int bubblesPerBurst = 5)
+        {
+            // Bubbles are handled by BubbleService through the settings
+            // Just toggle the enabled state temporarily for bursts
+            if (active)
+            {
+                App.Settings.Current.BubblesEnabled = true;
+                App.Settings.Current.BubblesFrequency = bubblesPerBurst * 2; // Higher frequency during burst
+            }
         }
 
         private void LoadPreset(Models.Preset preset)
@@ -1084,6 +1262,28 @@ namespace ConditioningControlPanel
         {
             if (_isRunning)
             {
+                // Check if a session is running
+                if (_sessionEngine != null && _sessionEngine.IsRunning)
+                {
+                    var session = _sessionEngine.CurrentSession;
+                    var elapsed = _sessionEngine.ElapsedTime;
+                    
+                    var confirmed = ShowStyledDialog(
+                        "⚠️ Stop Session?",
+                        $"You're currently in a session:\n" +
+                        $"{session?.Icon} {session?.Name}\n\n" +
+                        $"Time elapsed: {elapsed.Minutes:D2}:{elapsed.Seconds:D2}\n\n" +
+                        "If you stop now, you will NOT receive the XP reward.\n" +
+                        "Are you sure you want to quit?",
+                        "Yes, stop session", "Keep going");
+                    
+                    if (!confirmed) return;
+                    
+                    // Stop the session without completing it
+                    _sessionEngine.StopSession(completed: false);
+                    TxtPresetsStatus.Text = "Session cancelled";
+                }
+                
                 // User manually stopping
                 if (App.Settings.Current.SchedulerEnabled && IsInScheduledTimeWindow())
                 {
