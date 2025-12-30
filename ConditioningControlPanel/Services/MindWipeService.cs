@@ -38,6 +38,8 @@ namespace ConditioningControlPanel.Services
         
         public bool IsRunning => _isRunning;
         public bool IsLooping => _loopMode && _waveOut?.PlaybackState == PlaybackState.Playing;
+        public int AudioFileCount => _audioFiles?.Length ?? 0;
+        
         public double FrequencyPerHour
         {
             get => _frequencyPerHour;
@@ -52,7 +54,7 @@ namespace ConditioningControlPanel.Services
                 // Update live if playing
                 if (_audioReader != null)
                 {
-                    _audioReader.Volume = (float)_volume;
+                    try { _audioReader.Volume = (float)_volume; } catch { }
                 }
             }
         }
@@ -61,7 +63,7 @@ namespace ConditioningControlPanel.Services
         {
             _timer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(30) // Check every 30 seconds
+                Interval = TimeSpan.FromSeconds(10) // Check every 10 seconds for better high-frequency support
             };
             _timer.Tick += Timer_Tick;
             
@@ -73,21 +75,33 @@ namespace ConditioningControlPanel.Services
             try
             {
                 var assetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "mindwipe");
-                if (Directory.Exists(assetsPath))
+                
+                App.Logger?.Information("MindWipe: Looking for audio files in {Path}", assetsPath);
+                
+                if (!Directory.Exists(assetsPath))
                 {
-                    _audioFiles = Directory.GetFiles(assetsPath, "*.*")
-                        .Where(f => f.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
-                                   f.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
-                                   f.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
-                        .ToArray();
-                    
-                    App.Logger?.Information("MindWipe: Loaded {Count} audio files from {Path}", 
-                        _audioFiles.Length, assetsPath);
+                    // Create the directory so user knows where to put files
+                    Directory.CreateDirectory(assetsPath);
+                    App.Logger?.Warning("MindWipe: Created empty folder at {Path} - add audio files here!", assetsPath);
+                    _audioFiles = Array.Empty<string>();
+                    return;
+                }
+                
+                _audioFiles = Directory.GetFiles(assetsPath, "*.*")
+                    .Where(f => f.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
+                               f.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
+                               f.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                
+                if (_audioFiles.Length == 0)
+                {
+                    App.Logger?.Warning("MindWipe: No .mp3/.wav/.ogg files found in {Path}", assetsPath);
                 }
                 else
                 {
-                    App.Logger?.Warning("MindWipe: Audio folder not found at {Path}", assetsPath);
-                    _audioFiles = Array.Empty<string>();
+                    App.Logger?.Information("MindWipe: Loaded {Count} audio files: {Files}", 
+                        _audioFiles.Length, 
+                        string.Join(", ", _audioFiles.Select(Path.GetFileName)));
                 }
             }
             catch (Exception ex)
@@ -97,9 +111,22 @@ namespace ConditioningControlPanel.Services
             }
         }
         
+        /// <summary>
+        /// Reload audio files from disk (call after adding new files)
+        /// </summary>
+        public void ReloadAudioFiles()
+        {
+            LoadAudioFiles();
+        }
+        
         public void Start(double frequencyPerHour, double volume)
         {
-            if (_isRunning) return;
+            if (_isRunning)
+            {
+                App.Logger?.Debug("MindWipe: Already running, updating settings");
+                UpdateSettings(frequencyPerHour, volume);
+                return;
+            }
             
             _frequencyPerHour = frequencyPerHour;
             _volume = volume;
@@ -109,8 +136,8 @@ namespace ConditioningControlPanel.Services
             
             _timer.Start();
             
-            App.Logger?.Information("MindWipe: Started (frequency: {Freq}/hour, volume: {Vol}%)", 
-                frequencyPerHour, volume * 100);
+            App.Logger?.Information("MindWipe: Started (frequency: {Freq}/hour, volume: {Vol}%, files: {Count})", 
+                frequencyPerHour, volume * 100, _audioFiles?.Length ?? 0);
         }
         
         /// <summary>
@@ -230,7 +257,17 @@ namespace ConditioningControlPanel.Services
             // Don't trigger random sounds if loop mode is active
             if (_loopMode) return;
             
-            if (!_isRunning || _audioFiles == null || _audioFiles.Length == 0) return;
+            if (!_isRunning)
+            {
+                App.Logger?.Warning("MindWipe: Timer ticked but not running");
+                return;
+            }
+            
+            if (_audioFiles == null || _audioFiles.Length == 0)
+            {
+                App.Logger?.Warning("MindWipe: No audio files loaded");
+                return;
+            }
             
             // Calculate probability of triggering in this 30-second window
             double probability;
@@ -238,49 +275,49 @@ namespace ConditioningControlPanel.Services
             if (_sessionMode)
             {
                 // Escalating frequency in session mode
-                // Base multiplier determines plays per 5-minute block
-                // Block 0 (0-5min): base plays, Block 1 (5-10min): base+1 plays, etc.
                 var elapsed = DateTime.Now - _sessionStartTime;
                 var fiveMinBlocks = (int)(elapsed.TotalMinutes / 5);
                 var playsThisBlock = _sessionBaseFrequency + fiveMinBlocks;
                 
-                // Cap at reasonable maximum (10 plays per 5 min block)
-                playsThisBlock = Math.Min(playsThisBlock, 10);
+                // Cap at reasonable maximum (15 plays per 5 min block)
+                playsThisBlock = Math.Min(playsThisBlock, 15);
                 
-                // 5 minutes = 10 thirty-second windows
-                // Probability = plays / windows
-                probability = playsThisBlock / 10.0;
+                // 5 minutes = 30 ten-second windows
+                probability = playsThisBlock / 30.0;
                 
-                App.Logger?.Debug("MindWipe: Block {Block}, plays this block: {Plays}, probability: {Prob:P0}", 
+                App.Logger?.Debug("MindWipe: Session mode - Block {Block}, plays: {Plays}, prob: {Prob:P0}", 
                     fiveMinBlocks, playsThisBlock, probability);
             }
             else
             {
                 // Normal mode: frequency per hour
-                // 120 thirty-second windows per hour
-                probability = _frequencyPerHour / 120.0;
+                // 360 ten-second windows per hour
+                // At 180/hour, probability = 0.5 = 50% chance per interval
+                probability = _frequencyPerHour / 360.0;
+                
+                App.Logger?.Debug("MindWipe: Normal mode - Freq: {Freq}/h, prob: {Prob:P0}", 
+                    _frequencyPerHour, probability);
             }
             
-            if (_random.NextDouble() < probability)
+            // Generate random and check (probability > 1.0 means always trigger)
+            var roll = _random.NextDouble();
+            if (roll < probability)
             {
-                _ = PlayRandomAudioAsync();
+                App.Logger?.Information("MindWipe: Triggering audio (roll: {Roll:F2} < prob: {Prob:F2})", roll, probability);
+                PlayAudioNow();
             }
         }
         
-        private async Task PlayRandomAudioAsync()
+        private void PlayAudioNow()
         {
             if (_audioFiles == null || _audioFiles.Length == 0) return;
             
             try
             {
                 var audioFile = _audioFiles[_random.Next(_audioFiles.Length)];
-                
-                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    PlayAudio(audioFile);
-                });
-                
-                App.Logger?.Debug("MindWipe: Playing {File}", Path.GetFileName(audioFile));
+                PlayAudio(audioFile);
+                App.Logger?.Debug("MindWipe: Playing {File} at volume {Vol}%", 
+                    Path.GetFileName(audioFile), _volume * 100);
             }
             catch (Exception ex)
             {
@@ -340,11 +377,18 @@ namespace ConditioningControlPanel.Services
         {
             if (_audioFiles == null || _audioFiles.Length == 0)
             {
-                App.Logger?.Warning("MindWipe: No audio files available");
+                App.Logger?.Warning("MindWipe: No audio files available in assets/mindwipe/");
+                System.Windows.MessageBox.Show(
+                    "No audio files found!\n\nPlace .mp3, .wav, or .ogg files in:\nassets/mindwipe/", 
+                    "Mind Wipe", 
+                    System.Windows.MessageBoxButton.OK, 
+                    System.Windows.MessageBoxImage.Warning);
                 return;
             }
             
-            _ = PlayRandomAudioAsync();
+            // Use settings volume for test
+            _volume = App.Settings.Current.MindWipeVolume / 100.0;
+            PlayAudioNow();
         }
         
         /// <summary>

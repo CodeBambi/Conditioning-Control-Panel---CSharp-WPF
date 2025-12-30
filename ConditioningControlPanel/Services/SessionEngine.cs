@@ -535,6 +535,20 @@ namespace ConditioningControlPanel.Services
                         current.BouncingTextPool[phrase] = true;
                     }
                 }
+                
+                // Start bouncing text if level requirement met
+                if (current.PlayerLevel >= 60)
+                {
+                    App.BouncingText.Stop(); // Stop first to reset state
+                    App.BouncingText.Start();
+                    App.Logger?.Information("Session: Started bouncing text with phrases: {Phrases}", 
+                        string.Join(", ", settings.BouncingTextPhrases));
+                }
+            }
+            else
+            {
+                // Stop bouncing text if session disables it
+                App.BouncingText.Stop();
             }
             
             // Pink Filter (delayed start - don't enable yet if delayed)

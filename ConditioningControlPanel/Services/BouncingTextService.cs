@@ -50,11 +50,8 @@ public class BouncingTextService : IDisposable
             return;
         }
         
-        if (!settings.BouncingTextEnabled)
-        {
-            App.Logger?.Information("BouncingTextService: Disabled in settings");
-            return;
-        }
+        // Note: We don't check BouncingTextEnabled here because Start() is called
+        // explicitly when we want to start (either by toggle or by session)
         
         _isRunning = true;
         
@@ -98,12 +95,12 @@ public class BouncingTextService : IDisposable
 
     public void Stop()
     {
-        if (!_isRunning) return;
         _isRunning = false;
         
         _animTimer?.Stop();
         _animTimer = null;
         
+        // Always close and clear windows, even if we thought we weren't running
         foreach (var window in _windows)
         {
             try { window.Close(); } catch { }

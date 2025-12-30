@@ -73,6 +73,10 @@ namespace ConditioningControlPanel
             UpdateUI();
             _isLoading = false;
             
+            // Ensure all services are stopped on startup (cleanup any leftover state)
+            App.BouncingText.Stop();
+            App.Overlay.Stop();
+            
             // Show welcome dialog on first launch
             WelcomeDialog.ShowIfNeeded();
             
@@ -1313,8 +1317,9 @@ namespace ConditioningControlPanel
             if (settings.SubliminalEnabled)
                 App.Subliminal.Start();
             
-            // Start overlay service (handles spiral and pink filter based on level)
-            if (settings.PlayerLevel >= 10 && (settings.SpiralEnabled || settings.PinkFilterEnabled))
+            // Always start overlay service if level >= 10 (handles spiral and pink filter)
+            // This allows toggling overlays on/off while engine is running
+            if (settings.PlayerLevel >= 10)
             {
                 App.Overlay.Start();
             }
@@ -1342,6 +1347,17 @@ namespace ConditioningControlPanel
             {
                 App.BouncingText.Start();
             }
+            else
+            {
+                // Ensure bouncing text is stopped if disabled (cleanup any leftover state)
+                App.BouncingText.Stop();
+            }
+            
+            // Start mind wipe service (requires level 75)
+            if (settings.PlayerLevel >= 75 && settings.MindWipeEnabled)
+            {
+                App.MindWipe.Start(settings.MindWipeFrequency, settings.MindWipeVolume / 100.0);
+            }
             
             // Start ramp timer if enabled
             if (settings.IntensityRampEnabled)
@@ -1354,8 +1370,8 @@ namespace ConditioningControlPanel
             _isRunning = true;
             UpdateStartButton();
             
-            App.Logger?.Information("Engine started - Overlay: {Overlay}, Bubbles: {Bubbles}, LockCard: {LockCard}, BubbleCount: {BubbleCount}", 
-                App.Overlay.IsRunning, App.Bubbles.IsRunning, App.LockCard.IsRunning, App.BubbleCount.IsRunning);
+            App.Logger?.Information("Engine started - Overlay: {Overlay}, Bubbles: {Bubbles}, LockCard: {LockCard}, BubbleCount: {BubbleCount}, MindWipe: {MindWipe}", 
+                App.Overlay.IsRunning, App.Bubbles.IsRunning, App.LockCard.IsRunning, App.BubbleCount.IsRunning, App.MindWipe.IsRunning);
         }
 
         private void StopEngine()
@@ -1368,6 +1384,7 @@ namespace ConditioningControlPanel
             App.LockCard.Stop();
             App.BubbleCount.Stop();
             App.BouncingText.Stop();
+            App.MindWipe.Stop();
             App.Audio.Unduck();
             
             // Stop ramp timer and reset sliders
@@ -2311,6 +2328,8 @@ namespace ConditioningControlPanel
                 App.Overlay.RefreshOverlays();
                 App.Logger?.Information("Spiral overlay toggled: {Enabled}", isEnabled);
             }
+            
+            App.Settings.Save();
         }
 
         private void ChkPinkFilterEnabled_Changed(object sender, RoutedEventArgs e)
@@ -2326,6 +2345,8 @@ namespace ConditioningControlPanel
                 App.Overlay.RefreshOverlays();
                 App.Logger?.Information("Pink filter toggled: {Enabled}", isEnabled);
             }
+            
+            App.Settings.Save();
         }
 
         private void ChkBubblesEnabled_Changed(object sender, RoutedEventArgs e)
@@ -2348,6 +2369,8 @@ namespace ConditioningControlPanel
                 }
                 App.Logger?.Information("Bubbles toggled: {Enabled}", isEnabled);
             }
+            
+            App.Settings.Save();
         }
 
         private void ChkLockCardEnabled_Changed(object sender, RoutedEventArgs e)
@@ -2370,6 +2393,8 @@ namespace ConditioningControlPanel
                 }
                 App.Logger?.Information("Lock Card toggled: {Enabled}", isEnabled);
             }
+            
+            App.Settings.Save();
         }
 
         private void SliderLockCardFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -2408,6 +2433,8 @@ namespace ConditioningControlPanel
                 }
                 App.Logger?.Information("Bubble Count toggled: {Enabled}", isEnabled);
             }
+            
+            App.Settings.Save();
         }
 
         private void SliderBubbleCountFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -2420,6 +2447,8 @@ namespace ConditioningControlPanel
             {
                 App.BubbleCount.RefreshSchedule();
             }
+            
+            App.Settings.Save();
         }
 
         private void CmbBubbleCountDifficulty_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -2430,6 +2459,7 @@ namespace ConditioningControlPanel
             if (item?.Tag != null && int.TryParse(item.Tag.ToString(), out int difficulty))
             {
                 App.Settings.Current.BubbleCountDifficulty = difficulty;
+                App.Settings.Save();
             }
         }
 
@@ -2459,6 +2489,7 @@ namespace ConditioningControlPanel
             }
             
             App.Settings.Current.BubbleCountStrictLock = isEnabled;
+            App.Settings.Save();
         }
 
         private void BtnTestBubbleCount_Click(object sender, RoutedEventArgs e)
@@ -2490,6 +2521,8 @@ namespace ConditioningControlPanel
                 }
                 App.Logger?.Information("Bouncing Text toggled: {Enabled}", isEnabled);
             }
+            
+            App.Settings.Save();
         }
 
         private void SliderBouncingTextSpeed_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -2728,13 +2761,28 @@ namespace ConditioningControlPanel
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                Filter = "GIF Files (*.gif)|*.gif",
+                Filter = "GIF Files (*.gif)|*.gif|All Image Files|*.gif;*.png;*.jpg;*.jpeg",
                 Title = "Select Spiral GIF"
             };
+            
+            // Start in last used directory if available
+            var currentPath = App.Settings.Current.SpiralPath;
+            if (!string.IsNullOrEmpty(currentPath) && File.Exists(currentPath))
+            {
+                dialog.InitialDirectory = Path.GetDirectoryName(currentPath);
+            }
 
             if (dialog.ShowDialog() == true)
             {
                 App.Settings.Current.SpiralPath = dialog.FileName;
+                App.Settings.Save();
+                
+                // Refresh overlays if running
+                if (_isRunning)
+                {
+                    App.Overlay.RefreshOverlays();
+                }
+                
                 MessageBox.Show($"Selected: {Path.GetFileName(dialog.FileName)}", "Spiral Selected");
             }
         }
