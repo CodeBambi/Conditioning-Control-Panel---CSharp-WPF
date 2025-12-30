@@ -908,33 +908,161 @@
         <Grid x:Name="PresetsTab" Grid.Row="3" Margin="10,5,10,10" Visibility="Collapsed">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="350"/>
+                <ColumnDefinition Width="280"/>
             </Grid.ColumnDefinitions>
+            
+            <!-- Left Side: Presets and Sessions -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-            <!-- Preset List -->
-            <Border Grid.Column="0" Style="{StaticResource SectionPanel}" Margin="5">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    
-                    <Grid Grid.Row="0" Margin="0,0,0,10">
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="📋 Presets"/>
-                        <Button x:Name="BtnNewPreset" Content="➕ New Preset" Style="{StaticResource OutlineButton}"
-                                HorizontalAlignment="Right" Padding="10,5" FontSize="11"
-                                Click="BtnNewPreset_Click" ToolTip="Create a new preset from current settings"/>
+                <!-- Top Section: Preset Cards Row -->
+                <Border Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5,5,5,0" Padding="10">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="📋 Presets" Margin="0,0,0,8"/>
+                        
+                        <!-- Horizontal Scrolling Preset Cards -->
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <StackPanel Orientation="Horizontal">
+                                <!-- Preset Cards Container -->
+                                <StackPanel x:Name="PresetCardsPanel" Orientation="Horizontal">
+                                    <!-- Preset cards will be generated here dynamically -->
+                                </StackPanel>
+                                
+                                <!-- Fixed "New Preset" Card -->
+                                <Border Background="#2A2A4A" CornerRadius="6" Padding="8" Margin="4,0,0,0" 
+                                        Width="100" Height="70" Cursor="Hand"
+                                        MouseLeftButtonUp="BtnNewPreset_Click"
+                                        ToolTip="Create a new preset from current settings">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="BorderBrush" Value="#404060"/>
+                                            <Setter Property="BorderThickness" Value="2"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+                                                    <Setter Property="Background" Value="#353550"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <TextBlock Text="➕" FontSize="20" HorizontalAlignment="Center" Foreground="{StaticResource PinkBrush}"/>
+                                        <TextBlock Text="New" FontSize="10" FontWeight="Bold" 
+                                                   Foreground="{StaticResource PinkBrush}" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+                <!-- Bottom Section: Sessions (Coming Soon) -->
+                <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5,8,5,5" Padding="10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <Grid Grid.Row="0" Margin="0,0,0,8">
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="🎯 Sessions"/>
+                            <Border Background="#404060" CornerRadius="4" Padding="6,2" HorizontalAlignment="Right">
+                                <TextBlock Text="COMING SOON" Foreground="#808090" FontSize="9" FontWeight="Bold"/>
+                            </Border>
+                        </Grid>
+                        
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="SessionsPanel">
+                                <!-- Placeholder for future sessions feature -->
+                                <Border Background="#1E1E3A" CornerRadius="6" Padding="15" Margin="0,0,0,6">
+                                    <StackPanel HorizontalAlignment="Center">
+                                        <TextBlock Text="🚀" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Sessions Coming Soon!" Foreground="{StaticResource PinkBrush}" 
+                                                   FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Guided conditioning experiences with timed phases, goals, and rewards." 
+                                                   Foreground="#808090" FontSize="11" TextAlignment="Center" 
+                                                   Margin="0,5,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                                
+                                <!-- Session type previews (placeholders) -->
+                                <TextBlock Text="Preview of upcoming session types:" Foreground="#606080" 
+                                           FontSize="10" Margin="0,8,0,6"/>
+                                
+                                <Border Background="#252540" CornerRadius="5" Padding="10,8" Margin="0,0,0,4" Opacity="0.6"
+                                        Cursor="Hand" x:Name="SessionQuick" MouseLeftButtonUp="SessionCard_Click" Tag="quick">
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock Text="⏱️ Quick Session" Foreground="#909090" FontWeight="SemiBold" FontSize="11"/>
+                                            <TextBlock Text="5-10 minute focused conditioning burst" 
+                                                       Foreground="#505060" FontSize="9" Margin="0,1,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
+                                                   Foreground="#404050" FontSize="14"/>
+                                    </Grid>
+                                </Border>
+                                
+                                <Border Background="#252540" CornerRadius="5" Padding="10,8" Margin="0,0,0,4" Opacity="0.6"
+                                        Cursor="Hand" x:Name="SessionDeep" MouseLeftButtonUp="SessionCard_Click" Tag="deep">
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock Text="🌙 Deep Dive" Foreground="#909090" FontWeight="SemiBold" FontSize="11"/>
+                                            <TextBlock Text="30-60 minute immersive experience" 
+                                                       Foreground="#505060" FontSize="9" Margin="0,1,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
+                                                   Foreground="#404050" FontSize="14"/>
+                                    </Grid>
+                                </Border>
+                                
+                                <Border Background="#252540" CornerRadius="5" Padding="10,8" Margin="0,0,0,4" Opacity="0.6"
+                                        Cursor="Hand" x:Name="SessionRandom" MouseLeftButtonUp="SessionCard_Click" Tag="random">
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock Text="🎲 Random Challenge" Foreground="#909090" FontWeight="SemiBold" FontSize="11"/>
+                                            <TextBlock Text="Surprise session with random parameters" 
+                                                       Foreground="#505060" FontSize="9" Margin="0,1,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
+                                                   Foreground="#404050" FontSize="14"/>
+                                    </Grid>
+                                </Border>
+                                
+                                <Border Background="#252540" CornerRadius="5" Padding="10,8" Margin="0,0,0,4" Opacity="0.6"
+                                        Cursor="Hand" x:Name="SessionProgressive" MouseLeftButtonUp="SessionCard_Click" Tag="progressive">
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock Text="📈 Progressive" Foreground="#909090" FontWeight="SemiBold" FontSize="11"/>
+                                            <TextBlock Text="Intensity increases over time" 
+                                                       Foreground="#505060" FontSize="9" Margin="0,1,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
+                                                   Foreground="#404050" FontSize="14"/>
+                                    </Grid>
+                                </Border>
+                                
+                                <Border Background="#252540" CornerRadius="5" Padding="10,8" Margin="0,0,0,4" Opacity="0.6"
+                                        Cursor="Hand" x:Name="SessionGoal" MouseLeftButtonUp="SessionCard_Click" Tag="goal">
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock Text="🎯 Goal-Based" Foreground="#909090" FontWeight="SemiBold" FontSize="11"/>
+                                            <TextBlock Text="Complete objectives to finish session" 
+                                                       Foreground="#505060" FontSize="9" Margin="0,1,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
+                                                   Foreground="#404050" FontSize="14"/>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Grid>
-                    
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <StackPanel x:Name="PresetsList">
-                            <!-- Preset cards will be generated here dynamically -->
-                        </StackPanel>
-                    </ScrollViewer>
-                </Grid>
-            </Border>
-
-            <!-- Preset Details / Preview -->
+                </Border>
+            </Grid>
+            
+            <!-- Right Side: Details Panel -->
             <Border Grid.Column="1" Style="{StaticResource SectionPanel}" Margin="5">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -944,61 +1072,52 @@
                     </Grid.RowDefinitions>
                     
                     <!-- Header -->
-                    <StackPanel Grid.Row="0" Margin="0,0,0,15">
-                        <TextBlock x:Name="TxtPresetDetailName" Text="Select a Preset" 
-                                   Foreground="{StaticResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
-                        <TextBlock x:Name="TxtPresetDetailDesc" Text="Click on a preset to see details" 
-                                   Foreground="{StaticResource TextMutedBrush}" FontSize="12" 
-                                   TextWrapping="Wrap" Margin="0,5,0,0"/>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock x:Name="TxtDetailTitle" Text="Select a Preset" 
+                                   Foreground="{StaticResource PinkBrush}" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtDetailSubtitle" Text="Click on a preset or session to see details" 
+                                   Foreground="#808090" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
                     </StackPanel>
                     
-                    <!-- Settings Preview -->
+                    <!-- Details Content -->
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <StackPanel x:Name="PresetPreviewPanel">
-                            <TextBlock Text="⚡ Flash Images" Foreground="White" FontWeight="Bold" Margin="0,0,0,5"/>
-                            <TextBlock x:Name="TxtPreviewFlash" Text="Enabled: Yes | 2/min | Opacity: 100%" 
-                                       Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
+                        <StackPanel x:Name="DetailContentPanel">
+                            <!-- Preset details will show here -->
+                            <TextBlock Text="⚡ Flash Images" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="TxtDetailFlash" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
                             
-                            <TextBlock Text="🎬 Mandatory Videos" Foreground="White" FontWeight="Bold" Margin="0,0,0,5"/>
-                            <TextBlock x:Name="TxtPreviewVideo" Text="Enabled: No" 
-                                       Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
+                            <TextBlock Text="🎬 Mandatory Videos" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="TxtDetailVideo" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
                             
-                            <TextBlock Text="💭 Subliminals" Foreground="White" FontWeight="Bold" Margin="0,0,0,5"/>
-                            <TextBlock x:Name="TxtPreviewSubliminal" Text="Enabled: No" 
-                                       Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
+                            <TextBlock Text="💭 Subliminals" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="TxtDetailSubliminal" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
                             
-                            <TextBlock Text="🔊 Audio" Foreground="White" FontWeight="Bold" Margin="0,0,0,5"/>
-                            <TextBlock x:Name="TxtPreviewAudio" Text="Whispers: No | Master: 32%" 
-                                       Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
+                            <TextBlock Text="🔊 Audio" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="TxtDetailAudio" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
                             
-                            <TextBlock Text="🌀 Overlays" Foreground="White" FontWeight="Bold" Margin="0,0,0,5"/>
-                            <TextBlock x:Name="TxtPreviewOverlays" Text="Spiral: No | Pink Filter: No" 
-                                       Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
+                            <TextBlock Text="🌀 Overlays" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="TxtDetailOverlays" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
                             
-                            <TextBlock Text="🔐 Advanced" Foreground="White" FontWeight="Bold" Margin="0,0,0,5"/>
-                            <TextBlock x:Name="TxtPreviewAdvanced" Text="Bubbles: No | Lock Card: No" 
-                                       Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
+                            <TextBlock Text="🔐 Advanced" Foreground="White" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="TxtDetailAdvanced" Text="—" Foreground="#808090" FontSize="10" Margin="0,0,0,8"/>
                         </StackPanel>
                     </ScrollViewer>
                     
                     <!-- Action Buttons -->
-                    <StackPanel Grid.Row="2" Margin="0,10,0,0">
+                    <StackPanel Grid.Row="2" x:Name="DetailButtonsPanel" Margin="0,10,0,0">
                         <Button x:Name="BtnLoadPreset" Content="📥 Load Preset" Style="{StaticResource PinkButton}"
-                                Margin="0,0,0,8" Click="BtnLoadPreset_Click" IsEnabled="False"
-                                ToolTip="Apply this preset to your settings"/>
+                                Margin="0,0,0,6" Padding="10,8" Click="BtnLoadPreset_Click" IsEnabled="False"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Button x:Name="BtnSaveOverPreset" Grid.Column="0" Content="💾 Save Over" 
-                                    Style="{StaticResource OutlineButton}" Margin="0,0,4,0"
-                                    Click="BtnSaveOverPreset_Click" IsEnabled="False"
-                                    ToolTip="Save current settings to this preset"/>
+                            <Button x:Name="BtnSaveOverPreset" Grid.Column="0" Content="💾 Save" 
+                                    Style="{StaticResource OutlineButton}" Margin="0,0,3,0" Padding="8,6"
+                                    Click="BtnSaveOverPreset_Click" IsEnabled="False" FontSize="11"/>
                             <Button x:Name="BtnDeletePreset" Grid.Column="1" Content="🗑️ Delete" 
-                                    Style="{StaticResource OutlineButton}" Margin="4,0,0,0"
-                                    Click="BtnDeletePreset_Click" IsEnabled="False"
-                                    ToolTip="Delete this preset"/>
+                                    Style="{StaticResource OutlineButton}" Margin="3,0,0,0" Padding="8,6"
+                                    Click="BtnDeletePreset_Click" IsEnabled="False" FontSize="11"/>
                         </Grid>
                     </StackPanel>
                 </Grid>

@@ -506,102 +506,91 @@ namespace ConditioningControlPanel
 
         private void RefreshPresetsList()
         {
-            PresetsList.Children.Clear();
+            PresetCardsPanel.Children.Clear();
             _allPresets = Models.Preset.GetDefaultPresets();
             _allPresets.AddRange(App.Settings.Current.UserPresets);
             
             foreach (var preset in _allPresets)
             {
                 var card = CreatePresetCard(preset);
-                PresetsList.Children.Add(card);
+                PresetCardsPanel.Children.Add(card);
             }
         }
 
         private Border CreatePresetCard(Models.Preset preset)
         {
             var isSelected = _selectedPreset?.Id == preset.Id;
+            var pinkBrush = FindResource("PinkBrush") as SolidColorBrush;
+            
             var card = new Border
             {
-                Background = new SolidColorBrush(isSelected ? Color.FromRgb(60, 60, 100) : Color.FromRgb(30, 30, 58)),
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(12),
-                Margin = new Thickness(0, 0, 0, 8),
+                Background = new SolidColorBrush(isSelected ? Color.FromRgb(60, 60, 100) : Color.FromRgb(42, 42, 74)),
+                BorderBrush = isSelected ? pinkBrush : new SolidColorBrush(Color.FromRgb(64, 64, 96)),
+                BorderThickness = new Thickness(2),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(8),
+                Margin = new Thickness(0, 0, 6, 0),
+                Width = 100,
+                Height = 70,
                 Cursor = Cursors.Hand,
                 Tag = preset.Id
             };
             
             card.MouseLeftButtonDown += (s, e) => SelectPreset(preset);
+            card.MouseEnter += (s, e) => {
+                if (_selectedPreset?.Id != preset.Id)
+                    card.BorderBrush = pinkBrush;
+            };
+            card.MouseLeave += (s, e) => {
+                if (_selectedPreset?.Id != preset.Id)
+                    card.BorderBrush = new SolidColorBrush(Color.FromRgb(64, 64, 96));
+            };
             
-            var stack = new StackPanel();
+            var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Top };
             
-            // Header with name and badge
-            var header = new Grid();
+            // Name
             var nameText = new TextBlock
             {
                 Text = preset.Name,
                 Foreground = Brushes.White,
-                FontWeight = FontWeights.Bold,
-                FontSize = 14
-            };
-            header.Children.Add(nameText);
-            
-            if (preset.IsDefault)
-            {
-                var badge = new Border
-                {
-                    Background = FindResource("PinkBrush") as SolidColorBrush,
-                    CornerRadius = new CornerRadius(4),
-                    Padding = new Thickness(6, 2, 6, 2),
-                    HorizontalAlignment = HorizontalAlignment.Right
-                };
-                badge.Child = new TextBlock
-                {
-                    Text = "DEFAULT",
-                    Foreground = Brushes.White,
-                    FontSize = 9,
-                    FontWeight = FontWeights.Bold
-                };
-                header.Children.Add(badge);
-            }
-            else
-            {
-                var badge = new TextBlock
-                {
-                    Text = "CUSTOM",
-                    Foreground = new SolidColorBrush(Color.FromRgb(100, 200, 100)),
-                    FontSize = 9,
-                    FontWeight = FontWeights.Bold,
-                    HorizontalAlignment = HorizontalAlignment.Right,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                header.Children.Add(badge);
-            }
-            
-            stack.Children.Add(header);
-            
-            // Description
-            var desc = new TextBlock
-            {
-                Text = preset.Description,
-                Foreground = new SolidColorBrush(Color.FromRgb(150, 150, 150)),
-                FontSize = 11,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 5, 0, 0)
-            };
-            stack.Children.Add(desc);
-            
-            // Quick stats
-            var stats = new TextBlock
-            {
-                Text = GetPresetQuickStats(preset),
-                Foreground = new SolidColorBrush(Color.FromRgb(100, 100, 120)),
+                FontWeight = FontWeights.SemiBold,
                 FontSize = 10,
-                Margin = new Thickness(0, 8, 0, 0)
+                TextTrimming = TextTrimming.CharacterEllipsis
             };
-            stack.Children.Add(stats);
+            stack.Children.Add(nameText);
+            
+            // Badge
+            var badge = new TextBlock
+            {
+                Text = preset.IsDefault ? "DEFAULT" : "CUSTOM",
+                Foreground = preset.IsDefault ? pinkBrush : new SolidColorBrush(Color.FromRgb(100, 200, 100)),
+                FontSize = 7,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 1, 0, 0)
+            };
+            stack.Children.Add(badge);
+            
+            // Quick stats (icons only for compact view)
+            var statsPanel = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+            if (preset.FlashEnabled) AddStatIcon(statsPanel, "⚡", 10);
+            if (preset.MandatoryVideosEnabled) AddStatIcon(statsPanel, "🎬", 10);
+            if (preset.SubliminalEnabled) AddStatIcon(statsPanel, "💭", 10);
+            if (preset.SpiralEnabled) AddStatIcon(statsPanel, "🌀", 10);
+            if (preset.LockCardEnabled) AddStatIcon(statsPanel, "🔒", 10);
+            stack.Children.Add(statsPanel);
             
             card.Child = stack;
             return card;
+        }
+        
+        private void AddStatIcon(WrapPanel panel, string icon, int size = 12)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = icon,
+                FontSize = size,
+                Margin = new Thickness(0, 0, 2, 0)
+            });
         }
 
         private string GetPresetQuickStats(Models.Preset preset)
@@ -621,38 +610,81 @@ namespace ConditioningControlPanel
         {
             _selectedPreset = preset;
             
-            // Update UI
+            // Update cards UI
             RefreshPresetsList();
-            UpdatePresetPreview(preset);
+            
+            // Update detail panel
+            TxtDetailTitle.Text = preset.Name;
+            TxtDetailSubtitle.Text = preset.Description;
+            
+            TxtDetailFlash.Text = preset.FlashEnabled 
+                ? $"Enabled | {preset.FlashFrequency}/hr | Opacity: {preset.FlashOpacity}%"
+                : "Disabled";
+                
+            TxtDetailVideo.Text = preset.MandatoryVideosEnabled 
+                ? $"Enabled | {preset.VideosPerHour}/hr | Strict: {(preset.StrictLockEnabled ? "Yes" : "No")}"
+                : "Disabled";
+                
+            TxtDetailSubliminal.Text = preset.SubliminalEnabled 
+                ? $"Enabled | {preset.SubliminalFrequency}/min | Opacity: {preset.SubliminalOpacity}%"
+                : "Disabled";
+                
+            TxtDetailAudio.Text = $"Whispers: {(preset.SubAudioEnabled ? $"Yes ({preset.SubAudioVolume}%)" : "No")} | Master: {preset.MasterVolume}%";
+            
+            TxtDetailOverlays.Text = $"Spiral: {(preset.SpiralEnabled ? "Yes" : "No")} | Pink: {(preset.PinkFilterEnabled ? "Yes" : "No")}";
+            
+            TxtDetailAdvanced.Text = $"Bubbles: {(preset.BubblesEnabled ? "Yes" : "No")} | Lock Card: {(preset.LockCardEnabled ? "Yes" : "No")}";
             
             // Enable buttons
             BtnLoadPreset.IsEnabled = true;
             BtnSaveOverPreset.IsEnabled = !preset.IsDefault;
             BtnDeletePreset.IsEnabled = !preset.IsDefault;
         }
-
-        private void UpdatePresetPreview(Models.Preset preset)
+        
+        private void SessionCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            TxtPresetDetailName.Text = preset.Name;
-            TxtPresetDetailDesc.Text = preset.Description;
-            
-            TxtPreviewFlash.Text = preset.FlashEnabled 
-                ? $"Enabled | {preset.FlashFrequency}/min | Opacity: {preset.FlashOpacity}% | Fade: {preset.FadeDuration}%"
-                : "Disabled";
+            if (sender is Border border && border.Tag is string sessionType)
+            {
+                // Clear preset selection
+                _selectedPreset = null;
+                RefreshPresetsList();
                 
-            TxtPreviewVideo.Text = preset.MandatoryVideosEnabled 
-                ? $"Enabled | {preset.VideosPerHour}/hour | Strict: {(preset.StrictLockEnabled ? "Yes" : "No")}"
-                : "Disabled";
+                // Show session info in detail panel
+                BtnLoadPreset.IsEnabled = false;
+                BtnSaveOverPreset.IsEnabled = false;
+                BtnDeletePreset.IsEnabled = false;
                 
-            TxtPreviewSubliminal.Text = preset.SubliminalEnabled 
-                ? $"Enabled | {preset.SubliminalFrequency}/min | Opacity: {preset.SubliminalOpacity}%"
-                : "Disabled";
+                switch (sessionType)
+                {
+                    case "quick":
+                        TxtDetailTitle.Text = "⏱️ Quick Session";
+                        TxtDetailSubtitle.Text = "5-10 minute focused conditioning burst. Perfect for a quick reinforcement break.";
+                        break;
+                    case "deep":
+                        TxtDetailTitle.Text = "🌙 Deep Dive";
+                        TxtDetailSubtitle.Text = "30-60 minute immersive experience. Full conditioning with progressive intensity.";
+                        break;
+                    case "random":
+                        TxtDetailTitle.Text = "🎲 Random Challenge";
+                        TxtDetailSubtitle.Text = "Surprise session with randomized parameters. You won't know what's coming!";
+                        break;
+                    case "progressive":
+                        TxtDetailTitle.Text = "📈 Progressive";
+                        TxtDetailSubtitle.Text = "Starts gentle and gradually increases intensity over time.";
+                        break;
+                    case "goal":
+                        TxtDetailTitle.Text = "🎯 Goal-Based";
+                        TxtDetailSubtitle.Text = "Complete specific objectives to finish the session. Earn bonus XP!";
+                        break;
+                }
                 
-            TxtPreviewAudio.Text = $"Whispers: {(preset.SubAudioEnabled ? $"Yes ({preset.SubAudioVolume}%)" : "No")} | Master: {preset.MasterVolume}%";
-            
-            TxtPreviewOverlays.Text = $"Spiral: {(preset.SpiralEnabled ? $"Yes ({preset.SpiralOpacity}%)" : "No")} | Pink: {(preset.PinkFilterEnabled ? $"Yes ({preset.PinkFilterOpacity}%)" : "No")}";
-            
-            TxtPreviewAdvanced.Text = $"Bubbles: {(preset.BubblesEnabled ? "Yes" : "No")} | Lock Card: {(preset.LockCardEnabled ? $"Yes ({preset.LockCardRepeats}x)" : "No")}";
+                TxtDetailFlash.Text = "🔒 Coming Soon";
+                TxtDetailVideo.Text = "🔒 Coming Soon";
+                TxtDetailSubliminal.Text = "🔒 Coming Soon";
+                TxtDetailAudio.Text = "🔒 Coming Soon";
+                TxtDetailOverlays.Text = "🔒 Coming Soon";
+                TxtDetailAdvanced.Text = "🔒 Coming Soon";
+            }
         }
 
         private void LoadPreset(Models.Preset preset)
@@ -774,12 +806,6 @@ namespace ConditioningControlPanel
                 App.Settings.Save();
                 
                 _selectedPreset = null;
-                BtnLoadPreset.IsEnabled = false;
-                BtnSaveOverPreset.IsEnabled = false;
-                BtnDeletePreset.IsEnabled = false;
-                
-                TxtPresetDetailName.Text = "Select a Preset";
-                TxtPresetDetailDesc.Text = "Click on a preset to see details";
                 
                 RefreshPresetsList();
                 RefreshPresetsDropdown();
