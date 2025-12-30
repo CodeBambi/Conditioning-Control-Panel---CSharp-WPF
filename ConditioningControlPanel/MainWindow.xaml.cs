@@ -1747,12 +1747,12 @@ namespace ConditioningControlPanel
                 SliderFlashDuration.IsEnabled = true;
                 SliderFlashDuration.Opacity = 1.0;
                 TxtAudioWarning.Visibility = Visibility.Visible;
-                TxtAudioWarning.Text = "⚠️ Audio disabled when >30 flashes/hour";
+                TxtAudioWarning.Text = "⚠️ Audio off >30/h";
             }
             else
             {
                 ChkFlashAudio.IsEnabled = true;
-                TxtAudioWarning.Text = "⚠️ Max 30 flashes/hour when disabled";
+                TxtAudioWarning.Text = "⚠️ Max 30/h";
                 TxtAudioWarning.Visibility = (ChkFlashAudio.IsChecked ?? true) ? Visibility.Collapsed : Visibility.Visible;
             }
         }
