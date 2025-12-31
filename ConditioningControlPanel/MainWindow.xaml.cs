@@ -29,6 +29,9 @@ namespace ConditioningControlPanel
         // Session Engine
         private SessionEngine? _sessionEngine;
         
+        // Avatar Tube Window
+        private AvatarTubeWindow? _avatarTubeWindow;
+        
         // Ramp tracking
         private DispatcherTimer? _rampTimer;
         private DateTime _rampStartTime;
@@ -57,6 +60,10 @@ namespace ConditioningControlPanel
                 if (_isRunning) StopEngine();
                 SaveSettings();
                 Application.Current.Shutdown();
+            };
+            _trayIcon.OnShowRequested += () =>
+            {
+                ShowAvatarTube();
             };
             
             // Initialize global keyboard hook
@@ -198,6 +205,7 @@ namespace ConditioningControlPanel
                 }
                 WindowState = WindowState.Normal;
                 Activate();
+                ShowAvatarTube();
                 
                 _trayIcon?.ShowNotification("Stopped", "Press panic key again within 2 seconds to exit completely.", System.Windows.Forms.ToolTipIcon.Info);
             }
@@ -360,7 +368,46 @@ namespace ConditioningControlPanel
             
             // Auto-initialize browser on startup
             await InitializeBrowserAsync();
+            
+            // Initialize Avatar Tube Window
+            InitializeAvatarTube();
         }
+
+        #region Avatar Tube Window
+
+        private void InitializeAvatarTube()
+        {
+            try
+            {
+                _avatarTubeWindow = new AvatarTubeWindow(this);
+                _avatarTubeWindow.Show();
+                _avatarTubeWindow.StartPoseAnimation();
+                App.Logger?.Information("Avatar Tube Window initialized");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error("Failed to initialize Avatar Tube Window: {Error}", ex.Message);
+            }
+        }
+
+        public void ShowAvatarTube()
+        {
+            _avatarTubeWindow?.ShowTube();
+            _avatarTubeWindow?.StartPoseAnimation();
+        }
+
+        public void HideAvatarTube()
+        {
+            _avatarTubeWindow?.StopPoseAnimation();
+            _avatarTubeWindow?.HideTube();
+        }
+
+        public void SetAvatarPose(int poseNumber)
+        {
+            _avatarTubeWindow?.SetPose(poseNumber);
+        }
+
+        #endregion
 
         #region Tab Navigation
 
@@ -2895,12 +2942,14 @@ namespace ConditioningControlPanel
                 _keyboardHook?.Dispose();
                 _trayIcon?.Dispose();
                 _browser?.Dispose();
+                _avatarTubeWindow?.Close();
             }
             else
             {
                 // Always minimize to tray instead of closing
                 e.Cancel = true;
                 _trayIcon?.MinimizeToTray();
+                HideAvatarTube();
                 
                 // Show hint on first minimize
                 _trayIcon?.ShowNotification("Still Running", 
@@ -2918,6 +2967,11 @@ namespace ConditioningControlPanel
             if (WindowState == WindowState.Minimized)
             {
                 _trayIcon?.MinimizeToTray();
+                HideAvatarTube();
+            }
+            else if (WindowState == WindowState.Normal || WindowState == WindowState.Maximized)
+            {
+                ShowAvatarTube();
             }
         }
 
