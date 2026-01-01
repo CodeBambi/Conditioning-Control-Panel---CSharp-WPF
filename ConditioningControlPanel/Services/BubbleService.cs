@@ -100,7 +100,7 @@ public class BubbleService : IDisposable
     {
         try
         {
-            var imagePath = Path.Combine(_assetsPath, "images", "bubble.png");
+            var imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "bubble.png");
             if (File.Exists(imagePath))
             {
                 _bubbleImage = new BitmapImage();

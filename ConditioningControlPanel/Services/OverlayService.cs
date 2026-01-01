@@ -28,40 +28,36 @@ public class OverlayService : IDisposable
 
     public bool IsRunning => _isRunning;
 
-    /// <summary>
-    /// Gets a spiral path - either user-selected or random from Spirals folder
-    /// </summary>
-    private string GetSpiralPath()
-    {
-        var settings = App.Settings.Current;
-        
-        // If user has selected a specific spiral, use it
-        if (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
+        private string GetSpiralPath()
         {
-            return settings.SpiralPath;
-        }
-        
-        // Otherwise, try to pick a random spiral from the Spirals folder
-        var spiralsFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Spirals");
-        if (Directory.Exists(spiralsFolder))
-        {
-            var spiralFiles = Directory.GetFiles(spiralsFolder, "*.gif")
-                .Concat(Directory.GetFiles(spiralsFolder, "*.png"))
-                .Concat(Directory.GetFiles(spiralsFolder, "*.jpg"))
-                .Concat(Directory.GetFiles(spiralsFolder, "*.jpeg"))
-                .ToArray();
+            var settings = App.Settings.Current;
             
-            if (spiralFiles.Length > 0)
+            // If a specific path is set by the user, use it
+            if (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
             {
-                var randomSpiral = spiralFiles[_random.Next(spiralFiles.Length)];
-                App.Logger?.Information("No spiral selected, using random spiral: {Path}", Path.GetFileName(randomSpiral));
-                return randomSpiral;
+                return settings.SpiralPath;
             }
+            
+            // Otherwise, pick a random one from the Spirals folder
+            var spiralsFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Spirals");
+            if (Directory.Exists(spiralsFolder))
+            {
+                var files = Directory.GetFiles(spiralsFolder, "*.gif");
+                if (files.Length > 0)
+                {
+                    return files[_random.Next(files.Length)];
+                }
+            }
+
+            // Fallback to Resources/spiral.gif
+            var resourceSpiral = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "spiral.gif");
+            if (File.Exists(resourceSpiral))
+            {
+                return resourceSpiral;
+            }
+            
+            return ""; // No spiral found
         }
-        
-        App.Logger?.Warning("No spiral path set and no spirals found in Spirals folder");
-        return "";
-    }
 
     public void Start()
     {
