@@ -81,7 +81,7 @@ namespace ConditioningControlPanel.Models
 
 This session is designed for your morning routine - while you work, browse, or prepare for the day. No interruptions, no demands. Just gentle whispers and soft reminders that help good girls drift into that comfortable, familiar headspace.
 
-Perfect for multitasking. Perfect for letting go without even trying.
+Features gentle, positive subliminal reinforcement to help you start your day in a blissful, obedient haze.
 
 You don't need to do anything special. Just... let it happen. 💗",
             
@@ -111,7 +111,7 @@ You don't need to do anything special. Just... let it happen. 💗",
                 // Bouncing Text
                 BouncingTextEnabled = true,
                 BouncingTextSpeed = 2,
-                BouncingTextPhrases = new List<string> { "Good Girl", "GOOD GIRL", "good girl 💗" },
+                BouncingTextPhrases = new List<string> { "Good Girl", "Such a good girl", "Drifting peacefully", "Waking up pink" },
                 
                 // Pink Filter (delayed start, gradual)
                 PinkFilterEnabled = true,
@@ -166,7 +166,7 @@ You don't need to do anything special. Just... let it happen. 💗",
 
 This session was designed for your gaming sessions. Keep playing, keep focusing on your game. You won't even notice what's happening in the background... at first.
 
-The conditioning works while you play. Subtle at first, then slowly building. By the time you notice, you'll already be drifting into that familiar pink haze.
+Includes subtle 'Good Girl' and focus-based subliminals that won't break your concentration.
 
 Just play your game. Let everything else happen on its own.
 
@@ -201,7 +201,7 @@ Just play your game. Let everything else happen on its own.
                 // Bouncing Text
                 BouncingTextEnabled = true,
                 BouncingTextSpeed = 3,
-                BouncingTextPhrases = new List<string> { "Gamer Girl", "Good Girl", "Focus...", "💗" },
+                BouncingTextPhrases = new List<string> { "Good Girl", "GG", "Focus", "Obey", "Good Game" },
                 
                 // Pink Filter (delayed start at 15min)
                 PinkFilterEnabled = true,
@@ -263,7 +263,11 @@ Just play your game. Let everything else happen on its own.
             IsAvailable = true,
             Difficulty = SessionDifficulty.Easy,
             BonusXP = 400,
-            Description = "No need to get up, sweetheart. Stay comfortable, soft, and empty. Everything is designed to be viewed from a distance while your mind drifts away. Perfect for turning your relaxation time into a passive reprogramming session.",
+            Description = @"No need to get up, sweetheart. Stay comfortable, soft, and empty. 
+
+Filled with passive subliminals about being a pretty, empty doll.
+
+Everything is designed to be viewed from a distance while your mind drifts away. Perfect for turning your relaxation time into a passive reprogramming session.",
             
             Settings = new SessionSettings
             {
@@ -320,7 +324,8 @@ Just play your game. Let everything else happen on its own.
                 LockCardEnabled = false,
                 BubbleCountEnabled = false,
                 MiniGameEnabled = false,
-                BouncingTextEnabled = false
+                BouncingTextEnabled = true,
+                BouncingTextPhrases = new List<string> { "So Pretty", "Empty and Beautiful", "Just a Doll", "Relax and Obey" },
             },
             
             Phases = new List<SessionPhase>
@@ -347,7 +352,11 @@ Just play your game. Let everything else happen on its own.
             IsAvailable = true,
             Difficulty = SessionDifficulty.Hard,
             BonusXP = 1200,
-            Description = "A challenging denial and edging session designed to test your obedience and focus. Expect frequent conditioning visuals, audio whispers, and interactive elements designed to reinforce your training. Your only purpose is to sit prettily and let the pink fog consume you. And remember not to touch that clitty, Good Girls Don't Cum.",
+            Description = @"A challenging denial and edging session designed to test your obedience and focus. 
+
+This session is filled with intense denial and obedience subliminals.
+
+Your only purpose is to sit prettily and let the pink fog consume you. And remember not to touch that clitty, Good Girls Don't Cum.",
             
             Settings = new SessionSettings
             {
@@ -390,13 +399,11 @@ Just play your game. Let everything else happen on its own.
                 BouncingTextSpeed = 4,
                 BouncingTextPhrases = new List<string> 
                 { 
-                    "BIMBO DOLL", 
-                    "GOOD GIRLS DONT CUM", 
-                    "LISTEN AND OBEY", 
-                    "BAMBI CLIT LOCK", 
-                    "GOOD GIRL",
-                    "NO TOUCHING",
-                    "DENIED 💗"
+                    "Good Girls Don't Cum",
+                    "Denied",
+                    "Obey Your Cock",
+                    "Frustrated and Leaky",
+                    "No Touch"
                 },
                 
                 // Mind Wipe - Starts at 2/min, escalates
