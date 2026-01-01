@@ -679,50 +679,72 @@ public void UpdateBrainDrainBlurOpacity(int intensity)
     });
 }
 
+private bool _isCapturing = false; // Flag to prevent concurrent captures
+
 private void BrainDrainCaptureTick(object? sender, EventArgs e)
 {
-    if (_brainDrainImages.Count == 0)
+    if (_isCapturing || _brainDrainImages.Count == 0)
     {
-        _brainDrainCaptureTimer?.Stop();
+        if (_brainDrainImages.Count == 0) _brainDrainCaptureTimer?.Stop(); // Stop if no images to process
         return;
     }
 
-    // Hide all blur windows before capture to prevent capturing ourselves
-    foreach (var window in _brainDrainBlurWindows)
-    {
-        window.Opacity = 0;
-    }
+    _isCapturing = true;
 
-    // Force layout update to ensure windows are hidden before capture
-    Application.Current.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
-
-    // Capture all screens
-    var captures = new Dictionary<Window, BitmapSource?>();
-    foreach (var kvp in _brainDrainImages)
+    // Capture all screens on a background thread
+    System.Threading.Tasks.Task.Run(() =>
     {
-        var window = kvp.Key;
-        if (_brainDrainScreens.TryGetValue(window, out var screen))
+        var currentCaptures = new Dictionary<Window, BitmapSource?>();
+
+        // Hide all blur windows before capture to prevent capturing ourselves
+        Application.Current.Dispatcher.Invoke(() =>
         {
-            captures[window] = CaptureScreen(screen);
-        }
-    }
+            foreach (var window in _brainDrainBlurWindows)
+            {
+                window.Opacity = 0;
+            }
+            // Force layout update to ensure windows are hidden before capture
+            // Using a low priority to not block other UI tasks
+            Application.Current.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
+        });
 
-    // Show blur windows again and update image sources
-    foreach (var kvp in _brainDrainImages)
-    {
-        var window = kvp.Key;
-        var image = kvp.Value;
-        
-        if (captures.TryGetValue(window, out var capture) && capture != null)
+
+        foreach (var kvp in _brainDrainImages)
         {
-            image.Source = capture;
+            var window = kvp.Key;
+            if (_brainDrainScreens.TryGetValue(window, out var screen))
+            {
+                currentCaptures[window] = CaptureScreen(screen);
+            }
         }
-    }
 
-    foreach (var window in _brainDrainBlurWindows)
+        // Update image sources and show windows on the UI thread
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            foreach (var kvp in _brainDrainImages)
+            {
+                var window = kvp.Key;
+                var image = kvp.Value;
+                
+                if (currentCaptures.TryGetValue(window, out var capture) && capture != null)
+                {
+                    image.Source = capture;
+                }
+            }
+
+            foreach (var window in _brainDrainBlurWindows)
+            {
+                window.Opacity = 1;
+            }
+        });
+    }).ContinueWith(task => // Ensure the flag is reset even if task fails
     {
-        window.Opacity = 1;
-    }
+        _isCapturing = false;
+        if (task.IsFaulted)
+        {
+            App.Logger?.Error("BrainDrainCaptureTick: Background capture task failed: {Error}", task.Exception);
+        }
+    });
 }
 
 private Window? CreateBrainDrainWindow(System.Windows.Forms.Screen screen, int intensity)
