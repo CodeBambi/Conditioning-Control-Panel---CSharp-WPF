@@ -621,7 +621,7 @@ public void StartBrainDrainBlur(int intensity)
             // Start continuous capture timer
             _brainDrainCaptureTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(50) // 20 FPS refresh
+                Interval = TimeSpan.FromMilliseconds(33) // ~30 FPS refresh
             };
             _brainDrainCaptureTimer.Tick += BrainDrainCaptureTick;
             _brainDrainCaptureTimer.Start();
