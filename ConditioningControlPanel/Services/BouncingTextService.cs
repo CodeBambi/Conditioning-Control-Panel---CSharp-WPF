@@ -270,7 +270,7 @@ public class BouncingTextService : IDisposable
         if (bounced)
         {
             _currentColor = GetRandomColor();
-            App.Progression?.AddXP(10);
+            App.Progression?.AddXP(25);
             OnBounce?.Invoke(this, EventArgs.Empty);
             
             // 10% chance to change text on bounce
@@ -281,7 +281,7 @@ public class BouncingTextService : IDisposable
             }
             
             UpdateWindowsText();
-            App.Logger?.Debug("Bounce! +10 XP");
+            App.Logger?.Debug("Bounce! +25 XP");
         }
         
         // Update position in all windows

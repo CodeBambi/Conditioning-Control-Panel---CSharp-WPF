@@ -300,7 +300,7 @@ namespace ConditioningControlPanel
             // Award XP (only once)
             try
             {
-                var xpAmount = 10 * _requiredRepeats;
+                var xpAmount = (50 * _requiredRepeats) + 200;
                 if (_strictMode) xpAmount = (int)(xpAmount * 1.5);
                 App.Progression?.AddXP(xpAmount);
             }

@@ -148,8 +148,6 @@ namespace ConditioningControlPanel.Services
                 App.Audio?.Duck(App.Settings.Current.DuckingLevel);
             App.Audio?.PauseBackgroundMusic();
             
-            App.Progression?.AddXP(50);
-
             Application.Current.Dispatcher.Invoke(() =>
             {
                 var allScreens = Screen.AllScreens.ToList();
@@ -385,7 +383,7 @@ namespace ConditioningControlPanel.Services
             var target = new FloatingText(text, screen, settings.AttentionSize, () =>
             {
                 _hits++;
-                App.Progression?.AddXP(5);
+                App.Progression?.AddXP(10);
                 App.Logger.Debug("Target hit: {Hits}/{Total}", _hits, _total);
             });
 
@@ -415,10 +413,22 @@ namespace ConditioningControlPanel.Services
             {
                 bool passed = _hits >= _total;
                 App.Logger.Information("Attention result: {Hits}/{Total} = {Result}", _hits, _total, passed ? "PASS" : "FAIL");
-                
-                if (!passed) loop = true;
-                else if (_random.NextDouble() < 0.1) { loop = troll = true; }
-                if (passed) App.Progression?.AddXP(10);
+
+                if (passed)
+                {
+                    var xpForPlays = (_penalties + 1) * 50;
+                    var bonus = 200;
+                    App.Progression?.AddXP(xpForPlays + bonus);
+
+                    if (_random.NextDouble() < 0.1)
+                    {
+                        loop = troll = true;
+                    }
+                }
+                else
+                {
+                    loop = true;
+                }
             }
 
             if (loop && !string.IsNullOrEmpty(_retryPath))

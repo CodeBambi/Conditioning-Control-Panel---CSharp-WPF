@@ -136,14 +136,13 @@ namespace ConditioningControlPanel.Services
                 {
                     ScheduleBambiReset();
                 }
+                App.Progression?.AddXP(20);
             }
             else
             {
                 ShowSubliminalVisuals(text);
+                App.Progression?.AddXP(10);
             }
-            
-            // Add XP
-            App.Progression?.AddXP(1);
         }
 
         /// <summary>

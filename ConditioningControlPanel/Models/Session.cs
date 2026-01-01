@@ -42,11 +42,11 @@ namespace ConditioningControlPanel.Models
         {
             return difficulty switch
             {
-                SessionDifficulty.Easy => 50,
-                SessionDifficulty.Medium => 100,
-                SessionDifficulty.Hard => 200,
-                SessionDifficulty.Extreme => 500,
-                _ => 50
+                SessionDifficulty.Easy => 400,
+                SessionDifficulty.Medium => 800,
+                SessionDifficulty.Hard => 1200,
+                SessionDifficulty.Extreme => 2000,
+                _ => 400
             };
         }
         
@@ -76,7 +76,7 @@ namespace ConditioningControlPanel.Models
             DurationMinutes = 30,
             IsAvailable = true,
             Difficulty = SessionDifficulty.Easy,
-            BonusXP = 50,
+            BonusXP = 400,
             Description = @"Let the morning carry you gently into that soft, floaty space...
 
 This session is designed for your morning routine - while you work, browse, or prepare for the day. No interruptions, no demands. Just gentle whispers and soft reminders that help good girls drift into that comfortable, familiar headspace.
@@ -160,9 +160,7 @@ You don't need to do anything special. Just... let it happen. 💗",
             Name = "Gamer Girl",
             Icon = "🎮",
             DurationMinutes = 45,
-            IsAvailable = true,
-            Difficulty = SessionDifficulty.Medium,
-            BonusXP = 100,
+            BonusXP = 800,
             HasCornerGifOption = true,
             CornerGifDescription = "Optional: Place a subtle GIF in a screen corner (great for covering minimaps!)",
             Description = @"Time to play, Gamer Girl...
@@ -265,7 +263,7 @@ Just play your game. Let everything else happen on its own.
             DurationMinutes = 45,
             IsAvailable = true,
             Difficulty = SessionDifficulty.Easy,
-            BonusXP = 75,
+            BonusXP = 400,
             Description = "No need to get up, sweetheart. Stay comfortable, soft, and empty. Everything is designed to be viewed from a distance while your mind drifts away. Perfect for turning your relaxation time into a passive reprogramming session.",
             
             Settings = new SessionSettings
@@ -349,7 +347,7 @@ Just play your game. Let everything else happen on its own.
             DurationMinutes = 60,
             IsAvailable = true,
             Difficulty = SessionDifficulty.Hard,
-            BonusXP = 200,
+            BonusXP = 1200,
             Description = "A good Bambi doesn't need hands. A good Bambi doesn't need release. Your only purpose is to sit prettily and let the pink fog consume you. The video is just background noise; the real content is your denial. And remember not to touch that clitty, Good Girls Don't Cum.",
             
             Settings = new SessionSettings
@@ -449,7 +447,7 @@ Just play your game. Let everything else happen on its own.
                     DurationMinutes = 60,
                     IsAvailable = false,
                     Difficulty = SessionDifficulty.Hard,
-                    BonusXP = 200,
+                    BonusXP = 1200,
                     Description = "A longer, more immersive experience for when you have time to truly let go..."
                 },
                 new Session
@@ -460,7 +458,7 @@ Just play your game. Let everything else happen on its own.
                     DurationMinutes = 45,
                     IsAvailable = false,
                     Difficulty = SessionDifficulty.Extreme,
-                    BonusXP = 500,
+                    BonusXP = 2000,
                     Description = "Full Bambi mode. Everything turned up. Complete surrender."
                 },
                 new Session
@@ -471,7 +469,7 @@ Just play your game. Let everything else happen on its own.
                     DurationMinutes = 20,
                     IsAvailable = false,
                     Difficulty = SessionDifficulty.Medium,
-                    BonusXP = 100,
+                    BonusXP = 800,
                     Description = "You won't know what's coming. That's the point. Let go of control completely."
                 }
             };

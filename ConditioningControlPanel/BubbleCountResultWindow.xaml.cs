@@ -169,7 +169,8 @@ namespace ConditioningControlPanel
             if (answer == _correctAnswer)
             {
                 // Correct!
-                ShowFeedbackOnAll("🎉 CORRECT! +100 XP 🎉", Color.FromRgb(50, 205, 50));
+                App.Progression?.AddXP(250);
+                ShowFeedbackOnAll("🎉 CORRECT! +250 XP 🎉", Color.FromRgb(50, 205, 50));
                 DisableInputOnAll();
                 
                 // Track achievement - correct answer
