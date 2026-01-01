@@ -619,10 +619,10 @@ public void StartBrainDrainBlur(int intensity)
             }
 
             // Start continuous capture timer
-            // Set a fixed refresh rate of 50 FPS (20ms interval)
+            // Set a fixed refresh rate of 60 FPS (16ms interval)
             // This might offer a more stable experience than dynamically matching screen refresh rate
             // if system performance is a bottleneck for screen capture + blur.
-            var intervalMs = 20; // 50 FPS
+            var intervalMs = 16; // 60 FPS
             
             _brainDrainCaptureTimer = new DispatcherTimer
             {
