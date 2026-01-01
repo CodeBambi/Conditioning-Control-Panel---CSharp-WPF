@@ -2424,44 +2424,45 @@ namespace ConditioningControlPanel
                 if (SpiralUnlocked != null) SpiralUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (PinkFilterLocked != null) PinkFilterLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (PinkFilterUnlocked != null) PinkFilterUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                SetFeatureImageBlur(SpiralFeatureImage, !level10Unlocked);
-                SetFeatureImageBlur(PinkFilterFeatureImage, !level10Unlocked);
+                
+                if (SpiralFeatureImage != null) SetFeatureImageBlur(SpiralFeatureImage, !level10Unlocked);
+                if (PinkFilterFeatureImage != null) SetFeatureImageBlur(PinkFilterFeatureImage, !level10Unlocked);
                 
                 // Level 20 unlocks: Bubbles
                 var level20Unlocked = level >= 20;
                 if (BubblesLocked != null) BubblesLocked.Visibility = level20Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (BubblesUnlocked != null) BubblesUnlocked.Visibility = level20Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                SetFeatureImageBlur(BubblePopFeatureImage, !level20Unlocked);
+                if (BubblePopFeatureImage != null) SetFeatureImageBlur(BubblePopFeatureImage, !level20Unlocked);
                 
                 // Level 35 unlocks: Lock Card
                 var level35Unlocked = level >= 35;
                 if (LockCardLocked != null) LockCardLocked.Visibility = level35Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (LockCardUnlocked != null) LockCardUnlocked.Visibility = level35Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                SetFeatureImageBlur(LockCardFeatureImage, !level35Unlocked);
+                if (LockCardFeatureImage != null) SetFeatureImageBlur(LockCardFeatureImage, !level35Unlocked);
                 
                 // Level 50 unlocks: Bubble Count Game
                 var level50Unlocked = level >= 50;
                 if (Level50Locked != null) Level50Locked.Visibility = level50Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (Level50Unlocked != null) Level50Unlocked.Visibility = level50Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                SetFeatureImageBlur(BubbleCountFeatureImage, !level50Unlocked);
+                if (BubbleCountFeatureImage != null) SetFeatureImageBlur(BubbleCountFeatureImage, !level50Unlocked);
                 
                 // Level 60 unlocks: Bouncing Text
                 var level60Unlocked = level >= 60;
                 if (Level60Locked != null) Level60Locked.Visibility = level60Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (Level60Unlocked != null) Level60Unlocked.Visibility = level60Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                SetFeatureImageBlur(BouncingTextFeatureImage, !level60Unlocked);
+                if (BouncingTextFeatureImage != null) SetFeatureImageBlur(BouncingTextFeatureImage, !level60Unlocked);
                 
                 // Level 75 unlocks: Mind Wipe
                 var level75Unlocked = level >= 75;
                 if (MindWipeLocked != null) MindWipeLocked.Visibility = level75Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (MindWipeUnlocked != null) MindWipeUnlocked.Visibility = level75Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                SetFeatureImageBlur(MindWipeFeatureImage, !level75Unlocked);
+                if (MindWipeFeatureImage != null) SetFeatureImageBlur(MindWipeFeatureImage, !level75Unlocked);
 
                 // Level 90 unlocks: Brain Drain
                 var level90Unlocked = level >= 90;
                 if (BrainDrainLocked != null) BrainDrainLocked.Visibility = level90Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (BrainDrainUnlocked != null) BrainDrainUnlocked.Visibility = level90Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                SetFeatureImageBlur(BrainDrainFeatureImage, !level90Unlocked);
+                if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level90Unlocked);
 
                 App.Logger?.Debug("UpdateUnlockablesVisibility: Completed successfully.");
             }
