@@ -119,14 +119,12 @@ You don't need to do anything special. Just... let it happen. 💗",
                 PinkFilterStartOpacity = 0,
                 PinkFilterEndOpacity = 15,
                 
-                // Bubbles (intermittent)
+                // Bubbles (ramping)
                 BubblesEnabled = true,
-                BubblesIntermittent = true,
+                BubblesIntermittent = false,
                 BubblesClickable = true,
-                BubblesBurstCount = 4,
-                BubblesPerBurst = 5,
-                BubblesGapMin = 5,
-                BubblesGapMax = 8,
+                BubblesStartMinute = 5,
+                BubblesFrequency = 1,
                 
                 // Disabled features
                 MandatoryVideosEnabled = false,
@@ -405,8 +403,12 @@ Just play your game. Let everything else happen on its own.
                 MindWipeBaseMultiplier = 2, // Medium start (2 per 5min block)
                 MindWipeVolume = 25,
                 
-                // NO bubbles - no touching allowed!
-                BubblesEnabled = false,
+                // Bubbles (ramping)
+                BubblesEnabled = true,
+                BubblesIntermittent = false,
+                BubblesClickable = true,
+                BubblesStartMinute = 5,
+                BubblesFrequency = 1,
                 
                 // Other interactions disabled
                 MandatoryVideosEnabled = false,
@@ -598,12 +600,14 @@ Just play your game. Let everything else happen on its own.
         
         // Bubbles
         public bool BubblesEnabled { get; set; }
+        public int BubblesFrequency { get; set; } = 5;
         public bool BubblesIntermittent { get; set; }
         public bool BubblesClickable { get; set; } = true;
         public int BubblesBurstCount { get; set; } = 5; // Total bursts in session
         public int BubblesPerBurst { get; set; } = 5; // Bubbles per burst
         public int BubblesGapMin { get; set; } = 5;
         public int BubblesGapMax { get; set; } = 8;
+        public int BubblesStartMinute { get; set; } = 0;
         
         // Corner GIF (for Gamer Girl session)
         public bool CornerGifEnabled { get; set; }

@@ -315,6 +315,23 @@ namespace ConditioningControlPanel.Services
                 App.Settings.Current.SpiralOpacity = (int)_currentSpiralOpacity;
                 _mainWindow.UpdateSpiralOpacity((int)_currentSpiralOpacity);
             }
+
+            // Bubble frequency ramp
+            if (settings.BubblesEnabled && !settings.BubblesIntermittent && settings.BubblesStartMinute > 0)
+            {
+                if (elapsedMinutes >= settings.BubblesStartMinute)
+                {
+                    var timeSinceBubbleStart = elapsedMinutes - settings.BubblesStartMinute;
+                    var rampSteps = (int)(timeSinceBubbleStart / 5);
+                    var currentBubbleFreq = settings.BubblesFrequency + rampSteps;
+
+                    if (App.Settings.Current.BubblesFrequency != currentBubbleFreq)
+                    {
+                        App.Settings.Current.BubblesFrequency = currentBubbleFreq;
+                        App.Bubbles.RefreshFrequency();
+                    }
+                }
+            }
         }
         
         private void CheckDelayedFeatures(double elapsedMinutes)
@@ -358,6 +375,17 @@ namespace ConditioningControlPanel.Services
                     _mainWindow.EnableSpiral(true);
                     App.Logger?.Information("Spiral activated at {Minutes:F1} minutes (target was {Target:F1})", 
                         elapsedMinutes, _randomizedSpiralStartMinute);
+                }
+            }
+
+            // Bubbles delayed start
+            if (settings.BubblesEnabled && !App.Settings.Current.BubblesEnabled && settings.BubblesStartMinute > 0 && !settings.BubblesIntermittent)
+            {
+                if (elapsedMinutes >= settings.BubblesStartMinute)
+                {
+                    App.Settings.Current.BubblesEnabled = true;
+                    if(App.Settings.Current.PlayerLevel >= 20)
+                        App.Bubbles.Start();
                 }
             }
         }
@@ -596,8 +624,17 @@ namespace ConditioningControlPanel.Services
                 current.SpiralEnabled = false;
             }
             
-            // Bubbles (handled separately for intermittent mode)
-            current.BubblesEnabled = settings.BubblesEnabled && !settings.BubblesIntermittent;
+            // Bubbles
+            if (settings.BubblesEnabled)
+            {
+                current.BubblesFrequency = settings.BubblesFrequency;
+                // Start immediately if no start minute is set. Otherwise, CheckDelayedFeatures will handle it.
+                current.BubblesEnabled = settings.BubblesStartMinute == 0 && !settings.BubblesIntermittent;
+            }
+            else
+            {
+                current.BubblesEnabled = false;
+            }
             
             // Disabled features for this session
             current.MandatoryVideosEnabled = settings.MandatoryVideosEnabled;

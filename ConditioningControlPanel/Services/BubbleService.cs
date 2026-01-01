@@ -82,6 +82,20 @@ public class BubbleService : IDisposable
         App.Logger?.Information("BubbleService stopped");
     }
 
+    public void RefreshFrequency()
+    {
+        if (!_isRunning || _spawnTimer == null) return;
+        
+        _spawnTimer.Stop();
+        
+        var intervalMs = 60000.0 / Math.Max(1, App.Settings.Current.BubblesFrequency);
+        _spawnTimer.Interval = TimeSpan.FromMilliseconds(intervalMs);
+        
+        _spawnTimer.Start();
+        
+        App.Logger?.Information("BubbleService frequency updated to {Freq} bubbles/min", App.Settings.Current.BubblesFrequency);
+    }
+
     private void LoadBubbleImage()
     {
         try
