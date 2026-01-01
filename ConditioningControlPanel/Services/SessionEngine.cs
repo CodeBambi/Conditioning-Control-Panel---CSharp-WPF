@@ -728,13 +728,21 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                if (string.IsNullOrEmpty(settings.CornerGifPath) || !System.IO.File.Exists(settings.CornerGifPath))
+                var gifPath = settings.CornerGifPath;
+                if (string.IsNullOrEmpty(gifPath) || !System.IO.File.Exists(gifPath))
                 {
-                    App.Logger?.Warning("Corner GIF path is empty or file doesn't exist: {Path}", settings.CornerGifPath);
-                    return;
+                    // Fallback to spiral.gif
+                    gifPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "spiral.gif");
+                    App.Logger?.Information("Corner GIF not set, defaulting to spiral.gif");
+                    
+                    if (!System.IO.File.Exists(gifPath))
+                    {
+                        App.Logger?.Warning("Default spiral.gif not found at {Path}", gifPath);
+                        return; // Exit if default is also not found
+                    }
                 }
                 
-                var gifSize = 80; // Slightly larger for visibility
+                var gifSize = 500; // User requested size
                 var margin = 15; // Margin from screen edge
                 
                 // Use WPF's SystemParameters for accurate screen dimensions
@@ -781,7 +789,7 @@ namespace ConditioningControlPanel.Services
                 // Use MediaElement for GIF animation (better than WebBrowser for transparency)
                 var mediaElement = new System.Windows.Controls.MediaElement
                 {
-                    Source = new Uri(settings.CornerGifPath),
+                    Source = new Uri(gifPath),
                     LoadedBehavior = System.Windows.Controls.MediaState.Play,
                     UnloadedBehavior = System.Windows.Controls.MediaState.Manual,
                     Stretch = System.Windows.Media.Stretch.Uniform,
@@ -803,7 +811,7 @@ namespace ConditioningControlPanel.Services
                 MakeWindowClickThrough(_cornerGifWindow);
                 
                 App.Logger?.Information("Corner GIF shown at {Position}: {Path} (pos: {Left},{Top}, size: {Size}px, opacity: {Opacity}%)", 
-                    settings.CornerGifPosition, settings.CornerGifPath, left, top, gifSize, settings.CornerGifOpacity);
+                    settings.CornerGifPosition, gifPath, left, top, gifSize, settings.CornerGifOpacity);
             }
             catch (Exception ex)
             {
