@@ -814,14 +814,17 @@ private Window? CreateBrainDrainWindow(System.Windows.Forms.Screen screen, int i
 
 private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
 {
+    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
     try
     {
+        App.Logger?.Debug("CaptureScreen: Starting capture for screen {ScreenName} ({Width}x{Height})", screen.DeviceName, screen.Bounds.Width, screen.Bounds.Height);
+
         var hdcSrc = GetDC(IntPtr.Zero);
         var hdcDest = CreateCompatibleDC(hdcSrc);
         var hBitmap = CreateCompatibleBitmap(hdcSrc, screen.Bounds.Width, screen.Bounds.Height);
         var hOld = SelectObject(hdcDest, hBitmap);
 
-        BitBlt(hdcDest, 0, 0, screen.Bounds.Width, screen.Bounds.Height, 
+        BitBlt(hdcDest, 0, 0, screen.Bounds.Width, screen.Bounds.Height,
                hdcSrc, screen.Bounds.X, screen.Bounds.Y, SRCCOPY);
 
         SelectObject(hdcDest, hOld);
@@ -834,14 +837,17 @@ private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
         DeleteObject(hBitmap);
         bitmapSource.Freeze(); // Important for cross-thread access
 
+        stopwatch.Stop();
+        App.Logger?.Debug("CaptureScreen: Finished capture for screen {ScreenName} in {ElapsedMs}ms", screen.DeviceName, stopwatch.ElapsedMilliseconds);
         return bitmapSource;
     }
-    catch
+    catch (Exception ex)
     {
+        stopwatch.Stop();
+        App.Logger?.Error("CaptureScreen: Failed to capture screen {ScreenName} in {ElapsedMs}ms: {Error}", screen.DeviceName, stopwatch.ElapsedMilliseconds, ex.Message);
         return null;
     }
 }
-
 #endregion
 
     #region Helpers
