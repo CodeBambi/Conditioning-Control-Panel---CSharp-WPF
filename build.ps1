@@ -99,7 +99,7 @@ Place your content files here:
 }
 else {
     Write-Host "`n✅ Build complete!" -ForegroundColor Green
-    Write-Host "💡 Run with -Publish to create distributable package" -ForegroundColor Yellow
+    Write-Host '💡 Run with -Publish to create distributable package' -ForegroundColor Yellow
 }
 
 Write-Host ""
