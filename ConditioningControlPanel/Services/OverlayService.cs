@@ -618,18 +618,9 @@ public void StartBrainDrainBlur(int intensity)
                 }
             }
 
-            // Start continuous capture timer
-            // Set a fixed refresh rate of 60 FPS (16ms interval)
-            // This might offer a more stable experience than dynamically matching screen refresh rate
-            // if system performance is a bottleneck for screen capture + blur.
-            var intervalMs = 16; // 60 FPS
-            
-            _brainDrainCaptureTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(intervalMs)
-            };
-            _brainDrainCaptureTimer.Tick += BrainDrainCaptureTick;
-            _brainDrainCaptureTimer.Start();
+            // Use CompositionTarget.Rendering for optimal synchronization with display refresh.
+            // Screen capture is offloaded to a background thread.
+            System.Windows.Media.CompositionTarget.Rendering += CompositionTarget_Rendering;
 
             App.Logger?.Debug("Brain Drain started on {Count} screens at intensity {Intensity}%",
                 _brainDrainBlurWindows.Count, intensity);
@@ -645,8 +636,7 @@ public void StopBrainDrainBlur()
 {
     Application.Current.Dispatcher.Invoke(() =>
     {
-        _brainDrainCaptureTimer?.Stop();
-        _brainDrainCaptureTimer = null;
+        System.Windows.Media.CompositionTarget.Rendering -= CompositionTarget_Rendering;
 
         foreach (var window in _brainDrainBlurWindows)
         {
@@ -681,11 +671,17 @@ public void UpdateBrainDrainBlurOpacity(int intensity)
 
 private bool _isCapturing = false; // Flag to prevent concurrent captures
 
-private void BrainDrainCaptureTick(object? sender, EventArgs e)
+private void CompositionTarget_Rendering(object? sender, EventArgs e)
+{
+    // Trigger capture and display update on rendering tick
+    ProcessBrainDrainCaptureAndDisplay();
+}
+
+private void ProcessBrainDrainCaptureAndDisplay()
 {
     if (_isCapturing || _brainDrainImages.Count == 0)
     {
-        if (_brainDrainImages.Count == 0) _brainDrainCaptureTimer?.Stop(); // Stop if no images to process
+        if (_brainDrainImages.Count == 0) System.Windows.Media.CompositionTarget.Rendering -= CompositionTarget_Rendering; // Stop updates if no images
         return;
     }
 
@@ -742,7 +738,7 @@ private void BrainDrainCaptureTick(object? sender, EventArgs e)
         _isCapturing = false;
         if (task.IsFaulted)
         {
-            App.Logger?.Error("BrainDrainCaptureTick: Background capture task failed: {Error}", task.Exception);
+            App.Logger?.Error("ProcessBrainDrainCaptureAndDisplay: Background capture task failed: {Error}", task.Exception);
         }
     });
 }
