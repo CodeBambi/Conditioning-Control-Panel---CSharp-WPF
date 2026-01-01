@@ -111,7 +111,7 @@ namespace ConditioningControlPanel.Services
             _currentSpiralOpacity = session.Settings.SpiralOpacity;
             
             // Setup corner GIF if enabled
-            if (session.Settings.CornerGifEnabled && !string.IsNullOrEmpty(session.Settings.CornerGifPath))
+            if (session.Settings.CornerGifEnabled)
             {
                 ShowCornerGif(session.Settings);
             }
@@ -743,7 +743,7 @@ namespace ConditioningControlPanel.Services
                 }
                 
                 var gifSize = 500; // User requested size
-                var margin = 15; // Margin from screen edge
+                var margin = 0; // Margin from screen edge, set to 0 to be as close as possible
                 
                 // Use WPF's SystemParameters for accurate screen dimensions
                 var screenWidth = SystemParameters.PrimaryScreenWidth;
@@ -771,6 +771,9 @@ namespace ConditioningControlPanel.Services
                         break;
                 }
                 
+                // Increase opacity by 20%
+                var opacity = Math.Min(100, settings.CornerGifOpacity + 20) / 100.0;
+
                 _cornerGifWindow = new Window
                 {
                     WindowStyle = WindowStyle.None,
@@ -783,7 +786,7 @@ namespace ConditioningControlPanel.Services
                     Height = gifSize,
                     Left = left,
                     Top = top,
-                    Opacity = settings.CornerGifOpacity / 100.0
+                    Opacity = opacity
                 };
                 
                 // Use MediaElement for GIF animation (better than WebBrowser for transparency)
@@ -800,6 +803,7 @@ namespace ConditioningControlPanel.Services
                 // Loop the GIF
                 mediaElement.MediaEnded += (s, e) =>
                 {
+                    mediaElement.Stop();
                     mediaElement.Position = TimeSpan.Zero;
                     mediaElement.Play();
                 };
