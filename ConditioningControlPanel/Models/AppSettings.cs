@@ -888,6 +888,22 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Brain Drain (Unlocks Lv.25)
+        private bool _brainDrainEnabled = false;
+        public bool BrainDrainEnabled
+        {
+            get => _brainDrainEnabled;
+            set { _brainDrainEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _brainDrainIntensity = 20; // 1-100%
+        public int BrainDrainIntensity
+        {
+            get => _brainDrainIntensity;
+            set { _brainDrainIntensity = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+        }
+        #endregion
+
         #region Validation
 
         /// <summary>

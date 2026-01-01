@@ -325,7 +325,7 @@ Everything is designed to be viewed from a distance while your mind drifts away.
                 BubbleCountEnabled = false,
                 MiniGameEnabled = false,
                 BouncingTextEnabled = true,
-                BouncingTextPhrases = new List<string> { "So Pretty", "Empty and Beautiful", "Just a Doll", "Relax and Obey" },
+                BouncingTextPhrases = new List<string> { "So Pretty", "Empty and Beautiful", "Just a Doll", "Relax and Obey" }
             },
             
             Phases = new List<SessionPhase>
@@ -581,7 +581,11 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
     
             if (Settings.LockCardEnabled)
             {
-                parts.Add($"■ Lock Cards: ~{Settings.LockCardFrequency}/hour. Uses global phrase pool.");
+                var phrases = App.Settings?.Current.LockCardPhrases.Where(p => p.Value).Select(p => p.Key);
+                var phraseString = phrases != null && phrases.Any() 
+                    ? $"Uses phrases: \"{string.Join("\", \"", phrases)}\"" 
+                    : "Uses global phrase pool";
+                parts.Add($"■ Lock Cards: ~{Settings.LockCardFrequency}/hour. {phraseString}.");
             }
 
             if (Settings.BubbleCountEnabled)
