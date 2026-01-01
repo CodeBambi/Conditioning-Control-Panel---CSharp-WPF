@@ -520,8 +520,11 @@ namespace ConditioningControlPanel.Services
             _savedBouncingTextPool = new Dictionary<string, bool>(current.BouncingTextPool);
             
             _savedSettings.MandatoryVideosEnabled = current.MandatoryVideosEnabled;
+            _savedSettings.VideosPerHour = current.VideosPerHour;
             _savedSettings.LockCardEnabled = current.LockCardEnabled;
+            _savedSettings.LockCardFrequency = current.LockCardFrequency;
             _savedSettings.BubbleCountEnabled = current.BubbleCountEnabled;
+            _savedSettings.BubbleCountFrequency = current.BubbleCountFrequency;
         }
         
         private Dictionary<string, bool>? _savedBouncingTextPool;
@@ -636,10 +639,24 @@ namespace ConditioningControlPanel.Services
                 current.BubblesEnabled = false;
             }
             
-            // Disabled features for this session
+            // Interactive Features
             current.MandatoryVideosEnabled = settings.MandatoryVideosEnabled;
+            if (settings.VideosPerHour.HasValue)
+            {
+                current.VideosPerHour = settings.VideosPerHour.Value;
+            }
+
             current.LockCardEnabled = settings.LockCardEnabled;
+            if (settings.LockCardFrequency.HasValue)
+            {
+                current.LockCardFrequency = settings.LockCardFrequency.Value;
+            }
+
             current.BubbleCountEnabled = settings.BubbleCountEnabled;
+            if (settings.BubbleCountFrequency.HasValue)
+            {
+                current.BubbleCountFrequency = settings.BubbleCountFrequency.Value;
+            }
             
             // Apply settings to UI
             _mainWindow.ApplySessionSettings();
@@ -692,8 +709,11 @@ namespace ConditioningControlPanel.Services
             }
             
             current.MandatoryVideosEnabled = _savedSettings.MandatoryVideosEnabled;
+            current.VideosPerHour = _savedSettings.VideosPerHour;
             current.LockCardEnabled = _savedSettings.LockCardEnabled;
+            current.LockCardFrequency = _savedSettings.LockCardFrequency;
             current.BubbleCountEnabled = _savedSettings.BubbleCountEnabled;
+            current.BubbleCountFrequency = _savedSettings.BubbleCountFrequency;
             
             // Apply restored settings to UI
             _mainWindow.ApplySessionSettings();
