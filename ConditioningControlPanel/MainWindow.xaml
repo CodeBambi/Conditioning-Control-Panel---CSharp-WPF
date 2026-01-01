@@ -2019,8 +2019,7 @@ Bimbo" Foreground="#FF69B4"
                             
                             <!-- Feature Image -->
                             <Border x:Name="BrainDrainFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <!-- TODO: Replace with brain drain.png when available. Using Mind Wipers.png as fallback. -->
-                                <Image Source="pack://application:,,,/Resources/features/Mind Wipers.png" Stretch="Uniform"/>
+                                <Image Source="pack://application:,,,/Resources/features/brain drain.png" Stretch="Uniform"/>
                             </Border>
                         </Grid>
                     </Border>
