@@ -20,6 +20,8 @@ public partial class AchievementPopup : Window
     {
         InitializeComponent();
         
+        App.Logger?.Debug("Creating AchievementPopup for: {Name}", achievement.Name);
+        
         // Set content
         TxtName.Text = achievement.Name;
         TxtFlavor.Text = achievement.FlavorText;
@@ -28,12 +30,7 @@ public partial class AchievementPopup : Window
         LoadAchievementImage(achievement.ImageName);
         
         // Position in bottom-right corner of primary screen
-        var screen = System.Windows.Forms.Screen.PrimaryScreen;
-        if (screen != null)
-        {
-            Left = screen.WorkingArea.Right - Width - 20;
-            Top = screen.WorkingArea.Bottom - Height - 20;
-        }
+        PositionWindow();
         
         // Auto-close after 6 seconds
         _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
@@ -48,20 +45,48 @@ public partial class AchievementPopup : Window
         Opacity = 0;
         Loaded += (s, e) =>
         {
+            App.Logger?.Debug("AchievementPopup loaded, starting fade-in animation");
             var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300));
             BeginAnimation(OpacityProperty, fadeIn);
         };
+    }
+    
+    /// <summary>
+    /// Position the window in the bottom-right corner of the primary screen
+    /// </summary>
+    private void PositionWindow()
+    {
+        try
+        {
+            // Get the working area of the primary screen (excludes taskbar)
+            var workArea = SystemParameters.WorkArea;
+            
+            // Position in bottom-right corner with 20px margin
+            Left = workArea.Right - Width - 20;
+            Top = workArea.Bottom - Height - 20;
+            
+            App.Logger?.Debug("Positioned popup at Left={Left}, Top={Top}", Left, Top);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error(ex, "Failed to position achievement popup, using defaults");
+            // Fallback: center on screen
+            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
     }
     
     private void LoadAchievementImage(string imageName)
     {
         try
         {
-            // Try to load from Resources/achievements folder
+            App.Logger?.Debug("Loading achievement image: {Name}", imageName);
+            
+            // Try to load from Resources/achievements folder (file on disk)
             var imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "achievements", imageName);
             
             if (File.Exists(imagePath))
             {
+                App.Logger?.Debug("Found image file at: {Path}", imagePath);
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
                 bitmap.UriSource = new Uri(imagePath, UriKind.Absolute);
@@ -74,13 +99,15 @@ public partial class AchievementPopup : Window
                 // Try pack URI (embedded resource)
                 try
                 {
+                    App.Logger?.Debug("Trying pack URI for: {Name}", imageName);
                     var packUri = new Uri($"pack://application:,,,/Resources/achievements/{imageName}", UriKind.Absolute);
                     var bitmap = new BitmapImage(packUri);
                     AchievementImage.Source = bitmap;
+                    App.Logger?.Debug("Loaded image from pack URI");
                 }
-                catch
+                catch (Exception packEx)
                 {
-                    App.Logger?.Warning("Achievement image not found: {Name}", imageName);
+                    App.Logger?.Warning(packEx, "Achievement image not found: {Name}", imageName);
                 }
             }
         }
@@ -92,9 +119,24 @@ public partial class AchievementPopup : Window
     
     private void FadeOutAndClose()
     {
-        var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300));
-        fadeOut.Completed += (s, e) => Close();
-        BeginAnimation(OpacityProperty, fadeOut);
+        try
+        {
+            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300));
+            fadeOut.Completed += (s, e) => 
+            {
+                try
+                {
+                    Close();
+                }
+                catch { /* Ignore close errors */ }
+            };
+            BeginAnimation(OpacityProperty, fadeOut);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error(ex, "Error during fade out, closing directly");
+            try { Close(); } catch { }
+        }
     }
     
     private void BtnClose_Click(object sender, RoutedEventArgs e)
@@ -106,12 +148,17 @@ public partial class AchievementPopup : Window
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         // Allow dragging the window
-        DragMove();
+        try
+        {
+            DragMove();
+        }
+        catch { /* Ignore drag errors */ }
     }
     
     protected override void OnClosed(EventArgs e)
     {
         _autoCloseTimer.Stop();
         base.OnClosed(e);
+        App.Logger?.Debug("AchievementPopup closed");
     }
 }

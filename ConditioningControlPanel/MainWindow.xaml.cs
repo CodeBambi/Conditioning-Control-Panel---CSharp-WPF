@@ -128,6 +128,8 @@ namespace ConditioningControlPanel
                 _trayIcon?.ShowNotification("Level Up!", $"You reached Level {newLevel}!", System.Windows.Forms.ToolTipIcon.Info);
                 // Play level up sound
                 PlayLevelUpSound();
+                // Update avatar if level threshold reached (20, 50, 100)
+                _avatarTubeWindow?.UpdateAvatarForLevel(newLevel);
             });
         }
 
@@ -2332,12 +2334,10 @@ namespace ConditioningControlPanel
             // Update title based on level
             TxtPlayerTitle.Text = level switch
             {
-                < 5 => "Beginner Bimbo",
-                < 10 => "Training Bimbo",
-                < 20 => "Eager Bimbo",
-                < 30 => "Devoted Bimbo",
-                < 50 => "Advanced Bimbo",
-                _ => "Perfect Bimbo"
+                < 20 => "BASIC BIMBO",
+                < 50 => "DUMB AIRHEAD",
+                < 100 => "SYNTHETIC BLOWDOLL",
+                _ => "PERFECT FUCKPUPPET"
             };
             
             // Update unlockables visibility based on level

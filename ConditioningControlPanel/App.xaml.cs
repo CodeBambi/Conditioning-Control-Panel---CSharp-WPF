@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Media;
 using System.Windows;
 using ConditioningControlPanel.Services;
 using Serilog;
@@ -68,12 +69,16 @@ namespace ConditioningControlPanel
             MindWipe = new MindWipeService();
             Achievements = new AchievementService();
             
-            // Wire up achievement popup BEFORE checking initial achievements
+            // Wire up achievement popup BEFORE checking any achievements
             Achievements.AchievementUnlocked += OnAchievementUnlocked;
             
-            // Now check level achievements (so popup can show)
+            // Now check initial achievements (so popup can show)
             Achievements.CheckLevelAchievements(Settings.Current.PlayerLevel);
             Logger.Information("Checked level achievements for level {Level}", Settings.Current.PlayerLevel);
+            
+            // Check daily maintenance achievement (7 days streak)
+            Achievements.CheckDailyMaintenance();
+            Logger.Information("Checked daily maintenance achievement");
 
             Logger.Information("Services initialized");
 
@@ -87,22 +92,56 @@ namespace ConditioningControlPanel
             Logger.Information("OnAchievementUnlocked handler called for: {Name}", achievement.Name);
             
             // Show achievement popup
-            var popup = new AchievementPopup(achievement);
-            popup.Show();
-            
-            Logger.Information("Achievement popup shown for: {Name}", achievement.Name);
-            
-            // Play achievement sound if available
             try
             {
-                var soundPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "sounds", "achievement.wav");
-                if (File.Exists(soundPath))
+                var popup = new AchievementPopup(achievement);
+                popup.Show();
+                Logger.Information("Achievement popup shown for: {Name}", achievement.Name);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, "Failed to show achievement popup for: {Name}", achievement.Name);
+            }
+            
+            // Play achievement sound
+            PlayAchievementSound();
+        }
+        
+        /// <summary>
+        /// Play the achievement notification sound
+        /// </summary>
+        private void PlayAchievementSound()
+        {
+            try
+            {
+                // First try custom achievement sound
+                var customSoundPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "sounds", "achievement.wav");
+                if (File.Exists(customSoundPath))
                 {
-                    var player = new System.Media.SoundPlayer(soundPath);
+                    var player = new SoundPlayer(customSoundPath);
                     player.Play();
+                    Logger.Debug("Played custom achievement sound");
+                }
+                else
+                {
+                    // Fall back to Windows notification sound (Asterisk = the classic notification "ding")
+                    SystemSounds.Asterisk.Play();
+                    Logger.Debug("Played Windows notification sound");
                 }
             }
-            catch { /* Ignore sound errors */ }
+            catch (Exception ex)
+            {
+                Logger.Warning(ex, "Failed to play achievement sound, trying fallback");
+                try
+                {
+                    // Ultimate fallback - Windows exclamation sound
+                    SystemSounds.Exclamation.Play();
+                }
+                catch
+                {
+                    // Ignore if even fallback fails
+                }
+            }
         }
 
         protected override void OnExit(ExitEventArgs e)

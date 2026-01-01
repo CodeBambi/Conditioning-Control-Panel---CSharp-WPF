@@ -32,14 +32,25 @@ namespace ConditioningControlPanel.Services
         private int _sessionBaseFrequency;
         private DateTime _sessionStartTime;
         
-        // Loop mode
+        // Loop mode with crossfade
         private bool _loopMode;
         private string? _loopFilePath;
         private DateTime _loopStartTime;
         private bool _cleanSlateAchieved;
         
+        // Crossfade support - two players for seamless looping
+        private const double CROSSFADE_OVERLAP_SECONDS = 0.12;
+        private WaveOutEvent? _loopWaveOutA;
+        private WaveOutEvent? _loopWaveOutB;
+        private AudioFileReader? _loopReaderA;
+        private AudioFileReader? _loopReaderB;
+        private bool _usePlayerA = true; // Alternate between A and B
+        private DispatcherTimer? _crossfadeTimer;
+        private TimeSpan _loopDuration;
+        
         public bool IsRunning => _isRunning;
-        public bool IsLooping => _loopMode && _waveOut?.PlaybackState == PlaybackState.Playing;
+        public bool IsLooping => _loopMode && (_loopWaveOutA?.PlaybackState == PlaybackState.Playing || 
+                                                _loopWaveOutB?.PlaybackState == PlaybackState.Playing);
         public int AudioFileCount => _audioFiles?.Length ?? 0;
         
         public double FrequencyPerHour
@@ -57,6 +68,15 @@ namespace ConditioningControlPanel.Services
                 if (_audioReader != null)
                 {
                     try { _audioReader.Volume = (float)_volume; } catch { }
+                }
+                // Update loop players
+                if (_loopReaderA != null)
+                {
+                    try { _loopReaderA.Volume = (float)_volume; } catch { }
+                }
+                if (_loopReaderB != null)
+                {
+                    try { _loopReaderB.Volume = (float)_volume; } catch { }
                 }
             }
         }
@@ -170,6 +190,7 @@ namespace ConditioningControlPanel.Services
             _cts?.Cancel();
             
             StopCurrentAudio();
+            StopLoop();
             
             App.Logger?.Information("MindWipe: Stopped");
         }
@@ -183,10 +204,19 @@ namespace ConditioningControlPanel.Services
             {
                 _audioReader.Volume = (float)_volume;
             }
+            // Update loop players
+            if (_loopReaderA != null)
+            {
+                try { _loopReaderA.Volume = (float)_volume; } catch { }
+            }
+            if (_loopReaderB != null)
+            {
+                try { _loopReaderB.Volume = (float)_volume; } catch { }
+            }
         }
         
         /// <summary>
-        /// Start looping a random audio file continuously in the background
+        /// Start looping a random audio file continuously in the background with crossfade
         /// </summary>
         public void StartLoop(double volume)
         {
@@ -204,26 +234,43 @@ namespace ConditioningControlPanel.Services
             _loopFilePath = _audioFiles[_random.Next(_audioFiles.Length)];
             _loopStartTime = DateTime.Now;
             _cleanSlateAchieved = false;
+            _usePlayerA = true;
             
-            PlayLoopAudio();
+            // Get audio duration for crossfade timing
+            try
+            {
+                using var tempReader = new AudioFileReader(_loopFilePath);
+                _loopDuration = tempReader.TotalTime;
+                App.Logger?.Information("MindWipe: Loop file duration: {Duration:F2}s", _loopDuration.TotalSeconds);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "MindWipe: Failed to get audio duration, using fallback");
+                _loopDuration = TimeSpan.FromSeconds(30); // Fallback
+            }
             
-            App.Logger?.Information("MindWipe: Loop started with {File} at {Vol}% volume", 
-                Path.GetFileName(_loopFilePath), volume * 100);
+            // Start first player
+            StartNextLoopPlayer();
+            
+            // Setup crossfade timer - triggers slightly before track ends to start next player
+            var crossfadeInterval = _loopDuration - TimeSpan.FromSeconds(CROSSFADE_OVERLAP_SECONDS);
+            if (crossfadeInterval.TotalMilliseconds < 100)
+            {
+                crossfadeInterval = TimeSpan.FromMilliseconds(100);
+            }
+            
+            _crossfadeTimer = new DispatcherTimer
+            {
+                Interval = crossfadeInterval
+            };
+            _crossfadeTimer.Tick += CrossfadeTimer_Tick;
+            _crossfadeTimer.Start();
+            
+            App.Logger?.Information("MindWipe: Loop started with {File} at {Vol}% volume (crossfade: {Overlap}s)", 
+                Path.GetFileName(_loopFilePath), volume * 100, CROSSFADE_OVERLAP_SECONDS);
         }
         
-        /// <summary>
-        /// Stop the looping audio
-        /// </summary>
-        public void StopLoop()
-        {
-            _loopMode = false;
-            _loopFilePath = null;
-            StopCurrentAudio();
-            
-            App.Logger?.Information("MindWipe: Loop stopped");
-        }
-        
-        private void PlayLoopAudio()
+        private void CrossfadeTimer_Tick(object? sender, EventArgs e)
         {
             if (!_loopMode || string.IsNullOrEmpty(_loopFilePath)) return;
             
@@ -235,36 +282,128 @@ namespace ConditioningControlPanel.Services
                 {
                     _cleanSlateAchieved = true;
                     App.Achievements?.TrackMindWipeDuration(elapsed);
+                    App.Logger?.Information("MindWipe: Clean Slate achievement triggered at {Elapsed:F0}s", elapsed);
                 }
             }
             
+            // Start the next player (creates overlap)
+            StartNextLoopPlayer();
+        }
+        
+        private void StartNextLoopPlayer()
+        {
+            if (!_loopMode || string.IsNullOrEmpty(_loopFilePath)) return;
+            
             try
             {
-                StopCurrentAudio();
-                
-                _audioReader = new AudioFileReader(_loopFilePath);
-                _audioReader.Volume = (float)_volume;
-                
-                _waveOut = new WaveOutEvent();
-                _waveOut.Init(_audioReader);
-                _waveOut.PlaybackStopped += (s, e) =>
+                if (_usePlayerA)
                 {
-                    // Loop: restart when finished
-                    if (_loopMode && _loopFilePath != null)
-                    {
-                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
-                        {
-                            PlayLoopAudio();
-                        });
-                    }
-                };
+                    // Clean up old player A if exists
+                    DisposePlayerA();
+                    
+                    // Create new player A
+                    _loopReaderA = new AudioFileReader(_loopFilePath);
+                    _loopReaderA.Volume = (float)_volume;
+                    
+                    _loopWaveOutA = new WaveOutEvent();
+                    _loopWaveOutA.Init(_loopReaderA);
+                    _loopWaveOutA.Play();
+                    
+                    App.Logger?.Debug("MindWipe: Started player A");
+                    
+                    // Schedule cleanup of player B after overlap period
+                    SchedulePlayerCleanup(false);
+                }
+                else
+                {
+                    // Clean up old player B if exists
+                    DisposePlayerB();
+                    
+                    // Create new player B
+                    _loopReaderB = new AudioFileReader(_loopFilePath);
+                    _loopReaderB.Volume = (float)_volume;
+                    
+                    _loopWaveOutB = new WaveOutEvent();
+                    _loopWaveOutB.Init(_loopReaderB);
+                    _loopWaveOutB.Play();
+                    
+                    App.Logger?.Debug("MindWipe: Started player B");
+                    
+                    // Schedule cleanup of player A after overlap period
+                    SchedulePlayerCleanup(true);
+                }
                 
-                _waveOut.Play();
+                // Alternate for next iteration
+                _usePlayerA = !_usePlayerA;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "MindWipe: Error playing loop audio");
+                App.Logger?.Error(ex, "MindWipe: Error starting loop player");
             }
+        }
+        
+        private void SchedulePlayerCleanup(bool cleanupA)
+        {
+            // Wait a bit longer than the overlap to ensure smooth transition, then cleanup old player
+            Task.Delay(TimeSpan.FromSeconds(CROSSFADE_OVERLAP_SECONDS + 0.1)).ContinueWith(_ =>
+            {
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+                {
+                    if (cleanupA)
+                    {
+                        DisposePlayerA();
+                    }
+                    else
+                    {
+                        DisposePlayerB();
+                    }
+                });
+            });
+        }
+        
+        private void DisposePlayerA()
+        {
+            try
+            {
+                _loopWaveOutA?.Stop();
+                _loopWaveOutA?.Dispose();
+                _loopWaveOutA = null;
+                
+                _loopReaderA?.Dispose();
+                _loopReaderA = null;
+            }
+            catch { }
+        }
+        
+        private void DisposePlayerB()
+        {
+            try
+            {
+                _loopWaveOutB?.Stop();
+                _loopWaveOutB?.Dispose();
+                _loopWaveOutB = null;
+                
+                _loopReaderB?.Dispose();
+                _loopReaderB = null;
+            }
+            catch { }
+        }
+        
+        /// <summary>
+        /// Stop the looping audio
+        /// </summary>
+        public void StopLoop()
+        {
+            _loopMode = false;
+            _loopFilePath = null;
+            
+            _crossfadeTimer?.Stop();
+            _crossfadeTimer = null;
+            
+            DisposePlayerA();
+            DisposePlayerB();
+            
+            App.Logger?.Information("MindWipe: Loop stopped");
         }
         
         private void Timer_Tick(object? sender, EventArgs e)
@@ -422,6 +561,7 @@ namespace ConditioningControlPanel.Services
         {
             Stop();
             StopCurrentAudio();
+            StopLoop();
         }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -33,6 +34,9 @@ public class BouncingTextService : IDisposable
     private double _textHeight = 60;
     private int _currentFontSize = BASE_FONT_SIZE;
     
+    // Corner hit detection - tolerance in pixels (corners are hard to hit exactly)
+    private const double CORNER_TOLERANCE = 15.0;
+    
     public bool IsRunning => _isRunning;
     
     public event EventHandler? OnBounce;
@@ -57,18 +61,19 @@ public class BouncingTextService : IDisposable
         
         // Calculate font size based on settings (50-300% of base)
         _currentFontSize = (int)(BASE_FONT_SIZE * settings.BouncingTextSize / 100.0);
-        _textWidth = _currentFontSize * 4; // Approximate width
-        _textHeight = _currentFontSize * 1.5; // Approximate height
         
         // Get random text from pool
         SelectRandomText();
         
+        // Measure actual text size
+        MeasureTextSize();
+        
         // Calculate screen bounds
         CalculateScreenBounds(settings.DualMonitorEnabled);
         
-        // Random starting position
-        _posX = _minX + _random.NextDouble() * (_maxX - _minX - _textWidth);
-        _posY = _minY + _random.NextDouble() * (_maxY - _minY - _textHeight);
+        // Random starting position (ensure text starts fully within bounds)
+        _posX = _minX + _random.NextDouble() * Math.Max(1, (_maxX - _minX - _textWidth));
+        _posY = _minY + _random.NextDouble() * Math.Max(1, (_maxY - _minY - _textHeight));
         
         // Random velocity (speed based on setting)
         var speed = settings.BouncingTextSpeed / 10.0; // 1-10 maps to 0.1-1.0 multiplier
@@ -90,7 +95,8 @@ public class BouncingTextService : IDisposable
         _animTimer.Tick += Animate;
         _animTimer.Start();
         
-        App.Logger?.Information("BouncingTextService started - Text: {Text}", _currentText);
+        App.Logger?.Information("BouncingTextService started - Text: {Text}, Size: {W}x{H}", 
+            _currentText, _textWidth, _textHeight);
     }
 
     public void Stop()
@@ -125,6 +131,38 @@ public class BouncingTextService : IDisposable
         else
         {
             _currentText = enabledTexts[_random.Next(enabledTexts.Count)];
+        }
+    }
+
+    /// <summary>
+    /// Measure the actual rendered size of the current text
+    /// </summary>
+    private void MeasureTextSize()
+    {
+        try
+        {
+            var typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
+            var formattedText = new FormattedText(
+                _currentText,
+                CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                _currentFontSize,
+                Brushes.White,
+                new NumberSubstitution(),
+                VisualTreeHelper.GetDpi(Application.Current.MainWindow).PixelsPerDip);
+            
+            _textWidth = formattedText.Width;
+            _textHeight = formattedText.Height;
+            
+            App.Logger?.Debug("Measured text '{Text}': {W}x{H}", _currentText, _textWidth, _textHeight);
+        }
+        catch (Exception ex)
+        {
+            // Fallback to estimation if measurement fails
+            _textWidth = _currentFontSize * _currentText.Length * 0.6;
+            _textHeight = _currentFontSize * 1.2;
+            App.Logger?.Warning(ex, "Failed to measure text, using estimate: {W}x{H}", _textWidth, _textHeight);
         }
     }
 
@@ -175,27 +213,34 @@ public class BouncingTextService : IDisposable
         bool bouncedX = false;
         bool bouncedY = false;
         
-        // Bounce off edges
+        // Calculate the RIGHT and BOTTOM edges of the text
+        double textRight = _posX + _textWidth;
+        double textBottom = _posY + _textHeight;
+        
+        // Bounce off LEFT edge (text's left edge hits screen's left edge)
         if (_posX <= _minX)
         {
             _posX = _minX;
             _velX = Math.Abs(_velX);
             bouncedX = true;
         }
-        else if (_posX + _textWidth >= _maxX)
+        // Bounce off RIGHT edge (text's right edge hits screen's right edge)
+        else if (textRight >= _maxX)
         {
             _posX = _maxX - _textWidth;
             _velX = -Math.Abs(_velX);
             bouncedX = true;
         }
         
+        // Bounce off TOP edge (text's top edge hits screen's top edge)
         if (_posY <= _minY)
         {
             _posY = _minY;
             _velY = Math.Abs(_velY);
             bouncedY = true;
         }
-        else if (_posY + _textHeight >= _maxY)
+        // Bounce off BOTTOM edge (text's bottom edge hits screen's bottom edge)
+        else if (textBottom >= _maxY)
         {
             _posY = _maxY - _textHeight;
             _velY = -Math.Abs(_velY);
@@ -207,8 +252,18 @@ public class BouncingTextService : IDisposable
         // Check for corner hit (both X and Y bounce at the same time!)
         if (bouncedX && bouncedY)
         {
-            App.Logger?.Information("CORNER HIT! 🎯");
+            App.Logger?.Information("🎯 CORNER HIT! Position: ({X}, {Y})", _posX, _posY);
             App.Achievements?.TrackCornerHit();
+        }
+        // Also check for "near corner" hits - when very close to a corner during a single-axis bounce
+        else if (bounced)
+        {
+            bool nearCorner = IsNearCorner(_posX, _posY, textRight, textBottom);
+            if (nearCorner)
+            {
+                App.Logger?.Information("🎯 NEAR-CORNER HIT! Position: ({X}, {Y})", _posX, _posY);
+                App.Achievements?.TrackCornerHit();
+            }
         }
         
         // On bounce: change color, award XP, maybe change text
@@ -222,6 +277,7 @@ public class BouncingTextService : IDisposable
             if (_random.NextDouble() < 0.1)
             {
                 SelectRandomText();
+                MeasureTextSize(); // Re-measure when text changes
             }
             
             UpdateWindowsText();
@@ -230,6 +286,23 @@ public class BouncingTextService : IDisposable
         
         // Update position in all windows
         UpdateWindowsPosition();
+    }
+
+    /// <summary>
+    /// Check if the text is near any corner within tolerance
+    /// </summary>
+    private bool IsNearCorner(double left, double top, double right, double bottom)
+    {
+        // Top-left corner
+        bool nearTopLeft = left <= _minX + CORNER_TOLERANCE && top <= _minY + CORNER_TOLERANCE;
+        // Top-right corner
+        bool nearTopRight = right >= _maxX - CORNER_TOLERANCE && top <= _minY + CORNER_TOLERANCE;
+        // Bottom-left corner
+        bool nearBottomLeft = left <= _minX + CORNER_TOLERANCE && bottom >= _maxY - CORNER_TOLERANCE;
+        // Bottom-right corner
+        bool nearBottomRight = right >= _maxX - CORNER_TOLERANCE && bottom >= _maxY - CORNER_TOLERANCE;
+        
+        return nearTopLeft || nearTopRight || nearBottomLeft || nearBottomRight;
     }
 
     private void UpdateWindowsText()
@@ -244,7 +317,7 @@ public class BouncingTextService : IDisposable
     {
         foreach (var window in _windows)
         {
-            window.UpdatePosition(_posX, _posY);
+            window.UpdatePosition(_posX, _posY, _textWidth, _textHeight);
         }
     }
 
@@ -297,13 +370,12 @@ public class BouncingTextService : IDisposable
         _velX *= scale;
         _velY *= scale;
         
-        // Check if font size changed - if so, restart to recreate windows
+        // Check if font size changed - if so, update and re-measure
         var newFontSize = (int)(BASE_FONT_SIZE * settings.BouncingTextSize / 100.0);
         if (newFontSize != _currentFontSize)
         {
             _currentFontSize = newFontSize;
-            _textWidth = _currentFontSize * 4;
-            _textHeight = _currentFontSize * 1.5;
+            MeasureTextSize(); // Re-measure with new font size
             
             // Update font size in all windows
             foreach (var window in _windows)
@@ -382,14 +454,19 @@ internal class BouncingTextWindow : Window
         _textBlock.FontSize = fontSize;
     }
 
-    public void UpdatePosition(double x, double y)
+    public void UpdatePosition(double x, double y, double textWidth, double textHeight)
     {
         // Convert global position to local screen position
         var localX = x - (_screen.Bounds.X / _dpiScale);
         var localY = y - (_screen.Bounds.Y / _dpiScale);
         
-        // Only show if text is within this screen's bounds
-        if (localX + 400 >= 0 && localX < Width && localY + 100 >= 0 && localY < Height)
+        // Check if any part of the text is visible on this screen
+        bool isVisible = (localX + textWidth >= 0) && 
+                         (localX < Width) && 
+                         (localY + textHeight >= 0) && 
+                         (localY < Height);
+        
+        if (isVisible)
         {
             Canvas.SetLeft(_textBlock, localX);
             Canvas.SetTop(_textBlock, localY);

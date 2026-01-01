@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Conditioning Control Panel v3.0" 
-        Height="881" Width="1280"
+        Height="881" Width="1355"
         MinHeight="795" MinWidth="1100"
         Background="#1A1A2E"
         WindowStartupLocation="Manual"
@@ -311,9 +311,22 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Title -->
+                <!-- Title + Player Title -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="💗" FontSize="20" Margin="0,0,8,0"/>
+                    <!-- Player Title and Level (moved to far left) -->
+                    <TextBlock Text="⭐" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtPlayerTitle" Text="BASIC BIMBO" Foreground="#FF69B4" 
+                               FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="#FF69B4" BlurRadius="8" ShadowDepth="0" Opacity="0.6"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                    <Border Background="{StaticResource PinkBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,20,0">
+                        <TextBlock x:Name="TxtLevel" Text="Lvl 1" Foreground="White" FontWeight="Bold" FontSize="12"/>
+                    </Border>
+                    
+                    <!-- App Title -->
+                    <TextBlock Text="💗" FontSize="15" Margin="0,0,8,0"/>
                     <TextBlock Text="Conditioning Control Panel" Foreground="White" FontSize="18" FontWeight="Bold"/>
                     <TextBlock Text="v3.0" Foreground="{StaticResource PinkBrush}" FontSize="12" FontWeight="Normal" 
                                VerticalAlignment="Bottom" Margin="6,0,0,2"/>
@@ -331,10 +344,9 @@
                             Margin="5,0" Click="BtnAchievements_Click"/>
                 </StackPanel>
 
-                <!-- Level Display and Preset -->
+                <!-- Preset Dropdown -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <!-- Preset Dropdown -->
-                    <ComboBox x:Name="CmbPresets" Width="160" Margin="0,0,15,0"
+                    <ComboBox x:Name="CmbPresets" Width="160" Margin="0,0,0,0"
                               SelectionChanged="CmbPresets_SelectionChanged"
                               ToolTip="Select a preset configuration">
                         <ComboBox.Style>
@@ -429,13 +441,6 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    
-                    <TextBlock Text="⭐" FontSize="16" Margin="0,0,5,0"/>
-                    <TextBlock x:Name="TxtPlayerTitle" Text="Beginner Bimbo" Foreground="White" 
-                               FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                    <Border Background="{StaticResource PinkBrush}" CornerRadius="12" Padding="10,4">
-                        <TextBlock x:Name="TxtLevel" Text="Lvl 1" Foreground="White" FontWeight="Bold" FontSize="12"/>
-                    </Border>
                 </StackPanel>
             </Grid>
         </Border>

@@ -12,12 +12,13 @@ namespace ConditioningControlPanel
     {
         private readonly Window _parentWindow;
         private readonly DispatcherTimer _poseTimer;
-        private readonly BitmapImage[] _avatarPoses;
+        private BitmapImage[] _avatarPoses;
         private int _currentPoseIndex = 0;
         private bool _isAttached = true;
         private Storyboard? _floatStoryboard;
         private IntPtr _tubeHandle;
         private IntPtr _parentHandle;
+        private int _currentAvatarSet = 1; // Track which avatar set is loaded
 
         // ============================================================
         // POSITIONING & SCALING - ADJUST THESE VALUES AS NEEDED
@@ -53,8 +54,12 @@ namespace ConditioningControlPanel
             _parentWindow = parentWindow;
             Owner = parentWindow;
             
-            // Load avatar poses
-            _avatarPoses = LoadAvatarPoses();
+            // Determine which avatar set to load based on player level
+            int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+            _currentAvatarSet = GetAvatarSetForLevel(playerLevel);
+            
+            // Load avatar poses for the appropriate set
+            _avatarPoses = LoadAvatarPoses(_currentAvatarSet);
             
             // Set initial pose
             if (_avatarPoses.Length > 0)
@@ -82,6 +87,60 @@ namespace ConditioningControlPanel
             
             // Keep z-order synced during any position change
             LocationChanged += (s, e) => SyncZOrder();
+            
+            App.Logger?.Information("AvatarTubeWindow initialized with avatar set {Set} for level {Level}", 
+                _currentAvatarSet, playerLevel);
+        }
+
+        /// <summary>
+        /// Determines which avatar set to use based on player level
+        /// </summary>
+        /// <param name="level">Player's current level</param>
+        /// <returns>Avatar set number (1-4)</returns>
+        public static int GetAvatarSetForLevel(int level)
+        {
+            // Avatar Set 4: Level 100+
+            if (level >= 100) return 4;
+            // Avatar Set 3: Level 50-99
+            if (level >= 50) return 3;
+            // Avatar Set 2: Level 20-49
+            if (level >= 20) return 2;
+            // Avatar Set 1: Level 1-19 (default)
+            return 1;
+        }
+
+        /// <summary>
+        /// Updates the avatar to match the current player level
+        /// Call this when the player levels up
+        /// </summary>
+        public void UpdateAvatarForLevel(int newLevel)
+        {
+            int newSet = GetAvatarSetForLevel(newLevel);
+            
+            if (newSet != _currentAvatarSet)
+            {
+                App.Logger?.Information("🎨 Avatar upgrade! Changing from set {OldSet} to set {NewSet} at level {Level}", 
+                    _currentAvatarSet, newSet, newLevel);
+                
+                _currentAvatarSet = newSet;
+                _avatarPoses = LoadAvatarPoses(newSet);
+                
+                // Reset to first pose of new set with a nice transition
+                _currentPoseIndex = 0;
+                
+                if (_avatarPoses.Length > 0)
+                {
+                    // Fade transition to new avatar
+                    var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300));
+                    fadeOut.Completed += (s, args) =>
+                    {
+                        ImgAvatar.Source = _avatarPoses[0];
+                        var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300));
+                        ImgAvatar.BeginAnimation(OpacityProperty, fadeIn);
+                    };
+                    ImgAvatar.BeginAnimation(OpacityProperty, fadeOut);
+                }
+            }
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e)
@@ -129,15 +188,26 @@ namespace ConditioningControlPanel
             _floatStoryboard?.Stop();
         }
 
-        private BitmapImage[] LoadAvatarPoses()
+        /// <summary>
+        /// Load avatar poses for a specific set
+        /// </summary>
+        /// <param name="setNumber">1 = default, 2 = level 20, 3 = level 50, 4 = level 100</param>
+        private BitmapImage[] LoadAvatarPoses(int setNumber = 1)
         {
             var poses = new BitmapImage[4];
+            
+            // Determine the resource path based on set number
+            // Set 1: avatar_pose1.png - avatar_pose4.png (original)
+            // Set 2: avatar2_pose1.png - avatar2_pose4.png (level 20)
+            // Set 3: avatar3_pose1.png - avatar3_pose4.png (level 50)
+            // Set 4: avatar4_pose1.png - avatar4_pose4.png (level 100)
+            string prefix = setNumber == 1 ? "avatar_pose" : $"avatar{setNumber}_pose";
             
             for (int i = 0; i < 4; i++)
             {
                 try
                 {
-                    var uri = new Uri($"pack://application:,,,/Resources/avatar_pose{i + 1}.png", UriKind.Absolute);
+                    var uri = new Uri($"pack://application:,,,/Resources/{prefix}{i + 1}.png", UriKind.Absolute);
                     var bitmap = new BitmapImage();
                     bitmap.BeginInit();
                     bitmap.UriSource = uri;
@@ -145,11 +215,37 @@ namespace ConditioningControlPanel
                     bitmap.EndInit();
                     bitmap.Freeze();
                     poses[i] = bitmap;
+                    
+                    App.Logger?.Debug("Loaded avatar pose: {Prefix}{Index}.png", prefix, i + 1);
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning("Failed to load avatar pose {Index}: {Error}", i + 1, ex.Message);
-                    poses[i] = new BitmapImage();
+                    App.Logger?.Warning("Failed to load avatar pose {Prefix}{Index}: {Error}", prefix, i + 1, ex.Message);
+                    
+                    // Try to fall back to default avatar set if a higher set fails to load
+                    if (setNumber > 1)
+                    {
+                        try
+                        {
+                            var fallbackUri = new Uri($"pack://application:,,,/Resources/avatar_pose{i + 1}.png", UriKind.Absolute);
+                            var fallbackBitmap = new BitmapImage();
+                            fallbackBitmap.BeginInit();
+                            fallbackBitmap.UriSource = fallbackUri;
+                            fallbackBitmap.CacheOption = BitmapCacheOption.OnLoad;
+                            fallbackBitmap.EndInit();
+                            fallbackBitmap.Freeze();
+                            poses[i] = fallbackBitmap;
+                            App.Logger?.Debug("Fell back to default avatar pose {Index}", i + 1);
+                        }
+                        catch
+                        {
+                            poses[i] = new BitmapImage();
+                        }
+                    }
+                    else
+                    {
+                        poses[i] = new BitmapImage();
+                    }
                 }
             }
             
@@ -266,6 +362,11 @@ namespace ConditioningControlPanel
         {
             _poseTimer.Interval = interval;
         }
+        
+        /// <summary>
+        /// Gets the current avatar set number
+        /// </summary>
+        public int CurrentAvatarSet => _currentAvatarSet;
 
         protected override void OnClosed(EventArgs e)
         {

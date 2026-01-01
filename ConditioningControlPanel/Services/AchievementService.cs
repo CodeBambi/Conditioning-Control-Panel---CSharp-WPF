@@ -55,9 +55,8 @@ public class AchievementService : IDisposable
         _trackingTimer.Tick += TrackTimeBasedProgress;
         _trackingTimer.Start();
         
-        // Note: Level achievements are checked in App.xaml.cs AFTER event handler is wired
-        // Check daily maintenance achievement
-        CheckDailyMaintenance();
+        // NOTE: Level achievements and daily maintenance are checked in App.xaml.cs
+        // AFTER the event handler is wired up, so popups actually show!
         
         App.Logger?.Information("AchievementService initialized. {Count} achievements unlocked.", 
             _progress.UnlockedAchievements.Count);

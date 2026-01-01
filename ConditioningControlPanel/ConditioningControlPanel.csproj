@@ -84,10 +84,30 @@
     
     <!-- Avatar Tube images - MUST be Resource for pack:// URIs to work -->
     <Resource Include="Resources\tube.png" />
+    
+    <!-- Avatar Set 1: Default (Level 1-19) -->
     <Resource Include="Resources\avatar_pose1.png" />
     <Resource Include="Resources\avatar_pose2.png" />
     <Resource Include="Resources\avatar_pose3.png" />
     <Resource Include="Resources\avatar_pose4.png" />
+    
+    <!-- Avatar Set 2: Level 20+ (Neon/Circuit style) -->
+    <Resource Include="Resources\avatar2_pose1.png" />
+    <Resource Include="Resources\avatar2_pose2.png" />
+    <Resource Include="Resources\avatar2_pose3.png" />
+    <Resource Include="Resources\avatar2_pose4.png" />
+    
+    <!-- Avatar Set 3: Level 50+ (Marionette/Puppet style) -->
+    <Resource Include="Resources\avatar3_pose1.png" />
+    <Resource Include="Resources\avatar3_pose2.png" />
+    <Resource Include="Resources\avatar3_pose3.png" />
+    <Resource Include="Resources\avatar3_pose4.png" />
+    
+    <!-- Avatar Set 4: Level 100+ (Sunglasses/Glamour style) -->
+    <Resource Include="Resources\avatar4_pose1.png" />
+    <Resource Include="Resources\avatar4_pose2.png" />
+    <Resource Include="Resources\avatar4_pose3.png" />
+    <Resource Include="Resources\avatar4_pose4.png" />
     
     <!-- Achievement images -->
     <Resource Include="Resources\achievements\*.png" />
