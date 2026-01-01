@@ -7,7 +7,10 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using System.Drawing; // Added for screen capture functionality
+using System.Drawing;
+using SharpDX;
+using SharpDX.Direct3D11;
+using SharpDX.DXGI;
 
 namespace ConditioningControlPanel.Services;
 
@@ -19,7 +22,7 @@ public class OverlayService : IDisposable
     private readonly List<Window> _pinkFilterWindows = new();
     private readonly List<Window> _spiralWindows = new();
     private readonly List<MediaElement> _spiralMediaElements = new();
-    private readonly List<Window> _brainDrainBlurWindows = new(); // New field for Brain Drain blur
+    private readonly List<Window> _brainDrainBlurWindows = new();
     private bool _isRunning;
     private DispatcherTimer? _updateTimer;
     private DispatcherTimer? _gifLoopTimer;
@@ -29,8 +32,8 @@ public class OverlayService : IDisposable
 
     public bool IsRunning => _isRunning;
 
-    // P/Invoke declarations for screen capture (BitBlt)
-    private const int SRCCOPY = 0x00CC0020; // DwRop parameter for BitBlt
+    // Legacy P/Invoke declarations (kept for compatibility)
+    private const int SRCCOPY = 0x00CC0020;
     
     [System.Runtime.InteropServices.DllImport("gdi32.dll")]
     private static extern bool BitBlt(IntPtr hdcDest, int xDest, int yDest, int wDest, int hDest, IntPtr hdcSrc, int xSrc, int ySrc, int dwRop);
@@ -56,61 +59,25 @@ public class OverlayService : IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
 
-[System.Runtime.InteropServices.DllImport("dwmapi.dll")]
-private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
 
-[System.Runtime.InteropServices.DllImport("dwmapi.dll")]
-private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
-[System.Runtime.InteropServices.DllImport("user32.dll")]
-private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
-
-[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-private struct MARGINS
-{
-    public int Left, Right, Top, Bottom;
-}
-
-[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-private struct WindowCompositionAttributeData
-{
-    public int Attribute;
-    public IntPtr Data;
-    public int SizeOfData;
-}
-
-[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-private struct AccentPolicy
-{
-    public int AccentState;
-    public int AccentFlags;
-    public uint GradientColor;
-    public int AnimationId;
-}
-
-private const int ACCENT_ENABLE_BLURBEHIND = 3;
-private const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
-private const int WCA_ACCENT_POLICY = 19;
-
-        private string GetSpiralPath()
+    private string GetSpiralPath()
+    {
+        var settings = App.Settings.Current;
+        
+        if (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
         {
-            var settings = App.Settings.Current;
-            
-            // If a specific path is set by the user, use it
-            if (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
-            {
-                return settings.SpiralPath;
-            }
-            
-            // Fallback to Resources/spiral.gif if user-defined path is not set or invalid
-            var resourceSpiral = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "spiral.gif");
-            if (File.Exists(resourceSpiral))
-            {
-                return resourceSpiral;
-            }
-            
-            return ""; // No spiral found
+            return settings.SpiralPath;
         }
+        
+        var resourceSpiral = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "spiral.gif");
+        if (File.Exists(resourceSpiral))
+        {
+            return resourceSpiral;
+        }
+        
+        return "";
+    }
 
     public void Start()
     {
@@ -121,7 +88,6 @@ private const int WCA_ACCENT_POLICY = 19;
         {
             var settings = App.Settings.Current;
 
-            // Check level requirements
             if (settings.PlayerLevel < 10)
             {
                 App.Logger?.Information("OverlayService: Level {Level} is below 10, overlays not available", settings.PlayerLevel);
@@ -171,10 +137,6 @@ private const int WCA_ACCENT_POLICY = 19;
         App.Logger?.Information("OverlayService stopped");
     }
 
-    /// <summary>
-    /// Immediately refresh overlay state based on current settings
-    /// Call this when settings change while engine is running
-    /// </summary>
     public void RefreshOverlays()
     {
         if (!_isRunning) return;
@@ -183,20 +145,18 @@ private const int WCA_ACCENT_POLICY = 19;
         {
             var settings = App.Settings.Current;
             
-            // Pink Filter
             if (settings.PinkFilterEnabled && settings.PlayerLevel >= 10)
             {
                 if (_pinkFilterWindows.Count == 0)
                     StartPinkFilter();
                 else
-                    UpdatePinkFilterOpacity(); // Update opacity if already running
+                    UpdatePinkFilterOpacity();
             }
             else
             {
                 StopPinkFilter();
             }
             
-            // Spiral - use GetSpiralPath to allow random selection
             var spiralPath = GetSpiralPath();
             if (settings.SpiralEnabled && settings.PlayerLevel >= 10 && !string.IsNullOrEmpty(spiralPath))
             {
@@ -204,14 +164,13 @@ private const int WCA_ACCENT_POLICY = 19;
                 if (_spiralWindows.Count == 0)
                     StartSpiral();
                 else
-                    UpdateSpiralOpacity(); // Update opacity if already running
+                    UpdateSpiralOpacity();
             }
             else
             {
                 StopSpiral();
             }
 
-            // Brain Drain Blur
             if (settings.BrainDrainEnabled && settings.PlayerLevel >= 90)
             {
                 if (_brainDrainBlurWindows.Count == 0)
@@ -233,12 +192,11 @@ private const int WCA_ACCENT_POLICY = 19;
     {
         var settings = App.Settings.Current;
 
-        // Check level requirement
         if (settings.PlayerLevel < 10)
         {
             StopPinkFilter();
             StopSpiral();
-            StopBrainDrainBlur(); // Also stop Brain Drain if level is too low
+            StopBrainDrainBlur();
             return;
         }
 
@@ -255,7 +213,6 @@ private const int WCA_ACCENT_POLICY = 19;
             UpdatePinkFilterOpacity();
         }
 
-        // Spiral - use GetSpiralPath to allow random selection
         var spiralPath = GetSpiralPath();
         if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath) && _spiralWindows.Count == 0)
         {
@@ -282,12 +239,10 @@ private const int WCA_ACCENT_POLICY = 19;
         {
             var settings = App.Settings.Current;
             
-            // Get all screens if dual monitor enabled, otherwise just primary
             var screens = settings.DualMonitorEnabled 
                 ? System.Windows.Forms.Screen.AllScreens 
                 : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
 
-            // Create overlay for each screen
             foreach (var screen in screens)
             {
                 var window = CreatePinkFilterForScreen(screen, settings.PinkFilterOpacity);
@@ -310,12 +265,8 @@ private const int WCA_ACCENT_POLICY = 19;
     {
         try
         {
-            // Get the actual DPI for THIS specific monitor
             double monitorDpi = GetMonitorDpi(screen);
             double primaryDpi = GetPrimaryMonitorDpi();
-            
-            // WPF uses primary monitor DPI for coordinate system
-            // We need to convert physical pixels to WPF units
             double scale = primaryDpi / 96.0;
             
             double left = screen.Bounds.X / scale;
@@ -323,14 +274,13 @@ private const int WCA_ACCENT_POLICY = 19;
             double width = screen.Bounds.Width / scale;
             double height = screen.Bounds.Height / scale;
 
-            // Apply exponential curve for finer control at low values
             var actualOpacity = Math.Pow(opacity / 100.0, 2);
 
             var pinkOverlay = new Border
             {
                 Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(
                                     (byte)(actualOpacity * 255), 255, 105, 180)),
-                Opacity = 1.0 // Opacity handled by the solid color brush's alpha
+                Opacity = 1.0
             };
 
             var window = new Window
@@ -384,22 +334,22 @@ private const int WCA_ACCENT_POLICY = 19;
 
     private void UpdatePinkFilterOpacity()
     {
-                    // Apply exponential curve for finer control at low values
-                    var actualOpacity = Math.Pow(App.Settings.Current.PinkFilterOpacity / 100.0, 2);
-                    foreach (var window in _pinkFilterWindows)
-                    {
-                        if (window.Content is Border border)
-                        {
-                            if (border.Background is System.Windows.Media.SolidColorBrush brush)
-                            {
-                                brush.Color = System.Windows.Media.Color.FromArgb((byte)(actualOpacity * 255), 255, 105, 180);
-                            }
-                        }
-                    }    }
+        var actualOpacity = Math.Pow(App.Settings.Current.PinkFilterOpacity / 100.0, 2);
+        foreach (var window in _pinkFilterWindows)
+        {
+            if (window.Content is Border border)
+            {
+                if (border.Background is System.Windows.Media.SolidColorBrush brush)
+                {
+                    brush.Color = System.Windows.Media.Color.FromArgb((byte)(actualOpacity * 255), 255, 105, 180);
+                }
+            }
+        }
+    }
 
     #endregion
 
-    #region Spiral Overlay
+    #region Spiral
 
     private void StartSpiral()
     {
@@ -408,25 +358,16 @@ private const int WCA_ACCENT_POLICY = 19;
         try
         {
             var settings = App.Settings.Current;
-            _spiralPath = settings.SpiralPath;
 
-            if (string.IsNullOrEmpty(_spiralPath) || !File.Exists(_spiralPath))
-            {
-                App.Logger?.Warning("Spiral path not set or file not found: {Path}", _spiralPath);
-                return;
-            }
-
-            // Check if it's a GIF
-            _isGifSpiral = Path.GetExtension(_spiralPath).Equals(".gif", StringComparison.OrdinalIgnoreCase);
-
-            // Get all screens if dual monitor enabled, otherwise just primary
             var screens = settings.DualMonitorEnabled 
                 ? System.Windows.Forms.Screen.AllScreens 
                 : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
 
+            _isGifSpiral = _spiralPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
+
             foreach (var screen in screens)
             {
-                var (window, media) = CreateSpiralForScreen(screen, _spiralPath, settings.SpiralOpacity);
+                var (window, media) = CreateSpiralForScreen(screen, settings.SpiralOpacity);
                 if (window != null)
                 {
                     _spiralWindows.Add(window);
@@ -437,27 +378,15 @@ private const int WCA_ACCENT_POLICY = 19;
                 }
             }
 
-            // For GIFs, setup a timer to force loop (MediaElement doesn't loop GIFs well)
             if (_isGifSpiral && _spiralMediaElements.Count > 0)
             {
-                _gifLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-                _gifLoopTimer.Tick += (s, e) =>
-                {
-                    foreach (var media in _spiralMediaElements)
-                    {
-                        try
-                        {
-                            media.Position = TimeSpan.Zero;
-                            media.Play();
-                        }
-                        catch { }
-                    }
-                };
+                _gifLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+                _gifLoopTimer.Tick += GifLoopTimer_Tick;
                 _gifLoopTimer.Start();
             }
 
-            App.Logger?.Debug("Spiral started on {Count} screens: {Path} at opacity {Opacity}% (GIF: {IsGif})", 
-                _spiralWindows.Count, _spiralPath, settings.SpiralOpacity, _isGifSpiral);
+            App.Logger?.Debug("Spiral started on {Count} screens at opacity {Opacity}%", 
+                _spiralWindows.Count, settings.SpiralOpacity);
         }
         catch (Exception ex)
         {
@@ -465,15 +394,24 @@ private const int WCA_ACCENT_POLICY = 19;
         }
     }
 
-    private (Window?, MediaElement?) CreateSpiralForScreen(System.Windows.Forms.Screen screen, string spiralPath, int opacity)
+    private void GifLoopTimer_Tick(object? sender, EventArgs e)
+    {
+        foreach (var media in _spiralMediaElements)
+        {
+            if (media.NaturalDuration.HasTimeSpan && 
+                media.Position >= media.NaturalDuration.TimeSpan - TimeSpan.FromMilliseconds(100))
+            {
+                media.Position = TimeSpan.Zero;
+            }
+        }
+    }
+
+    private (Window? window, MediaElement? media) CreateSpiralForScreen(System.Windows.Forms.Screen screen, int opacity)
     {
         try
         {
-            // Get the actual DPI for THIS specific monitor
             double monitorDpi = GetMonitorDpi(screen);
             double primaryDpi = GetPrimaryMonitorDpi();
-            
-            // WPF uses primary monitor DPI for coordinate system
             double scale = primaryDpi / 96.0;
             
             double left = screen.Bounds.X / scale;
@@ -481,39 +419,24 @@ private const int WCA_ACCENT_POLICY = 19;
             double width = screen.Bounds.Width / scale;
             double height = screen.Bounds.Height / scale;
 
-            // Apply exponential curve for finer control at low values
             var actualOpacity = Math.Pow(opacity / 100.0, 2);
-            
-            var media = new MediaElement
+
+            var mediaElement = new MediaElement
             {
-                Source = new Uri(spiralPath),
-                LoadedBehavior = MediaState.Manual,
+                Source = new Uri(_spiralPath),
+                LoadedBehavior = MediaState.Play,
                 UnloadedBehavior = MediaState.Manual,
                 Stretch = Stretch.UniformToFill,
                 Opacity = actualOpacity,
-                Volume = 0 // Mute spiral videos/gifs
+                IsMuted = true
             };
-            
-            media.MediaEnded += (s, e) =>
+
+            mediaElement.MediaEnded += (s, e) =>
             {
-                Application.Current.Dispatcher.BeginInvoke(() =>
-                {
-                    if (media != null)
-                    {
-                        media.Position = TimeSpan.Zero;
-                        media.Play();
-                    }
-                });
+                mediaElement.Position = TimeSpan.Zero;
+                mediaElement.Play();
             };
-            
-            media.MediaOpened += (s, e) =>
-            {
-                Application.Current.Dispatcher.BeginInvoke(() =>
-                {
-                    media?.Play();
-                });
-            };
-            
+
             var window = new Window
             {
                 WindowStyle = System.Windows.WindowStyle.None,
@@ -529,7 +452,7 @@ private const int WCA_ACCENT_POLICY = 19;
                 Top = top,
                 Width = width,
                 Height = height,
-                Content = media
+                Content = mediaElement
             };
 
             window.SourceInitialized += (s, e) =>
@@ -540,12 +463,8 @@ private const int WCA_ACCENT_POLICY = 19;
             };
 
             window.Show();
-            media.Play();
             
-            App.Logger?.Debug("Spiral for {Screen} at {X},{Y} size {W}x{H} (MonitorDPI:{MonDpi}, PrimaryDPI:{PriDpi})", 
-                screen.DeviceName, left, top, width, height, monitorDpi, primaryDpi);
-
-            return (window, media);
+            return (window, mediaElement);
         }
         catch (Exception ex)
         {
@@ -556,13 +475,12 @@ private const int WCA_ACCENT_POLICY = 19;
 
     private void StopSpiral()
     {
-        // Stop GIF loop timer
         _gifLoopTimer?.Stop();
         _gifLoopTimer = null;
-        
+
         foreach (var media in _spiralMediaElements)
         {
-            try { media.Stop(); } catch { }
+            try { media.Stop(); media.Close(); } catch { }
         }
         _spiralMediaElements.Clear();
 
@@ -571,13 +489,11 @@ private const int WCA_ACCENT_POLICY = 19;
             try { window.Close(); } catch { }
         }
         _spiralWindows.Clear();
-        
         App.Logger?.Debug("Spiral stopped");
     }
 
     private void UpdateSpiralOpacity()
     {
-        // Apply exponential curve for finer control at low values
         var opacity = Math.Pow(App.Settings.Current.SpiralOpacity / 100.0, 2);
         foreach (var media in _spiralMediaElements)
         {
@@ -587,274 +503,469 @@ private const int WCA_ACCENT_POLICY = 19;
 
     #endregion
 
-#region Brain Drain Blur
+    #region Brain Drain Blur (DXGI Desktop Duplication)
 
-private Dictionary<Window, System.Windows.Controls.Image> _brainDrainImages = new();
-private Dictionary<Window, System.Windows.Forms.Screen> _brainDrainScreens = new();
-private DispatcherTimer? _brainDrainCaptureTimer;
-private int _currentBrainDrainIntensity = 50;
+    private Dictionary<Window, System.Windows.Controls.Image> _brainDrainImages = new();
+    private Dictionary<Window, System.Windows.Forms.Screen> _brainDrainScreens = new();
+    private Dictionary<int, DesktopDuplicator> _desktopDuplicators = new();
+    private DispatcherTimer? _brainDrainCaptureTimer;
+    private int _currentBrainDrainIntensity = 50;
 
-public void StartBrainDrainBlur(int intensity)
-{
-    if (_brainDrainBlurWindows.Count > 0) return;
-
-    _currentBrainDrainIntensity = intensity;
-
-    Application.Current.Dispatcher.Invoke(() =>
+    /// <summary>
+    /// DXGI Desktop Duplication wrapper for efficient screen capture
+    /// </summary>
+    private class DesktopDuplicator : IDisposable
     {
-        try
-        {
-            var settings = App.Settings.Current;
-            var screens = settings.DualMonitorEnabled
-                ? System.Windows.Forms.Screen.AllScreens
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+        private SharpDX.Direct3D11.Device? _device;
+        private OutputDuplication? _duplication;
+        private Texture2D? _stagingTexture;
+        private readonly int _width;
+        private readonly int _height;
+        private bool _disposed;
 
-            foreach (var screen in screens)
+        public int Width => _width;
+        public int Height => _height;
+        public bool IsValid => _duplication != null && !_disposed;
+
+        public DesktopDuplicator(int adapterIndex, int outputIndex)
+        {
+            try
             {
-                var window = CreateBrainDrainWindow(screen, intensity);
-                if (window != null)
+                using var factory = new Factory1();
+                using var adapter = factory.GetAdapter1(adapterIndex);
+                
+                _device = new SharpDX.Direct3D11.Device(adapter, DeviceCreationFlags.BgraSupport);
+                
+                using var output = adapter.GetOutput(outputIndex);
+                var outputDesc = output.Description;
+                _width = outputDesc.DesktopBounds.Right - outputDesc.DesktopBounds.Left;
+                _height = outputDesc.DesktopBounds.Bottom - outputDesc.DesktopBounds.Top;
+
+                using var output1 = output.QueryInterface<Output1>();
+                _duplication = output1.DuplicateOutput(_device);
+
+                // Create staging texture for CPU access
+                var stagingDesc = new Texture2DDescription
                 {
-                    _brainDrainBlurWindows.Add(window);
+                    Width = _width,
+                    Height = _height,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    Format = Format.B8G8R8A8_UNorm,
+                    SampleDescription = new SampleDescription(1, 0),
+                    Usage = ResourceUsage.Staging,
+                    CpuAccessFlags = CpuAccessFlags.Read,
+                    BindFlags = BindFlags.None
+                };
+                _stagingTexture = new Texture2D(_device, stagingDesc);
+
+                App.Logger?.Debug("DesktopDuplicator initialized: Adapter {Adapter}, Output {Output}, Size {W}x{H}",
+                    adapterIndex, outputIndex, _width, _height);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error("Failed to initialize DesktopDuplicator: {Error}", ex.Message);
+                Dispose();
+                throw;
+            }
+        }
+
+        public BitmapSource? CaptureFrame()
+        {
+            if (_disposed || _duplication == null || _device == null || _stagingTexture == null)
+                return null;
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                // Try to acquire next frame (0ms timeout = don't wait)
+                var result = _duplication.TryAcquireNextFrame(0, out var frameInfo, out var desktopResource);
+                
+                if (result.Failure)
+                {
+                    // No new frame available, which is fine
+                    return null;
+                }
+
+                try
+                {
+                    using var desktopTexture = desktopResource.QueryInterface<Texture2D>();
+                    
+                    // Copy to staging texture
+                    _device.ImmediateContext.CopyResource(desktopTexture, _stagingTexture);
+
+                    // Map staging texture to CPU memory
+                    var dataBox = _device.ImmediateContext.MapSubresource(
+                        _stagingTexture, 0, MapMode.Read, SharpDX.Direct3D11.MapFlags.None);
+
+                    try
+                    {
+                        // Create WPF BitmapSource from the data
+                        var bitmap = new WriteableBitmap(_width, _height, 96, 96, PixelFormats.Bgra32, null);
+                        bitmap.Lock();
+
+                        try
+                        {
+                            // Copy row by row (handle pitch/stride differences)
+                            var destPtr = bitmap.BackBuffer;
+                            var srcPtr = dataBox.DataPointer;
+                            var destStride = bitmap.BackBufferStride;
+                            var srcStride = dataBox.RowPitch;
+
+                            for (int y = 0; y < _height; y++)
+                            {
+                                Utilities.CopyMemory(
+                                    destPtr + y * destStride,
+                                    srcPtr + y * srcStride,
+                                    _width * 4);
+                            }
+
+                            bitmap.AddDirtyRect(new Int32Rect(0, 0, _width, _height));
+                        }
+                        finally
+                        {
+                            bitmap.Unlock();
+                        }
+
+                        bitmap.Freeze();
+                        stopwatch.Stop();
+                        App.Logger?.Debug("DesktopDuplicator.CaptureFrame: Capture & conversion finished in {ElapsedMs}ms (Size: {W}x{H})", stopwatch.ElapsedMilliseconds, _width, _height);
+                        return bitmap;
+                    }
+                    finally
+                    {
+                        _device.ImmediateContext.UnmapSubresource(_stagingTexture, 0);
+                    }
+                }
+                finally
+                {
+                    desktopResource?.Dispose();
+                    _duplication.ReleaseFrame();
                 }
             }
+            catch (SharpDXException ex) when (ex.ResultCode.Code == SharpDX.DXGI.ResultCode.WaitTimeout.Result.Code)
+            {
+                // Timeout is expected when no new frame
+                return null;
+            }
+            catch (SharpDXException ex) when (ex.ResultCode.Code == SharpDX.DXGI.ResultCode.AccessLost.Result.Code)
+            {
+                // Desktop duplication lost (e.g., resolution change, secure desktop)
+                App.Logger?.Warning("Desktop duplication access lost, will reinitialize");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error("DesktopDuplicator CaptureFrame error: {Error}", ex.Message);
+                return null;
+            }
+        }
 
-            // Use CompositionTarget.Rendering for optimal synchronization with display refresh.
-            // Screen capture is offloaded to a background thread.
-            System.Windows.Media.CompositionTarget.Rendering += CompositionTarget_Rendering;
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
 
-            App.Logger?.Debug("Brain Drain started on {Count} screens at intensity {Intensity}%",
-                _brainDrainBlurWindows.Count, intensity);
+            _stagingTexture?.Dispose();
+            _stagingTexture = null;
+
+            _duplication?.Dispose();
+            _duplication = null;
+
+            _device?.Dispose();
+            _device = null;
+        }
+    }
+
+    public void StartBrainDrainBlur(int intensity)
+    {
+        if (_brainDrainBlurWindows.Count > 0) return;
+
+        _currentBrainDrainIntensity = intensity;
+
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            try
+            {
+                var settings = App.Settings.Current;
+                var screens = settings.DualMonitorEnabled
+                    ? System.Windows.Forms.Screen.AllScreens
+                    : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+                // Initialize desktop duplicators for each output
+                InitializeDesktopDuplicators(screens);
+
+                foreach (var screen in screens)
+                {
+                    var window = CreateBrainDrainWindow(screen, intensity);
+                    if (window != null)
+                    {
+                        _brainDrainBlurWindows.Add(window);
+                    }
+                }
+
+                // Start capture timer at 45 FPS (~22ms interval)
+                _brainDrainCaptureTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(22)
+                };
+                _brainDrainCaptureTimer.Tick += BrainDrainCaptureTick;
+                _brainDrainCaptureTimer.Start();
+
+                App.Logger?.Debug("Brain Drain started on {Count} screens at intensity {Intensity}% using DXGI",
+                    _brainDrainBlurWindows.Count, intensity);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error("Failed to start Brain Drain: {Error}", ex.Message);
+            }
+        });
+    }
+
+    private void InitializeDesktopDuplicators(System.Windows.Forms.Screen[] screens)
+    {
+        // Clean up existing duplicators
+        foreach (var dup in _desktopDuplicators.Values)
+        {
+            dup.Dispose();
+        }
+        _desktopDuplicators.Clear();
+
+        // Map screens to DXGI outputs
+        try
+        {
+            using var factory = new Factory1();
+            
+            for (int adapterIdx = 0; adapterIdx < factory.GetAdapterCount1(); adapterIdx++)
+            {
+                using var adapter = factory.GetAdapter1(adapterIdx);
+                
+                for (int outputIdx = 0; outputIdx < adapter.GetOutputCount(); outputIdx++)
+                {
+                    using var output = adapter.GetOutput(outputIdx);
+                    var bounds = output.Description.DesktopBounds;
+                    
+                    // Find matching screen
+                    for (int screenIdx = 0; screenIdx < screens.Length; screenIdx++)
+                    {
+                        var screen = screens[screenIdx];
+                        if (screen.Bounds.X == bounds.Left && 
+                            screen.Bounds.Y == bounds.Top &&
+                            screen.Bounds.Width == bounds.Right - bounds.Left &&
+                            screen.Bounds.Height == bounds.Bottom - bounds.Top)
+                        {
+                            try
+                            {
+                                _desktopDuplicators[screenIdx] = new DesktopDuplicator(adapterIdx, outputIdx);
+                                App.Logger?.Debug("Mapped screen {ScreenIdx} ({Name}) to adapter {Adapter} output {Output}",
+                                    screenIdx, screen.DeviceName, adapterIdx, outputIdx);
+                            }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Warning("Failed to create duplicator for screen {Idx}: {Error}", screenIdx, ex.Message);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
-            App.Logger?.Error("Failed to start Brain Drain: {Error}", ex.Message);
+            App.Logger?.Error("Failed to initialize desktop duplicators: {Error}", ex.Message);
         }
-    });
-}
-
-public void StopBrainDrainBlur()
-{
-    Application.Current.Dispatcher.Invoke(() =>
-    {
-        System.Windows.Media.CompositionTarget.Rendering -= CompositionTarget_Rendering;
-
-        foreach (var window in _brainDrainBlurWindows)
-        {
-            try { window.Close(); } catch { }
-        }
-        _brainDrainBlurWindows.Clear();
-        _brainDrainImages.Clear();
-        _brainDrainScreens.Clear();
-        
-        App.Logger?.Debug("Brain Drain stopped");
-    });
-}
-
-public void UpdateBrainDrainBlurOpacity(int intensity)
-{
-    _currentBrainDrainIntensity = intensity;
-    
-    // Update blur radius on all images
-    double blurRadius = intensity * 0.3; // 0-30 blur radius for 0-100% intensity
-    
-    Application.Current.Dispatcher.Invoke(() =>
-    {
-        foreach (var img in _brainDrainImages.Values)
-        {
-            if (img.Effect is System.Windows.Media.Effects.BlurEffect blur)
-            {
-                blur.Radius = blurRadius;
-            }
-        }
-    });
-}
-
-private volatile int _captureLock = 0; // Use Interlocked for atomic access
-
-private void CompositionTarget_Rendering(object? sender, EventArgs e)
-{
-    // Trigger capture and display update on rendering tick
-    ProcessBrainDrainCaptureAndDisplay();
-}
-
-private void ProcessBrainDrainCaptureAndDisplay()
-{
-    if (_brainDrainImages.Count == 0)
-    {
-        System.Windows.Media.CompositionTarget.Rendering -= CompositionTarget_Rendering; // Stop updates if no images
-        return;
     }
 
-    // Try to acquire the lock. If another capture is already in progress, skip this frame.
-    if (System.Threading.Interlocked.CompareExchange(ref _captureLock, 1, 0) != 0)
+    public void StopBrainDrainBlur()
     {
-        return; // A capture is already in progress, skip this rendering frame
-    }
-
-    // Capture all screens on a background thread
-    System.Threading.Tasks.Task.Run(() =>
-    {
-        var currentCaptures = new Dictionary<Window, BitmapSource?>();
-
-        // Hide all blur windows before capture to prevent capturing ourselves (on UI thread)
         Application.Current.Dispatcher.Invoke(() =>
         {
+            _brainDrainCaptureTimer?.Stop();
+            _brainDrainCaptureTimer = null;
+
             foreach (var window in _brainDrainBlurWindows)
             {
-                window.Opacity = 0;
+                try { window.Close(); } catch { }
             }
-            // Force layout update to ensure windows are hidden before capture
-            Application.Current.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
-        });
+            _brainDrainBlurWindows.Clear();
+            _brainDrainImages.Clear();
+            _brainDrainScreens.Clear();
 
+            // Clean up desktop duplicators
+            foreach (var dup in _desktopDuplicators.Values)
+            {
+                dup.Dispose();
+            }
+            _desktopDuplicators.Clear();
+
+            App.Logger?.Debug("Brain Drain stopped");
+        });
+    }
+
+    public void UpdateBrainDrainBlurOpacity(int intensity)
+    {
+        _currentBrainDrainIntensity = intensity;
+
+        double blurRadius = intensity * 0.3;
+
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            foreach (var img in _brainDrainImages.Values)
+            {
+                if (img.Effect is System.Windows.Media.Effects.BlurEffect blur)
+                {
+                    blur.Radius = blurRadius;
+                }
+            }
+        });
+    }
+
+    private void BrainDrainCaptureTick(object? sender, EventArgs e)
+    {
+        if (_brainDrainImages.Count == 0)
+        {
+            _brainDrainCaptureTimer?.Stop();
+            return;
+        }
+
+        var settings = App.Settings.Current;
+        var screens = settings.DualMonitorEnabled
+            ? System.Windows.Forms.Screen.AllScreens
+            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+        // Capture and update each screen
+        int screenIdx = 0;
         foreach (var kvp in _brainDrainImages)
         {
             var window = kvp.Key;
-            if (_brainDrainScreens.TryGetValue(window, out var screen))
-            {
-                currentCaptures[window] = CaptureScreen(screen);
-            }
-        }
+            var image = kvp.Value;
 
-        // Update image sources and show windows on the UI thread
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            foreach (var kvp in _brainDrainImages)
+            if (_desktopDuplicators.TryGetValue(screenIdx, out var duplicator) && duplicator.IsValid)
             {
-                var window = kvp.Key;
-                var image = kvp.Value;
-                
-                if (currentCaptures.TryGetValue(window, out var capture) && capture != null)
+                var capture = duplicator.CaptureFrame();
+                if (capture != null)
                 {
                     image.Source = capture;
                 }
+                // If capture is null, keep the previous frame (no flicker)
+            }
+            else
+            {
+                // Fallback to BitBlt if DXGI not available for this screen
+                if (_brainDrainScreens.TryGetValue(window, out var screen))
+                {
+                    var capture = CaptureScreenFallback(screen);
+                    if (capture != null)
+                    {
+                        image.Source = capture;
+                    }
+                }
             }
 
-            foreach (var window in _brainDrainBlurWindows)
-            {
-                window.Opacity = 1;
-            }
-        });
-    }).ContinueWith(task => // Ensure the flag is reset even if task fails
-    {
-        System.Threading.Interlocked.Exchange(ref _captureLock, 0); // Release the lock
-        if (task.IsFaulted)
-        {
-            App.Logger?.Error("ProcessBrainDrainCaptureAndDisplay: Background capture task failed: {Error}", task.Exception);
+            screenIdx++;
         }
-    });
-}
+    }
 
-private Window? CreateBrainDrainWindow(System.Windows.Forms.Screen screen, int intensity)
-{
-    try
+    private Window? CreateBrainDrainWindow(System.Windows.Forms.Screen screen, int intensity)
     {
-        double primaryDpi = GetPrimaryMonitorDpi();
-        double scale = primaryDpi / 96.0;
-
-        double left = screen.Bounds.X / scale;
-        double top = screen.Bounds.Y / scale;
-        double width = screen.Bounds.Width / scale;
-        double height = screen.Bounds.Height / scale;
-
-        double blurRadius = intensity * 0.3; // 0-30 blur radius
-
-        var image = new System.Windows.Controls.Image
+        try
         {
-            Stretch = Stretch.Fill,
-            Effect = new System.Windows.Media.Effects.BlurEffect
+            double primaryDpi = GetPrimaryMonitorDpi();
+            double scale = primaryDpi / 96.0;
+
+            double left = screen.Bounds.X / scale;
+            double top = screen.Bounds.Y / scale;
+            double width = screen.Bounds.Width / scale;
+            double height = screen.Bounds.Height / scale;
+
+            double blurRadius = intensity * 0.3;
+
+            var image = new System.Windows.Controls.Image
             {
-                Radius = blurRadius,
-                KernelType = System.Windows.Media.Effects.KernelType.Gaussian
-            }
-        };
+                Stretch = Stretch.Fill,
+                Effect = new System.Windows.Media.Effects.BlurEffect
+                {
+                    Radius = blurRadius,
+                    KernelType = System.Windows.Media.Effects.KernelType.Gaussian
+                }
+            };
 
-        var window = new Window
+            var window = new Window
+            {
+                WindowStyle = System.Windows.WindowStyle.None,
+                AllowsTransparency = true,
+                Background = System.Windows.Media.Brushes.Transparent,
+                Topmost = true,
+                ShowInTaskbar = false,
+                ShowActivated = false,
+                Focusable = false,
+                IsHitTestVisible = false,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = left,
+                Top = top,
+                Width = width,
+                Height = height,
+                Content = image
+            };
+
+            window.SourceInitialized += (s, e) =>
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
+            };
+
+            window.Show();
+
+            _brainDrainImages[window] = image;
+            _brainDrainScreens[window] = screen;
+
+            return window;
+        }
+        catch (Exception ex)
         {
-            WindowStyle = System.Windows.WindowStyle.None,
-            AllowsTransparency = true,
-            Background = System.Windows.Media.Brushes.Transparent,
-            Topmost = true,
-            ShowInTaskbar = false,
-            ShowActivated = false,
-            Focusable = false,
-            IsHitTestVisible = false,
-            WindowStartupLocation = WindowStartupLocation.Manual,
-            Left = left,
-            Top = top,
-            Width = width,
-            Height = height,
-            Content = image
-        };
-
-        window.SourceInitialized += (s, e) =>
-        {
-            var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
-            var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
-        };
-
-        window.Show();
-        
-        _brainDrainImages[window] = image;
-        _brainDrainScreens[window] = screen;
-
-        // Initial capture
-        var capture = CaptureScreen(screen);
-        if (capture != null) image.Source = capture;
-
-        return window;
-    }
-    catch (Exception ex)
-    {
             App.Logger?.Error("Failed to create Brain Drain window: {Error}", ex.Message);
-        return null;
+            return null;
+        }
     }
-}
 
-private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
-{
-    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-    try
+    /// <summary>
+    /// Fallback capture using BitBlt (for when DXGI is unavailable)
+    /// </summary>
+    private BitmapSource? CaptureScreenFallback(System.Windows.Forms.Screen screen)
     {
-        App.Logger?.Debug("CaptureScreen: Starting capture for screen {ScreenName} ({Width}x{Height})", screen.DeviceName, screen.Bounds.Width, screen.Bounds.Height);
+        try
+        {
+            var hdcSrc = GetDC(IntPtr.Zero);
+            var hdcDest = CreateCompatibleDC(hdcSrc);
+            var hBitmap = CreateCompatibleBitmap(hdcSrc, screen.Bounds.Width, screen.Bounds.Height);
+            var hOld = SelectObject(hdcDest, hBitmap);
 
-        var hdcSrc = GetDC(IntPtr.Zero);
-        var hdcDest = CreateCompatibleDC(hdcSrc);
-        var hBitmap = CreateCompatibleBitmap(hdcSrc, screen.Bounds.Width, screen.Bounds.Height);
-        var hOld = SelectObject(hdcDest, hBitmap);
+            BitBlt(hdcDest, 0, 0, screen.Bounds.Width, screen.Bounds.Height,
+                   hdcSrc, screen.Bounds.X, screen.Bounds.Y, SRCCOPY);
 
-        BitBlt(hdcDest, 0, 0, screen.Bounds.Width, screen.Bounds.Height,
-               hdcSrc, screen.Bounds.X, screen.Bounds.Y, SRCCOPY);
+            SelectObject(hdcDest, hOld);
+            DeleteDC(hdcDest);
+            ReleaseDC(IntPtr.Zero, hdcSrc);
 
-        SelectObject(hdcDest, hOld);
-        DeleteDC(hdcDest);
-        ReleaseDC(IntPtr.Zero, hdcSrc);
+            var bitmapSource = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
+                hBitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
 
-        var bitmapSource = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
-            hBitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+            DeleteObject(hBitmap);
+            bitmapSource.Freeze();
 
-        DeleteObject(hBitmap);
-        bitmapSource.Freeze(); // Important for cross-thread access
-
-        stopwatch.Stop();
-        App.Logger?.Debug("CaptureScreen: Finished capture for screen {ScreenName} in {ElapsedMs}ms", screen.DeviceName, stopwatch.ElapsedMilliseconds);
-        return bitmapSource;
+            return bitmapSource;
+        }
+        catch
+        {
+            return null;
+        }
     }
-    catch (Exception ex)
-    {
-        stopwatch.Stop();
-        App.Logger?.Error("CaptureScreen: Failed to capture screen {ScreenName} in {ElapsedMs}ms: {Error}", screen.DeviceName, stopwatch.ElapsedMilliseconds, ex.Message);
-        return null;
-    }
-}
-#endregion
+
+    #endregion
 
     #region Helpers
 
-    /// <summary>
-    /// Get DPI for a specific monitor
-    /// </summary>
     private double GetMonitorDpi(System.Windows.Forms.Screen screen)
     {
         try
@@ -873,9 +984,6 @@ private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
         return 96.0;
     }
 
-    /// <summary>
-    /// Get DPI for the primary monitor
-    /// </summary>
     private double GetPrimaryMonitorDpi()
     {
         try
@@ -890,32 +998,22 @@ private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
         return 96.0;
     }
 
-    /// <summary>
-    /// Get DPI scale for a specific screen using its bounds
-    /// This handles multi-monitor setups with different scaling per monitor
-    /// </summary>
     private double GetDpiScaleForScreen(System.Windows.Forms.Screen screen)
     {
         try
         {
-            // Try to get per-monitor DPI using Win32 API
-            var hwnd = IntPtr.Zero;
-            
-            // Get DPI for the monitor this screen is on
             uint dpiX = 96, dpiY = 96;
             var hMonitor = MonitorFromPoint(new POINT { X = screen.Bounds.X + 1, Y = screen.Bounds.Y + 1 }, 2);
-            
+
             if (hMonitor != IntPtr.Zero)
             {
-                // Try GetDpiForMonitor (Windows 8.1+)
                 var result = GetDpiForMonitor(hMonitor, 0, out dpiX, out dpiY);
                 if (result == 0)
                 {
                     return dpiX / 96.0;
                 }
             }
-            
-            // Fallback to system DPI
+
             using var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero);
             return g.DpiX / 96.0;
         }
@@ -964,7 +1062,6 @@ private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
 
-    // Per-monitor DPI support (Windows 8.1+)
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
 
@@ -974,7 +1071,6 @@ private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
     [System.Runtime.InteropServices.DllImport("shcore.dll")]
     private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
-    // SetWindowPos for positioning windows in physical pixels
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     private const uint SWP_SHOWWINDOW = 0x0040;
     private const uint SWP_NOACTIVATE = 0x0010;
@@ -983,7 +1079,6 @@ private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
-    // For refresh rate
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     public static extern bool EnumDisplaySettingsEx(string? lpszDeviceName, uint iModeNum, ref DEVMODE lpDevMode, uint dwFlags);
 
@@ -1053,7 +1148,7 @@ private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
         {
             return (int)dm.dmDisplayFrequency;
         }
-        return 60; // Default to 60Hz if unable to get refresh rate
+        return 60;
     }
 
     #endregion
