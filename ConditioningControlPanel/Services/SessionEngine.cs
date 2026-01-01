@@ -168,6 +168,9 @@ namespace ConditioningControlPanel.Services
             // Stop Mind Wipe
             App.MindWipe?.Stop();
             
+            // Stop Bubbles
+            App.Bubbles?.Stop();
+            
             // Restore original settings
             RestoreSettings();
             
