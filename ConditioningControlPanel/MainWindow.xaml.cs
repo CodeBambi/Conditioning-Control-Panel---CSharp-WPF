@@ -490,7 +490,18 @@ namespace ConditioningControlPanel
                     break;
 
                 case "progression":
-                    ProgressionTab.Visibility = Visibility.Visible;
+                    App.Logger?.Debug("ShowTab: Attempting to make ProgressionTab visible.");
+                    try
+                    {
+                        ProgressionTab.Visibility = Visibility.Visible;
+                        App.Logger?.Debug("ShowTab: ProgressionTab visibility set to Visible.");
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Error("ShowTab: Error making ProgressionTab visible: {Error}", ex.Message);
+                        // Optionally re-throw or show a message box, but for now, just log
+                        throw; 
+                    }
                     BtnProgression.Background = pinkBrush;
                     BtnProgression.Foreground = Brushes.White;
                     break;
