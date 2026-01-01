@@ -1031,15 +1031,13 @@
                                                     <TextBlock Text="30 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                                 <Border Background="#2A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="⭐ +50 XP" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                    <TextBlock Text="{Binding BonusXP, StringFormat='⭐ +{0} XP'}" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Text="Gentle passive conditioning for your morning routine" 
                                                        Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
-                                        <TextBlock Text="▶" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="{StaticResource PinkBrush}" FontSize="18"/>
-                                    </Grid>
+                                                                            </Grid>
                                 </Border>
                                 
                                 <!-- Gamer Girl - Available -->
@@ -1064,15 +1062,13 @@
                                                     <TextBlock Text="45 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                                 <Border Background="#3A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="⭐⭐ +100 XP" Foreground="#FFD700" FontSize="9" FontWeight="Bold"/>
+                                                    <TextBlock Text="{Binding BonusXP, StringFormat='⭐⭐ +{0} XP'}" Foreground="#FFD700" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Text="Background conditioning while you game" 
                                                        Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
-                                        <TextBlock Text="▶" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="{StaticResource PinkBrush}" FontSize="18"/>
-                                    </Grid>
+                                                                            </Grid>
                                 </Border>
                                 
                                 <!-- The Distant Doll - Available -->
@@ -1097,15 +1093,13 @@
                                                     <TextBlock Text="45 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                                 <Border Background="#2A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="⭐ +75 XP" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                    <TextBlock Text="{Binding BonusXP, StringFormat='⭐ +{0} XP'}" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Text="Passive couch session - no audio ducking" 
                                                        Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
-                                        <TextBlock Text="▶" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="{StaticResource PinkBrush}" FontSize="18"/>
-                                    </Grid>
+                                                                            </Grid>
                                 </Border>
                                 
                                 <!-- Good Girls Don't Cum - Available -->
@@ -1130,15 +1124,13 @@
                                                     <TextBlock Text="60 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                                 <Border Background="#4A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="⭐⭐⭐ +200 XP" Foreground="#FFA500" FontSize="9" FontWeight="Bold"/>
+                                                    <TextBlock Text="{Binding BonusXP, StringFormat='⭐⭐⭐ +{0} XP'}" Foreground="#FFA500" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Text="Denial session - heavy pink fog conditioning" 
                                                        Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
-                                        <TextBlock Text="▶" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="{StaticResource PinkBrush}" FontSize="18"/>
-                                    </Grid>
+                                                                            </Grid>
                                 </Border>
                                 
                                 <!-- Coming Soon Sessions -->
