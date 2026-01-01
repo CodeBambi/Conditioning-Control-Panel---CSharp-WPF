@@ -925,8 +925,10 @@ namespace ConditioningControlPanel
                     TxtSessionSubliminal.Text = _selectedSession.GetSpoilerSubliminal();
                     TxtSessionAudio.Text = _selectedSession.GetSpoilerAudio();
                     TxtSessionOverlays.Text = _selectedSession.GetSpoilerOverlays();
-                                            TxtSessionExtras.Text = _selectedSession.GetSpoilerInteractive();
-                                            TxtSessionTimeline.Text = _selectedSession.GetSpoilerTimeline();                    // Enable/disable start button
+                    TxtSessionExtras.Text = _selectedSession.GetSpoilerExtras();
+                    TxtSessionTimeline.Text = _selectedSession.GetSpoilerTimeline();
+                    
+                    // Enable/disable start button
                     BtnStartSession.IsEnabled = _selectedSession.IsAvailable;
                     BtnStartSession.Content = _selectedSession.IsAvailable ? "▶ Start Session" : "🔒 Coming Soon";
                 }

@@ -346,7 +346,7 @@ Just play your game. Let everything else happen on its own.
             IsAvailable = true,
             Difficulty = SessionDifficulty.Hard,
             BonusXP = 1200,
-            Description = "A challenging denial and edging session designed to test your obedience and focus. Expect frequent conditioning visuals, audio whispers, and interactive elements designed to reinforce your training. Your only purpose is to sit prettily and let the pink fog consume you. And remember not to touch that clitty, Good Girls Don't Cum.",
+            Description = "A good Bambi doesn't need hands. A good Bambi doesn't need release. Your only purpose is to sit prettily and let the pink fog consume you. The video is just background noise; the real content is your denial. And remember not to touch that clitty, Good Girls Don't Cum.",
             
             Settings = new SessionSettings
             {
@@ -402,7 +402,7 @@ Just play your game. Let everything else happen on its own.
                 MindWipeEnabled = true,
                 MindWipeBaseMultiplier = 2, // Medium start (2 per 5min block)
                 MindWipeVolume = 25,
-
+                
                 // Bubbles (ramping)
                 BubblesEnabled = true,
                 BubblesIntermittent = false,
@@ -410,13 +410,11 @@ Just play your game. Let everything else happen on its own.
                 BubblesStartMinute = 5,
                 BubblesFrequency = 1,
                 
-                // Interactive Events
-                MandatoryVideosEnabled = true,
-                VideosPerHour = 2,
-                LockCardEnabled = true,
-                LockCardFrequency = 2,
-                BubbleCountEnabled = true,
-                BubbleCountFrequency = 2
+                // Other interactions disabled
+                MandatoryVideosEnabled = false,
+                LockCardEnabled = false,
+                BubbleCountEnabled = false,
+                MiniGameEnabled = false
             },
             
             Phases = new List<SessionPhase>
@@ -484,29 +482,24 @@ Just play your game. Let everything else happen on its own.
         /// </summary>
         public string GetSpoilerFlash()
         {
-            if (!Settings.FlashEnabled) return "■ Flashes: Disabled";
-            var frequency = Settings.FlashPerHour == Settings.FlashPerHourEnd 
-                ? $"~{Settings.FlashPerHour}/hr" 
-                : $"~{Settings.FlashPerHour}→{Settings.FlashPerHourEnd}/hr";
+            if (!Settings.FlashEnabled) return "Disabled";
             var opacity = Settings.FlashOpacity == Settings.FlashOpacityEnd 
                 ? $"{Settings.FlashOpacity}%" 
-                : $"{Settings.FlashOpacity}% → {Settings.FlashOpacityEnd}%";
-            var scale = Settings.FlashScale == 100 ? "" : $" ({Settings.FlashScale}% size)";
-            var audio = Settings.FlashAudioEnabled ? " audio-linked" : " silent";
-            var clickable = Settings.FlashClickable ? "" : " ghost";
-            return $"■ Flashes: {frequency}, {Settings.FlashImages} images, {opacity}{scale}{audio}{clickable}";
+                : $"{Settings.FlashOpacity}%→{Settings.FlashOpacityEnd}%";
+            return $"~{Settings.FlashPerHour}/hour, {Settings.FlashImages} images, {opacity} opacity, " +
+                   $"{(Settings.FlashClickable ? "clickable" : "ghost/click-through")}, {(Settings.FlashAudioEnabled ? "with audio" : "silent")}";
         }
         
         public string GetSpoilerSubliminal()
         {
-            if (!Settings.SubliminalEnabled) return "■ Text Subliminals: Disabled";
-            return $"■ Text Subliminals: {Settings.SubliminalPerMin}/min, {Settings.SubliminalFrames} frames, {Settings.SubliminalOpacity}% opacity. Uses global phrase pool.";
+            if (!Settings.SubliminalEnabled) return "Disabled";
+            return $"{Settings.SubliminalPerMin}/min, {Settings.SubliminalFrames} frames, {Settings.SubliminalOpacity}% opacity";
         }
         
         public string GetSpoilerAudio()
         {
-            if (!Settings.AudioWhispersEnabled) return "■ Audio Whispers: Disabled";
-            return $"■ Audio Whispers: {Settings.WhisperVolume}% volume. Uses global audio pool.";
+            if (!Settings.AudioWhispersEnabled) return "Whispers disabled";
+            return $"Whispers at {Settings.WhisperVolume}%";
         }
         
         public string GetSpoilerOverlays()
@@ -514,74 +507,38 @@ Just play your game. Let everything else happen on its own.
             var parts = new List<string>();
             if (Settings.PinkFilterEnabled)
             {
-                var ramp = Settings.PinkFilterStartOpacity == Settings.PinkFilterEndOpacity
-                    ? $"{Settings.PinkFilterStartOpacity}%"
-                    : $"{Settings.PinkFilterStartOpacity}% → {Settings.PinkFilterEndOpacity}%";
-                var timing = Settings.PinkFilterStartMinute > 0 ? $" (starts at ~{Settings.PinkFilterStartMinute} min)" : "";
-                parts.Add($"■ Pink Filter: {ramp}{timing}");
+                parts.Add($"Pink: starts {Settings.PinkFilterStartMinute}min, {Settings.PinkFilterStartOpacity}%→{Settings.PinkFilterEndOpacity}%");
             }
             if (Settings.SpiralEnabled)
             {
-                var ramp = Settings.SpiralOpacity == Settings.SpiralOpacityEnd
+                var spiralStart = Settings.SpiralStartMinute > 0 ? $"starts {Settings.SpiralStartMinute}min, " : "";
+                var spiralOpacity = Settings.SpiralOpacity == Settings.SpiralOpacityEnd
                     ? $"{Settings.SpiralOpacity}%"
-                    : $"{Settings.SpiralOpacity}% → {Settings.SpiralOpacityEnd}%";
-                var timing = Settings.SpiralStartMinute > 0 ? $" (starts at ~{Settings.SpiralStartMinute} min)" : "";
-                parts.Add($"■ Spiral Overlay: {ramp}{timing}");
+                    : $"{Settings.SpiralOpacity}%→{Settings.SpiralOpacityEnd}%";
+                parts.Add($"Spiral: {spiralStart}{spiralOpacity}");
             }
-            if (HasCornerGifOption)
-            {
-                var status = Settings.CornerGifEnabled ? "Enabled" : "Optional";
-                parts.Add($"■ Corner GIF: {status} at {Settings.CornerGifOpacity}% opacity");
-            }
-            if (parts.Count == 0) return "■ Overlays: None";
+            if (parts.Count == 0) return "None";
             return string.Join("\n", parts);
         }
         
-        public string GetSpoilerInteractive()
+        public string GetSpoilerExtras()
         {
             var parts = new List<string>();
             if (Settings.BouncingTextEnabled)
             {
                 var speed = Settings.BouncingTextSpeed <= 3 ? "slow" : Settings.BouncingTextSpeed <= 6 ? "medium" : "fast";
-                var phrases = Settings.BouncingTextPhrases.Any() 
-                    ? $"Using phrases: \"{string.Join("\", \"", Settings.BouncingTextPhrases)}\"" 
-                    : "Uses global phrase pool";
-                parts.Add($"■ Bouncing Text: {speed} speed. {phrases}.");
+                parts.Add($"Bouncing text ({speed}): \"{string.Join("\", \"", Settings.BouncingTextPhrases)}\"");
             }
-
             if (Settings.BubblesEnabled)
             {
-                string bubbleDesc;
-                if (Settings.BubblesIntermittent)
-                {
-                    var clickInfo = Settings.BubblesClickable ? "pop to dismiss" : "float-through";
-                    bubbleDesc = $"Intermittent bursts (~{Settings.BubblesBurstCount} total), {clickInfo}.";
-                }
-                else
-                {
-                    var freq = Settings.BubblesFrequency;
-                    var timing = Settings.BubblesStartMinute > 0 ? $"starts at {Settings.BubblesStartMinute} min, ramps up from {freq}/min" : $"~{freq}/min";
-                    bubbleDesc = $"Continuous at {timing}.";
-                }
-                parts.Add($"■ Bubbles: {bubbleDesc}");
+                var clickInfo = Settings.BubblesClickable ? "pop to dismiss" : "float through";
+                parts.Add($"Bubbles: {Settings.BubblesBurstCount} bursts of {Settings.BubblesPerBurst}, {clickInfo}");
             }
-    
-            if (Settings.MandatoryVideosEnabled)
+            if (Settings.CornerGifEnabled || HasCornerGifOption)
             {
-                parts.Add($"■ Mandatory Videos: ~{Settings.VideosPerHour}/hour. Uses global video pool.");
+                parts.Add($"Corner GIF: {(Settings.CornerGifEnabled ? "enabled" : "optional")} at {Settings.CornerGifOpacity}% opacity");
             }
-    
-            if (Settings.LockCardEnabled)
-            {
-                parts.Add($"■ Lock Cards: ~{Settings.LockCardFrequency}/hour. Uses global phrase pool.");
-            }
-
-            if (Settings.BubbleCountEnabled)
-            {
-                parts.Add($"■ Bubble Count Game: ~{Settings.BubbleCountFrequency}/hour.");
-            }
-
-            if (parts.Count == 0) return "■ Interactive Events: None";
+            if (parts.Count == 0) return "None";
             return string.Join("\n", parts);
         }
         
@@ -658,13 +615,10 @@ Just play your game. Let everything else happen on its own.
         public string CornerGifPath { get; set; } = "";
         public CornerPosition CornerGifPosition { get; set; } = CornerPosition.BottomLeft;
         
-        // Interactive Features
+        // Disabled features
         public bool MandatoryVideosEnabled { get; set; }
-        public int? VideosPerHour { get; set; }
         public bool LockCardEnabled { get; set; }
-        public int? LockCardFrequency { get; set; }
         public bool BubbleCountEnabled { get; set; }
-        public int? BubbleCountFrequency { get; set; }
         public bool MiniGameEnabled { get; set; }
         
         // Mind Wipe (escalating audio during sessions)
