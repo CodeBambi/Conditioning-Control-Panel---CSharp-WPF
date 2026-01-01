@@ -649,8 +649,7 @@ public void UpdateBrainDrainBlurOpacity(int intensity)
     Application.Current.Dispatcher.Invoke(() =>
     {
         // Update the opacity/color of each blur window
-        // Higher intensity = more opaque blur overlay
-        var opacity = Math.Clamp(intensity / 100.0, 0.1, 0.9);
+        var opacity = Math.Clamp(intensity / 100.0, 0.01, 0.9);
         
         foreach (var entry in _brainDrainBlurTargets)
         {
@@ -743,7 +742,7 @@ private void EnableBlur(Window window, int intensity)
         
         // Calculate gradient color with intensity-based alpha
         // Format: 0xAABBGGRR (Alpha, Blue, Green, Red)
-        var alpha = (uint)(Math.Clamp(intensity / 100.0, 0.1, 0.7) * 255);
+        var alpha = (uint)(Math.Clamp(intensity / 100.0, 0.01, 0.7) * 255);
         uint gradientColor = (alpha << 24) | 0x00303040; // Semi-transparent dark blue-gray
         
         var accent = new AccentPolicy
