@@ -648,23 +648,35 @@ public void UpdateBrainDrainBlurOpacity(int intensity)
     
     Application.Current.Dispatcher.Invoke(() =>
     {
-        // Update the opacity/color of each blur window
-        var opacity = Math.Clamp((intensity / 100.0) * 0.1, 0.001, 0.08);
+        // Scale opacity based on intensity:
+        // 0-40%: very subtle overlay (alpha 5-30)
+        // 40-100%: stronger overlay + blur kicks in
+        byte alpha;
+        if (intensity < 40)
+        {
+            // Linear scale from ~5 to ~30 alpha for 0-40% intensity
+            alpha = (byte)(5 + (intensity / 40.0) * 25);
+        }
+        else
+        {
+            // Linear scale from 30 to 120 alpha for 40-100% intensity
+            alpha = (byte)(30 + ((intensity - 40) / 60.0) * 90);
+        }
         
         foreach (var entry in _brainDrainBlurTargets)
         {
             entry.Value.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(
-                (byte)(opacity * 180), // Alpha: 0-180 based on intensity
-                200, 200, 220)); // Slight blue-gray tint
+                alpha,
+                180, 170, 200)); // Slight purple-gray tint
         }
         
-        // Re-apply blur effect to windows
+        // Re-apply blur effect (will enable/disable based on threshold)
         foreach (var window in _brainDrainBlurWindows)
         {
             EnableBlur(window, intensity);
         }
         
-        App.Logger?.Debug("Brain Drain blur intensity updated to {Intensity}%", intensity);
+        App.Logger?.Debug("Brain Drain: Updated to {Intensity}% (alpha: {Alpha})", intensity, alpha);
     });
 }
 
@@ -682,13 +694,21 @@ private Window? CreateBrainDrainBlurForScreen(System.Windows.Forms.Screen screen
         double width = screen.Bounds.Width / scale;
         double height = screen.Bounds.Height / scale;
 
-        // Create a semi-transparent background that will receive the blur effect
-        var opacity = Math.Clamp(intensity / 100.0, 0.1, 0.9);
+        byte alpha;
+        if (intensity < 40)
+        {
+            alpha = (byte)(5 + (intensity / 40.0) * 25);
+        }
+        else
+        {
+            alpha = (byte)(30 + ((intensity - 40) / 60.0) * 90);
+        }
+        
         var border = new Border
         {
             Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(
-                (byte)(opacity * 180),
-                200, 200, 220)) // Slight blue-gray tint for "brain drain" effect
+                alpha,
+                180, 170, 200)) // Slight purple-gray tint
         };
 
         var window = new Window
@@ -740,16 +760,50 @@ private void EnableBlur(Window window, int intensity)
     {
         var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
         
-        // Calculate gradient color with intensity-based alpha
+        // ONLY enable DWM blur if intensity is above 40%
+        // Below that, the semi-transparent overlay alone provides the effect
+        if (intensity < 40)
+        {
+            // Disable blur - just use the transparent overlay
+            var accentOff = new AccentPolicy
+            {
+                AccentState = 0, // ACCENT_DISABLED
+                AccentFlags = 0,
+                GradientColor = 0,
+                AnimationId = 0
+            };
+            
+            var sizeOff = System.Runtime.InteropServices.Marshal.SizeOf(accentOff);
+            var ptrOff = System.Runtime.InteropServices.Marshal.AllocHGlobal(sizeOff);
+            System.Runtime.InteropServices.Marshal.StructureToPtr(accentOff, ptrOff, false);
+            
+            var dataOff = new WindowCompositionAttributeData
+            {
+                Attribute = WCA_ACCENT_POLICY,
+                Data = ptrOff,
+                SizeOfData = sizeOff
+            };
+            
+            SetWindowCompositionAttribute(hwnd, ref dataOff);
+            System.Runtime.InteropServices.Marshal.FreeHGlobal(ptrOff);
+            
+            App.Logger?.Debug("Brain Drain: Blur disabled (intensity {Intensity}% < 40%)", intensity);
+            return;
+        }
+        
+        // Calculate alpha based on intensity (40-100 maps to light-heavy tint)
         // Format: 0xAABBGGRR (Alpha, Blue, Green, Red)
-        var alpha = (uint)(Math.Clamp((intensity / 100.0) * 0.1, 0.001, 0.05) * 255);
-        uint gradientColor = (alpha << 24) | 0x00303040; // Semi-transparent dark blue-gray
+        var normalizedIntensity = (intensity - 40) / 60.0; // 0.0 to 1.0 for 40-100%
+        var alpha = (uint)(normalizedIntensity * 0.4 * 255); // Max 40% alpha tint
+        uint gradientColor = (alpha << 24) | 0x00403050; // Semi-transparent purple-gray
+        
+        // Use lighter blur (BLURBEHIND) for 40-70%, full acrylic for 70%+
+        int accentState = intensity >= 70 ? ACCENT_ENABLE_ACRYLICBLURBEHIND : ACCENT_ENABLE_BLURBEHIND;
         
         var accent = new AccentPolicy
         {
-            // Use Acrylic on Windows 10 1803+, fall back to blur on older
-            AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND,
-            AccentFlags = 2, // Draw all borders
+            AccentState = accentState,
+            AccentFlags = 2,
             GradientColor = gradientColor,
             AnimationId = 0
         };
@@ -768,12 +822,12 @@ private void EnableBlur(Window window, int intensity)
         SetWindowCompositionAttribute(hwnd, ref data);
         System.Runtime.InteropServices.Marshal.FreeHGlobal(accentPtr);
         
-        App.Logger?.Debug("Enabled DWM blur for Brain Drain window");
+        App.Logger?.Debug("Brain Drain: Blur enabled (intensity {Intensity}%, mode: {Mode})", 
+            intensity, accentState == ACCENT_ENABLE_ACRYLICBLURBEHIND ? "Acrylic" : "BlurBehind");
     }
     catch (Exception ex)
     {
-        App.Logger?.Warning("Failed to enable DWM blur (falling back to simple overlay): {Error}", ex.Message);
-        // Blur will still work visually through the semi-transparent overlay, just not as smooth
+        App.Logger?.Warning("Failed to enable DWM blur: {Error}", ex.Message);
     }
 }
 
