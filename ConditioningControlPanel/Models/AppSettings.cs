@@ -275,15 +275,7 @@ namespace ConditioningControlPanel.Models
             { "BAMBI SLEEP", true },
             { "BIMBO DOLL", true },
             { "GOOD GIRL", true },
-            { "DROP FOR COCK", true },
-            { "SNAP AND FORGET", true },
-            { "PRIMPED AND PAMPERED", true },
-            { "BAMBI DOES AS SHE'S TOLD", true },
-            { "BAMBI CUM AND COLLAPSE", true },
-            { "ZAP COCK DRAIN OBEY", true },
-            { "GIGGLETIME", true },
-            { "BAMBI UNIFORM LOCK", true },
-            { "COCK ZOMBIE NOW", true }
+            { "DROP FOR COCK", true }
         };
         public Dictionary<string, bool> SubliminalPool
         {
