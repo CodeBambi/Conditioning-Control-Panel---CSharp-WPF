@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using System.Drawing; // Added for screen capture functionality
 
 namespace ConditioningControlPanel.Services;
 
@@ -18,15 +19,78 @@ public class OverlayService : IDisposable
     private readonly List<Window> _pinkFilterWindows = new();
     private readonly List<Window> _spiralWindows = new();
     private readonly List<MediaElement> _spiralMediaElements = new();
+    private readonly List<Window> _brainDrainBlurWindows = new(); // New field for Brain Drain blur
     private bool _isRunning;
     private DispatcherTimer? _updateTimer;
     private DispatcherTimer? _gifLoopTimer;
     private bool _isDisposed;
     private bool _isGifSpiral;
     private string _spiralPath = "";
-    private static readonly Random _random = new();
 
     public bool IsRunning => _isRunning;
+
+    // P/Invoke declarations for screen capture (BitBlt)
+    private const int SRCCOPY = 0x00CC0020; // DwRop parameter for BitBlt
+    
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    private static extern bool BitBlt(IntPtr hdcDest, int xDest, int yDest, int wDest, int hDest, IntPtr hdcSrc, int xSrc, int ySrc, int dwRop);
+    
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    private static extern IntPtr CreateCompatibleBitmap(IntPtr hdc, int nWidth, int nHeight);
+    
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+    
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    private static extern bool DeleteDC(IntPtr hdc);
+    
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    private static extern bool DeleteObject(IntPtr hObject);
+    
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+    private static extern IntPtr SelectObject(IntPtr hdc, IntPtr hObject);
+    
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetDC(IntPtr hwnd);
+    
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
+
+[System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
+
+[System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+private struct MARGINS
+{
+    public int Left, Right, Top, Bottom;
+}
+
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+private struct WindowCompositionAttributeData
+{
+    public int Attribute;
+    public IntPtr Data;
+    public int SizeOfData;
+}
+
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+private struct AccentPolicy
+{
+    public int AccentState;
+    public int AccentFlags;
+    public uint GradientColor;
+    public int AnimationId;
+}
+
+private const int ACCENT_ENABLE_BLURBEHIND = 3;
+private const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
+private const int WCA_ACCENT_POLICY = 19;
 
         private string GetSpiralPath()
         {
@@ -38,18 +102,7 @@ public class OverlayService : IDisposable
                 return settings.SpiralPath;
             }
             
-            // Otherwise, pick a random one from the Spirals folder
-            var spiralsFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Spirals");
-            if (Directory.Exists(spiralsFolder))
-            {
-                var files = Directory.GetFiles(spiralsFolder, "*.gif");
-                if (files.Length > 0)
-                {
-                    return files[_random.Next(files.Length)];
-                }
-            }
-
-            // Fallback to Resources/spiral.gif
+            // Fallback to Resources/spiral.gif if user-defined path is not set or invalid
             var resourceSpiral = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "spiral.gif");
             if (File.Exists(resourceSpiral))
             {
@@ -87,6 +140,11 @@ public class OverlayService : IDisposable
                 StartSpiral();
             }
 
+            if (settings.BrainDrainEnabled)
+            {
+                StartBrainDrainBlur((int)settings.BrainDrainIntensity);
+            }
+
             _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             _updateTimer.Tick += UpdateOverlays;
             _updateTimer.Start();
@@ -107,6 +165,7 @@ public class OverlayService : IDisposable
 
             StopPinkFilter();
             StopSpiral();
+            StopBrainDrainBlur();
         });
 
         App.Logger?.Information("OverlayService stopped");
@@ -151,10 +210,23 @@ public class OverlayService : IDisposable
             {
                 StopSpiral();
             }
+
+            // Brain Drain Blur
+            if (settings.BrainDrainEnabled && settings.PlayerLevel >= 90)
+            {
+                if (_brainDrainBlurWindows.Count == 0)
+                    StartBrainDrainBlur((int)settings.BrainDrainIntensity);
+                else
+                    UpdateBrainDrainBlurOpacity((int)settings.BrainDrainIntensity);
+            }
+            else
+            {
+                StopBrainDrainBlur();
+            }
         });
         
-        App.Logger?.Debug("Overlays refreshed - Pink: {Pink}, Spiral: {Spiral}", 
-            _pinkFilterWindows.Count > 0, _spiralWindows.Count > 0);
+        App.Logger?.Debug("Overlays refreshed - Pink: {Pink}, Spiral: {Spiral}, BrainDrain: {BrainDrain}", 
+            _pinkFilterWindows.Count > 0, _spiralWindows.Count > 0, _brainDrainBlurWindows.Count > 0);
     }
 
     private void UpdateOverlays(object? sender, EventArgs e)
@@ -166,6 +238,7 @@ public class OverlayService : IDisposable
         {
             StopPinkFilter();
             StopSpiral();
+            StopBrainDrainBlur(); // Also stop Brain Drain if level is too low
             return;
         }
 
@@ -255,15 +328,16 @@ public class OverlayService : IDisposable
 
             var pinkOverlay = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
-                Opacity = actualOpacity
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(
+                                    (byte)(actualOpacity * 255), 255, 105, 180)),
+                Opacity = 1.0 // Opacity handled by the solid color brush's alpha
             };
 
             var window = new Window
             {
-                WindowStyle = WindowStyle.None,
+                WindowStyle = System.Windows.WindowStyle.None,
                 AllowsTransparency = true,
-                Background = Brushes.Transparent,
+                Background = System.Windows.Media.Brushes.Transparent,
                 Topmost = true,
                 ShowInTaskbar = false,
                 ShowActivated = false,
@@ -310,16 +384,18 @@ public class OverlayService : IDisposable
 
     private void UpdatePinkFilterOpacity()
     {
-        // Apply exponential curve for finer control at low values
-        var opacity = Math.Pow(App.Settings.Current.PinkFilterOpacity / 100.0, 2);
-        foreach (var window in _pinkFilterWindows)
-        {
-            if (window.Content is Border border)
-            {
-                border.Opacity = opacity;
-            }
-        }
-    }
+                    // Apply exponential curve for finer control at low values
+                    var actualOpacity = Math.Pow(App.Settings.Current.PinkFilterOpacity / 100.0, 2);
+                    foreach (var window in _pinkFilterWindows)
+                    {
+                        if (window.Content is Border border)
+                        {
+                            if (border.Background is System.Windows.Media.SolidColorBrush brush)
+                            {
+                                brush.Color = System.Windows.Media.Color.FromArgb((byte)(actualOpacity * 255), 255, 105, 180);
+                            }
+                        }
+                    }    }
 
     #endregion
 
@@ -440,9 +516,9 @@ public class OverlayService : IDisposable
             
             var window = new Window
             {
-                WindowStyle = WindowStyle.None,
+                WindowStyle = System.Windows.WindowStyle.None,
                 AllowsTransparency = true,
-                Background = Brushes.Transparent,
+                Background = System.Windows.Media.Brushes.Transparent,
                 Topmost = true,
                 ShowInTaskbar = false,
                 ShowActivated = false,
@@ -510,6 +586,202 @@ public class OverlayService : IDisposable
     }
 
     #endregion
+
+#region Brain Drain Blur
+
+private Dictionary<Window, Border> _brainDrainBlurTargets = new();
+private int _currentBrainDrainIntensity = 50;
+
+public void StartBrainDrainBlur(int intensity)
+{
+    if (_brainDrainBlurWindows.Count > 0) return;
+
+    _currentBrainDrainIntensity = intensity;
+
+    Application.Current.Dispatcher.Invoke(() =>
+    {
+        try
+        {
+            var settings = App.Settings.Current;
+
+            // Get all screens if dual monitor enabled, otherwise just primary
+            var screens = settings.DualMonitorEnabled
+                ? System.Windows.Forms.Screen.AllScreens
+                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+            foreach (var screen in screens)
+            {
+                var window = CreateBrainDrainBlurForScreen(screen, intensity);
+                if (window != null)
+                {
+                    _brainDrainBlurWindows.Add(window);
+                }
+            }
+
+            App.Logger?.Debug("Brain Drain blur started on {Count} screens at intensity {Intensity}%",
+                _brainDrainBlurWindows.Count, intensity);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error("Failed to start Brain Drain blur: {Error}", ex.Message);
+        }
+    });
+}
+
+public void StopBrainDrainBlur()
+{
+    Application.Current.Dispatcher.Invoke(() =>
+    {
+        foreach (var window in _brainDrainBlurWindows)
+        {
+            try { window.Close(); } catch { }
+        }
+        _brainDrainBlurWindows.Clear();
+        _brainDrainBlurTargets.Clear();
+        App.Logger?.Debug("Brain Drain blur stopped");
+    });
+}
+
+public void UpdateBrainDrainBlurOpacity(int intensity)
+{
+    _currentBrainDrainIntensity = intensity;
+    
+    Application.Current.Dispatcher.Invoke(() =>
+    {
+        // Update the opacity/color of each blur window
+        // Higher intensity = more opaque blur overlay
+        var opacity = Math.Clamp(intensity / 100.0, 0.1, 0.9);
+        
+        foreach (var entry in _brainDrainBlurTargets)
+        {
+            entry.Value.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(
+                (byte)(opacity * 180), // Alpha: 0-180 based on intensity
+                200, 200, 220)); // Slight blue-gray tint
+        }
+        
+        // Re-apply blur effect to windows
+        foreach (var window in _brainDrainBlurWindows)
+        {
+            EnableBlur(window, intensity);
+        }
+        
+        App.Logger?.Debug("Brain Drain blur intensity updated to {Intensity}%", intensity);
+    });
+}
+
+private Window? CreateBrainDrainBlurForScreen(System.Windows.Forms.Screen screen, int intensity)
+{
+    try
+    {
+        // Get the actual DPI for THIS specific monitor
+        double monitorDpi = GetMonitorDpi(screen);
+        double primaryDpi = GetPrimaryMonitorDpi();
+        double scale = primaryDpi / 96.0;
+
+        double left = screen.Bounds.X / scale;
+        double top = screen.Bounds.Y / scale;
+        double width = screen.Bounds.Width / scale;
+        double height = screen.Bounds.Height / scale;
+
+        // Create a semi-transparent background that will receive the blur effect
+        var opacity = Math.Clamp(intensity / 100.0, 0.1, 0.9);
+        var border = new Border
+        {
+            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(
+                (byte)(opacity * 180),
+                200, 200, 220)) // Slight blue-gray tint for "brain drain" effect
+        };
+
+        var window = new Window
+        {
+            WindowStyle = System.Windows.WindowStyle.None,
+            AllowsTransparency = true,
+            Background = System.Windows.Media.Brushes.Transparent,
+            Topmost = true,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            Focusable = false,
+            IsHitTestVisible = false, // Make it click-through
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = left,
+            Top = top,
+            Width = width,
+            Height = height,
+            Content = border
+        };
+
+        window.SourceInitialized += (s, e) =>
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
+            
+            // Enable blur effect via DWM
+            EnableBlur(window, intensity);
+        };
+
+        window.Show();
+        _brainDrainBlurTargets[window] = border;
+
+        App.Logger?.Debug("Brain Drain blur window for {Screen} at {X},{Y} size {W}x{H}",
+            screen.DeviceName, left, top, width, height);
+
+        return window;
+    }
+    catch (Exception ex)
+    {
+        App.Logger?.Error("Failed to create Brain Drain blur for screen: {Error}", ex.Message);
+        return null;
+    }
+}
+
+private void EnableBlur(Window window, int intensity)
+{
+    try
+    {
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+        
+        // Calculate gradient color with intensity-based alpha
+        // Format: 0xAABBGGRR (Alpha, Blue, Green, Red)
+        var alpha = (uint)(Math.Clamp(intensity / 100.0, 0.1, 0.7) * 255);
+        uint gradientColor = (alpha << 24) | 0x00303040; // Semi-transparent dark blue-gray
+        
+        var accent = new AccentPolicy
+        {
+            // Use Acrylic on Windows 10 1803+, fall back to blur on older
+            AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND,
+            AccentFlags = 2, // Draw all borders
+            GradientColor = gradientColor,
+            AnimationId = 0
+        };
+
+        var accentSize = System.Runtime.InteropServices.Marshal.SizeOf(accent);
+        var accentPtr = System.Runtime.InteropServices.Marshal.AllocHGlobal(accentSize);
+        System.Runtime.InteropServices.Marshal.StructureToPtr(accent, accentPtr, false);
+
+        var data = new WindowCompositionAttributeData
+        {
+            Attribute = WCA_ACCENT_POLICY,
+            Data = accentPtr,
+            SizeOfData = accentSize
+        };
+
+        SetWindowCompositionAttribute(hwnd, ref data);
+        System.Runtime.InteropServices.Marshal.FreeHGlobal(accentPtr);
+        
+        App.Logger?.Debug("Enabled DWM blur for Brain Drain window");
+    }
+    catch (Exception ex)
+    {
+        App.Logger?.Warning("Failed to enable DWM blur (falling back to simple overlay): {Error}", ex.Message);
+        // Blur will still work visually through the semi-transparent overlay, just not as smooth
+    }
+}
+
+// REMOVE the old CaptureScreen method - it's no longer needed for Brain Drain
+// (Keep it only if used elsewhere in your code)
+
+#endregion
 
     #region Helpers
 
