@@ -676,6 +676,14 @@ public void UpdateBrainDrainBlurOpacity(int intensity)
 
 private void BrainDrainCaptureTick(object? sender, EventArgs e)
 {
+    App.Logger?.Debug("BrainDrainCaptureTick: Executing...");
+    if (_brainDrainImages.Count == 0)
+    {
+        App.Logger?.Warning("BrainDrainCaptureTick: _brainDrainImages is empty, stopping timer.");
+        _brainDrainCaptureTimer?.Stop();
+        return;
+    }
+
     foreach (var kvp in _brainDrainImages)
     {
         var window = kvp.Key;
@@ -683,13 +691,24 @@ private void BrainDrainCaptureTick(object? sender, EventArgs e)
         
         if (_brainDrainScreens.TryGetValue(window, out var screen))
         {
+            App.Logger?.Debug("BrainDrainCaptureTick: Capturing screen for window {WindowHandle}", window.GetHashCode());
             var capture = CaptureScreen(screen);
             if (capture != null)
             {
                 image.Source = capture;
+                App.Logger?.Debug("BrainDrainCaptureTick: Image source updated for window {WindowHandle}", window.GetHashCode());
+            }
+            else
+            {
+                App.Logger?.Warning("BrainDrainCaptureTick: CaptureScreen returned null for window {WindowHandle}", window.GetHashCode());
             }
         }
+        else
+        {
+            App.Logger?.Warning("BrainDrainCaptureTick: Screen not found for window {WindowHandle}", window.GetHashCode());
+        }
     }
+    App.Logger?.Debug("BrainDrainCaptureTick: Completed.");
 }
 
 private Window? CreateBrainDrainWindow(System.Windows.Forms.Screen screen, int intensity)
