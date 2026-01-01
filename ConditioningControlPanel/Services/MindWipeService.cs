@@ -96,20 +96,20 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var audioFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "mindwipe");
+                var assetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "mindwipe");
                 
-                App.Logger?.Information("MindWipe: Looking for audio files in {Path}", audioFolderPath);
+                App.Logger?.Information("MindWipe: Looking for audio files in {Path}", assetsPath);
                 
-                if (!Directory.Exists(audioFolderPath))
+                if (!Directory.Exists(assetsPath))
                 {
                     // Create the directory so user knows where to put files
-                    Directory.CreateDirectory(audioFolderPath);
-                    App.Logger?.Warning("MindWipe: Created empty folder at {Path} - add audio files here!", audioFolderPath);
+                    Directory.CreateDirectory(assetsPath);
+                    App.Logger?.Warning("MindWipe: Created empty folder at {Path} - add audio files here!", assetsPath);
                     _audioFiles = Array.Empty<string>();
                     return;
                 }
                 
-                _audioFiles = Directory.GetFiles(audioFolderPath, "*.*")
+                _audioFiles = Directory.GetFiles(assetsPath, "*.*")
                     .Where(f => f.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
                                f.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
                                f.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
@@ -117,7 +117,7 @@ namespace ConditioningControlPanel.Services
                 
                 if (_audioFiles.Length == 0)
                 {
-                    App.Logger?.Warning("MindWipe: No .mp3/.wav/.ogg files found in {Path}", audioFolderPath);
+                    App.Logger?.Warning("MindWipe: No .mp3/.wav/.ogg files found in {Path}", assetsPath);
                 }
                 else
                 {
