@@ -669,7 +669,7 @@ public void UpdateBrainDrainBlurOpacity(int intensity)
     });
 }
 
-private bool _isCapturing = false; // Flag to prevent concurrent captures
+private volatile int _captureLock = 0; // Use Interlocked for atomic access
 
 private void CompositionTarget_Rendering(object? sender, EventArgs e)
 {
@@ -679,20 +679,24 @@ private void CompositionTarget_Rendering(object? sender, EventArgs e)
 
 private void ProcessBrainDrainCaptureAndDisplay()
 {
-    if (_isCapturing || _brainDrainImages.Count == 0)
+    if (_brainDrainImages.Count == 0)
     {
-        if (_brainDrainImages.Count == 0) System.Windows.Media.CompositionTarget.Rendering -= CompositionTarget_Rendering; // Stop updates if no images
+        System.Windows.Media.CompositionTarget.Rendering -= CompositionTarget_Rendering; // Stop updates if no images
         return;
     }
 
-    _isCapturing = true;
+    // Try to acquire the lock. If another capture is already in progress, skip this frame.
+    if (System.Threading.Interlocked.CompareExchange(ref _captureLock, 1, 0) != 0)
+    {
+        return; // A capture is already in progress, skip this rendering frame
+    }
 
     // Capture all screens on a background thread
     System.Threading.Tasks.Task.Run(() =>
     {
         var currentCaptures = new Dictionary<Window, BitmapSource?>();
 
-        // Hide all blur windows before capture to prevent capturing ourselves
+        // Hide all blur windows before capture to prevent capturing ourselves (on UI thread)
         Application.Current.Dispatcher.Invoke(() =>
         {
             foreach (var window in _brainDrainBlurWindows)
@@ -700,10 +704,8 @@ private void ProcessBrainDrainCaptureAndDisplay()
                 window.Opacity = 0;
             }
             // Force layout update to ensure windows are hidden before capture
-            // Using a low priority to not block other UI tasks
             Application.Current.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
         });
-
 
         foreach (var kvp in _brainDrainImages)
         {
@@ -735,7 +737,7 @@ private void ProcessBrainDrainCaptureAndDisplay()
         });
     }).ContinueWith(task => // Ensure the flag is reset even if task fails
     {
-        _isCapturing = false;
+        System.Threading.Interlocked.Exchange(ref _captureLock, 0); // Release the lock
         if (task.IsFaulted)
         {
             App.Logger?.Error("ProcessBrainDrainCaptureAndDisplay: Background capture task failed: {Error}", task.Exception);
