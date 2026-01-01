@@ -1021,7 +1021,7 @@ private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
     {
         DEVMODE dm = new DEVMODE();
         dm.dmSize = (ushort)System.Runtime.InteropServices.Marshal.SizeOf(typeof(DEVMODE));
-        if (EnumDisplaySettingsEx(screen.DeviceName, ENUM_CURRENT_SETTINGS, ref dm, 0))
+        if (EnumDisplaySettingsEx(screen.DeviceName, (uint)ENUM_CURRENT_SETTINGS, ref dm, 0))
         {
             return (int)dm.dmDisplayFrequency;
         }
