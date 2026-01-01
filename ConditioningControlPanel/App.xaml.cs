@@ -44,12 +44,15 @@ namespace ConditioningControlPanel
 
             // Create assets directories
             var assetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets");
+            var resourcesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
+            Directory.CreateDirectory(resourcesPath); // Ensure Resources folder exists
+
             Directory.CreateDirectory(Path.Combine(assetsPath, "images"));
             Directory.CreateDirectory(Path.Combine(assetsPath, "sounds"));
             Directory.CreateDirectory(Path.Combine(assetsPath, "startle_videos"));
             Directory.CreateDirectory(Path.Combine(assetsPath, "backgrounds"));
-            Directory.CreateDirectory(Path.Combine(assetsPath, "sub_audio"));
-            Directory.CreateDirectory(Path.Combine(assetsPath, "mindwipe"));
+            Directory.CreateDirectory(Path.Combine(resourcesPath, "sub_audio"));
+            Directory.CreateDirectory(Path.Combine(resourcesPath, "sounds", "mindwipe"));
             
             // Create Spirals directory for random spiral selection
             Directory.CreateDirectory(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Spirals"));

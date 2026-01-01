@@ -32,7 +32,7 @@ namespace ConditioningControlPanel.Services
 
         public SubliminalService()
         {
-            _audioPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "sub_audio");
+            _audioPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sub_audio");
             Directory.CreateDirectory(_audioPath);
             
             _timer = new DispatcherTimer();
