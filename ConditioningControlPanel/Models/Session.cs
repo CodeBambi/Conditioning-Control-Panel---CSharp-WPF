@@ -606,6 +606,8 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
             }
             return string.Join("\n", lines);
         }
+
+        public string SpoilerInteractive { get; set; } = "";
     }
     
     /// <summary>

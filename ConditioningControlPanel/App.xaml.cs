@@ -23,6 +23,7 @@ namespace ConditioningControlPanel
         public static BubbleCountService BubbleCount { get; private set; } = null!;
         public static BouncingTextService BouncingText { get; private set; } = null!;
         public static MindWipeService MindWipe { get; private set; } = null!;
+        public static BrainDrainService BrainDrain { get; private set; } = null!;
         public static AchievementService Achievements { get; private set; } = null!;
 
         protected override void OnStartup(StartupEventArgs e)
@@ -70,6 +71,7 @@ namespace ConditioningControlPanel
             BubbleCount = new BubbleCountService();
             BouncingText = new BouncingTextService();
             MindWipe = new MindWipeService();
+            BrainDrain = new BrainDrainService();
             Achievements = new AchievementService();
             
             // Wire up achievement popup BEFORE checking any achievements
@@ -160,6 +162,7 @@ namespace ConditioningControlPanel
             BubbleCount?.Dispose();
             BouncingText?.Dispose();
             MindWipe?.Dispose();
+            BrainDrain?.Dispose();
             Achievements?.Dispose();
             Audio?.Dispose();
             Settings?.Save();

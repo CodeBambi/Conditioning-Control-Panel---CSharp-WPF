@@ -1,329 +1,222 @@
 using System;
-using System.Collections.Generic;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
-using System.Windows.Media.Effects;
+using System.IO;
+using System.Linq;
+using System.Threading;
 using System.Windows.Threading;
+using NAudio.Wave;
+using Serilog;
 
-namespace ConditioningControlPanel.Services;
-
-/// <summary>
-/// Brain Drain - Applies a blur effect to the screen, simulating dizziness/brain fog
-/// Unlocks at Level 25, awards 10 XP per minute while active
-/// </summary>
-public class BrainDrainService : IDisposable
+namespace ConditioningControlPanel.Services
 {
-    private readonly List<Window> _blurWindows = new();
-    private DispatcherTimer? _xpTimer;
-    private DispatcherTimer? _updateTimer;
-    private bool _isRunning;
-    private bool _isDisposed;
-    private DateTime _startTime;
-    
-    // Required level to unlock
-    public const int REQUIRED_LEVEL = 25;
-    
-    // XP awarded per minute
-    private const int XP_PER_MINUTE = 10;
-    
-    public bool IsRunning => _isRunning;
-    
-    public event EventHandler<int>? XPAwarded;
-
-    public void Start()
+    public class BrainDrainService : IDisposable
     {
-        if (_isRunning) return;
+        private readonly Random _random = new();
+        private readonly DispatcherTimer _timer;
+        private CancellationTokenSource? _cts;
         
-        var settings = App.Settings.Current;
+        private bool _isRunning;
+        private double _intensity = 50; // 50% default intensity
         
-        // Check level requirement
-        if (settings.PlayerLevel < REQUIRED_LEVEL)
+        private string[]? _audioFiles;
+        private WaveOutEvent? _waveOut;
+        private AudioFileReader? _audioReader;
+        
+        public bool IsRunning => _isRunning;
+        public int AudioFileCount => _audioFiles?.Length ?? 0;
+        
+        public double Intensity
         {
-            App.Logger?.Information("BrainDrainService: Level {Level} is below {Required}, not available", 
-                settings.PlayerLevel, REQUIRED_LEVEL);
-            return;
+            get => _intensity;
+            set => _intensity = Math.Clamp(value, 1, 100);
         }
         
-        if (!settings.BrainDrainEnabled)
+        public BrainDrainService()
         {
-            App.Logger?.Debug("BrainDrainService: Not enabled in settings");
-            return;
-        }
-        
-        _isRunning = true;
-        _startTime = DateTime.Now;
-        
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            CreateBlurOverlays();
-            
-            // Timer to update blur intensity based on settings changes
-            _updateTimer = new DispatcherTimer
+            _timer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(500)
+                Interval = TimeSpan.FromSeconds(5) 
             };
-            _updateTimer.Tick += UpdateBlurIntensity;
-            _updateTimer.Start();
+            _timer.Tick += Timer_Tick;
             
-            // Timer to award XP every minute
-            _xpTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMinutes(1)
-            };
-            _xpTimer.Tick += AwardXP;
-            _xpTimer.Start();
-        });
-        
-        App.Logger?.Information("BrainDrainService started at intensity {Intensity}%", settings.BrainDrainIntensity);
-    }
-
-    public void Stop()
-    {
-        if (!_isRunning) return;
-        _isRunning = false;
-        
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            _updateTimer?.Stop();
-            _updateTimer = null;
-            
-            _xpTimer?.Stop();
-            _xpTimer = null;
-            
-            foreach (var window in _blurWindows)
-            {
-                try { window.Close(); } catch { }
-            }
-            _blurWindows.Clear();
-        });
-        
-        var duration = DateTime.Now - _startTime;
-        App.Logger?.Information("BrainDrainService stopped after {Duration:F1} minutes", duration.TotalMinutes);
-    }
-
-    /// <summary>
-    /// Refresh overlays when settings change
-    /// </summary>
-    public void Refresh()
-    {
-        if (!_isRunning) return;
-        
-        var settings = App.Settings.Current;
-        
-        if (!settings.BrainDrainEnabled || settings.PlayerLevel < REQUIRED_LEVEL)
-        {
-            Stop();
-            return;
+            LoadAudioFiles();
         }
         
-        Application.Current.Dispatcher.Invoke(() =>
+        private void LoadAudioFiles()
         {
-            UpdateBlurIntensity(null, EventArgs.Empty);
-        });
-    }
-
-    private void CreateBlurOverlays()
-    {
-        var settings = App.Settings.Current;
-        
-        // Get screens based on dual monitor setting
-        var screens = settings.DualMonitorEnabled
-            ? System.Windows.Forms.Screen.AllScreens
-            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
-        
-        foreach (var screen in screens)
-        {
-            var window = CreateBlurWindowForScreen(screen, settings.BrainDrainIntensity);
-            if (window != null)
+            try
             {
-                _blurWindows.Add(window);
-            }
-        }
-        
-        App.Logger?.Debug("BrainDrain: Created {Count} blur overlay windows", _blurWindows.Count);
-    }
-
-    private Window? CreateBlurWindowForScreen(System.Windows.Forms.Screen screen, int intensity)
-    {
-        try
-        {
-            // Get DPI scaling
-            double dpiScale = GetDpiScaleForScreen(screen);
-            double primaryDpi = GetPrimaryDpi();
-            
-            // Calculate WPF coordinates
-            double left = screen.Bounds.X / primaryDpi * 96.0;
-            double top = screen.Bounds.Y / primaryDpi * 96.0;
-            double width = screen.Bounds.Width / dpiScale;
-            double height = screen.Bounds.Height / dpiScale;
-            
-            // Calculate blur radius (intensity 1-100 maps to blur radius 0.5-15)
-            double blurRadius = 0.5 + (intensity / 100.0) * 14.5;
-            
-            // Create a semi-transparent overlay with blur effect
-            // We use a very subtle white/gray tint to create the "foggy" effect
-            var overlay = new Border
-            {
-                Background = new SolidColorBrush(Color.FromArgb(
-                    (byte)(intensity * 0.3), // Very subtle alpha based on intensity
-                    255, 255, 255)),
-                Effect = new BlurEffect
+                var audioFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "braindrain");
+                
+                App.Logger?.Information("BrainDrain: Looking for audio files in {Path}", audioFolderPath);
+                
+                if (!Directory.Exists(audioFolderPath))
                 {
-                    Radius = blurRadius,
-                    KernelType = KernelType.Gaussian,
-                    RenderingBias = RenderingBias.Performance
-                }
-            };
-            
-            var window = new Window
-            {
-                WindowStyle = WindowStyle.None,
-                AllowsTransparency = true,
-                Background = Brushes.Transparent,
-                Topmost = true,
-                ShowInTaskbar = false,
-                ShowActivated = false,
-                Focusable = false,
-                IsHitTestVisible = false,
-                WindowStartupLocation = WindowStartupLocation.Manual,
-                Left = left,
-                Top = top,
-                Width = width,
-                Height = height,
-                Content = overlay
-            };
-            
-            window.SourceInitialized += (s, e) => MakeClickThrough(window);
-            window.Show();
-            
-            App.Logger?.Debug("BrainDrain: Created blur window for {Screen} at intensity {Intensity}% (blur: {Blur})", 
-                screen.DeviceName, intensity, blurRadius);
-            
-            return window;
-        }
-        catch (Exception ex)
-        {
-            App.Logger?.Error(ex, "BrainDrain: Failed to create blur window for screen");
-            return null;
-        }
-    }
-
-    private void UpdateBlurIntensity(object? sender, EventArgs e)
-    {
-        var settings = App.Settings.Current;
-        
-        if (!settings.BrainDrainEnabled)
-        {
-            Stop();
-            return;
-        }
-        
-        // Calculate blur radius based on intensity
-        double blurRadius = 0.5 + (settings.BrainDrainIntensity / 100.0) * 14.5;
-        byte alpha = (byte)(settings.BrainDrainIntensity * 0.3);
-        
-        foreach (var window in _blurWindows)
-        {
-            if (window.Content is Border border)
-            {
-                // Update blur effect
-                if (border.Effect is BlurEffect blur)
-                {
-                    blur.Radius = blurRadius;
+                    Directory.CreateDirectory(audioFolderPath);
+                    App.Logger?.Warning("BrainDrain: Created empty folder at {Path} - add audio files here!", audioFolderPath);
+                    _audioFiles = Array.Empty<string>();
+                    return;
                 }
                 
-                // Update background opacity
-                border.Background = new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255));
-            }
-        }
-    }
-
-    private void AwardXP(object? sender, EventArgs e)
-    {
-        if (!_isRunning) return;
-        
-        App.Progression?.AddXP(XP_PER_MINUTE);
-        XPAwarded?.Invoke(this, XP_PER_MINUTE);
-        
-        App.Logger?.Debug("BrainDrain: Awarded {XP} XP (1 minute elapsed)", XP_PER_MINUTE);
-    }
-
-    private void MakeClickThrough(Window window)
-    {
-        try
-        {
-            var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
-            var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
-        }
-        catch (Exception ex)
-        {
-            App.Logger?.Debug("BrainDrain: Failed to make window click-through: {Error}", ex.Message);
-        }
-    }
-
-    private double GetDpiScaleForScreen(System.Windows.Forms.Screen screen)
-    {
-        try
-        {
-            var hMonitor = MonitorFromPoint(new POINT { X = screen.Bounds.X + 1, Y = screen.Bounds.Y + 1 }, 2);
-            if (hMonitor != IntPtr.Zero)
-            {
-                var result = GetDpiForMonitor(hMonitor, 0, out uint dpiX, out uint dpiY);
-                if (result == 0)
+                _audioFiles = Directory.GetFiles(audioFolderPath, "*.*")
+                    .Where(f => f.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
+                               f.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
+                               f.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                
+                if (_audioFiles.Length == 0)
                 {
-                    return dpiX / 96.0;
+                    App.Logger?.Warning("BrainDrain: No .mp3/.wav/.ogg files found in {Path}", audioFolderPath);
+                }
+                else
+                {
+                    App.Logger?.Information("BrainDrain: Loaded {Count} audio files", _audioFiles.Length);
                 }
             }
-        }
-        catch { }
-        return 1.0;
-    }
-
-    private double GetPrimaryDpi()
-    {
-        try
-        {
-            var primary = System.Windows.Forms.Screen.PrimaryScreen;
-            if (primary != null)
+            catch (Exception ex)
             {
-                return GetDpiScaleForScreen(primary) * 96.0;
+                App.Logger?.Error(ex, "BrainDrain: Failed to load audio files");
+                _audioFiles = Array.Empty<string>();
             }
         }
-        catch { }
-        return 96.0;
-    }
+        
+        public void ReloadAudioFiles()
+        {
+            LoadAudioFiles();
+        }
+        
+        public void Start()
+        {
+            if (App.Settings.Current.PlayerLevel < 90)
+            {
+                App.Logger?.Information("BrainDrain: Level {Level} is below 90, not available", App.Settings.Current.PlayerLevel);
+                return;
+            }
 
-    #region Win32 Interop
+            if (!App.Settings.Current.BrainDrainEnabled)
+            {
+                App.Logger?.Debug("BrainDrain: Not enabled in settings");
+                return;
+            }
 
-    private const int GWL_EXSTYLE = -20;
-    private const int WS_EX_TRANSPARENT = 0x00000020;
-    private const int WS_EX_LAYERED = 0x00080000;
-    private const int WS_EX_TOOLWINDOW = 0x00000080;
-    private const int WS_EX_NOACTIVATE = 0x08000000;
+            if (_isRunning) return;
+            
+            UpdateSettings();
+            _isRunning = true;
+            _cts = new CancellationTokenSource();
+            
+            _timer.Start();
+            
+            App.Logger?.Information("BrainDrain started at intensity {Intensity}%", _intensity);
+        }
+        
+        public void Stop()
+        {
+            if (!_isRunning) return;
+            
+            _isRunning = false;
+            _timer.Stop();
+            _cts?.Cancel();
+            
+            StopCurrentAudio();
+            
+            App.Logger?.Information("BrainDrain stopped");
+        }
+        
+        public void UpdateSettings()
+        {
+            Intensity = App.Settings.Current.BrainDrainIntensity;
+        }
+        
+        private void Timer_Tick(object? sender, EventArgs e)
+        {
+            if (!_isRunning) return;
+            if (_audioFiles == null || _audioFiles.Length == 0) return;
 
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern int GetWindowLong(IntPtr hwnd, int index);
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
-
-    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-    private struct POINT { public int X; public int Y; }
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
-
-    [System.Runtime.InteropServices.DllImport("shcore.dll")]
-    private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
-
-    #endregion
-
-    public void Dispose()
-    {
-        if (_isDisposed) return;
-        _isDisposed = true;
-        Stop();
+            var probability = _intensity / 100.0 / (60.0 / _timer.Interval.TotalSeconds);
+            
+            if (_random.NextDouble() < probability)
+            {
+                PlayAudioNow();
+            }
+        }
+        
+        private void PlayAudioNow()
+        {
+            if (_audioFiles == null || _audioFiles.Length == 0) return;
+            
+            try
+            {
+                var audioFile = _audioFiles[_random.Next(_audioFiles.Length)];
+                PlayAudio(audioFile);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BrainDrain: Failed to play audio");
+            }
+        }
+        
+        private void PlayAudio(string filePath)
+        {
+            try
+            {
+                StopCurrentAudio();
+                
+                _audioReader = new AudioFileReader(filePath);
+                _audioReader.Volume = (float)(App.Settings.Current.MasterVolume / 100.0);
+                
+                _waveOut = new WaveOutEvent();
+                _waveOut.Init(_audioReader);
+                _waveOut.PlaybackStopped += (s, e) =>
+                {
+                    try
+                    {
+                        _waveOut?.Dispose();
+                        _audioReader?.Dispose();
+                    }
+                    catch { }
+                };
+                
+                _waveOut.Play();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "BrainDrain: Error playing audio file {Path}", filePath);
+            }
+        }
+        
+        private void StopCurrentAudio()
+        {
+            try
+            {
+                _waveOut?.Stop();
+                _waveOut?.Dispose();
+                _waveOut = null;
+                
+                _audioReader?.Dispose();
+                _audioReader = null;
+            }
+            catch { }
+        }
+        
+        public void Test()
+        {
+            if (_audioFiles == null || _audioFiles.Length == 0)
+            {
+                System.Windows.MessageBox.Show(
+                    "No audio files found!\n\nPlace .mp3, .wav, or .ogg files in:\nResources/sounds/braindrain/", 
+                    "Brain Drain", 
+                    System.Windows.MessageBoxButton.OK, 
+                    System.Windows.MessageBoxImage.Warning);
+                return;
+            }
+            
+            PlayAudioNow();
+        }
+        
+        public void Dispose()
+        {
+            Stop();
+            StopCurrentAudio();
+        }
     }
 }

@@ -1959,6 +1959,71 @@ Bimbo" Foreground="#FF69B4"
                             </Border>
                         </Grid>
                     </Border>
+
+                    <!-- Brain Drain - Lvl 90 -->
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                            ToolTip="Drains your thoughts with subliminal messaging.&#x0a;Unlocks at Level 90.">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <Grid Grid.Column="0">
+                                <!-- Locked State -->
+                                <StackPanel x:Name="BrainDrainLocked" Visibility="Visible">
+                                    <Grid>
+                                        <TextBlock Text="💧 Brain Drain" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                        <TextBlock Text="🔒 Lvl 90" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
+                                    </Grid>
+                                    <TextBlock Text="Reach Level 90 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                               FontSize="12" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            
+                                <!-- Unlocked State -->
+                                <StackPanel x:Name="BrainDrainUnlocked" Visibility="Collapsed">
+                                    <Grid>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="💧 Brain Drain" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
+                                            <TextBlock Text="✔ Lvl 90" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                        <CheckBox x:Name="ChkBrainDrainEnabled" Style="{StaticResource ToggleStyle}" 
+                                                  HorizontalAlignment="Right"
+                                                  Checked="ChkBrainDrainEnabled_Changed" Unchecked="ChkBrainDrainEnabled_Changed"/>
+                                    </Grid>
+                                
+                                    <StackPanel x:Name="BrainDrainSettings" Margin="0,10,0,0">
+                                        <!-- Intensity -->
+                                        <Grid Margin="0,3,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Style="{StaticResource SettingLabel}" Text="Intensity"
+                                                       ToolTip="How intense the brain drain effect is"/>
+                                            <TextBlock x:Name="TxtBrainDrainIntensity" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="50%"/>
+                                        </Grid>
+                                        <Slider x:Name="SliderBrainDrainIntensity" Minimum="1" Maximum="100" Value="50" 
+                                                Margin="0,1" ValueChanged="SliderBrainDrainIntensity_Changed"
+                                                ToolTip="Brain drain intensity (1-100%)"/>
+                                    
+                                        <!-- Test Button -->
+                                        <Button Content="▶ Test Now" 
+                                                Background="#40FFFFFF" Foreground="White" 
+                                                BorderThickness="0" Padding="10,5" Margin="0,10,0,0"
+                                                Cursor="Hand" Click="BtnTestBrainDrain_Click"
+                                                ToolTip="Test the brain drain effect now"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                            
+                            <!-- Feature Image -->
+                            <Border x:Name="BrainDrainFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
+                                <!-- TODO: Replace with brain drain.png when available. Using Mind Wipers.png as fallback. -->
+                                <Image Source="pack://application:,,,/Resources/features/Mind Wipers.png" Stretch="Uniform"/>
+                            </Border>
+                        </Grid>
+                    </Border>
                 </StackPanel>
                 </ScrollViewer>
             </Border>

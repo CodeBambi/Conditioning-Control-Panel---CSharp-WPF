@@ -1607,7 +1607,13 @@ namespace ConditioningControlPanel
             {
                 App.MindWipe.Start(settings.MindWipeFrequency, settings.MindWipeVolume / 100.0);
             }
-            
+
+            // Start brain drain service (requires level 90)
+            if (settings.PlayerLevel >= 90 && settings.BrainDrainEnabled)
+            {
+                App.BrainDrain.Start();
+            }
+
             // Start ramp timer if enabled
             if (settings.IntensityRampEnabled)
             {
@@ -1619,8 +1625,8 @@ namespace ConditioningControlPanel
             _isRunning = true;
             UpdateStartButton();
             
-            App.Logger?.Information("Engine started - Overlay: {Overlay}, Bubbles: {Bubbles}, LockCard: {LockCard}, BubbleCount: {BubbleCount}, MindWipe: {MindWipe}", 
-                App.Overlay.IsRunning, App.Bubbles.IsRunning, App.LockCard.IsRunning, App.BubbleCount.IsRunning, App.MindWipe.IsRunning);
+            App.Logger?.Information("Engine started - Overlay: {Overlay}, Bubbles: {Bubbles}, LockCard: {LockCard}, BubbleCount: {BubbleCount}, MindWipe: {MindWipe}, BrainDrain: {BrainDrain}", 
+                App.Overlay.IsRunning, App.Bubbles.IsRunning, App.LockCard.IsRunning, App.BubbleCount.IsRunning, App.MindWipe.IsRunning, App.BrainDrain.IsRunning);
         }
 
         private void StopEngine()
@@ -1634,6 +1640,7 @@ namespace ConditioningControlPanel
             App.BubbleCount.Stop();
             App.BouncingText.Stop();
             App.MindWipe.Stop();
+            App.BrainDrain.Stop();
             App.Audio.Unduck();
             
             // Stop ramp timer and reset sliders
@@ -2099,6 +2106,10 @@ namespace ConditioningControlPanel
             SliderMindWipeFreq.Value = s.MindWipeFrequency;
             SliderMindWipeVolume.Value = s.MindWipeVolume;
             ChkMindWipeLoop.IsChecked = s.MindWipeLoop;
+
+            // Brain Drain
+            ChkBrainDrainEnabled.IsChecked = s.BrainDrainEnabled;
+            SliderBrainDrainIntensity.Value = s.BrainDrainIntensity;
             
             // Bouncing Text Size (add if not already loaded above)
             SliderBouncingTextSize.Value = s.BouncingTextSize;
@@ -2172,6 +2183,7 @@ namespace ConditioningControlPanel
             if (TxtBouncingTextSize != null) TxtBouncingTextSize.Text = $"{(int)SliderBouncingTextSize.Value}%";
             if (TxtMindWipeFreq != null) TxtMindWipeFreq.Text = $"{(int)SliderMindWipeFreq.Value}/h";
             if (TxtMindWipeVolume != null) TxtMindWipeVolume.Text = $"{(int)SliderMindWipeVolume.Value}%";
+            if (TxtBrainDrainIntensity != null) TxtBrainDrainIntensity.Text = $"{(int)SliderBrainDrainIntensity.Value}%";
             
             // Scheduler sliders
             if (TxtRampDuration != null) TxtRampDuration.Text = $"{(int)SliderRampDuration.Value} min";
@@ -2236,6 +2248,10 @@ namespace ConditioningControlPanel
             s.LockCardFrequency = (int)SliderLockCardFreq.Value;
             s.LockCardRepeats = (int)SliderLockCardRepeats.Value;
             s.LockCardStrict = ChkLockCardStrict.IsChecked ?? false;
+
+            // Brain Drain
+            s.BrainDrainEnabled = ChkBrainDrainEnabled.IsChecked ?? false;
+            s.BrainDrainIntensity = (int)SliderBrainDrainIntensity.Value;
 
             // Scheduler
             s.SchedulerEnabled = ChkSchedulerEnabled.IsChecked ?? false;
@@ -2382,6 +2398,12 @@ namespace ConditioningControlPanel
             MindWipeLocked.Visibility = level75Unlocked ? Visibility.Collapsed : Visibility.Visible;
             MindWipeUnlocked.Visibility = level75Unlocked ? Visibility.Visible : Visibility.Collapsed;
             SetFeatureImageBlur(MindWipeFeatureImage, !level75Unlocked);
+
+            // Level 90 unlocks: Brain Drain
+            var level90Unlocked = level >= 90;
+            BrainDrainLocked.Visibility = level90Unlocked ? Visibility.Collapsed : Visibility.Visible;
+            BrainDrainUnlocked.Visibility = level90Unlocked ? Visibility.Visible : Visibility.Collapsed;
+            SetFeatureImageBlur(BrainDrainFeatureImage, !level90Unlocked);
         }
         
         /// <summary>
@@ -2912,6 +2934,51 @@ namespace ConditioningControlPanel
         private void BtnTestMindWipe_Click(object sender, RoutedEventArgs e)
         {
             App.MindWipe.TriggerOnce();
+        }
+
+        #endregion
+
+        #region Brain Drain (Lvl 90)
+
+        private void ChkBrainDrainEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkBrainDrainEnabled.IsChecked ?? false;
+            App.Settings.Current.BrainDrainEnabled = isEnabled;
+
+            if (_isRunning)
+            {
+                if (isEnabled && App.Settings.Current.PlayerLevel >= 90)
+                {
+                    App.BrainDrain.Start();
+                }
+                else
+                {
+                    App.BrainDrain.Stop();
+                }
+                App.Logger?.Information("Brain Drain toggled: {Enabled}", isEnabled);
+            }
+
+            App.Settings.Save();
+        }
+
+        private void SliderBrainDrainIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtBrainDrainIntensity == null) return;
+            TxtBrainDrainIntensity.Text = $"{(int)e.NewValue}%";
+            App.Settings.Current.BrainDrainIntensity = (int)e.NewValue;
+
+            if (_isRunning)
+            {
+                App.BrainDrain.UpdateSettings();
+            }
+            App.Settings.Save();
+        }
+
+        private void BtnTestBrainDrain_Click(object sender, RoutedEventArgs e)
+        {
+            App.BrainDrain.Test();
         }
 
         #endregion
