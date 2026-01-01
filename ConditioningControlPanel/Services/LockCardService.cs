@@ -94,13 +94,6 @@ namespace ConditioningControlPanel.Services
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
-                // Prevent stacking multiple lock cards
-                if (Application.Current.Windows.OfType<LockCardWindow>().Any())
-                {
-                    App.Logger?.Information("LockCardService: A lock card is already open. Skipping.");
-                    return;
-                }
-
                 try
                 {
                     var settings = App.Settings.Current;
