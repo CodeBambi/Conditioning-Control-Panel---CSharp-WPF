@@ -2360,50 +2360,61 @@ namespace ConditioningControlPanel
 
         private void UpdateUnlockablesVisibility(int level)
         {
-            // Level 10 unlocks: Spiral Overlay, Pink Filter
-            var level10Unlocked = level >= 10;
-            SpiralLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
-            SpiralUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
-            PinkFilterLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
-            PinkFilterUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
-            SetFeatureImageBlur(SpiralFeatureImage, !level10Unlocked);
-            SetFeatureImageBlur(PinkFilterFeatureImage, !level10Unlocked);
-            
-            // Level 20 unlocks: Bubbles
-            var level20Unlocked = level >= 20;
-            BubblesLocked.Visibility = level20Unlocked ? Visibility.Collapsed : Visibility.Visible;
-            BubblesUnlocked.Visibility = level20Unlocked ? Visibility.Visible : Visibility.Collapsed;
-            SetFeatureImageBlur(BubblePopFeatureImage, !level20Unlocked);
-            
-            // Level 35 unlocks: Lock Card
-            var level35Unlocked = level >= 35;
-            LockCardLocked.Visibility = level35Unlocked ? Visibility.Collapsed : Visibility.Visible;
-            LockCardUnlocked.Visibility = level35Unlocked ? Visibility.Visible : Visibility.Collapsed;
-            SetFeatureImageBlur(LockCardFeatureImage, !level35Unlocked);
-            
-            // Level 50 unlocks: Bubble Count Game
-            var level50Unlocked = level >= 50;
-            Level50Locked.Visibility = level50Unlocked ? Visibility.Collapsed : Visibility.Visible;
-            Level50Unlocked.Visibility = level50Unlocked ? Visibility.Visible : Visibility.Collapsed;
-            SetFeatureImageBlur(BubbleCountFeatureImage, !level50Unlocked);
-            
-            // Level 60 unlocks: Bouncing Text
-            var level60Unlocked = level >= 60;
-            Level60Locked.Visibility = level60Unlocked ? Visibility.Collapsed : Visibility.Visible;
-            Level60Unlocked.Visibility = level60Unlocked ? Visibility.Visible : Visibility.Collapsed;
-            SetFeatureImageBlur(BouncingTextFeatureImage, !level60Unlocked);
-            
-            // Level 75 unlocks: Mind Wipe
-            var level75Unlocked = level >= 75;
-            MindWipeLocked.Visibility = level75Unlocked ? Visibility.Collapsed : Visibility.Visible;
-            MindWipeUnlocked.Visibility = level75Unlocked ? Visibility.Visible : Visibility.Collapsed;
-            SetFeatureImageBlur(MindWipeFeatureImage, !level75Unlocked);
+            try
+            {
+                App.Logger?.Debug("UpdateUnlockablesVisibility: Updating visibility for level {Level}", level);
 
-            // Level 90 unlocks: Brain Drain
-            var level90Unlocked = level >= 90;
-            BrainDrainLocked.Visibility = level90Unlocked ? Visibility.Collapsed : Visibility.Visible;
-            BrainDrainUnlocked.Visibility = level90Unlocked ? Visibility.Visible : Visibility.Collapsed;
-            SetFeatureImageBlur(BrainDrainFeatureImage, !level90Unlocked);
+                // Level 10 unlocks: Spiral Overlay, Pink Filter
+                var level10Unlocked = level >= 10;
+                if (SpiralLocked != null) SpiralLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
+                if (SpiralUnlocked != null) SpiralUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                if (PinkFilterLocked != null) PinkFilterLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
+                if (PinkFilterUnlocked != null) PinkFilterUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                SetFeatureImageBlur(SpiralFeatureImage, !level10Unlocked);
+                SetFeatureImageBlur(PinkFilterFeatureImage, !level10Unlocked);
+                
+                // Level 20 unlocks: Bubbles
+                var level20Unlocked = level >= 20;
+                if (BubblesLocked != null) BubblesLocked.Visibility = level20Unlocked ? Visibility.Collapsed : Visibility.Visible;
+                if (BubblesUnlocked != null) BubblesUnlocked.Visibility = level20Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                SetFeatureImageBlur(BubblePopFeatureImage, !level20Unlocked);
+                
+                // Level 35 unlocks: Lock Card
+                var level35Unlocked = level >= 35;
+                if (LockCardLocked != null) LockCardLocked.Visibility = level35Unlocked ? Visibility.Collapsed : Visibility.Visible;
+                if (LockCardUnlocked != null) LockCardUnlocked.Visibility = level35Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                SetFeatureImageBlur(LockCardFeatureImage, !level35Unlocked);
+                
+                // Level 50 unlocks: Bubble Count Game
+                var level50Unlocked = level >= 50;
+                if (Level50Locked != null) Level50Locked.Visibility = level50Unlocked ? Visibility.Collapsed : Visibility.Visible;
+                if (Level50Unlocked != null) Level50Unlocked.Visibility = level50Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                SetFeatureImageBlur(BubbleCountFeatureImage, !level50Unlocked);
+                
+                // Level 60 unlocks: Bouncing Text
+                var level60Unlocked = level >= 60;
+                if (Level60Locked != null) Level60Locked.Visibility = level60Unlocked ? Visibility.Collapsed : Visibility.Visible;
+                if (Level60Unlocked != null) Level60Unlocked.Visibility = level60Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                SetFeatureImageBlur(BouncingTextFeatureImage, !level60Unlocked);
+                
+                // Level 75 unlocks: Mind Wipe
+                var level75Unlocked = level >= 75;
+                if (MindWipeLocked != null) MindWipeLocked.Visibility = level75Unlocked ? Visibility.Collapsed : Visibility.Visible;
+                if (MindWipeUnlocked != null) MindWipeUnlocked.Visibility = level75Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                SetFeatureImageBlur(MindWipeFeatureImage, !level75Unlocked);
+
+                // Level 90 unlocks: Brain Drain
+                var level90Unlocked = level >= 90;
+                if (BrainDrainLocked != null) BrainDrainLocked.Visibility = level90Unlocked ? Visibility.Collapsed : Visibility.Visible;
+                if (BrainDrainUnlocked != null) BrainDrainUnlocked.Visibility = level90Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                SetFeatureImageBlur(BrainDrainFeatureImage, !level90Unlocked);
+
+                App.Logger?.Debug("UpdateUnlockablesVisibility: Completed successfully.");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error("UpdateUnlockablesVisibility: Error updating unlockables visibility: {Error}", ex.Message);
+            }
         }
         
         /// <summary>
@@ -2411,15 +2422,36 @@ namespace ConditioningControlPanel
         /// </summary>
         private void SetFeatureImageBlur(Border? featureImageBorder, bool blur)
         {
-            if (featureImageBorder == null) return;
-            
-            if (blur)
+            try
             {
-                featureImageBorder.Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 15 };
+                if (featureImageBorder == null)
+                {
+                    App.Logger?.Warning("SetFeatureImageBlur: featureImageBorder is null.");
+                    return;
+                }
+                
+                // Ensure the child is an Image before attempting to set its effect
+                if (featureImageBorder.Child is Image image)
+                {
+                    if (blur)
+                    {
+                        image.Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 15 };
+                        App.Logger?.Debug("SetFeatureImageBlur: Applied blur to {ElementName}", featureImageBorder.Name);
+                    }
+                    else
+                    {
+                        image.Effect = null;
+                        App.Logger?.Debug("SetFeatureImageBlur: Removed blur from {ElementName}", featureImageBorder.Name);
+                    }
+                }
+                else
+                {
+                    App.Logger?.Warning("SetFeatureImageBlur: Child of featureImageBorder is not an Image. Child type: {ChildType}", featureImageBorder.Child?.GetType().Name);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                featureImageBorder.Effect = null;
+                App.Logger?.Error("SetFeatureImageBlur: Error setting blur effect for {ElementName}: {Error}", featureImageBorder?.Name, ex.Message);
             }
         }
 
