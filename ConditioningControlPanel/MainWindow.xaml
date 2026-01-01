@@ -188,16 +188,32 @@
 
         <!-- Slider Style -->
         <Style x:Key="PinkSlider" TargetType="Slider">
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="Maximum" Value="100"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid>
                             <Border Height="4" Background="#404060" CornerRadius="2" VerticalAlignment="Center"/>
-                            <Border Height="4" Background="{StaticResource PinkBrush}" CornerRadius="2" 
-                                    VerticalAlignment="Center" HorizontalAlignment="Left"
-                                    Width="{Binding Value, RelativeSource={RelativeSource TemplatedParent}, 
-                                            Converter={StaticResource SliderWidthConverter}}"/>
                             <Track x:Name="PART_Track">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="Slider.DecreaseLarge">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Height="4" Background="{StaticResource PinkBrush}" CornerRadius="2"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="Slider.IncreaseLarge">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
                                 <Track.Thumb>
                                     <Thumb>
                                         <Thumb.Template>
@@ -1988,7 +2004,7 @@ Bimbo" Foreground="#FF69B4"
                                             <TextBlock Text="✔ Lvl 90" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
                                         </StackPanel>
                                         <CheckBox x:Name="ChkBrainDrainEnabled" Style="{StaticResource ToggleStyle}" 
-                                                  HorizontalAlignment="Right" IsChecked="{Binding App.Settings.Current.BrainDrainEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  HorizontalAlignment="Right"
                                                   Checked="ChkBrainDrainEnabled_Changed" Unchecked="ChkBrainDrainEnabled_Changed"/>
                                     </Grid>
                                 
@@ -2002,10 +2018,10 @@ Bimbo" Foreground="#FF69B4"
                                             <TextBlock Style="{StaticResource SettingLabel}" Text="Intensity"
                                                        ToolTip="Blur intensity (0-25%)"/>
                                             <TextBlock x:Name="TxtBrainDrainIntensity" Grid.Column="1" Style="{StaticResource ValueLabel}" 
-                                                       Text="{Binding App.Settings.Current.BrainDrainIntensity, StringFormat={}{0}%}"/>
+                                                       Text="10%"/>
                                         </Grid>
                                         <Slider x:Name="SliderBrainDrainIntensity" Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="25" Value="{Binding App.Settings.Current.BrainDrainIntensity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
+                                                Minimum="0" Maximum="25" Value="10" 
                                                 Margin="0,1" ValueChanged="SliderBrainDrainIntensity_Changed"/>
                                     
                                         <!-- Test Button -->
