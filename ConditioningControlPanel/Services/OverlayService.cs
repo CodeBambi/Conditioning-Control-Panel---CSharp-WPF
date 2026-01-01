@@ -167,10 +167,9 @@ public class OverlayService : IDisposable
 
     public void Stop()
     {
-        if (!_isRunning) return;
         _isRunning = false;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        try
         {
             _updateTimer?.Stop();
             _updateTimer = null;
@@ -178,7 +177,11 @@ public class OverlayService : IDisposable
             StopPinkFilter();
             StopSpiral();
             StopBrainDrainBlur();
-        });
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error(ex, "Error during OverlayService Stop");
+        }
 
         App.Logger?.Information("OverlayService stopped");
     }
@@ -361,7 +364,7 @@ public class OverlayService : IDisposable
 
     private void StopPinkFilter()
     {
-        foreach (var window in _pinkFilterWindows)
+        foreach (var window in _pinkFilterWindows.ToList())
         {
             try { window.Close(); } catch { }
         }
@@ -515,13 +518,13 @@ public class OverlayService : IDisposable
         _gifLoopTimer?.Stop();
         _gifLoopTimer = null;
 
-        foreach (var media in _spiralMediaElements)
+        foreach (var media in _spiralMediaElements.ToList())
         {
             try { media.Stop(); media.Close(); } catch { }
         }
         _spiralMediaElements.Clear();
 
-        foreach (var window in _spiralWindows)
+        foreach (var window in _spiralWindows.ToList())
         {
             try { window.Close(); } catch { }
         }
@@ -818,14 +821,32 @@ public class OverlayService : IDisposable
 
     public void StopBrainDrainBlur()
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        try
         {
             _brainDrainCaptureTimer?.Stop();
             _brainDrainCaptureTimer = null;
 
-            foreach (var window in _brainDrainBlurWindows)
+            // Try to close windows - handle both normal and shutdown scenarios
+            var windowsToClose = _brainDrainBlurWindows.ToList();
+            foreach (var window in windowsToClose)
             {
-                try { window.Close(); } catch { }
+                try 
+                { 
+                    if (Application.Current?.Dispatcher?.CheckAccess() == true)
+                    {
+                        window.Close();
+                    }
+                    else if (Application.Current?.Dispatcher != null)
+                    {
+                        Application.Current.Dispatcher.Invoke(() => window.Close());
+                    }
+                    else
+                    {
+                        // Dispatcher not available (shutdown), close directly
+                        window.Close();
+                    }
+                } 
+                catch { }
             }
             _brainDrainBlurWindows.Clear();
             _brainDrainImages.Clear();
@@ -834,12 +855,16 @@ public class OverlayService : IDisposable
             // Clean up desktop duplicators
             foreach (var dup in _desktopDuplicators.Values)
             {
-                dup.Dispose();
+                try { dup.Dispose(); } catch { }
             }
             _desktopDuplicators.Clear();
 
             App.Logger?.Debug("Brain Drain stopped");
-        });
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error(ex, "Error stopping Brain Drain blur");
+        }
     }
 
     public void UpdateBrainDrainBlurOpacity(int intensity)
@@ -1255,12 +1280,60 @@ public class OverlayService : IDisposable
     {
         if (_isDisposed) return;
         _isDisposed = true;
-        Stop();
+        
+        // Stop the service normally first
+        _isRunning = false;
+        _updateTimer?.Stop();
+        _updateTimer = null;
 
         // Unsubscribe from settings changes
         if (App.Settings?.Current != null)
         {
             App.Settings.Current.PropertyChanged -= CurrentSettings_PropertyChanged;
+        }
+        
+        // Forcefully close all overlay windows - don't rely on Dispatcher during shutdown
+        try
+        {
+            // Stop brain drain capture timer
+            _brainDrainCaptureTimer?.Stop();
+            _brainDrainCaptureTimer = null;
+            
+            // Close all brain drain blur windows
+            foreach (var window in _brainDrainBlurWindows.ToList())
+            {
+                try { window.Close(); } catch { }
+            }
+            _brainDrainBlurWindows.Clear();
+            _brainDrainImages.Clear();
+            _brainDrainScreens.Clear();
+            
+            // Dispose desktop duplicators
+            foreach (var dup in _desktopDuplicators.Values)
+            {
+                try { dup.Dispose(); } catch { }
+            }
+            _desktopDuplicators.Clear();
+            
+            // Close all pink filter windows
+            foreach (var window in _pinkFilterWindows.ToList())
+            {
+                try { window.Close(); } catch { }
+            }
+            _pinkFilterWindows.Clear();
+            
+            // Close all spiral windows
+            foreach (var window in _spiralWindows.ToList())
+            {
+                try { window.Close(); } catch { }
+            }
+            _spiralWindows.Clear();
+            
+            App.Logger?.Debug("OverlayService disposed - all windows closed");
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error(ex, "Error during OverlayService disposal");
         }
     }
 }

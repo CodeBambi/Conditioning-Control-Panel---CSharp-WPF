@@ -63,6 +63,15 @@ namespace ConditioningControlPanel
             {
                 _exitRequested = true;
                 if (_isRunning) StopEngine();
+                
+                // Explicitly stop and dispose overlay to close all blur windows
+                try
+                {
+                    App.Overlay?.Stop();
+                    App.Overlay?.Dispose();
+                }
+                catch { }
+                
                 SaveSettings();
                 Application.Current.Shutdown();
             };
@@ -1173,7 +1182,11 @@ namespace ConditioningControlPanel
                 await _sessionEngine.StartSessionAsync(session);
                 
                 // Update UI to show session is running
-                TxtPresetsStatus.Text = $"🎯 {session.Name} running... {session.DurationMinutes}:00 remaining";
+                if (TxtPresetsStatus != null)
+                {
+                    TxtPresetsStatus.Visibility = Visibility.Visible;
+                    TxtPresetsStatus.Text = $"🎯 {session.Name} running... {session.DurationMinutes}:00 remaining";
+                }
                 
                 App.Logger?.Information("Started session: {Name} ({Difficulty}, +{XP} XP)", 
                     session.Name, session.Difficulty, session.BonusXP);
@@ -1198,7 +1211,11 @@ namespace ConditioningControlPanel
                 completeWindow.ShowDialog();
                 
                 // Update status
-                TxtPresetsStatus.Text = "Ready to start";
+                if (TxtPresetsStatus != null)
+                {
+                    TxtPresetsStatus.Visibility = Visibility.Collapsed;
+                    TxtPresetsStatus.Text = "";
+                }
                 
                 App.Logger?.Information("Session {Name} completed, awarded {XP} XP", e.Session.Name, e.XPEarned);
             });
@@ -1208,9 +1225,10 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
-                if (_sessionEngine?.CurrentSession != null)
+                if (_sessionEngine?.CurrentSession != null && TxtPresetsStatus != null)
                 {
                     var remaining = e.Remaining;
+                    TxtPresetsStatus.Visibility = Visibility.Visible;
                     TxtPresetsStatus.Text = $"🎯 {_sessionEngine.CurrentSession.Name} running... " +
                         $"{remaining.Minutes:D2}:{remaining.Seconds:D2} remaining ({e.ProgressPercent:F0}%)";
                 }
@@ -1545,7 +1563,11 @@ namespace ConditioningControlPanel
                     
                     // Stop the session without completing it
                     _sessionEngine.StopSession(completed: false);
-                    TxtPresetsStatus.Text = "Session cancelled";
+                    if (TxtPresetsStatus != null)
+                    {
+                        TxtPresetsStatus.Visibility = Visibility.Collapsed;
+                        TxtPresetsStatus.Text = "";
+                    }
                 }
                 
                 // User manually stopping
@@ -1995,11 +2017,21 @@ namespace ConditioningControlPanel
                 };
                 
                 // Also update Presets tab button using direct reference
-                if (BtnPresetsStart != null)
+                if (TxtPresetsStatus != null)
                 {
-                    BtnPresetsStart.Background = new SolidColorBrush(Color.FromRgb(255, 107, 107)); // Red
-                    BtnPresetsStart.Content = "⏹ Stop";
+                    TxtPresetsStatus.Visibility = Visibility.Visible;
                 }
+                
+                BtnStart.Background = new SolidColorBrush(Color.FromRgb(255, 107, 107)); // Red
+                BtnStart.Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Children =
+                    {
+                        new TextBlock { Text = "⏹", Margin = new Thickness(0, 0, 10, 0) },
+                        new TextBlock { Text = "STOP" }
+                    }
+                };
             }
             else
             {
@@ -2015,11 +2047,22 @@ namespace ConditioningControlPanel
                 };
                 
                 // Also update Presets tab button
-                if (BtnPresetsStart != null)
+                if (TxtPresetsStatus != null)
                 {
-                    BtnPresetsStart.Background = FindResource("PinkBrush") as SolidColorBrush;
-                    BtnPresetsStart.Content = "▶ Start";
+                    TxtPresetsStatus.Visibility = Visibility.Collapsed;
+                    TxtPresetsStatus.Text = "";
                 }
+                
+                BtnStart.Background = FindResource("PinkBrush") as SolidColorBrush;
+                BtnStart.Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Children =
+                    {
+                        new TextBlock { Text = "▶", Margin = new Thickness(0, 0, 10, 0) },
+                        new TextBlock { Text = "START" }
+                    }
+                };
             }
         }
         
@@ -3310,6 +3353,14 @@ namespace ConditioningControlPanel
                 _trayIcon?.Dispose();
                 _browser?.Dispose();
                 _avatarTubeWindow?.Close();
+                
+                // Explicitly stop all overlay windows before app exits
+                try
+                {
+                    App.Overlay?.Stop();
+                    App.Overlay?.Dispose();
+                }
+                catch { }
             }
             else
             {

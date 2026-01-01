@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Conditioning Control Panel v4.0" 
-        Height="881" Width="1305"
-        MinHeight="795" MinWidth="1100"
+        Height="941" Width="1305"
+        MinHeight="855" MinWidth="1100"
         Background="#1A1A2E"
         WindowStartupLocation="Manual"
         WindowStyle="None"
@@ -289,6 +289,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Custom Title Bar -->
@@ -610,23 +611,13 @@ Bimbo" Foreground="#FF69B4"
                     </Border>
 
                     <!-- Logo (Clickable for Neon Obsession achievement) -->
-                    <Border Background="#01000000" Padding="0" Height="302" Margin="0,0,0,8"
+                    <Border Background="#01000000" Padding="0" Height="295" Margin="0,0,0,8"
                             Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                             ToolTip="Click me rapidly! 💗">
                         <Image x:Name="ImgLogo" Stretch="Uniform" 
                                HorizontalAlignment="Stretch" VerticalAlignment="Center"
                                RenderOptions.BitmapScalingMode="HighQuality"/>
                     </Border>
-
-                    <!-- START Button -->
-                    <Button x:Name="BtnStart" Style="{StaticResource PinkButton}" 
-                            Height="50" FontSize="18" Margin="0,5" Click="BtnStart_Click"
-                            ToolTip="Start/Stop the conditioning engine">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="▶" Margin="0,0,10,0"/>
-                            <TextBlock Text="START"/>
-                        </StackPanel>
-                    </Button>
                 </StackPanel>
             </ScrollViewer>
 
@@ -823,35 +814,6 @@ Bimbo" Foreground="#FF69B4"
                             </Grid>
                         </StackPanel>
                     </Border>
-                    
-                    <!-- Save / Exit Buttons - Detached -->
-                    <Grid Margin="0,8,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0" Content="💾 Save" Style="{StaticResource PinkButton}" 
-                                Margin="0,0,5,0" Height="50" FontSize="16" Click="BtnSave_Click"
-                                ToolTip="Save all settings to disk"/>
-                        <Button Grid.Column="1" Content="🚪 Exit" Background="#FF6B6B" Foreground="White"
-                                FontWeight="Bold" Height="50" FontSize="16" Margin="5,0,0,0" Click="BtnExit_Click"
-                                ToolTip="Exit the application completely">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="20,10">
-                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                </Border>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                    </Grid>
                 </StackPanel>
             </ScrollViewer>
 
@@ -952,13 +914,8 @@ Bimbo" Foreground="#FF69B4"
 
         <!-- Presets Tab (Hidden by default) -->
         <Grid x:Name="PresetsTab" Grid.Row="3" Margin="10,5,10,10" Visibility="Collapsed">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-            
             <!-- Main Content -->
-            <Grid Grid.Row="0">
+            <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="430"/>
@@ -1047,11 +1004,14 @@ Bimbo" Foreground="#FF69B4"
                                                 <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
                                                     <TextBlock Text="30 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
+                                                <Border Background="#2A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
+                                                    <TextBlock Text="⭐ Easy" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
                                                 <Border Background="#2A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="{Binding BonusXP, StringFormat='⭐ +{0} XP'}" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                    <TextBlock Text="+400 XP" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="Gentle passive conditioning for your morning routine" 
+                                            <TextBlock Text="Gentle subliminals &amp; bouncing text with gradual pink filter" 
                                                        Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
                                                                             </Grid>
@@ -1079,10 +1039,13 @@ Bimbo" Foreground="#FF69B4"
                                                     <TextBlock Text="45 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                                 <Border Background="#3A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="{Binding BonusXP, StringFormat='⭐⭐ +{0} XP'}" Foreground="#FFD700" FontSize="9" FontWeight="Bold"/>
+                                                    <TextBlock Text="⭐⭐ Medium" Foreground="#FFD700" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
+                                                <Border Background="#3A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
+                                                    <TextBlock Text="+800 XP" Foreground="#FFD700" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="Background conditioning while you game" 
+                                            <TextBlock Text="Non-intrusive conditioning with pink filter &amp; spiral overlay" 
                                                        Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
                                                                             </Grid>
@@ -1109,11 +1072,14 @@ Bimbo" Foreground="#FF69B4"
                                                 <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
                                                     <TextBlock Text="45 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
+                                                <Border Background="#2A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
+                                                    <TextBlock Text="⭐ Easy" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
                                                 <Border Background="#2A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="{Binding BonusXP, StringFormat='⭐ +{0} XP'}" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                    <TextBlock Text="+400 XP" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="Passive couch session - no audio ducking" 
+                                            <TextBlock Text="Large visuals for couch viewing, no audio ducking" 
                                                        Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
                                                                             </Grid>
@@ -1141,10 +1107,13 @@ Bimbo" Foreground="#FF69B4"
                                                     <TextBlock Text="60 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                                 <Border Background="#4A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="{Binding BonusXP, StringFormat='⭐⭐⭐ +{0} XP'}" Foreground="#FFA500" FontSize="9" FontWeight="Bold"/>
+                                                    <TextBlock Text="⭐⭐⭐ Hard" Foreground="#FFA500" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
+                                                <Border Background="#4A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
+                                                    <TextBlock Text="+1200 XP" Foreground="#FFA500" FontSize="9" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="Denial session - heavy pink fog conditioning" 
+                                            <TextBlock Text="Denial session with heavy conditioning, videos &amp; lock cards" 
                                                        Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
                                                                             </Grid>
@@ -1399,34 +1368,6 @@ Bimbo" Foreground="#FF69B4"
                 </Grid>
             </Border>
             </Grid>
-            
-            <!-- Bottom Bar: Start/Save/Exit Buttons -->
-            <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5,8,5,0" Padding="15,12">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <!-- Status text on left -->
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock x:Name="TxtPresetsStatus" Text="Ready to start" Foreground="#808090" FontSize="12"/>
-                    </StackPanel>
-                    
-                    <!-- Buttons on right -->
-                    <Button x:Name="BtnPresetsStart" Grid.Column="1" Content="▶ Start" Style="{StaticResource PinkButton}"
-                            Padding="20,10" FontSize="13" Margin="0,0,10,0"
-                            Click="BtnStart_Click" ToolTip="Start the conditioning engine"/>
-                    <Button Grid.Column="2" Content="💾 Save" Style="{StaticResource OutlineButton}"
-                            Padding="16,10" FontSize="13" Margin="0,0,10,0"
-                            Click="BtnSave_Click" ToolTip="Save current settings"/>
-                    <Button Grid.Column="3" Content="🚪 Exit" Style="{StaticResource OutlineButton}"
-                            Padding="16,10" FontSize="13"
-                            Click="BtnExit_Click" ToolTip="Exit the application"/>
-                </Grid>
-            </Border>
         </Grid>
 
         <!-- Progression Tab (Hidden by default) -->
@@ -1435,13 +1376,9 @@ Bimbo" Foreground="#FF69B4"
                 <ColumnDefinition Width="2*"/>
                 <ColumnDefinition Width="280"/>
             </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
 
             <!-- Unlockables -->
-            <Border Grid.Column="0" Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5"
+            <Border Grid.Column="0" Style="{StaticResource SectionPanel}" Margin="5"
                     ToolTip="Features that unlock as you level up.&#x0a;Keep conditioning to earn XP and unlock new features!">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
@@ -2044,8 +1981,8 @@ Bimbo" Foreground="#FF69B4"
                 </ScrollViewer>
             </Border>
 
-            <!-- Right Column: Scheduler + Ramp stacked -->
-            <StackPanel Grid.Column="1" Grid.Row="0">
+            <!-- Right Column: Scheduler + Ramp + Community stacked -->
+            <StackPanel Grid.Column="1">
                 <!-- Scheduler Box -->
                 <Border Style="{StaticResource SectionPanel}" Margin="5">
                     <StackPanel>
@@ -2157,21 +2094,21 @@ Bimbo" Foreground="#FF69B4"
                         </Border>
                     </StackPanel>
                 </Border>
-            </StackPanel>
-            
-            <!-- Coming Soon: Community -->
-            <Border Grid.Column="0" Grid.ColumnSpan="2" Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5" MinHeight="80"
-                    ToolTip="Coming Soon: Connect with other users!">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock Text="🌐" FontSize="28" VerticalAlignment="Center" Margin="0,0,15,0"/>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Community" Foreground="{StaticResource PinkBrush}" 
-                                   FontSize="16" FontWeight="Bold"/>
-                        <TextBlock Text="Coming Soon - Connect, share &amp; compete" Foreground="#888888" 
-                                   FontSize="11" FontStyle="Italic"/>
+                
+                <!-- Coming Soon: Community -->
+                <Border Style="{StaticResource SectionPanel}" Margin="5" MinHeight="70"
+                        ToolTip="Coming Soon: Connect with other users!">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="🌐" FontSize="24" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Community" Foreground="{StaticResource PinkBrush}" 
+                                       FontSize="14" FontWeight="Bold"/>
+                            <TextBlock Text="Coming Soon - Connect, share &amp; compete" Foreground="#888888" 
+                                       FontSize="10" FontStyle="Italic"/>
+                        </StackPanel>
                     </StackPanel>
-                </StackPanel>
-            </Border>
+                </Border>
+            </StackPanel>
         </Grid>
 
         <!-- Achievements Tab -->
@@ -2200,6 +2137,67 @@ Bimbo" Foreground="#FF69B4"
                                HorizontalAlignment="Center" Margin="0,15,0,0"/>
                 </StackPanel>
             </ScrollViewer>
+        </Border>
+
+        <!-- Global Bottom Bar: Start / Save / Exit (Always visible) -->
+        <Border Grid.Row="4" Background="{StaticResource PanelBgBrush}" Margin="10,5,10,10" CornerRadius="10" Padding="15,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                
+                <!-- Status Text (spans full width) -->
+                <TextBlock x:Name="TxtPresetsStatus" Grid.Row="0" Grid.ColumnSpan="2" 
+                           Text="" Foreground="#808090" FontSize="11" 
+                           HorizontalAlignment="Center" Margin="0,0,0,8"
+                           Visibility="Collapsed"/>
+                
+                <!-- START Button (half width) -->
+                <Button x:Name="BtnStart" Grid.Row="1" Grid.Column="0" Style="{StaticResource PinkButton}" 
+                        Height="50" FontSize="18" Margin="0,0,8,0" Click="BtnStart_Click"
+                        ToolTip="Start/Stop the conditioning engine">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="▶" Margin="0,0,10,0"/>
+                        <TextBlock Text="START"/>
+                    </StackPanel>
+                </Button>
+                
+                <!-- Save / Exit (other half) -->
+                <Grid Grid.Row="1" Grid.Column="1" Margin="8,0,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="💾 Save" Style="{StaticResource PinkButton}" 
+                            Height="50" FontSize="16" Margin="0,0,5,0" Click="BtnSave_Click"
+                            ToolTip="Save all settings to disk"/>
+                    <Button Grid.Column="1" Content="🚪 Exit" Height="50" FontSize="16" Margin="5,0,0,0" Click="BtnExit_Click"
+                            ToolTip="Exit the application completely">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="#FF6B6B"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="20,10">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+            </Grid>
         </Border>
 
     </Grid>
