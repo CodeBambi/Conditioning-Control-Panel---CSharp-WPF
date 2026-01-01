@@ -96,20 +96,20 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var assetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "mindwipe");
+                var audioFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "mindwipe");
                 
-                App.Logger?.Information("MindWipe: Looking for audio files in {Path}", assetsPath);
+                App.Logger?.Information("MindWipe: Looking for audio files in {Path}", audioFolderPath);
                 
-                if (!Directory.Exists(assetsPath))
+                if (!Directory.Exists(audioFolderPath))
                 {
                     // Create the directory so user knows where to put files
-                    Directory.CreateDirectory(assetsPath);
-                    App.Logger?.Warning("MindWipe: Created empty folder at {Path} - add audio files here!", assetsPath);
+                    Directory.CreateDirectory(audioFolderPath);
+                    App.Logger?.Warning("MindWipe: Created empty folder at {Path} - add audio files here!", audioFolderPath);
                     _audioFiles = Array.Empty<string>();
                     return;
                 }
                 
-                _audioFiles = Directory.GetFiles(assetsPath, "*.*")
+                _audioFiles = Directory.GetFiles(audioFolderPath, "*.*")
                     .Where(f => f.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
                                f.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
                                f.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
@@ -117,7 +117,7 @@ namespace ConditioningControlPanel.Services
                 
                 if (_audioFiles.Length == 0)
                 {
-                    App.Logger?.Warning("MindWipe: No .mp3/.wav/.ogg files found in {Path}", assetsPath);
+                    App.Logger?.Warning("MindWipe: No .mp3/.wav/.ogg files found in {Path}", audioFolderPath);
                 }
                 else
                 {
