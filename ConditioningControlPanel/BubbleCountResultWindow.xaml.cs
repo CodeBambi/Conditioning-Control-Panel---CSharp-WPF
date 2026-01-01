@@ -172,6 +172,9 @@ namespace ConditioningControlPanel
                 ShowFeedbackOnAll("🎉 CORRECT! +100 XP 🎉", Color.FromRgb(50, 205, 50));
                 DisableInputOnAll();
                 
+                // Track achievement - correct answer
+                App.Achievements?.TrackBubbleCountResult(true);
+                
                 // Delay then complete
                 var timer = new System.Windows.Threading.DispatcherTimer
                 {
@@ -189,6 +192,9 @@ namespace ConditioningControlPanel
                 // Wrong answer
                 _attemptsRemaining--;
                 UpdateAttemptsOnAll();
+                
+                // Track achievement - wrong answer (breaks streak)
+                App.Achievements?.TrackBubbleCountResult(false);
                 
                 if (_attemptsRemaining <= 0)
                 {

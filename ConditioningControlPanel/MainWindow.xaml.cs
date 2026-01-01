@@ -7,6 +7,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -31,6 +33,9 @@ namespace ConditioningControlPanel
         
         // Avatar Tube Window
         private AvatarTubeWindow? _avatarTubeWindow;
+        
+        // Achievement tracking
+        private Dictionary<string, Image> _achievementImages = new();
         
         // Ramp tracking
         private DispatcherTimer? _rampTimer;
@@ -79,6 +84,13 @@ namespace ConditioningControlPanel
             InitializePresets();
             UpdateUI();
             _isLoading = false;
+            
+            // Initialize achievement grid and subscribe to unlock events
+            PopulateAchievementGrid();
+            if (App.Achievements != null)
+            {
+                App.Achievements.AchievementUnlocked += OnAchievementUnlockedInMainWindow;
+            }
             
             // Ensure all services are stopped on startup (cleanup any leftover state)
             App.BouncingText.Stop();
@@ -153,6 +165,16 @@ namespace ConditioningControlPanel
 
         private void OnGlobalKeyPressed(Key key)
         {
+            // Track Alt+Tab for achievement (Player 2 Disconnected)
+            if (key == Key.Tab && (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt)))
+            {
+                if (_isRunning)
+                {
+                    App.Achievements?.TrackAltTab();
+                    App.Logger?.Debug("Alt+Tab detected during session");
+                }
+            }
+            
             // Handle panic key capture mode
             if (_isCapturingPanicKey)
             {
@@ -475,8 +497,136 @@ namespace ConditioningControlPanel
                     AchievementsTab.Visibility = Visibility.Visible;
                     BtnAchievements.Background = pinkBrush;
                     BtnAchievements.Foreground = Brushes.White;
+                    UpdateAchievementCount();
                     break;
             }
+        }
+        
+        private void UpdateAchievementCount()
+        {
+            if (TxtAchievementCount != null && App.Achievements != null)
+            {
+                var unlocked = App.Achievements.GetUnlockedCount();
+                var total = App.Achievements.GetTotalCount();
+                TxtAchievementCount.Text = $"{unlocked} / {total} Achievements Unlocked";
+            }
+        }
+        
+        private void PopulateAchievementGrid()
+        {
+            if (AchievementGrid == null) return;
+            
+            AchievementGrid.Children.Clear();
+            _achievementImages.Clear();
+            
+            var tileStyle = FindResource("AchievementTile") as Style;
+            
+            // Add all achievements
+            foreach (var kvp in Models.Achievement.All)
+            {
+                var achievement = kvp.Value;
+                var isUnlocked = App.Achievements?.Progress.IsUnlocked(achievement.Id) ?? false;
+                
+                var border = new Border { Style = tileStyle };
+                border.ToolTip = isUnlocked 
+                    ? $"{achievement.Name}\n\n\"{achievement.FlavorText}\""
+                    : $"???\n\nRequirement: {achievement.Requirement}";
+                
+                var image = new Image
+                {
+                    Stretch = Stretch.Uniform,
+                    Source = LoadAchievementImage(achievement.ImageName)
+                };
+                
+                // Apply blur if locked
+                if (!isUnlocked)
+                {
+                    image.Effect = new BlurEffect { Radius = 15 };
+                }
+                
+                border.Child = image;
+                AchievementGrid.Children.Add(border);
+                
+                // Store reference for later updates
+                _achievementImages[achievement.Id] = image;
+            }
+            
+            // Add "Coming Soon" placeholders
+            for (int i = 0; i < 2; i++)
+            {
+                var border = new Border { Style = tileStyle };
+                var stack = new StackPanel 
+                { 
+                    VerticalAlignment = VerticalAlignment.Center, 
+                    HorizontalAlignment = HorizontalAlignment.Center 
+                };
+                stack.Children.Add(new TextBlock 
+                { 
+                    Text = "❓", 
+                    FontSize = 32, 
+                    HorizontalAlignment = HorizontalAlignment.Center 
+                });
+                stack.Children.Add(new TextBlock 
+                { 
+                    Text = "Coming Soon", 
+                    Foreground = new SolidColorBrush(Color.FromRgb(102, 102, 102)), 
+                    FontSize = 10, 
+                    HorizontalAlignment = HorizontalAlignment.Center, 
+                    Margin = new Thickness(0, 5, 0, 0) 
+                });
+                border.Child = stack;
+                AchievementGrid.Children.Add(border);
+            }
+            
+            UpdateAchievementCount();
+            App.Logger?.Information("Achievement grid populated with {Count} achievements", _achievementImages.Count);
+        }
+        
+        private BitmapImage? LoadAchievementImage(string imageName)
+        {
+            try
+            {
+                var uri = new Uri($"pack://application:,,,/Resources/achievements/{imageName}", UriKind.Absolute);
+                return new BitmapImage(uri);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to load achievement image {Name}: {Error}", imageName, ex.Message);
+                return null;
+            }
+        }
+        
+        private void RefreshAchievementTile(string achievementId)
+        {
+            if (!_achievementImages.TryGetValue(achievementId, out var image)) return;
+            
+            var isUnlocked = App.Achievements?.Progress.IsUnlocked(achievementId) ?? false;
+            
+            // Update blur
+            image.Effect = isUnlocked ? null : new BlurEffect { Radius = 15 };
+            
+            // Update tooltip
+            if (Models.Achievement.All.TryGetValue(achievementId, out var achievement))
+            {
+                var parent = image.Parent as Border;
+                if (parent != null)
+                {
+                    parent.ToolTip = isUnlocked 
+                        ? $"{achievement.Name}\n\n\"{achievement.FlavorText}\""
+                        : $"???\n\nRequirement: {achievement.Requirement}";
+                }
+            }
+            
+            UpdateAchievementCount();
+        }
+        
+        private void OnAchievementUnlockedInMainWindow(object? sender, Models.Achievement achievement)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                RefreshAchievementTile(achievement.Id);
+                App.Logger?.Information("Achievement tile refreshed: {Name}", achievement.Name);
+            });
         }
 
         #endregion
@@ -2785,6 +2935,39 @@ namespace ConditioningControlPanel
         #endregion
 
         #region Button Events
+        
+        private void ImgLogo_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Track for Neon Obsession achievement (20 rapid clicks on the avatar/logo)
+            App.Achievements?.TrackAvatarClick();
+            
+            // Log click count for debugging
+            var clickCount = App.Achievements?.Progress.AvatarClickCount ?? 0;
+            App.Logger?.Debug("Logo/Avatar clicked! Count: {Count}/20", clickCount);
+            
+            // Visual feedback - quick pulse effect
+            if (ImgLogo != null)
+            {
+                var pulse = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = 1.0,
+                    To = 1.05,
+                    Duration = TimeSpan.FromMilliseconds(80),
+                    AutoReverse = true
+                };
+                
+                var scaleTransform = ImgLogo.RenderTransform as System.Windows.Media.ScaleTransform;
+                if (scaleTransform == null)
+                {
+                    scaleTransform = new System.Windows.Media.ScaleTransform(1, 1);
+                    ImgLogo.RenderTransformOrigin = new Point(0.5, 0.5);
+                    ImgLogo.RenderTransform = scaleTransform;
+                }
+                
+                scaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, pulse);
+                scaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, pulse);
+            }
+        }
 
         private void BtnTestVideo_Click(object sender, RoutedEventArgs e)
         {

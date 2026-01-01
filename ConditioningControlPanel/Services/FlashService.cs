@@ -525,6 +525,9 @@ namespace ConditioningControlPanel.Services
             
             // Award XP for viewing
             App.Progression.AddXP(1);
+            
+            // Track for achievement
+            App.Achievements?.TrackFlashImage();
         }
 
         private void OnFlashClicked(FlashWindow window, AppSettings settings)

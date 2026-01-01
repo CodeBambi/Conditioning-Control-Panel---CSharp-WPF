@@ -25,6 +25,11 @@ namespace ConditioningControlPanel
         private readonly bool _isPrimary;
         private static List<LockCardWindow> _allWindows = new();
         private static string _sharedInput = "";
+        
+        // Achievement tracking
+        private static DateTime _startTime;
+        private static int _totalErrors = 0;
+        private static int _totalCharsTyped = 0;
 
         /// <summary>
         /// Check if any lock card window is currently open
@@ -206,6 +211,19 @@ namespace ConditioningControlPanel
             var input = TxtInput.Text;
             _sharedInput = input;
             
+            // Track characters typed for achievement
+            _totalCharsTyped++;
+            
+            // Check for errors (input doesn't match phrase prefix)
+            if (input.Length > 0)
+            {
+                var expectedPrefix = _phrase.Substring(0, Math.Min(input.Length, _phrase.Length));
+                if (!string.Equals(input, expectedPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    _totalErrors++;
+                }
+            }
+            
             // Sync to all other windows
             SyncInputToAllWindows(input);
             
@@ -276,6 +294,9 @@ namespace ConditioningControlPanel
 
         private void CompleteAllWindows()
         {
+            // Calculate completion time
+            var completionTime = (DateTime.Now - _startTime).TotalSeconds;
+            
             // Award XP (only once)
             try
             {
@@ -285,7 +306,11 @@ namespace ConditioningControlPanel
             }
             catch { }
             
-            App.Logger?.Information("Lock Card completed - {Repeats} repeats", _requiredRepeats);
+            App.Logger?.Information("Lock Card completed - {Repeats} repeats in {Time:F1}s with {Errors} errors", 
+                _requiredRepeats, completionTime, _totalErrors);
+            
+            // Track achievement
+            App.Achievements?.TrackLockCardCompletion(completionTime, _totalCharsTyped, _totalErrors, _requiredRepeats);
             
             foreach (var window in _allWindows)
             {
@@ -412,6 +437,11 @@ namespace ConditioningControlPanel
             // Clear any existing windows
             _allWindows.Clear();
             _sharedInput = "";
+            
+            // Reset achievement tracking
+            _startTime = DateTime.Now;
+            _totalErrors = 0;
+            _totalCharsTyped = 0;
             
             var screens = System.Windows.Forms.Screen.AllScreens;
             LockCardWindow? primaryWindow = null;

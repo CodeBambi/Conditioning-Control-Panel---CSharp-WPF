@@ -22,6 +22,7 @@ namespace ConditioningControlPanel
         public static BubbleCountService BubbleCount { get; private set; } = null!;
         public static BouncingTextService BouncingText { get; private set; } = null!;
         public static MindWipeService MindWipe { get; private set; } = null!;
+        public static AchievementService Achievements { get; private set; } = null!;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -48,6 +49,9 @@ namespace ConditioningControlPanel
             Directory.CreateDirectory(Path.Combine(assetsPath, "backgrounds"));
             Directory.CreateDirectory(Path.Combine(assetsPath, "sub_audio"));
             Directory.CreateDirectory(Path.Combine(assetsPath, "mindwipe"));
+            
+            // Create Spirals directory for random spiral selection
+            Directory.CreateDirectory(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Spirals"));
 
             // Initialize services
             Settings = new SettingsService();
@@ -62,12 +66,43 @@ namespace ConditioningControlPanel
             BubbleCount = new BubbleCountService();
             BouncingText = new BouncingTextService();
             MindWipe = new MindWipeService();
+            Achievements = new AchievementService();
+            
+            // Wire up achievement popup BEFORE checking initial achievements
+            Achievements.AchievementUnlocked += OnAchievementUnlocked;
+            
+            // Now check level achievements (so popup can show)
+            Achievements.CheckLevelAchievements(Settings.Current.PlayerLevel);
+            Logger.Information("Checked level achievements for level {Level}", Settings.Current.PlayerLevel);
 
             Logger.Information("Services initialized");
 
             // Show main window
             var mainWindow = new MainWindow();
             mainWindow.Show();
+        }
+        
+        private void OnAchievementUnlocked(object? sender, Models.Achievement achievement)
+        {
+            Logger.Information("OnAchievementUnlocked handler called for: {Name}", achievement.Name);
+            
+            // Show achievement popup
+            var popup = new AchievementPopup(achievement);
+            popup.Show();
+            
+            Logger.Information("Achievement popup shown for: {Name}", achievement.Name);
+            
+            // Play achievement sound if available
+            try
+            {
+                var soundPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "sounds", "achievement.wav");
+                if (File.Exists(soundPath))
+                {
+                    var player = new System.Media.SoundPlayer(soundPath);
+                    player.Play();
+                }
+            }
+            catch { /* Ignore sound errors */ }
         }
 
         protected override void OnExit(ExitEventArgs e)
@@ -83,6 +118,7 @@ namespace ConditioningControlPanel
             BubbleCount?.Dispose();
             BouncingText?.Dispose();
             MindWipe?.Dispose();
+            Achievements?.Dispose();
             Audio?.Dispose();
             Settings?.Save();
 

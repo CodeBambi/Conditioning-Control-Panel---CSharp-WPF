@@ -145,6 +145,9 @@ public class BubbleService : IDisposable
         _bubbles.Remove(bubble);
         OnBubblePopped?.Invoke();
         App.Progression?.AddXP(2);
+        
+        // Track for achievement
+        App.Achievements?.TrackBubblePopped();
     }
 
     private void OnMiss(Bubble bubble)

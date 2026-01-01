@@ -587,8 +587,10 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Logo -->
-                    <Border Background="Transparent" Padding="0" Height="302" Margin="0,0,0,8">
+                    <!-- Logo (Clickable for Neon Obsession achievement) -->
+                    <Border Background="#01000000" Padding="0" Height="302" Margin="0,0,0,8"
+                            Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
+                            ToolTip="Click me rapidly! 💗">
                         <Image x:Name="ImgLogo" Stretch="Uniform" 
                                HorizontalAlignment="Stretch" VerticalAlignment="Center"
                                RenderOptions.BitmapScalingMode="HighQuality"/>
@@ -2111,158 +2113,11 @@
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     
-                    <!-- Static Achievement Grid -->
-                    <UniformGrid Columns="7" Margin="0,5">
-                        <!-- Row 1 -->
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/10 hours pink.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/clean slate.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/corner hit.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/daily mainenance.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/deep sleep.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/Dumb Bimbo.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/how many.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <!-- Row 2 -->
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/look but dont touch.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/lv 10.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/lv 50.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/Mathematician's nightmare.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/mercy beggar.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/morning glory.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/Neon obsession.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <!-- Row 3 -->
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/obedience reflex.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/perfect plastic puppet.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/player 2 disconnected.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/pop the Thought.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/relapse.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/retinal burn.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/Sofa decor.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <!-- Row 4 -->
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/spiral eyes.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/system overload.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/total lockdown.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/typing tutor.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <Image Source="pack://application:,,,/Resources/achievements/What panic button.png" Stretch="Uniform">
-                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
-                            </Image>
-                        </Border>
-                        <!-- Coming Soon placeholders -->
-                        <Border Style="{StaticResource AchievementTile}">
-                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <TextBlock Text="❓" FontSize="32" HorizontalAlignment="Center"/>
-                                <TextBlock Text="Coming Soon" Foreground="#666666" FontSize="10" HorizontalAlignment="Center" Margin="0,5,0,0"/>
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource AchievementTile}">
-                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <TextBlock Text="❓" FontSize="32" HorizontalAlignment="Center"/>
-                                <TextBlock Text="Coming Soon" Foreground="#666666" FontSize="10" HorizontalAlignment="Center" Margin="0,5,0,0"/>
-                            </StackPanel>
-                        </Border>
+                    <!-- Dynamic Achievement Grid (populated in code-behind) -->
+                    <UniformGrid x:Name="AchievementGrid" Columns="7" Margin="0,5">
                     </UniformGrid>
                     
-                    <TextBlock Text="0 / 26 Achievements Unlocked" Foreground="#888888" FontSize="14" 
+                    <TextBlock x:Name="TxtAchievementCount" Text="0 / 25 Achievements Unlocked" Foreground="#888888" FontSize="14" 
                                HorizontalAlignment="Center" Margin="0,15,0,0"/>
                 </StackPanel>
             </ScrollViewer>

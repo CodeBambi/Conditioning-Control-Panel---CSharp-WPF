@@ -35,6 +35,8 @@ namespace ConditioningControlPanel.Services
         // Loop mode
         private bool _loopMode;
         private string? _loopFilePath;
+        private DateTime _loopStartTime;
+        private bool _cleanSlateAchieved;
         
         public bool IsRunning => _isRunning;
         public bool IsLooping => _loopMode && _waveOut?.PlaybackState == PlaybackState.Playing;
@@ -200,6 +202,8 @@ namespace ConditioningControlPanel.Services
             _loopMode = true;
             _volume = volume;
             _loopFilePath = _audioFiles[_random.Next(_audioFiles.Length)];
+            _loopStartTime = DateTime.Now;
+            _cleanSlateAchieved = false;
             
             PlayLoopAudio();
             
@@ -222,6 +226,17 @@ namespace ConditioningControlPanel.Services
         private void PlayLoopAudio()
         {
             if (!_loopMode || string.IsNullOrEmpty(_loopFilePath)) return;
+            
+            // Check for Clean Slate achievement (60 seconds of continuous loop)
+            if (!_cleanSlateAchieved)
+            {
+                var elapsed = (DateTime.Now - _loopStartTime).TotalSeconds;
+                if (elapsed >= 60)
+                {
+                    _cleanSlateAchieved = true;
+                    App.Achievements?.TrackMindWipeDuration(elapsed);
+                }
+            }
             
             try
             {

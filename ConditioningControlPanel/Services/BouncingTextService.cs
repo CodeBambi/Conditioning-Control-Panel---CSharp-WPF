@@ -172,33 +172,43 @@ public class BouncingTextService : IDisposable
         _posX += _velX;
         _posY += _velY;
         
-        bool bounced = false;
+        bool bouncedX = false;
+        bool bouncedY = false;
         
         // Bounce off edges
         if (_posX <= _minX)
         {
             _posX = _minX;
             _velX = Math.Abs(_velX);
-            bounced = true;
+            bouncedX = true;
         }
         else if (_posX + _textWidth >= _maxX)
         {
             _posX = _maxX - _textWidth;
             _velX = -Math.Abs(_velX);
-            bounced = true;
+            bouncedX = true;
         }
         
         if (_posY <= _minY)
         {
             _posY = _minY;
             _velY = Math.Abs(_velY);
-            bounced = true;
+            bouncedY = true;
         }
         else if (_posY + _textHeight >= _maxY)
         {
             _posY = _maxY - _textHeight;
             _velY = -Math.Abs(_velY);
-            bounced = true;
+            bouncedY = true;
+        }
+        
+        bool bounced = bouncedX || bouncedY;
+        
+        // Check for corner hit (both X and Y bounce at the same time!)
+        if (bouncedX && bouncedY)
+        {
+            App.Logger?.Information("CORNER HIT! 🎯");
+            App.Achievements?.TrackCornerHit();
         }
         
         // On bounce: change color, award XP, maybe change text

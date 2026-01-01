@@ -284,5 +284,33 @@ namespace ConditioningControlPanel
             
             base.OnClosed(e);
         }
+        
+        private void ImgAvatar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Track for Neon Obsession achievement (20 rapid clicks)
+            App.Achievements?.TrackAvatarClick();
+            
+            // Log click count for debugging
+            var clickCount = App.Achievements?.Progress.AvatarClickCount ?? 0;
+            App.Logger?.Debug("Avatar clicked! Count: {Count}/20", clickCount);
+            
+            // Visual feedback - quick pulse effect
+            var pulse = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                From = 1.0,
+                To = 1.1,
+                Duration = TimeSpan.FromMilliseconds(100),
+                AutoReverse = true
+            };
+            
+            var scaleTransform = new System.Windows.Media.ScaleTransform(1, 1);
+            ImgAvatar.RenderTransform = new System.Windows.Media.TransformGroup
+            {
+                Children = { new System.Windows.Media.TranslateTransform(AvatarTranslate.X, AvatarTranslate.Y), scaleTransform }
+            };
+            
+            scaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, pulse);
+            scaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, pulse);
+        }
     }
 }

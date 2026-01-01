@@ -134,6 +134,9 @@ namespace ConditioningControlPanel.Services
             // Fire started event
             SessionStarted?.Invoke(this, EventArgs.Empty);
             
+            // Track session start for achievements (e.g., Relapse)
+            App.Achievements?.TrackSessionStart();
+            
             // Announce first phase
             if (session.Phases.Count > 0)
             {
@@ -181,10 +184,23 @@ namespace ConditioningControlPanel.Services
                 
                 App.Logger?.Information("Session completed: {Name}, XP: {XP}", 
                     _currentSession.Name, _currentSession.BonusXP);
+                
+                // Track achievement for session completion
+                // Use App.Settings.Current for panic/strict lock as these are app-level settings
+                var appSettings = App.Settings.Current;
+                App.Achievements?.TrackSessionComplete(
+                    _currentSession.Name,
+                    ElapsedTime.TotalMinutes,
+                    !appSettings.PanicKeyEnabled, // No panic = disabled
+                    appSettings.StrictLockEnabled
+                );
             }
             else
             {
                 App.Logger?.Information("Session stopped early");
+                
+                // Track panic button press for Relapse achievement
+                App.Achievements?.TrackPanicPressed();
             }
             
             _currentSession = null;
