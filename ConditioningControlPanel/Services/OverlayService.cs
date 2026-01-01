@@ -589,7 +589,9 @@ private const int WCA_ACCENT_POLICY = 19;
 
 #region Brain Drain Blur
 
-private Dictionary<Window, Border> _brainDrainBlurTargets = new();
+private Dictionary<Window, System.Windows.Controls.Image> _brainDrainImages = new();
+private Dictionary<Window, System.Windows.Forms.Screen> _brainDrainScreens = new();
+private DispatcherTimer? _brainDrainCaptureTimer;
 private int _currentBrainDrainIntensity = 50;
 
 public void StartBrainDrainBlur(int intensity)
@@ -603,27 +605,33 @@ public void StartBrainDrainBlur(int intensity)
         try
         {
             var settings = App.Settings.Current;
-
-            // Get all screens if dual monitor enabled, otherwise just primary
             var screens = settings.DualMonitorEnabled
                 ? System.Windows.Forms.Screen.AllScreens
                 : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
 
             foreach (var screen in screens)
             {
-                var window = CreateBrainDrainBlurForScreen(screen, intensity);
+                var window = CreateBrainDrainWindow(screen, intensity);
                 if (window != null)
                 {
                     _brainDrainBlurWindows.Add(window);
                 }
             }
 
-            App.Logger?.Debug("Brain Drain blur started on {Count} screens at intensity {Intensity}%",
+            // Start continuous capture timer
+            _brainDrainCaptureTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(50) // 20 FPS refresh
+            };
+            _brainDrainCaptureTimer.Tick += BrainDrainCaptureTick;
+            _brainDrainCaptureTimer.Start();
+
+            App.Logger?.Debug("Brain Drain started on {Count} screens at intensity {Intensity}%",
                 _brainDrainBlurWindows.Count, intensity);
         }
         catch (Exception ex)
         {
-            App.Logger?.Error("Failed to start Brain Drain blur: {Error}", ex.Message);
+            App.Logger?.Error("Failed to start Brain Drain: {Error}", ex.Message);
         }
     });
 }
@@ -632,13 +640,18 @@ public void StopBrainDrainBlur()
 {
     Application.Current.Dispatcher.Invoke(() =>
     {
+        _brainDrainCaptureTimer?.Stop();
+        _brainDrainCaptureTimer = null;
+
         foreach (var window in _brainDrainBlurWindows)
         {
             try { window.Close(); } catch { }
         }
         _brainDrainBlurWindows.Clear();
-        _brainDrainBlurTargets.Clear();
-        App.Logger?.Debug("Brain Drain blur stopped");
+        _brainDrainImages.Clear();
+        _brainDrainScreens.Clear();
+        
+        App.Logger?.Debug("Brain Drain stopped");
     });
 }
 
@@ -646,46 +659,43 @@ public void UpdateBrainDrainBlurOpacity(int intensity)
 {
     _currentBrainDrainIntensity = intensity;
     
+    // Update blur radius on all images
+    double blurRadius = intensity * 0.3; // 0-30 blur radius for 0-100% intensity
+    
     Application.Current.Dispatcher.Invoke(() =>
     {
-        // Scale opacity based on intensity:
-        // 0-40%: very subtle overlay (alpha 5-30)
-        // 40-100%: stronger overlay + blur kicks in
-        byte alpha;
-        if (intensity < 40)
+        foreach (var img in _brainDrainImages.Values)
         {
-            // Linear scale from ~5 to ~30 alpha for 0-40% intensity
-            alpha = (byte)(5 + (intensity / 40.0) * 25);
+            if (img.Effect is System.Windows.Media.Effects.BlurEffect blur)
+            {
+                blur.Radius = blurRadius;
+            }
         }
-        else
-        {
-            // Linear scale from 30 to 120 alpha for 40-100% intensity
-            alpha = (byte)(30 + ((intensity - 40) / 60.0) * 90);
-        }
-        
-        foreach (var entry in _brainDrainBlurTargets)
-        {
-            entry.Value.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(
-                alpha,
-                180, 170, 200)); // Slight purple-gray tint
-        }
-        
-        // Re-apply blur effect (will enable/disable based on threshold)
-        foreach (var window in _brainDrainBlurWindows)
-        {
-            EnableBlur(window, intensity);
-        }
-        
-        App.Logger?.Debug("Brain Drain: Updated to {Intensity}% (alpha: {Alpha})", intensity, alpha);
     });
 }
 
-private Window? CreateBrainDrainBlurForScreen(System.Windows.Forms.Screen screen, int intensity)
+private void BrainDrainCaptureTick(object? sender, EventArgs e)
+{
+    foreach (var kvp in _brainDrainImages)
+    {
+        var window = kvp.Key;
+        var image = kvp.Value;
+        
+        if (_brainDrainScreens.TryGetValue(window, out var screen))
+        {
+            var capture = CaptureScreen(screen);
+            if (capture != null)
+            {
+                image.Source = capture;
+            }
+        }
+    }
+}
+
+private Window? CreateBrainDrainWindow(System.Windows.Forms.Screen screen, int intensity)
 {
     try
     {
-        // Get the actual DPI for THIS specific monitor
-        double monitorDpi = GetMonitorDpi(screen);
         double primaryDpi = GetPrimaryMonitorDpi();
         double scale = primaryDpi / 96.0;
 
@@ -694,21 +704,16 @@ private Window? CreateBrainDrainBlurForScreen(System.Windows.Forms.Screen screen
         double width = screen.Bounds.Width / scale;
         double height = screen.Bounds.Height / scale;
 
-        byte alpha;
-        if (intensity < 40)
+        double blurRadius = intensity * 0.3; // 0-30 blur radius
+
+        var image = new System.Windows.Controls.Image
         {
-            alpha = (byte)(5 + (intensity / 40.0) * 25);
-        }
-        else
-        {
-            alpha = (byte)(30 + ((intensity - 40) / 60.0) * 90);
-        }
-        
-        var border = new Border
-        {
-            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(
-                alpha,
-                180, 170, 200)) // Slight purple-gray tint
+            Stretch = Stretch.Fill,
+            Effect = new System.Windows.Media.Effects.BlurEffect
+            {
+                Radius = blurRadius,
+                KernelType = System.Windows.Media.Effects.KernelType.Gaussian
+            }
         };
 
         var window = new Window
@@ -720,13 +725,13 @@ private Window? CreateBrainDrainBlurForScreen(System.Windows.Forms.Screen screen
             ShowInTaskbar = false,
             ShowActivated = false,
             Focusable = false,
-            IsHitTestVisible = false, // Make it click-through
+            IsHitTestVisible = false,
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = left,
             Top = top,
             Width = width,
             Height = height,
-            Content = border
+            Content = image
         };
 
         window.SourceInitialized += (s, e) =>
@@ -734,105 +739,55 @@ private Window? CreateBrainDrainBlurForScreen(System.Windows.Forms.Screen screen
             var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
             var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
             SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
-            
-            // Enable blur effect via DWM
-            EnableBlur(window, intensity);
         };
 
         window.Show();
-        _brainDrainBlurTargets[window] = border;
+        
+        _brainDrainImages[window] = image;
+        _brainDrainScreens[window] = screen;
 
-        App.Logger?.Debug("Brain Drain blur window for {Screen} at {X},{Y} size {W}x{H}",
-            screen.DeviceName, left, top, width, height);
+        // Initial capture
+        var capture = CaptureScreen(screen);
+        if (capture != null) image.Source = capture;
 
         return window;
     }
     catch (Exception ex)
     {
-        App.Logger?.Error("Failed to create Brain Drain blur for screen: {Error}", ex.Message);
+            App.Logger?.Error("Failed to create Brain Drain window: {Error}", ex.Message);
         return null;
     }
 }
 
-private void EnableBlur(Window window, int intensity)
+private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
 {
     try
     {
-        var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
-        
-        // ONLY enable DWM blur if intensity is above 40%
-        // Below that, the semi-transparent overlay alone provides the effect
-        if (intensity < 40)
-        {
-            // Disable blur - just use the transparent overlay
-            var accentOff = new AccentPolicy
-            {
-                AccentState = 0, // ACCENT_DISABLED
-                AccentFlags = 0,
-                GradientColor = 0,
-                AnimationId = 0
-            };
-            
-            var sizeOff = System.Runtime.InteropServices.Marshal.SizeOf(accentOff);
-            var ptrOff = System.Runtime.InteropServices.Marshal.AllocHGlobal(sizeOff);
-            System.Runtime.InteropServices.Marshal.StructureToPtr(accentOff, ptrOff, false);
-            
-            var dataOff = new WindowCompositionAttributeData
-            {
-                Attribute = WCA_ACCENT_POLICY,
-                Data = ptrOff,
-                SizeOfData = sizeOff
-            };
-            
-            SetWindowCompositionAttribute(hwnd, ref dataOff);
-            System.Runtime.InteropServices.Marshal.FreeHGlobal(ptrOff);
-            
-            App.Logger?.Debug("Brain Drain: Blur disabled (intensity {Intensity}% < 40%)", intensity);
-            return;
-        }
-        
-        // Calculate alpha based on intensity (40-100 maps to light-heavy tint)
-        // Format: 0xAABBGGRR (Alpha, Blue, Green, Red)
-        var normalizedIntensity = (intensity - 40) / 60.0; // 0.0 to 1.0 for 40-100%
-        var alpha = (uint)(normalizedIntensity * 0.4 * 255); // Max 40% alpha tint
-        uint gradientColor = (alpha << 24) | 0x00403050; // Semi-transparent purple-gray
-        
-        // Use lighter blur (BLURBEHIND) for 40-70%, full acrylic for 70%+
-        int accentState = intensity >= 70 ? ACCENT_ENABLE_ACRYLICBLURBEHIND : ACCENT_ENABLE_BLURBEHIND;
-        
-        var accent = new AccentPolicy
-        {
-            AccentState = accentState,
-            AccentFlags = 2,
-            GradientColor = gradientColor,
-            AnimationId = 0
-        };
+        var hdcSrc = GetDC(IntPtr.Zero);
+        var hdcDest = CreateCompatibleDC(hdcSrc);
+        var hBitmap = CreateCompatibleBitmap(hdcSrc, screen.Bounds.Width, screen.Bounds.Height);
+        var hOld = SelectObject(hdcDest, hBitmap);
 
-        var accentSize = System.Runtime.InteropServices.Marshal.SizeOf(accent);
-        var accentPtr = System.Runtime.InteropServices.Marshal.AllocHGlobal(accentSize);
-        System.Runtime.InteropServices.Marshal.StructureToPtr(accent, accentPtr, false);
+        BitBlt(hdcDest, 0, 0, screen.Bounds.Width, screen.Bounds.Height, 
+               hdcSrc, screen.Bounds.X, screen.Bounds.Y, SRCCOPY);
 
-        var data = new WindowCompositionAttributeData
-        {
-            Attribute = WCA_ACCENT_POLICY,
-            Data = accentPtr,
-            SizeOfData = accentSize
-        };
+        SelectObject(hdcDest, hOld);
+        DeleteDC(hdcDest);
+        ReleaseDC(IntPtr.Zero, hdcSrc);
 
-        SetWindowCompositionAttribute(hwnd, ref data);
-        System.Runtime.InteropServices.Marshal.FreeHGlobal(accentPtr);
-        
-        App.Logger?.Debug("Brain Drain: Blur enabled (intensity {Intensity}%, mode: {Mode})", 
-            intensity, accentState == ACCENT_ENABLE_ACRYLICBLURBEHIND ? "Acrylic" : "BlurBehind");
+        var bitmapSource = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
+            hBitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+
+        DeleteObject(hBitmap);
+        bitmapSource.Freeze(); // Important for cross-thread access
+
+        return bitmapSource;
     }
-    catch (Exception ex)
+    catch
     {
-        App.Logger?.Warning("Failed to enable DWM blur: {Error}", ex.Message);
+        return null;
     }
 }
-
-// REMOVE the old CaptureScreen method - it's no longer needed for Brain Drain
-// (Keep it only if used elsewhere in your code)
 
 #endregion
 
