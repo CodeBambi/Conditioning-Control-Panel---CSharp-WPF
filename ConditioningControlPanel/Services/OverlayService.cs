@@ -619,9 +619,12 @@ public void StartBrainDrainBlur(int intensity)
             }
 
             // Start continuous capture timer
+            var primaryScreenRefreshRate = GetScreenRefreshRate(System.Windows.Forms.Screen.PrimaryScreen);
+            var intervalMs = (int)(1000.0 / primaryScreenRefreshRate);
+            
             _brainDrainCaptureTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(33) // ~30 FPS refresh
+                Interval = TimeSpan.FromMilliseconds(intervalMs) // Match screen refresh rate
             };
             _brainDrainCaptureTimer.Tick += BrainDrainCaptureTick;
             _brainDrainCaptureTimer.Start();
@@ -676,39 +679,48 @@ public void UpdateBrainDrainBlurOpacity(int intensity)
 
 private void BrainDrainCaptureTick(object? sender, EventArgs e)
 {
-    App.Logger?.Debug("BrainDrainCaptureTick: Executing...");
     if (_brainDrainImages.Count == 0)
     {
-        App.Logger?.Warning("BrainDrainCaptureTick: _brainDrainImages is empty, stopping timer.");
         _brainDrainCaptureTimer?.Stop();
         return;
     }
 
+    // Hide all blur windows before capture to prevent capturing ourselves
+    foreach (var window in _brainDrainBlurWindows)
+    {
+        window.Opacity = 0;
+    }
+
+    // Force layout update to ensure windows are hidden before capture
+    Application.Current.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+
+    // Capture all screens
+    var captures = new Dictionary<Window, BitmapSource?>();
+    foreach (var kvp in _brainDrainImages)
+    {
+        var window = kvp.Key;
+        if (_brainDrainScreens.TryGetValue(window, out var screen))
+        {
+            captures[window] = CaptureScreen(screen);
+        }
+    }
+
+    // Show blur windows again and update image sources
     foreach (var kvp in _brainDrainImages)
     {
         var window = kvp.Key;
         var image = kvp.Value;
         
-        if (_brainDrainScreens.TryGetValue(window, out var screen))
+        if (captures.TryGetValue(window, out var capture) && capture != null)
         {
-            App.Logger?.Debug("BrainDrainCaptureTick: Capturing screen for window {WindowHandle}", window.GetHashCode());
-            var capture = CaptureScreen(screen);
-            if (capture != null)
-            {
-                image.Source = capture;
-                App.Logger?.Debug("BrainDrainCaptureTick: Image source updated for window {WindowHandle}", window.GetHashCode());
-            }
-            else
-            {
-                App.Logger?.Warning("BrainDrainCaptureTick: CaptureScreen returned null for window {WindowHandle}", window.GetHashCode());
-            }
-        }
-        else
-        {
-            App.Logger?.Warning("BrainDrainCaptureTick: Screen not found for window {WindowHandle}", window.GetHashCode());
+            image.Source = capture;
         }
     }
-    App.Logger?.Debug("BrainDrainCaptureTick: Completed.");
+
+    foreach (var window in _brainDrainBlurWindows)
+    {
+        window.Opacity = 1;
+    }
 }
 
 private Window? CreateBrainDrainWindow(System.Windows.Forms.Screen screen, int intensity)
@@ -942,6 +954,79 @@ private BitmapSource? CaptureScreen(System.Windows.Forms.Screen screen)
 
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    // For refresh rate
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    public static extern bool EnumDisplaySettingsEx(string? lpszDeviceName, uint iModeNum, ref DEVMODE lpDevMode, uint dwFlags);
+
+    public const int ENUM_CURRENT_SETTINGS = -1;
+    public const int ENUM_REGISTRY_SETTINGS = -2;
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Ansi)]
+    public struct DEVMODE
+    {
+        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string dmDeviceName;
+        public ushort dmSpecVersion;
+        public ushort dmDriverVersion;
+        public ushort dmSize;
+        public ushort dmDriverExtra;
+        public uint dmCurrentMode;
+        public uint dmFields;
+
+        public short dmPositionX;
+        public short dmPositionY;
+        public Orientation dmDisplayOrientation;
+        public DisplayFixedOutput dmDisplayFixedOutput;
+
+        public short dmColor;
+        public short dmDuplex;
+        public short dmYResolution;
+        public short dmTTOption;
+        public short dmCollate;
+        [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string dmFormName;
+        public ushort dmLogPixels;
+        public uint dmBitsPerPel;
+        public uint dmPelsWidth;
+        public uint dmPelsHeight;
+        public uint dmDisplayFlags;
+        public uint dmDisplayFrequency;
+        public uint dmICMMethod;
+        public uint dmICMIntent;
+        public uint dmMediaType;
+        public uint dmDitherType;
+        public uint dmReserved1;
+        public uint dmReserved2;
+        public uint dmPanningWidth;
+        public uint dmPanningHeight;
+    }
+
+    public enum Orientation : int
+    {
+        DMDO_DEFAULT = 0,
+        DMDO_90 = 1,
+        DMDO_180 = 2,
+        DMDO_270 = 3
+    }
+
+    public enum DisplayFixedOutput : int
+    {
+        DMDFO_DEFAULT = 0,
+        DMDFO_STRETCH = 1,
+        DMDFO_CENTER = 2
+    }
+
+    private int GetScreenRefreshRate(System.Windows.Forms.Screen screen)
+    {
+        DEVMODE dm = new DEVMODE();
+        dm.dmSize = (ushort)System.Runtime.InteropServices.Marshal.SizeOf(typeof(DEVMODE));
+        if (EnumDisplaySettingsEx(screen.DeviceName, ENUM_CURRENT_SETTINGS, ref dm, 0))
+        {
+            return (int)dm.dmDisplayFrequency;
+        }
+        return 60; // Default to 60Hz if unable to get refresh rate
+    }
 
     #endregion
 
