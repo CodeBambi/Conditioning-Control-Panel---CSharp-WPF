@@ -59,7 +59,41 @@ public class OverlayService : IDisposable
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
 
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
 
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MARGINS
+    {
+        public int Left, Right, Top, Bottom;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WindowCompositionAttributeData
+    {
+        public int Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct AccentPolicy
+    {
+        public int AccentState;
+        public int AccentFlags;
+        public uint GradientColor;
+        public int AnimationId;
+    }
+
+    private const int ACCENT_ENABLE_BLURBEHIND = 3;
+    private const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
+    private const int WCA_ACCENT_POLICY = 19;
 
     private string GetSpiralPath()
     {
@@ -575,7 +609,6 @@ public class OverlayService : IDisposable
             if (_disposed || _duplication == null || _device == null || _stagingTexture == null)
                 return null;
 
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 // Try to acquire next frame (0ms timeout = don't wait)
@@ -628,8 +661,6 @@ public class OverlayService : IDisposable
                         }
 
                         bitmap.Freeze();
-                        stopwatch.Stop();
-                        App.Logger?.Debug("DesktopDuplicator.CaptureFrame: Capture & conversion finished in {ElapsedMs}ms (Size: {W}x{H})", stopwatch.ElapsedMilliseconds, _width, _height);
                         return bitmap;
                     }
                     finally
@@ -704,13 +735,19 @@ public class OverlayService : IDisposable
                     }
                 }
 
-                // Start capture timer at 45 FPS (~22ms interval)
+                // Match capture rate to highest monitor refresh rate
+                int maxRefreshRate = screens.Max(s => GetScreenRefreshRate(s));
+                double intervalMs = 1000.0 / maxRefreshRate;
+                
                 _brainDrainCaptureTimer = new DispatcherTimer
                 {
-                    Interval = TimeSpan.FromMilliseconds(22)
+                    Interval = TimeSpan.FromMilliseconds(intervalMs)
                 };
                 _brainDrainCaptureTimer.Tick += BrainDrainCaptureTick;
                 _brainDrainCaptureTimer.Start();
+                
+                App.Logger?.Debug("Brain Drain capture rate: {RefreshRate}Hz ({IntervalMs:F2}ms)", 
+                    maxRefreshRate, intervalMs);
 
                 App.Logger?.Debug("Brain Drain started on {Count} screens at intensity {Intensity}% using DXGI",
                     _brainDrainBlurWindows.Count, intensity);
@@ -805,9 +842,11 @@ public class OverlayService : IDisposable
     public void UpdateBrainDrainBlurOpacity(int intensity)
     {
         _currentBrainDrainIntensity = intensity;
-
-        double blurRadius = intensity * 0.3;
-
+    
+        // Scale intensity (0-25) to blur radius (0-30)
+        // Assuming slider max is 25, and this should map to the previous max blur radius of 30.
+        double blurRadius = (intensity / 25.0) * 30.0; // Max slider value 25 maps to max blur radius 30.
+    
         Application.Current.Dispatcher.Invoke(() =>
         {
             foreach (var img in _brainDrainImages.Values)
@@ -819,7 +858,6 @@ public class OverlayService : IDisposable
             }
         });
     }
-
     private void BrainDrainCaptureTick(object? sender, EventArgs e)
     {
         if (_brainDrainImages.Count == 0)
@@ -913,6 +951,9 @@ public class OverlayService : IDisposable
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
                 var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
                 SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
+                
+                // Exclude this window from screen capture so DXGI doesn't capture itself
+                SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
             };
 
             window.Show();
@@ -1061,6 +1102,12 @@ public class OverlayService : IDisposable
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint dwAffinity);
+
+    private const uint WDA_NONE = 0x0;
+    private const uint WDA_EXCLUDEFROMCAPTURE = 0x11; // Windows 10 2004+
 
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
