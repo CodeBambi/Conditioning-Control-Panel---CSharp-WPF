@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Conditioning Control Panel v3.0" 
-        Height="881" Width="1355"
+        Height="881" Width="1305"
         MinHeight="795" MinWidth="1100"
         Background="#1A1A2E"
         WindowStartupLocation="Manual"
@@ -315,7 +315,8 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Player Title and Level (moved to far left) -->
                     <TextBlock Text="⭐" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="TxtPlayerTitle" Text="BASIC BIMBO" Foreground="#FF69B4" 
+                    <TextBlock x:Name="TxtPlayerTitle" Text="Basic
+Bimbo" Foreground="#FF69B4" 
                                FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0">
                         <TextBlock.Effect>
                             <DropShadowEffect Color="#FF69B4" BlurRadius="8" ShadowDepth="0" Opacity="0.6"/>
