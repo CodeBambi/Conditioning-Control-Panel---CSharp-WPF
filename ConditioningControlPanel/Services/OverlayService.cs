@@ -12,6 +12,9 @@ using SharpDX;
 using SharpDX.Direct3D11;
 using SharpDX.DXGI;
 
+using System.ComponentModel; // Added for INotifyPropertyChanged
+using System.Runtime.CompilerServices; // Added for CallerMemberName
+
 namespace ConditioningControlPanel.Services;
 
 /// <summary>
@@ -20,6 +23,15 @@ namespace ConditioningControlPanel.Services;
 public class OverlayService : IDisposable
 {
     private readonly List<Window> _pinkFilterWindows = new();
+
+    public OverlayService()
+    {
+        // Subscribe to settings changes if App.Settings.Current is available
+        if (App.Settings?.Current != null)
+        {
+            App.Settings.Current.PropertyChanged += CurrentSettings_PropertyChanged;
+        }
+    }
     private readonly List<Window> _spiralWindows = new();
     private readonly List<MediaElement> _spiralMediaElements = new();
     private readonly List<Window> _brainDrainBlurWindows = new();
@@ -205,17 +217,8 @@ public class OverlayService : IDisposable
                 StopSpiral();
             }
 
-            if (settings.BrainDrainEnabled && settings.PlayerLevel >= 90)
-            {
-                if (_brainDrainBlurWindows.Count == 0)
-                    StartBrainDrainBlur((int)settings.BrainDrainIntensity);
-                else
-                    UpdateBrainDrainBlurOpacity((int)settings.BrainDrainIntensity);
-            }
-            else
-            {
-                StopBrainDrainBlur();
-            }
+            // Handle Brain Drain via its dedicated refresh state method
+            RefreshBrainDrainState();
         });
         
         App.Logger?.Debug("Overlays refreshed - Pink: {Pink}, Spiral: {Spiral}, BrainDrain: {BrainDrain}", 
@@ -1200,10 +1203,64 @@ public class OverlayService : IDisposable
 
     #endregion
 
+    private void CurrentSettings_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // Ensure this is executed on the UI thread
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            if (e.PropertyName == nameof(App.Settings.Current.BrainDrainIntensity) ||
+                e.PropertyName == nameof(App.Settings.Current.BrainDrainEnabled))
+            {
+                App.Logger?.Debug("Brain Drain setting changed: {PropertyName}. Refreshing state.", e.PropertyName);
+                RefreshBrainDrainState();
+            }
+            // Add other property names for PinkFilter, Spiral, etc. here if needed
+            // else if (e.PropertyName == nameof(App.Settings.Current.PinkFilterEnabled) ||
+            //          e.PropertyName == nameof(App.Settings.Current.PinkFilterOpacity))
+            // {
+            //      RefreshPinkFilterState();
+            // }
+            // else if (e.PropertyName == nameof(App.Settings.Current.SpiralEnabled) ||
+            //          e.PropertyName == nameof(App.Settings.Current.SpiralOpacity))
+            // {
+            //      RefreshSpiralState();
+            // }
+        });
+    }
+
+    // New method to encapsulate Brain Drain specific refresh logic
+    private void RefreshBrainDrainState()
+    {
+        var settings = App.Settings.Current;
+        if (settings.BrainDrainEnabled && settings.PlayerLevel >= 90) // Assuming level requirement for Brain Drain
+        {
+            // If not running or duplicators not initialized (e.g., first time enabling)
+            if (_brainDrainBlurWindows.Count == 0 || !_desktopDuplicators.Any(kvp => kvp.Value.IsValid))
+            {
+                StartBrainDrainBlur((int)settings.BrainDrainIntensity);
+            }
+            else
+            {
+                // Already running, just update intensity
+                UpdateBrainDrainBlurOpacity((int)settings.BrainDrainIntensity);
+            }
+        }
+        else
+        {
+            StopBrainDrainBlur();
+        }
+    }
+
     public void Dispose()
     {
         if (_isDisposed) return;
         _isDisposed = true;
         Stop();
+
+        // Unsubscribe from settings changes
+        if (App.Settings?.Current != null)
+        {
+            App.Settings.Current.PropertyChanged -= CurrentSettings_PropertyChanged;
+        }
     }
 }
