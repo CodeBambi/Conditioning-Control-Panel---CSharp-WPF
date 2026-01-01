@@ -619,12 +619,14 @@ public void StartBrainDrainBlur(int intensity)
             }
 
             // Start continuous capture timer
-            var primaryScreenRefreshRate = GetScreenRefreshRate(System.Windows.Forms.Screen.PrimaryScreen);
-            var intervalMs = (int)(1000.0 / primaryScreenRefreshRate);
+            // Set a fixed refresh rate of 50 FPS (20ms interval)
+            // This might offer a more stable experience than dynamically matching screen refresh rate
+            // if system performance is a bottleneck for screen capture + blur.
+            var intervalMs = 20; // 50 FPS
             
             _brainDrainCaptureTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(intervalMs) // Match screen refresh rate
+                Interval = TimeSpan.FromMilliseconds(intervalMs)
             };
             _brainDrainCaptureTimer.Tick += BrainDrainCaptureTick;
             _brainDrainCaptureTimer.Start();
