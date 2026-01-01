@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -317,13 +318,19 @@ namespace ConditioningControlPanel.Services
                 }
             }
             
-            // Spiral delayed start (use randomized time, but only if path exists!)
+            // Spiral delayed start (use randomized time)
             if (settings.SpiralEnabled && !App.Settings.Current.SpiralEnabled)
             {
-                // Check if spiral path exists before trying to enable
-                if (string.IsNullOrEmpty(App.Settings.Current.SpiralPath))
+                // Check if spiral path exists OR if there are spirals in Spirals folder
+                var spiralsFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Spirals");
+                var hasUserSpiral = !string.IsNullOrEmpty(App.Settings.Current.SpiralPath) && 
+                                   File.Exists(App.Settings.Current.SpiralPath);
+                var hasRandomSpirals = Directory.Exists(spiralsFolder) && 
+                                       Directory.GetFiles(spiralsFolder, "*.gif").Length > 0;
+                
+                if (!hasUserSpiral && !hasRandomSpirals)
                 {
-                    App.Logger?.Warning("Spiral enabled in session but no spiral file selected - skipping");
+                    App.Logger?.Warning("Spiral enabled in session but no spiral files found - skipping");
                     // Disable in session to prevent repeated warnings
                     settings.SpiralEnabled = false;
                     return;

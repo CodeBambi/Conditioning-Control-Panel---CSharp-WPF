@@ -79,6 +79,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- App icon -->
     <Resource Include="Resources\app.ico" />
+    
+    <!-- Avatar Tube images - MUST be Resource for pack:// URIs to work -->
+    <Resource Include="Resources\tube.png" />
+    <Resource Include="Resources\avatar_pose1.png" />
+    <Resource Include="Resources\avatar_pose2.png" />
+    <Resource Include="Resources\avatar_pose3.png" />
+    <Resource Include="Resources\avatar_pose4.png" />
+    
+    <!-- Achievement images -->
+    <Resource Include="Resources\achievements\*.png" />
+    
+    <!-- Feature images -->
+    <Resource Include="Resources\features\*.png" />
   </ItemGroup>
 </Project>

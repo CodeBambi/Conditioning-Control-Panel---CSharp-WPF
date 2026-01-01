@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -23,8 +24,44 @@ public class OverlayService : IDisposable
     private bool _isDisposed;
     private bool _isGifSpiral;
     private string _spiralPath = "";
+    private static readonly Random _random = new();
 
     public bool IsRunning => _isRunning;
+
+    /// <summary>
+    /// Gets a spiral path - either user-selected or random from Spirals folder
+    /// </summary>
+    private string GetSpiralPath()
+    {
+        var settings = App.Settings.Current;
+        
+        // If user has selected a specific spiral, use it
+        if (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
+        {
+            return settings.SpiralPath;
+        }
+        
+        // Otherwise, try to pick a random spiral from the Spirals folder
+        var spiralsFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Spirals");
+        if (Directory.Exists(spiralsFolder))
+        {
+            var spiralFiles = Directory.GetFiles(spiralsFolder, "*.gif")
+                .Concat(Directory.GetFiles(spiralsFolder, "*.png"))
+                .Concat(Directory.GetFiles(spiralsFolder, "*.jpg"))
+                .Concat(Directory.GetFiles(spiralsFolder, "*.jpeg"))
+                .ToArray();
+            
+            if (spiralFiles.Length > 0)
+            {
+                var randomSpiral = spiralFiles[_random.Next(spiralFiles.Length)];
+                App.Logger?.Information("No spiral selected, using random spiral: {Path}", Path.GetFileName(randomSpiral));
+                return randomSpiral;
+            }
+        }
+        
+        App.Logger?.Warning("No spiral path set and no spirals found in Spirals folder");
+        return "";
+    }
 
     public void Start()
     {
@@ -47,8 +84,10 @@ public class OverlayService : IDisposable
                 StartPinkFilter();
             }
 
-            if (settings.SpiralEnabled && !string.IsNullOrEmpty(settings.SpiralPath))
+            var spiralPath = GetSpiralPath();
+            if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath))
             {
+                _spiralPath = spiralPath;
                 StartSpiral();
             }
 
@@ -102,9 +141,11 @@ public class OverlayService : IDisposable
                 StopPinkFilter();
             }
             
-            // Spiral
-            if (settings.SpiralEnabled && settings.PlayerLevel >= 10 && !string.IsNullOrEmpty(settings.SpiralPath))
+            // Spiral - use GetSpiralPath to allow random selection
+            var spiralPath = GetSpiralPath();
+            if (settings.SpiralEnabled && settings.PlayerLevel >= 10 && !string.IsNullOrEmpty(spiralPath))
             {
+                _spiralPath = spiralPath;
                 if (_spiralWindows.Count == 0)
                     StartSpiral();
                 else
@@ -145,8 +186,11 @@ public class OverlayService : IDisposable
             UpdatePinkFilterOpacity();
         }
 
-        if (settings.SpiralEnabled && !string.IsNullOrEmpty(settings.SpiralPath) && _spiralWindows.Count == 0)
+        // Spiral - use GetSpiralPath to allow random selection
+        var spiralPath = GetSpiralPath();
+        if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath) && _spiralWindows.Count == 0)
         {
+            _spiralPath = spiralPath;
             StartSpiral();
         }
         else if (!settings.SpiralEnabled && _spiralWindows.Count > 0)

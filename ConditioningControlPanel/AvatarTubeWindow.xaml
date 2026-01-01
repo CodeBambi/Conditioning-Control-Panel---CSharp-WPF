@@ -27,7 +27,7 @@
                Stretch="Uniform"
                HorizontalAlignment="Center"
                VerticalAlignment="Bottom"
-               Margin="155,110,262,175"
+               Margin="155,100,258,175"
                MaxHeight="340"
                RenderTransformOrigin="0.5,0.5"
                IsHitTestVisible="False">

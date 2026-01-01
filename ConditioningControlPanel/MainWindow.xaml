@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Conditioning Control Panel v3.0" 
-        Height="875" Width="1080"
-        MinHeight="795" MinWidth="1000"
+        Height="881" Width="1280"
+        MinHeight="795" MinWidth="1100"
         Background="#1A1A2E"
         WindowStartupLocation="Manual"
         WindowStyle="None"
@@ -245,6 +245,26 @@
             <Setter Property="HorizontalAlignment" Value="Right"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+        
+        <!-- Achievement Tile Style -->
+        <Style x:Key="AchievementTile" TargetType="Border">
+            <Setter Property="Background" Value="#1E1E3A"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="Padding" Value="5"/>
+            <Setter Property="MinHeight" Value="100"/>
+            <Setter Property="MinWidth" Value="100"/>
+        </Style>
+        
+        <!-- Feature Image Style -->
+        <Style x:Key="FeatureImageBorder" TargetType="Border">
+            <Setter Property="Width" Value="180"/>
+            <Setter Property="Height" Value="180"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Background" Value="#1A1A2E"/>
+            <Setter Property="Margin" Value="10,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -307,6 +327,8 @@
                             Margin="5,0" Click="BtnPresets_Click"/>
                     <Button x:Name="BtnProgression" Content="📊 Progression" Style="{StaticResource OutlineButton}" 
                             Margin="5,0" Click="BtnProgression_Click"/>
+                    <Button x:Name="BtnAchievements" Content="🏆 Achievements" Style="{StaticResource OutlineButton}" 
+                            Margin="5,0" Click="BtnAchievements_Click"/>
                 </StackPanel>
 
                 <!-- Level Display and Preset -->
@@ -1394,8 +1416,8 @@
         <!-- Progression Tab (Hidden by default) -->
         <Grid x:Name="ProgressionTab" Grid.Row="3" Margin="10,5,10,10" Visibility="Collapsed">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="280"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
@@ -1414,21 +1436,20 @@
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Hypnotic spiral animation overlay.&#x0a;Covers all screens with customizable opacity.&#x0a;Unlocks at Level 10.">
                         <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <Grid Grid.Column="0">
                             <!-- Locked State -->
                             <StackPanel x:Name="SpiralLocked" Visibility="Visible">
                                 <Grid>
                                     <TextBlock Text="🌀 Spiral Overlay" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
                                     <TextBlock Text="🔒 Lvl 10" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🔒" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                        <TextBlock Text="Reach Level 10 to Unlock" Foreground="{StaticResource PinkBrush}" 
-                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Spiral Overlay Feature" Foreground="#888888" 
-                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                </Border>
+                                <TextBlock Text="Reach Level 10 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                           FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
                             
                             <!-- Unlocked State -->
@@ -1462,6 +1483,12 @@
                                         Margin="0,10,0,0" Click="BtnSelectSpiral_Click"
                                         ToolTip="Choose a spiral GIF animation"/>
                             </StackPanel>
+                            </Grid>
+                            
+                            <!-- Feature Image -->
+                            <Border x:Name="SpiralFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
+                                <Image Source="pack://application:,,,/Resources/features/spiral overlay.png" Stretch="Uniform"/>
+                            </Border>
                         </Grid>
                     </Border>
 
@@ -1469,21 +1496,20 @@
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Pink color tint overlay for all screens.&#x0a;Subtle or intense, you choose!&#x0a;Unlocks at Level 10.">
                         <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <Grid Grid.Column="0">
                             <!-- Locked State -->
                             <StackPanel x:Name="PinkFilterLocked" Visibility="Visible">
                                 <Grid>
                                     <TextBlock Text="💗 Pink Filter" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
                                     <TextBlock Text="🔒 Lvl 10" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🔒" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                        <TextBlock Text="Reach Level 10 to Unlock" Foreground="{StaticResource PinkBrush}" 
-                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Pink Filter Feature" Foreground="#888888" 
-                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                </Border>
+                                <TextBlock Text="Reach Level 10 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                           FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
                             
                             <!-- Unlocked State -->
@@ -1514,6 +1540,12 @@
                                     <TextBlock x:Name="TxtPinkOpacity" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="10%"/>
                                 </Grid>
                             </StackPanel>
+                            </Grid>
+                            
+                            <!-- Feature Image -->
+                            <Border x:Name="PinkFilterFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
+                                <Image Source="pack://application:,,,/Resources/features/Pink filter.png" Stretch="Uniform"/>
+                            </Border>
                         </Grid>
                     </Border>
 
@@ -1521,21 +1553,20 @@
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Pop floating bubbles to earn XP!&#x0a;Fun mini-game that spawns periodically.&#x0a;Unlocks at Level 20.">
                         <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <Grid Grid.Column="0">
                             <!-- Locked State -->
                             <StackPanel x:Name="BubblesLocked" Visibility="Visible">
                                 <Grid>
                                     <TextBlock Text="🫧 Bubble Pop" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
                                     <TextBlock Text="🔒 Lvl 20" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🔒" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                        <TextBlock Text="Reach Level 20 to Unlock" Foreground="{StaticResource PinkBrush}" 
-                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Bubble Pop Game" Foreground="#888888" 
-                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                </Border>
+                                <TextBlock Text="Reach Level 20 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                           FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
                             
                             <!-- Unlocked State -->
@@ -1566,6 +1597,12 @@
                                     <TextBlock x:Name="TxtBubbleFreq" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="5"/>
                                 </Grid>
                             </StackPanel>
+                            </Grid>
+                            
+                            <!-- Feature Image -->
+                            <Border x:Name="BubblePopFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
+                                <Image Source="pack://application:,,,/Resources/features/Bubble pop.png" Stretch="Uniform"/>
+                            </Border>
                         </Grid>
                     </Border>
 
@@ -1573,21 +1610,20 @@
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Screen lock that requires typing phrases.&#x0a;Reinforces conditioning through repetition.&#x0a;Unlocks at Level 35.">
                         <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <Grid Grid.Column="0">
                             <!-- Locked State -->
                             <StackPanel x:Name="LockCardLocked" Visibility="Visible">
                                 <Grid>
                                     <TextBlock Text="📐 Lock Card" Foreground="#666666" FontWeight="Bold"/>
                                     <TextBlock Text="🔒 Lvl 35" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🔒" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                        <TextBlock Text="Reach Level 35 to Unlock" Foreground="{StaticResource PinkBrush}" 
-                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Type-to-Unlock Screen Lock" Foreground="#888888" 
-                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                </Border>
+                                <TextBlock Text="Reach Level 35 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                           FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
                             
                             <!-- Unlocked State -->
@@ -1656,6 +1692,12 @@
                                             ToolTip="Customize lock card colors"/>
                                 </Grid>
                             </StackPanel>
+                            </Grid>
+                            
+                            <!-- Feature Image -->
+                            <Border x:Name="LockCardFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
+                                <Image Source="pack://application:,,,/Resources/features/Phrase Lock.png" Stretch="Uniform"/>
+                            </Border>
                         </Grid>
                     </Border>
 
@@ -1663,21 +1705,20 @@
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Count the bubbles challenge!&#x0a;Memory and attention test for bonus XP.&#x0a;Unlocks at Level 50.">
                         <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <Grid Grid.Column="0">
                             <!-- Locked State -->
                             <StackPanel x:Name="Level50Locked" Visibility="Visible">
                                 <Grid>
                                     <TextBlock Text="🫧 Bubble Count" Foreground="#666666" FontWeight="Bold"/>
                                     <TextBlock Text="🔒 Lvl 50" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🫧" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                        <TextBlock Text="Bubble Count Challenge" Foreground="{StaticResource PinkBrush}" 
-                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Count the bubbles to earn XP!" Foreground="#888888" 
-                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0" FontStyle="Italic"/>
-                                    </StackPanel>
-                                </Border>
+                                <TextBlock Text="Reach Level 50 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                           FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
                             
                             <!-- Unlocked State -->
@@ -1740,6 +1781,12 @@
                                             ToolTip="Trigger a bubble count challenge now"/>
                                 </StackPanel>
                             </StackPanel>
+                            </Grid>
+                            
+                            <!-- Feature Image -->
+                            <Border x:Name="BubbleCountFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
+                                <Image Source="pack://application:,,,/Resources/features/Bubble count.png" Stretch="Uniform"/>
+                            </Border>
                         </Grid>
                     </Border>
 
@@ -1747,21 +1794,20 @@
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="DVD screensaver-style bouncing text!&#x0a;Customizable phrases bounce across screen.&#x0a;Unlocks at Level 60.">
                         <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <Grid Grid.Column="0">
                             <!-- Locked State -->
                             <StackPanel x:Name="Level60Locked" Visibility="Visible">
                                 <Grid>
                                     <TextBlock Text="📺 Bouncing Text" Foreground="#666666" FontWeight="Bold"/>
                                     <TextBlock Text="🔒 Lvl 60" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="📺" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                        <TextBlock Text="DVD Screensaver Style" Foreground="{StaticResource PinkBrush}" 
-                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Bouncing text across your screen!" Foreground="#888888" 
-                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0" FontStyle="Italic"/>
-                                    </StackPanel>
-                                </Border>
+                                <TextBlock Text="Reach Level 60 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                           FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
                             
                             <!-- Unlocked State -->
@@ -1818,6 +1864,12 @@
                                             ToolTip="Customize the bouncing text phrases"/>
                                 </StackPanel>
                             </StackPanel>
+                            </Grid>
+                            
+                            <!-- Feature Image -->
+                            <Border x:Name="BouncingTextFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
+                                <Image Source="pack://application:,,,/Resources/features/bouncing text.png" Stretch="Uniform"/>
+                            </Border>
                         </Grid>
                     </Border>
 
@@ -1825,21 +1877,20 @@
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Random mind wipe audio effects!&#x0a;Escalates in frequency during sessions.&#x0a;Unlocks at Level 75.">
                         <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <Grid Grid.Column="0">
                             <!-- Locked State -->
                             <StackPanel x:Name="MindWipeLocked" Visibility="Visible">
                                 <Grid>
                                     <TextBlock Text="🧠 Mind Wipe" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
                                     <TextBlock Text="🔒 Lvl 75" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <Border Background="#2A2A4A" CornerRadius="6" Padding="20,30" Margin="0,12,0,0">
-                                    <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🧠" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                        <TextBlock Text="Mind Wipe Audio" Foreground="{StaticResource PinkBrush}" 
-                                                   FontWeight="Bold" FontSize="14" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Random audio to wipe your thoughts!" Foreground="#888888" 
-                                                   FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0" FontStyle="Italic"/>
-                                    </StackPanel>
-                                </Border>
+                                <TextBlock Text="Reach Level 75 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                           FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
                             
                             <!-- Unlocked State -->
@@ -1892,18 +1943,6 @@
                                                   Checked="ChkMindWipeLoop_Changed" Unchecked="ChkMindWipeLoop_Changed"/>
                                     </Grid>
                                     
-                                    <!-- Session Info -->
-                                    <Border Background="#2A2A4A" CornerRadius="4" Padding="8" Margin="0,10,0,0">
-                                        <StackPanel>
-                                            <TextBlock Text="📈 Session Mode" Foreground="{StaticResource PinkBrush}" 
-                                                       FontWeight="Bold" FontSize="11"/>
-                                            <TextBlock Text="Escalates every 5 minutes!" Foreground="#888888" 
-                                                       FontSize="11" Margin="0,2,0,0"/>
-                                            <TextBlock Text="Easy: 1→2→3... | Medium: 2→3→4... | Hard: 3→4→5..." 
-                                                       Foreground="#666666" FontSize="10" Margin="0,4,0,0"/>
-                                        </StackPanel>
-                                    </Border>
-                                    
                                     <!-- Test Button -->
                                     <Button Content="🔊 Test Now" 
                                             Background="#40FFFFFF" Foreground="White" 
@@ -1912,200 +1951,322 @@
                                             ToolTip="Play a mind wipe sound now"/>
                                 </StackPanel>
                             </StackPanel>
+                            </Grid>
+                            
+                            <!-- Feature Image -->
+                            <Border x:Name="MindWipeFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
+                                <Image Source="pack://application:,,,/Resources/features/Mind Wipers.png" Stretch="Uniform"/>
+                            </Border>
                         </Grid>
                     </Border>
                 </StackPanel>
                 </ScrollViewer>
             </Border>
 
-            <!-- Scheduler -->
-            <Border Grid.Column="1" Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5"
-                    ToolTip="Automate your conditioning schedule.&#x0a;Set times and days for automatic start/stop.">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource SectionHeader}" Text="📅 Scheduler"
-                               ToolTip="Configure automatic scheduling for conditioning sessions"/>
-                    
-                    <!-- Scheduler Enable with explanation -->
-                    <Grid Margin="0,5">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="Enable Scheduler"/>
-                            <TextBlock Text="℘" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
-                                       ToolTip="Auto-starts the engine at Start time and auto-stops at End time on selected days"/>
-                        </StackPanel>
-                        <CheckBox x:Name="ChkSchedulerEnabled" Style="{StaticResource ToggleStyle}" 
-                                  HorizontalAlignment="Right"
-                                  ToolTip="When enabled, the engine will automatically start and stop based on the schedule below"/>
-                    </Grid>
-                    
-                    <!-- Time Range -->
-                    <TextBlock Style="{StaticResource SettingLabel}" Text="Active Hours" Margin="0,8,0,5"
-                               ToolTip="The time window when the engine will be active"/>
-                    <Grid ToolTip="Start Time → End Time. Engine auto-starts at start time and auto-stops at end time">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="TxtStartTime" Grid.Column="0" Text="16:00" Background="#1E1E3A" 
-                                 Foreground="White" BorderBrush="{StaticResource PinkBrush}" 
-                                 Padding="10,8" FontSize="14" TextAlignment="Center"
-                                 ToolTip="Start time (24h format) - Engine will auto-start at this time"/>
-                        <TextBlock Grid.Column="1" Text="→" Foreground="White" FontSize="16" 
-                                   Margin="10,0" VerticalAlignment="Center"/>
-                        <TextBox x:Name="TxtEndTime" Grid.Column="2" Text="22:00" Background="#1E1E3A" 
-                                 Foreground="White" BorderBrush="{StaticResource PinkBrush}" 
-                                 Padding="10,8" FontSize="14" TextAlignment="Center"
-                                 ToolTip="End time (24h format) - Engine will auto-stop at this time"/>
-                    </Grid>
-                    
-                    <!-- Days -->
-                    <TextBlock Style="{StaticResource SettingLabel}" Text="Active Days" Margin="0,8,0,5"
-                               ToolTip="Select which days of the week the scheduler is active"/>
-                    <WrapPanel>
-                        <CheckBox x:Name="ChkMon" Content="Mon" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Monday"/>
-                        <CheckBox x:Name="ChkTue" Content="Tue" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Tuesday"/>
-                        <CheckBox x:Name="ChkWed" Content="Wed" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Wednesday"/>
-                        <CheckBox x:Name="ChkThu" Content="Thu" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Thursday"/>
-                        <CheckBox x:Name="ChkFri" Content="Fri" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Friday"/>
-                        <CheckBox x:Name="ChkSat" Content="Sat" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Saturday"/>
-                        <CheckBox x:Name="ChkSun" Content="Sun" Foreground="White" Margin="0,0,10,5" IsChecked="True" ToolTip="Sunday"/>
-                    </WrapPanel>
-                    
-                    <!-- Intensity Ramp -->
-                    <TextBlock Style="{StaticResource SettingLabel}" Text="Intensity Ramp" Margin="0,8,0,5"
-                               ToolTip="Gradually increase intensity over time from base values to maximum"/>
-                    <Grid Margin="0,5">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="Enable Ramp"/>
-                            <TextBlock Text="℘" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
-                                       ToolTip="Linked settings will gradually increase from their base value to (base × multiplier) over the duration"/>
-                        </StackPanel>
-                        <CheckBox x:Name="ChkRampEnabled" Style="{StaticResource ToggleStyle}" 
-                                  HorizontalAlignment="Right"
-                                  ToolTip="Enable gradual intensity increase over time"/>
-                    </Grid>
-                    <Grid Margin="0,6,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="70"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="50"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Style="{StaticResource SettingLabel}" Text="Duration"
-                                   ToolTip="How long until intensity reaches maximum"/>
-                        <Slider Grid.Column="1" x:Name="SliderRampDuration" Minimum="10" Maximum="180" Value="60" 
-                                Margin="10,0" ValueChanged="SliderRampDuration_Changed"
-                                ToolTip="Ramp duration in minutes"/>
-                        <TextBlock x:Name="TxtRampDuration" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="60 min"/>
-                    </Grid>
-                    <Grid Margin="0,6,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="70"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="50"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Style="{StaticResource SettingLabel}" Text="Multiplier"
-                                   ToolTip="Final intensity = Base value × Multiplier"/>
-                        <Slider Grid.Column="1" x:Name="SliderMultiplier" Minimum="1" Maximum="3" Value="1.5" 
-                                Margin="10,0" ValueChanged="SliderMultiplier_Changed"
-                                ToolTip="Maximum intensity multiplier (e.g., 2x means double the base values)"/>
-                        <TextBlock x:Name="TxtMultiplier" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="1.5x"/>
-                    </Grid>
-                    
-                    <!-- End Session at Ramp End -->
-                    <Grid Margin="0,8,0,0">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="End at Ramp Complete"/>
-                            <TextBlock Text="℘" Foreground="#888" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center"
-                                       ToolTip="Automatically stop the engine when the intensity ramp reaches its end"/>
-                        </StackPanel>
-                        <CheckBox x:Name="ChkEndAtRamp" Style="{StaticResource ToggleStyle}" 
-                                  HorizontalAlignment="Right"
-                                  ToolTip="Stop the session automatically when ramp duration completes"/>
-                    </Grid>
-                    
-                    <!-- Ramp Links -->
-                    <TextBlock Style="{StaticResource SettingLabel}" Text="Link to Ramp" Margin="0,10,0,6" Foreground="{StaticResource PinkBrush}"
-                               ToolTip="Select which settings should scale with the intensity ramp"/>
-                    <Border Background="#1E1E3A" CornerRadius="6" Padding="10,8"
-                            ToolTip="Checked items will gradually increase from base to (base × multiplier)">
-                        <Grid>
+            <!-- Right Column: Scheduler + Ramp stacked -->
+            <StackPanel Grid.Column="1" Grid.Row="0">
+                <!-- Scheduler Box -->
+                <Border Style="{StaticResource SectionPanel}" Margin="5">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="📅 Scheduler" FontSize="14"/>
+                        
+                        <!-- Enable -->
+                        <Grid Margin="0,3">
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="Enable" FontSize="12"/>
+                            <CheckBox x:Name="ChkSchedulerEnabled" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right"/>
+                        </Grid>
+                        
+                        <!-- Time Range -->
+                        <Grid Margin="0,3">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            
-                            <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,2">
-                                <CheckBox x:Name="ChkRampLinkFlash" Style="{StaticResource ToggleStyle}"
-                                          ToolTip="Link flash image opacity to ramp"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Flash α" Margin="6,0,0,0" FontSize="11"
-                                           ToolTip="Flash image opacity"/>
-                            </StackPanel>
-                            <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,2">
-                                <CheckBox x:Name="ChkRampLinkSpiral" Style="{StaticResource ToggleStyle}"
-                                          ToolTip="Link spiral overlay opacity to ramp"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Spiral α" Margin="6,0,0,0" FontSize="11"
-                                           ToolTip="Spiral overlay opacity"/>
-                            </StackPanel>
-                            
-                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,6,0,2">
-                                <CheckBox x:Name="ChkRampLinkPink" Style="{StaticResource ToggleStyle}"
-                                          ToolTip="Link pink filter opacity to ramp"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Pink α" Margin="6,0,0,0" FontSize="11"
-                                           ToolTip="Pink filter opacity"/>
-                            </StackPanel>
-                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,6,0,2">
-                                <CheckBox x:Name="ChkRampLinkMaster" Style="{StaticResource ToggleStyle}"
-                                          ToolTip="Link master volume to ramp"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Master 📊" Margin="6,0,0,0" FontSize="11"
-                                           ToolTip="Master audio volume"/>
-                            </StackPanel>
-                            
-                            <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,6,0,2">
-                                <CheckBox x:Name="ChkRampLinkSubAudio" Style="{StaticResource ToggleStyle}"
-                                          ToolTip="Link subliminal audio volume to ramp"/>
-                                <TextBlock Style="{StaticResource SettingLabel}" Text="Sub 📊" Margin="6,0,0,0" FontSize="11"
-                                           ToolTip="Subliminal whisper volume"/>
-                            </StackPanel>
+                            <TextBox x:Name="TxtStartTime" Grid.Column="0" Text="16:00" Background="#1E1E3A" 
+                                     Foreground="White" BorderBrush="{StaticResource PinkBrush}" 
+                                     Padding="6,4" FontSize="12" TextAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="→" Foreground="White" FontSize="12" Margin="5,0" VerticalAlignment="Center"/>
+                            <TextBox x:Name="TxtEndTime" Grid.Column="2" Text="22:00" Background="#1E1E3A" 
+                                     Foreground="White" BorderBrush="{StaticResource PinkBrush}" 
+                                     Padding="6,4" FontSize="12" TextAlignment="Center"/>
                         </Grid>
-                    </Border>
-                </StackPanel>
-                </ScrollViewer>
-            </Border>
-            
-            <!-- Coming Soon: Achievements -->
-            <Border Grid.Column="0" Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5" MinHeight="120"
-                    ToolTip="Coming Soon: Track your milestones and earn badges!">
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="🏆" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                    <TextBlock Text="Achievements" Foreground="{StaticResource PinkBrush}" 
-                               FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Coming Soon" Foreground="#666666" 
-                               FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/>
-                    <TextBlock Text="Earn badges and track milestones" Foreground="#888888" 
-                               FontSize="11" HorizontalAlignment="Center" Margin="0,3,0,0" FontStyle="Italic"/>
-                </StackPanel>
-            </Border>
+                        
+                        <!-- Days -->
+                        <WrapPanel Margin="0,3">
+                            <CheckBox x:Name="ChkMon" Content="M" Foreground="White" Margin="0,0,6,0" IsChecked="True" FontSize="10"/>
+                            <CheckBox x:Name="ChkTue" Content="T" Foreground="White" Margin="0,0,6,0" IsChecked="True" FontSize="10"/>
+                            <CheckBox x:Name="ChkWed" Content="W" Foreground="White" Margin="0,0,6,0" IsChecked="True" FontSize="10"/>
+                            <CheckBox x:Name="ChkThu" Content="T" Foreground="White" Margin="0,0,6,0" IsChecked="True" FontSize="10"/>
+                            <CheckBox x:Name="ChkFri" Content="F" Foreground="White" Margin="0,0,6,0" IsChecked="True" FontSize="10"/>
+                            <CheckBox x:Name="ChkSat" Content="S" Foreground="White" Margin="0,0,6,0" IsChecked="True" FontSize="10"/>
+                            <CheckBox x:Name="ChkSun" Content="S" Foreground="White" Margin="0,0,0,0" IsChecked="True" FontSize="10"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Intensity Ramp Box -->
+                <Border Style="{StaticResource SectionPanel}" Margin="5">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="⚡ Intensity Ramp" FontSize="14"/>
+                        
+                        <!-- Enable Ramp -->
+                        <Grid Margin="0,3">
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="Enable" FontSize="12"/>
+                            <CheckBox x:Name="ChkRampEnabled" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right"/>
+                        </Grid>
+                        
+                        <!-- Duration -->
+                        <Grid Margin="0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="50"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="Duration" FontSize="11"/>
+                            <Slider Grid.Column="1" x:Name="SliderRampDuration" Minimum="10" Maximum="180" Value="60" 
+                                    Margin="5,0" ValueChanged="SliderRampDuration_Changed"/>
+                            <TextBlock x:Name="TxtRampDuration" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="60 min" FontSize="11"/>
+                        </Grid>
+                        
+                        <!-- Multiplier -->
+                        <Grid Margin="0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="60"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="50"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="Multiplier" FontSize="11"/>
+                            <Slider Grid.Column="1" x:Name="SliderMultiplier" Minimum="1" Maximum="3" Value="1.5" 
+                                    Margin="5,0" ValueChanged="SliderMultiplier_Changed"/>
+                            <TextBlock x:Name="TxtMultiplier" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="1.5x" FontSize="11"/>
+                        </Grid>
+                        
+                        <!-- End at Ramp -->
+                        <Grid Margin="0,2">
+                            <TextBlock Style="{StaticResource SettingLabel}" Text="End at Complete" FontSize="11"/>
+                            <CheckBox x:Name="ChkEndAtRamp" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right"/>
+                        </Grid>
+                        
+                        <!-- Ramp Links -->
+                        <TextBlock Text="Link to Ramp" Foreground="{StaticResource PinkBrush}" FontSize="11" Margin="0,5,0,2"/>
+                        <Border Background="#1E1E3A" CornerRadius="4" Padding="6,4">
+                            <WrapPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,8,2">
+                                    <CheckBox x:Name="ChkRampLinkFlash" Style="{StaticResource ToggleStyle}"/>
+                                    <TextBlock Text="Flash" Foreground="#AAA" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,8,2">
+                                    <CheckBox x:Name="ChkRampLinkSpiral" Style="{StaticResource ToggleStyle}"/>
+                                    <TextBlock Text="Spiral" Foreground="#AAA" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,8,2">
+                                    <CheckBox x:Name="ChkRampLinkPink" Style="{StaticResource ToggleStyle}"/>
+                                    <TextBlock Text="Pink" Foreground="#AAA" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,8,2">
+                                    <CheckBox x:Name="ChkRampLinkMaster" Style="{StaticResource ToggleStyle}"/>
+                                    <TextBlock Text="Master" Foreground="#AAA" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                    <CheckBox x:Name="ChkRampLinkSubAudio" Style="{StaticResource ToggleStyle}"/>
+                                    <TextBlock Text="Sub" Foreground="#AAA" FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </WrapPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
             
             <!-- Coming Soon: Community -->
-            <Border Grid.Column="1" Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5" MinHeight="120"
+            <Border Grid.Column="0" Grid.ColumnSpan="2" Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="5" MinHeight="80"
                     ToolTip="Coming Soon: Connect with other users!">
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="🌐" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                    <TextBlock Text="Community" Foreground="{StaticResource PinkBrush}" 
-                               FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Coming Soon" Foreground="#666666" 
-                               FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/>
-                    <TextBlock Text="Connect, share &amp; compete" Foreground="#888888" 
-                               FontSize="11" HorizontalAlignment="Center" Margin="0,3,0,0" FontStyle="Italic"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock Text="🌐" FontSize="28" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Community" Foreground="{StaticResource PinkBrush}" 
+                                   FontSize="16" FontWeight="Bold"/>
+                        <TextBlock Text="Coming Soon - Connect, share &amp; compete" Foreground="#888888" 
+                                   FontSize="11" FontStyle="Italic"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </Grid>
+
+        <!-- Achievements Tab -->
+        <Border x:Name="AchievementsTab" Grid.Row="3" Margin="10,5,10,10" Visibility="Collapsed"
+                Style="{StaticResource SectionPanel}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="🏆 Achievements" Margin="0,0,0,10"/>
+                    <TextBlock Text="Complete challenges to unlock achievements! Locked achievements are blurred until earned." 
+                               Foreground="#888888" FontSize="12" Margin="0,0,0,15"/>
+                    
+                    <!-- Achievement Grid - 7 columns -->
+                    <ItemsControl x:Name="AchievementsGrid">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="7"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    
+                    <!-- Static Achievement Grid -->
+                    <UniformGrid Columns="7" Margin="0,5">
+                        <!-- Row 1 -->
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/10 hours pink.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/clean slate.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/corner hit.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/daily mainenance.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/deep sleep.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/Dumb Bimbo.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/how many.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <!-- Row 2 -->
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/look but dont touch.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/lv 10.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/lv 50.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/Mathematician's nightmare.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/mercy beggar.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/morning glory.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/Neon obsession.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <!-- Row 3 -->
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/obedience reflex.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/perfect plastic puppet.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/player 2 disconnected.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/pop the Thought.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/relapse.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/retinal burn.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/Sofa decor.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <!-- Row 4 -->
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/spiral eyes.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/system overload.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/total lockdown.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/typing tutor.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <Image Source="pack://application:,,,/Resources/achievements/What panic button.png" Stretch="Uniform">
+                                <Image.Effect><BlurEffect Radius="15"/></Image.Effect>
+                            </Image>
+                        </Border>
+                        <!-- Coming Soon placeholders -->
+                        <Border Style="{StaticResource AchievementTile}">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock Text="❓" FontSize="32" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Coming Soon" Foreground="#666666" FontSize="10" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource AchievementTile}">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock Text="❓" FontSize="32" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Coming Soon" Foreground="#666666" FontSize="10" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+                    
+                    <TextBlock Text="0 / 26 Achievements Unlocked" Foreground="#888888" FontSize="14" 
+                               HorizontalAlignment="Center" Margin="0,15,0,0"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
 
     </Grid>
 </Window>

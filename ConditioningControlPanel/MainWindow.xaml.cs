@@ -427,12 +427,18 @@ namespace ConditioningControlPanel
             ShowTab("progression");
         }
 
+        private void BtnAchievements_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("achievements");
+        }
+
         private void ShowTab(string tab)
         {
             // Hide all tabs
             SettingsTab.Visibility = Visibility.Collapsed;
             PresetsTab.Visibility = Visibility.Collapsed;
             ProgressionTab.Visibility = Visibility.Collapsed;
+            AchievementsTab.Visibility = Visibility.Collapsed;
 
             // Reset button styles
             var pinkBrush = FindResource("PinkBrush") as SolidColorBrush;
@@ -442,6 +448,8 @@ namespace ConditioningControlPanel
             BtnPresets.Foreground = pinkBrush;
             BtnProgression.Background = Brushes.Transparent;
             BtnProgression.Foreground = pinkBrush;
+            BtnAchievements.Background = Brushes.Transparent;
+            BtnAchievements.Foreground = pinkBrush;
 
             switch (tab)
             {
@@ -461,6 +469,12 @@ namespace ConditioningControlPanel
                     ProgressionTab.Visibility = Visibility.Visible;
                     BtnProgression.Background = pinkBrush;
                     BtnProgression.Foreground = Brushes.White;
+                    break;
+
+                case "achievements":
+                    AchievementsTab.Visibility = Visibility.Visible;
+                    BtnAchievements.Background = pinkBrush;
+                    BtnAchievements.Foreground = Brushes.White;
                     break;
             }
         }
@@ -1058,24 +1072,62 @@ namespace ConditioningControlPanel
             _isLoading = false;
         }
         
-        public void UpdatePinkFilterOpacity(int opacity)
-        {
-            App.Settings.Current.PinkFilterOpacity = opacity;
-        }
-        
         public void UpdateSpiralOpacity(int opacity)
         {
             App.Settings.Current.SpiralOpacity = opacity;
+            Dispatcher.Invoke(() =>
+            {
+                if (SliderSpiralOpacity != null && !_isLoading)
+                {
+                    _isLoading = true;
+                    SliderSpiralOpacity.Value = opacity;
+                    if (TxtSpiralOpacity != null) TxtSpiralOpacity.Text = $"{opacity}%";
+                    _isLoading = false;
+                }
+            });
         }
         
         public void EnablePinkFilter(bool enabled)
         {
             App.Settings.Current.PinkFilterEnabled = enabled;
+            Dispatcher.Invoke(() =>
+            {
+                if (ChkPinkFilterEnabled != null && !_isLoading)
+                {
+                    _isLoading = true;
+                    ChkPinkFilterEnabled.IsChecked = enabled;
+                    _isLoading = false;
+                }
+            });
         }
         
         public void EnableSpiral(bool enabled)
         {
             App.Settings.Current.SpiralEnabled = enabled;
+            Dispatcher.Invoke(() =>
+            {
+                if (ChkSpiralEnabled != null && !_isLoading)
+                {
+                    _isLoading = true;
+                    ChkSpiralEnabled.IsChecked = enabled;
+                    _isLoading = false;
+                }
+            });
+        }
+        
+        public void UpdatePinkFilterOpacity(int opacity)
+        {
+            App.Settings.Current.PinkFilterOpacity = opacity;
+            Dispatcher.Invoke(() =>
+            {
+                if (SliderPinkOpacity != null && !_isLoading)
+                {
+                    _isLoading = true;
+                    SliderPinkOpacity.Value = opacity;
+                    if (TxtPinkOpacity != null) TxtPinkOpacity.Text = $"{opacity}%";
+                    _isLoading = false;
+                }
+            });
         }
         
         public void SetBubblesActive(bool active, int bubblesPerBurst = 5)
@@ -2150,31 +2202,55 @@ namespace ConditioningControlPanel
             SpiralUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
             PinkFilterLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
             PinkFilterUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
+            SetFeatureImageBlur(SpiralFeatureImage, !level10Unlocked);
+            SetFeatureImageBlur(PinkFilterFeatureImage, !level10Unlocked);
             
             // Level 20 unlocks: Bubbles
             var level20Unlocked = level >= 20;
             BubblesLocked.Visibility = level20Unlocked ? Visibility.Collapsed : Visibility.Visible;
             BubblesUnlocked.Visibility = level20Unlocked ? Visibility.Visible : Visibility.Collapsed;
+            SetFeatureImageBlur(BubblePopFeatureImage, !level20Unlocked);
             
             // Level 35 unlocks: Lock Card
             var level35Unlocked = level >= 35;
             LockCardLocked.Visibility = level35Unlocked ? Visibility.Collapsed : Visibility.Visible;
             LockCardUnlocked.Visibility = level35Unlocked ? Visibility.Visible : Visibility.Collapsed;
+            SetFeatureImageBlur(LockCardFeatureImage, !level35Unlocked);
             
             // Level 50 unlocks: Bubble Count Game
             var level50Unlocked = level >= 50;
             Level50Locked.Visibility = level50Unlocked ? Visibility.Collapsed : Visibility.Visible;
             Level50Unlocked.Visibility = level50Unlocked ? Visibility.Visible : Visibility.Collapsed;
+            SetFeatureImageBlur(BubbleCountFeatureImage, !level50Unlocked);
             
             // Level 60 unlocks: Bouncing Text
             var level60Unlocked = level >= 60;
             Level60Locked.Visibility = level60Unlocked ? Visibility.Collapsed : Visibility.Visible;
             Level60Unlocked.Visibility = level60Unlocked ? Visibility.Visible : Visibility.Collapsed;
+            SetFeatureImageBlur(BouncingTextFeatureImage, !level60Unlocked);
             
             // Level 75 unlocks: Mind Wipe
             var level75Unlocked = level >= 75;
             MindWipeLocked.Visibility = level75Unlocked ? Visibility.Collapsed : Visibility.Visible;
             MindWipeUnlocked.Visibility = level75Unlocked ? Visibility.Visible : Visibility.Collapsed;
+            SetFeatureImageBlur(MindWipeFeatureImage, !level75Unlocked);
+        }
+        
+        /// <summary>
+        /// Applies or removes blur effect on feature images based on lock state
+        /// </summary>
+        private void SetFeatureImageBlur(Border? featureImageBorder, bool blur)
+        {
+            if (featureImageBorder == null) return;
+            
+            if (blur)
+            {
+                featureImageBorder.Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 15 };
+            }
+            else
+            {
+                featureImageBorder.Effect = null;
+            }
         }
 
         #endregion
