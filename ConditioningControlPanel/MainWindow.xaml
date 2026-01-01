@@ -1988,7 +1988,7 @@ Bimbo" Foreground="#FF69B4"
                                             <TextBlock Text="✔ Lvl 90" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
                                         </StackPanel>
                                         <CheckBox x:Name="ChkBrainDrainEnabled" Style="{StaticResource ToggleStyle}" 
-                                                  HorizontalAlignment="Right"
+                                                  HorizontalAlignment="Right" IsChecked="{Binding App.Settings.Current.BrainDrainEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                   Checked="ChkBrainDrainEnabled_Changed" Unchecked="ChkBrainDrainEnabled_Changed"/>
                                     </Grid>
                                 
@@ -2000,12 +2000,13 @@ Bimbo" Foreground="#FF69B4"
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Style="{StaticResource SettingLabel}" Text="Intensity"
-                                                       ToolTip="How intense the brain drain effect is"/>
-                                            <TextBlock x:Name="TxtBrainDrainIntensity" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="50%"/>
+                                                       ToolTip="Blur intensity (0-25%)"/>
+                                            <TextBlock x:Name="TxtBrainDrainIntensity" Grid.Column="1" Style="{StaticResource ValueLabel}" 
+                                                       Text="{Binding App.Settings.Current.BrainDrainIntensity, StringFormat={}{0}%}"/>
                                         </Grid>
-                                        <Slider x:Name="SliderBrainDrainIntensity" Minimum="1" Maximum="100" Value="50" 
-                                                Margin="0,1" ValueChanged="SliderBrainDrainIntensity_Changed"
-                                                ToolTip="Brain drain intensity (1-100%)"/>
+                                        <Slider x:Name="SliderBrainDrainIntensity" Style="{StaticResource PinkSlider}"
+                                                Minimum="0" Maximum="25" Value="{Binding App.Settings.Current.BrainDrainIntensity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
+                                                Margin="0,1" ValueChanged="SliderBrainDrainIntensity_Changed"/>
                                     
                                         <!-- Test Button -->
                                         <Button Content="▶ Test Now" 
