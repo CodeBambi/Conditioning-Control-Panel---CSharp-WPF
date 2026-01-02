@@ -1639,7 +1639,7 @@ Bimbo" Foreground="#FF69B4"
                             
                             <!-- Feature Image -->
                             <Border x:Name="SpiralFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/spiral overlay.png" Stretch="Uniform"/>
+                                <Image Source="pack://application:,,,/Resources/features/spiral_overlay.png" Stretch="Uniform"/>
                             </Border>
                         </Grid>
                     </Border>
@@ -1696,7 +1696,7 @@ Bimbo" Foreground="#FF69B4"
                             
                             <!-- Feature Image -->
                             <Border x:Name="PinkFilterFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/Pink filter.png" Stretch="Uniform"/>
+                                <Image Source="pack://application:,,,/Resources/features/Pink_filter.png" Stretch="Uniform"/>
                             </Border>
                         </Grid>
                     </Border>
@@ -1753,7 +1753,7 @@ Bimbo" Foreground="#FF69B4"
                             
                             <!-- Feature Image -->
                             <Border x:Name="BubblePopFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/Bubble pop.png" Stretch="Uniform"/>
+                                <Image Source="pack://application:,,,/Resources/features/Bubble_pop.png" Stretch="Uniform"/>
                             </Border>
                         </Grid>
                     </Border>
@@ -1848,7 +1848,7 @@ Bimbo" Foreground="#FF69B4"
                             
                             <!-- Feature Image -->
                             <Border x:Name="LockCardFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/Phrase Lock.png" Stretch="Uniform"/>
+                                <Image Source="pack://application:,,,/Resources/features/Phrase_Lock.png" Stretch="Uniform"/>
                             </Border>
                         </Grid>
                     </Border>
@@ -1937,7 +1937,7 @@ Bimbo" Foreground="#FF69B4"
                             
                             <!-- Feature Image -->
                             <Border x:Name="BubbleCountFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/Bubble count.png" Stretch="Uniform"/>
+                                <Image Source="pack://application:,,,/Resources/features/Bubble_count.png" Stretch="Uniform"/>
                             </Border>
                         </Grid>
                     </Border>
@@ -2020,7 +2020,7 @@ Bimbo" Foreground="#FF69B4"
                             
                             <!-- Feature Image -->
                             <Border x:Name="BouncingTextFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/bouncing text.png" Stretch="Uniform"/>
+                                <Image Source="pack://application:,,,/Resources/features/bouncing_text.png" Stretch="Uniform"/>
                             </Border>
                         </Grid>
                     </Border>
@@ -2107,7 +2107,7 @@ Bimbo" Foreground="#FF69B4"
                             
                             <!-- Feature Image -->
                             <Border x:Name="MindWipeFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/Mind Wipers.png" Stretch="Uniform"/>
+                                <Image Source="pack://application:,,,/Resources/features/Mind_Wipers.png" Stretch="Uniform"/>
                             </Border>
                         </Grid>
                     </Border>
@@ -2172,7 +2172,7 @@ Bimbo" Foreground="#FF69B4"
                             
                             <!-- Feature Image -->
                             <Border x:Name="BrainDrainFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/brain drain.png" Stretch="Uniform"/>
+                                <Image Source="pack://application:,,,/Resources/features/brain_drain.png" Stretch="Uniform"/>
                             </Border>
                         </Grid>
                     </Border>

@@ -27,7 +27,7 @@ public class Achievement
             Name = "Plastic Initiation",
             Requirement = "Reach Level 10",
             FlavorText = "Welcome to the dollhouse. You're just getting started.",
-            ImageName = "lv 10.png",
+            ImageName = "lv_10.png",
             Category = AchievementCategory.Progression
         },
         ["dumb_bimbo"] = new Achievement
@@ -36,7 +36,7 @@ public class Achievement
             Name = "Dumb Bimbo",
             Requirement = "Reach Level 20",
             FlavorText = "We're losing some IQ points, right Bambi?",
-            ImageName = "Dumb Bimbo.png",
+            ImageName = "Dumb_Bimbo.png",
             Category = AchievementCategory.Progression
         },
         ["fully_synthetic"] = new Achievement
@@ -45,7 +45,7 @@ public class Achievement
             Name = "Fully Synthetic",
             Requirement = "Reach Level 50",
             FlavorText = "More plastic than flesh. Your transformation is becoming permanent.",
-            ImageName = "lv 50.png",
+            ImageName = "lv_50.png",
             Category = AchievementCategory.Progression
         },
         ["perfect_plastic_puppet"] = new Achievement
@@ -54,7 +54,7 @@ public class Achievement
             Name = "Perfect Plastic Puppet",
             Requirement = "Reach Level 100",
             FlavorText = "And you thought it was just a game, uh?",
-            ImageName = "perfect plastic puppet.png",
+            ImageName = "perfect_plastic_puppet.png",
             Category = AchievementCategory.Progression
         },
         
@@ -65,7 +65,7 @@ public class Achievement
             Name = "Rose-Tinted Reality",
             Requirement = "Keep the Pink Filter active for 10 cumulative hours",
             FlavorText = "The world just looks better this way, doesn't it?",
-            ImageName = "10 hours pink.png",
+            ImageName = "10_hours_pink.png",
             Category = AchievementCategory.TimeSessions
         },
         ["deep_sleep"] = new Achievement
@@ -74,7 +74,7 @@ public class Achievement
             Name = "Deep Sleep Mode",
             Requirement = "Complete a session lasting longer than 3 hours",
             FlavorText = "Who needs the real world anyway?",
-            ImageName = "deep sleep.png",
+            ImageName = "deep_sleep.png",
             Category = AchievementCategory.TimeSessions
         },
         ["daily_maintenance"] = new Achievement
@@ -83,7 +83,7 @@ public class Achievement
             Name = "Daily Maintenance",
             Requirement = "Launch the app 7 days in a row",
             FlavorText = "Good dolls need regular updates.",
-            ImageName = "daily mainenance.png",
+            ImageName = "daily_maintenance.png",
             Category = AchievementCategory.TimeSessions
         },
         ["retinal_burn"] = new Achievement
@@ -92,7 +92,7 @@ public class Achievement
             Name = "Retinal Burn",
             Requirement = "Have 5,000 Flash Images displayed",
             FlavorText = "Close your eyes. You can still see them, can't you?",
-            ImageName = "retinal burn.png",
+            ImageName = "retinal_burn.png",
             Category = AchievementCategory.TimeSessions
         },
         ["morning_glory"] = new Achievement
@@ -101,7 +101,7 @@ public class Achievement
             Name = "Morning Glory",
             Requirement = "Complete Morning Drift between 6-9 AM",
             FlavorText = "Starting the day on the right frequency.",
-            ImageName = "morning glory.png",
+            ImageName = "morning_glory.png",
             Category = AchievementCategory.TimeSessions
         },
         ["player_2_disconnected"] = new Achievement
@@ -110,7 +110,7 @@ public class Achievement
             Name = "Player 2 Disconnected",
             Requirement = "Complete Gamer Girl without Alt+Tab",
             FlavorText = "Game over. The conditioning won.",
-            ImageName = "player 2 disconnected.png",
+            ImageName = "player_2_disconnected.png",
             Category = AchievementCategory.TimeSessions
         },
         ["sofa_decor"] = new Achievement
@@ -119,7 +119,7 @@ public class Achievement
             Name = "Sofa Decor",
             Requirement = "Complete The Distant Doll session",
             FlavorText = "You're just a pretty accessory for the furniture now.",
-            ImageName = "Sofa decor.png",
+            ImageName = "Sofa_decor.png",
             Category = AchievementCategory.TimeSessions
         },
         ["look_but_dont_touch"] = new Achievement
@@ -128,7 +128,7 @@ public class Achievement
             Name = "Look, But Don't Touch",
             Requirement = "Complete Good Girls Don't Cum with Strict Lock",
             FlavorText = "Frustration is just another word for devotion.",
-            ImageName = "look but dont touch.png",
+            ImageName = "look_but_dont_touch.png",
             Category = AchievementCategory.TimeSessions
         },
         ["spiral_eyes"] = new Achievement
@@ -137,7 +137,7 @@ public class Achievement
             Name = "Spiral Eyes",
             Requirement = "Stare at the Spiral Overlay for 20 minutes",
             FlavorText = "Round and round it goes, where your mind went, nobody knows.",
-            ImageName = "spiral eyes.png",
+            ImageName = "spiral_eyes.png",
             Category = AchievementCategory.TimeSessions
         },
         
@@ -148,7 +148,7 @@ public class Achievement
             Name = "Mathematician's Nightmare",
             Requirement = "Guess correct bubble count 5 times in a row",
             FlavorText = "You're surprisingly good at counting for an airhead.",
-            ImageName = "Mathematician's nightmare.png",
+            ImageName = "Mathematician's_nightmare.png",
             Category = AchievementCategory.Minigames
         },
         ["pop_the_thought"] = new Achievement
@@ -157,7 +157,7 @@ public class Achievement
             Name = "Pop Goes The Thought",
             Requirement = "Pop 1,000 bubbles total",
             FlavorText = "Every pop is a thought disappearing.",
-            ImageName = "pop the Thought.png",
+            ImageName = "pop_the_Thought.png",
             Category = AchievementCategory.Minigames
         },
         ["typing_tutor"] = new Achievement
@@ -166,7 +166,7 @@ public class Achievement
             Name = "Typing Tutor",
             Requirement = "Complete Lock Card with 100% accuracy",
             FlavorText = "Good muscle memory. Your fingers know what to say.",
-            ImageName = "typing tutor.png",
+            ImageName = "typing_tutor.png",
             Category = AchievementCategory.Minigames
         },
         ["obedience_reflex"] = new Achievement
@@ -175,7 +175,7 @@ public class Achievement
             Name = "Obedience Reflex",
             Requirement = "Complete Lock Card (3 phrases) in under 15 seconds",
             FlavorText = "You didn't even read it, you just typed. Speed is a sign of devotion.",
-            ImageName = "obedience reflex.png",
+            ImageName = "obedience_reflex.png",
             Category = AchievementCategory.Minigames
         },
         ["mercy_beggar"] = new Achievement
@@ -184,7 +184,7 @@ public class Achievement
             Name = "Mercy Beggar",
             Requirement = "Fail the attention check 3 times",
             FlavorText = "Too dumb to focus? Time for a penalty.",
-            ImageName = "mercy beggar.png",
+            ImageName = "mercy_beggar.png",
             Category = AchievementCategory.Minigames
         },
         ["clean_slate"] = new Achievement
@@ -193,7 +193,7 @@ public class Achievement
             Name = "Clean Slate",
             Requirement = "Let Mind Wipers run for 60 seconds",
             FlavorText = "Squeaky clean. No thoughts, just shine.",
-            ImageName = "clean slate.png",
+            ImageName = "clean_slate.png",
             Category = AchievementCategory.Minigames
         },
         ["corner_hit"] = new Achievement
@@ -202,7 +202,7 @@ public class Achievement
             Name = "Corner Hit",
             Requirement = "Watch Bouncing Text hit the exact corner",
             FlavorText = "The most exciting thing that happened all day.",
-            ImageName = "corner hit.png",
+            ImageName = "corner_hit.png",
             Category = AchievementCategory.Minigames
         },
         ["neon_obsession"] = new Achievement
@@ -211,7 +211,7 @@ public class Achievement
             Name = "Neon Obsession",
             Requirement = "Click on the Avatar 20 times rapidly",
             FlavorText = "Hey! I'm just a drawing... or am I?",
-            ImageName = "Neon obsession.png",
+            ImageName = "Neon_obsession.png",
             Category = AchievementCategory.Minigames
         },
         
@@ -222,7 +222,7 @@ public class Achievement
             Name = "Panic Button? What Panic Button?",
             Requirement = "Complete any session with Disable Panic enabled",
             FlavorText = "There is no escape, and you love it.",
-            ImageName = "What panic button.png",
+            ImageName = "What_panic_button.png",
             Category = AchievementCategory.Hardcore
         },
         ["relapse"] = new Achievement
@@ -240,7 +240,7 @@ public class Achievement
             Name = "Total Lockdown",
             Requirement = "Activate Strict Lock, No Panic, and Pink Filter together",
             FlavorText = "The Danger Combination. Brave... or foolish?",
-            ImageName = "total lockdown.png",
+            ImageName = "total_lockdown.png",
             Category = AchievementCategory.Hardcore
         },
         ["system_overload"] = new Achievement
@@ -249,7 +249,7 @@ public class Achievement
             Name = "System Overload",
             Requirement = "Have Bubbles, Bouncing Text, and Spiral all active",
             FlavorText = "Too much input. Brain.exe has stopped working.",
-            ImageName = "system overload.png",
+            ImageName = "system_overload.png",
             Category = AchievementCategory.Hardcore
         }
     };

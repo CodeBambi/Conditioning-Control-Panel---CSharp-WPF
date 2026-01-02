@@ -147,6 +147,25 @@ namespace ConditioningControlPanel.Services
             _fileService.ExportSession(session, filePath);
         }
 
+        public void UpdateCustomSession(Session updatedSession)
+        {
+            var definition = SessionDefinition.FromSession(updatedSession);
+            _fileService.SaveCustomSession(definition);
+
+            var existingSession = _sessions.FirstOrDefault(s => s.Id == updatedSession.Id);
+            if (existingSession != null)
+            {
+                _sessions.Remove(existingSession);
+                AllSessions.Remove(existingSession);
+            }
+            _sessions.Add(updatedSession);
+            AllSessions.Add(updatedSession);
+
+            // Let the UI decide what to do
+            SessionRemoved?.Invoke(existingSession);
+            SessionAdded?.Invoke(updatedSession);
+        }
+
         /// <summary>
         /// Adds a new session created in the editor
         /// </summary>

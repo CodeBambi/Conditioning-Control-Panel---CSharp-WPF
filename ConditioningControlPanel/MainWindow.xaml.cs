@@ -1994,29 +1994,42 @@ namespace ConditioningControlPanel
                 editor.Owner = this;
                 if (editor.ShowDialog() == true && editor.ResultSession != null)
                 {
-                    // Save the updated session
-                    if (_sessionFileService == null)
+                    if (_sessionFileService == null) _sessionFileService = new Services.SessionFileService();
+                    if (_sessionManager == null) InitializeSessionManager();
+
+                    var editedSession = editor.ResultSession;
+
+                    if (session.Source == Models.SessionSource.BuiltIn)
                     {
-                        _sessionFileService = new Services.SessionFileService();
+                        // Editing a built-in session creates a new custom session
+                        editedSession.Id = Guid.NewGuid().ToString(); // New ID
+
+                        var dialog = new Microsoft.Win32.SaveFileDialog
+                        {
+                            Filter = "Session Files (*.session.json)|*.session.json",
+                            Title = "Save as New Custom Session",
+                            InitialDirectory = SessionFileService.CustomSessionsFolder,
+                            FileName = SessionFileService.GetExportFileName(editedSession)
+                        };
+
+                        if (dialog.ShowDialog() == true)
+                        {
+                            _sessionManager.AddNewSession(editedSession, dialog.FileName);
+                            MessageBox.Show("Built-in session saved as a new custom session!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                        }
                     }
-
-                    var definition = Models.SessionDefinition.FromSession(editor.ResultSession);
-                    _sessionFileService.SaveCustomSession(definition);
-
-                    // If it's a custom session, refresh the card
-                    if (session.Source != Models.SessionSource.BuiltIn)
+                    else // Custom session
                     {
-                        RemoveCustomSessionCard(session);
-                        AddCustomSessionCard(editor.ResultSession);
+                        // Preserve original ID and save over existing file
+                        editedSession.Id = session.Id;
+                        _sessionManager.UpdateCustomSession(editedSession);
+                        
+                        SelectSession(editedSession);
+                        ShowDropZoneStatus($"Session updated: {editedSession.Name}", isError: false);
                     }
-
-                    // Re-select to update the details panel
-                    SelectSession(editor.ResultSession);
-
-                    ShowDropZoneStatus($"Session updated: {editor.ResultSession.Name}", isError: false);
                 }
             }
-            e.Handled = true; // Prevent triggering the parent's click
+            e.Handled = true;
         }
 
         private void SessionBtn_Export(object sender, RoutedEventArgs e)

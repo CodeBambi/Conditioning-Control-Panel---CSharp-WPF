@@ -81,11 +81,6 @@
     </None>
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="Resources\**\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
 
   <ItemGroup>
     <!-- App icon -->
@@ -123,5 +118,8 @@
     
     <!-- Feature images -->
     <Resource Include="Resources\features\*.png" />
+
+    <!-- Sound files -->
+    <Resource Include="Resources\sounds\**\*" />
   </ItemGroup>
 </Project>
