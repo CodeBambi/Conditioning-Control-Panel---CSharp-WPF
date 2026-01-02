@@ -22,26 +22,24 @@
                    VerticalAlignment="Center"
                    IsHitTestVisible="False"/>
 
-            <!-- Avatar container - centered within the tube area -->
-            <Grid Margin="140,180,240,160">
-                <!-- Avatar/Sprite with floating animation -->
-                <Image x:Name="ImgAvatar"
-                       Stretch="Uniform"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       MaxHeight="380"
-                       RenderTransformOrigin="0.5,0.5"
-                       IsHitTestVisible="True"
-                       Cursor="Hand"
-                       MouseLeftButtonDown="ImgAvatar_MouseLeftButtonDown">
-                    <Image.RenderTransform>
-                        <TranslateTransform x:Name="AvatarTranslate" Y="0"/>
-                    </Image.RenderTransform>
-                    <Image.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
-                    </Image.Effect>
-                </Image>
-            </Grid>
+            <!-- Avatar/Sprite SECOND (on top) with floating animation -->
+            <Image x:Name="ImgAvatar"
+                   Stretch="Uniform"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Bottom"
+                   Margin="155,100,258,175"
+                   MaxHeight="340"
+                   RenderTransformOrigin="0.5,0.5"
+                   IsHitTestVisible="True"
+                   Cursor="Hand"
+                   MouseLeftButtonDown="ImgAvatar_MouseLeftButtonDown">
+                <Image.RenderTransform>
+                    <TranslateTransform x:Name="AvatarTranslate" Y="0"/>
+                </Image.RenderTransform>
+                <Image.Effect>
+                    <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                </Image.Effect>
+            </Image>
         </Grid>
     </Viewbox>
 </Window>

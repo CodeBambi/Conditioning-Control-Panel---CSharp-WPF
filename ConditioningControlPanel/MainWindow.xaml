@@ -4,7 +4,7 @@
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Conditioning Control Panel v4.0"
         Height="901" Width="1305"
-        MinHeight="815" MinWidth="1100"
+        MinHeight="620" MinWidth="898"
         Background="#1A1A2E"
         WindowStartupLocation="Manual"
         WindowStyle="None"
@@ -334,14 +334,17 @@
         </Style>
     </Window.Resources>
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="36"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <!-- Viewbox scales all content proportionally with window size -->
+    <Viewbox Stretch="Fill">
+        <!-- Design canvas at reference size 1305x901 -->
+        <Grid Width="1305" Height="901">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="36"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
         <!-- Custom Title Bar -->
         <Border Grid.Row="0" Background="{StaticResource PinkBrush}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
@@ -2567,5 +2570,6 @@ Bimbo" Foreground="#FF69B4"
                 </Border>
             </Grid>
         </Border>
-    </Grid>
+        </Grid>
+    </Viewbox>
 </Window>
