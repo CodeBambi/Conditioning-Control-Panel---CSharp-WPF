@@ -41,6 +41,11 @@ namespace ConditioningControlPanel
         private DispatcherTimer? _rampTimer;
         private DateTime _rampStartTime;
         private Dictionary<string, double> _rampBaseValues = new();
+
+        // Easter egg tracking (100 clicks in 60 seconds)
+        private int _easterEggClickCount = 0;
+        private DateTime _easterEggFirstClick = DateTime.MinValue;
+        private bool _easterEggTriggered = false;
         
         // Scheduler tracking
         private DispatcherTimer? _schedulerTimer;
@@ -2402,8 +2407,8 @@ namespace ConditioningControlPanel
                 App.MindWipe.Start(settings.MindWipeFrequency, settings.MindWipeVolume / 100.0);
             }
 
-            // Start brain drain service (requires level 90)
-            if (settings.PlayerLevel >= 90 && settings.BrainDrainEnabled)
+            // Start brain drain service (requires level 70)
+            if (settings.PlayerLevel >= 70 && settings.BrainDrainEnabled)
             {
                 App.BrainDrain.Start();
             }
@@ -3118,6 +3123,31 @@ namespace ConditioningControlPanel
             Close(); // This will now actually close since _exitRequested is true
         }
 
+        private void BtnMainHelp_Click(object sender, RoutedEventArgs e)
+        {
+            // Hide browser (WebView2 doesn't respect WPF z-order)
+            if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Hidden;
+            MainTutorialOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void MainTutorial_Close(object sender, RoutedEventArgs e)
+        {
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Visible;
+        }
+
+        private void MainTutorial_Close(object sender, MouseButtonEventArgs e)
+        {
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Visible;
+        }
+
+        private void MainTutorial_ContentClick(object sender, MouseButtonEventArgs e)
+        {
+            // Prevent closing when clicking on the content
+            e.Handled = true;
+        }
+
         #endregion
 
         #region UI Updates
@@ -3222,11 +3252,11 @@ namespace ConditioningControlPanel
                 if (MindWipeUnlocked != null) MindWipeUnlocked.Visibility = level75Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (MindWipeFeatureImage != null) SetFeatureImageBlur(MindWipeFeatureImage, !level75Unlocked);
 
-                // Level 90 unlocks: Brain Drain
-                var level90Unlocked = level >= 90;
-                if (BrainDrainLocked != null) BrainDrainLocked.Visibility = level90Unlocked ? Visibility.Collapsed : Visibility.Visible;
-                if (BrainDrainUnlocked != null) BrainDrainUnlocked.Visibility = level90Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level90Unlocked);
+                // Level 70 unlocks: Brain Drain
+                var level70Unlocked = level >= 70;
+                if (BrainDrainLocked != null) BrainDrainLocked.Visibility = level70Unlocked ? Visibility.Collapsed : Visibility.Visible;
+                if (BrainDrainUnlocked != null) BrainDrainUnlocked.Visibility = level70Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level70Unlocked);
 
                 App.Logger?.Debug("UpdateUnlockablesVisibility: Completed successfully.");
             }
@@ -3789,7 +3819,7 @@ namespace ConditioningControlPanel
 
         #endregion
 
-        #region Brain Drain (Lvl 90)
+        #region Brain Drain (Lvl 70)
 
         private void ChkBrainDrainEnabled_Changed(object sender, RoutedEventArgs e)
         {
@@ -3800,7 +3830,7 @@ namespace ConditioningControlPanel
 
             if (_isRunning)
             {
-                if (isEnabled && App.Settings.Current.PlayerLevel >= 90)
+                if (isEnabled && App.Settings.Current.PlayerLevel >= 70)
                 {
                     App.BrainDrain.Start();
                 }
@@ -3856,11 +3886,32 @@ namespace ConditioningControlPanel
         {
             // Track for Neon Obsession achievement (20 rapid clicks on the avatar/logo)
             App.Achievements?.TrackAvatarClick();
-            
+
             // Log click count for debugging
             var clickCount = App.Achievements?.Progress.AvatarClickCount ?? 0;
             App.Logger?.Debug("Logo/Avatar clicked! Count: {Count}/20", clickCount);
-            
+
+            // Easter egg tracking (100 clicks in 60 seconds)
+            if (!_easterEggTriggered)
+            {
+                var now = DateTime.Now;
+                if (_easterEggFirstClick == DateTime.MinValue || (now - _easterEggFirstClick).TotalSeconds > 60)
+                {
+                    // Reset if more than 60 seconds passed
+                    _easterEggFirstClick = now;
+                    _easterEggClickCount = 1;
+                }
+                else
+                {
+                    _easterEggClickCount++;
+                    if (_easterEggClickCount >= 100)
+                    {
+                        _easterEggTriggered = true;
+                        ShowEasterEgg();
+                    }
+                }
+            }
+
             // Visual feedback - quick pulse effect
             if (ImgLogo != null)
             {
@@ -3871,7 +3922,7 @@ namespace ConditioningControlPanel
                     Duration = TimeSpan.FromMilliseconds(80),
                     AutoReverse = true
                 };
-                
+
                 var scaleTransform = ImgLogo.RenderTransform as System.Windows.Media.ScaleTransform;
                 if (scaleTransform == null)
                 {
@@ -3879,10 +3930,17 @@ namespace ConditioningControlPanel
                     ImgLogo.RenderTransformOrigin = new Point(0.5, 0.5);
                     ImgLogo.RenderTransform = scaleTransform;
                 }
-                
+
                 scaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, pulse);
                 scaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, pulse);
             }
+        }
+
+        private void ShowEasterEgg()
+        {
+            var easterEggWindow = new EasterEggWindow();
+            easterEggWindow.Owner = this;
+            easterEggWindow.ShowDialog();
         }
 
         private void BtnTestVideo_Click(object sender, RoutedEventArgs e)

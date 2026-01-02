@@ -520,15 +520,32 @@ Bimbo" Foreground="#FF69B4"
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="TxtLevelLabel" Grid.Column="0" Text="LVL 1" Foreground="{StaticResource PinkBrush}" 
+            <TextBlock x:Name="TxtLevelLabel" Grid.Column="0" Text="LVL 1" Foreground="{StaticResource PinkBrush}"
                        FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
-            <Border Grid.Column="1" Background="#404060" CornerRadius="4" Height="8">
-                <Border x:Name="XPBar" Background="{StaticResource PinkBrush}" CornerRadius="4" 
+            <Border Grid.Column="1" Background="#404060" CornerRadius="4" Height="8" Margin="0,0,10,0">
+                <Border x:Name="XPBar" Background="{StaticResource PinkBrush}" CornerRadius="4"
                         HorizontalAlignment="Left" Width="100"/>
             </Border>
-            <TextBlock x:Name="TxtXP" Grid.Column="2" Text="0 / 70 XP" Foreground="{StaticResource TextMutedBrush}" 
-                       FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+            <TextBlock x:Name="TxtXP" Grid.Column="2" Text="0 / 70 XP" Foreground="{StaticResource TextMutedBrush}"
+                       FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <Button x:Name="BtnMainHelp" Grid.Column="3" Content="?" Click="BtnMainHelp_Click"
+                    Width="24" Height="24" ToolTip="How to use the app">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="#FF69B4" CornerRadius="12" Width="24" Height="24" Cursor="Hand">
+                            <TextBlock Text="?" Foreground="White" FontWeight="Bold" FontSize="14"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
         </Grid>
 
         <!-- Main Content - Settings Tab -->
@@ -661,8 +678,8 @@ Bimbo" Foreground="#FF69B4"
                         </StackPanel>
                     </Border>
 
-                    <!-- Logo (Clickable for Neon Obsession achievement) -->
-                    <Border Background="#01000000" Padding="0" Height="295" Margin="0,0,0,8"
+                    <!-- Logo (Clickable for Neon Obsession achievement + Easter Egg) -->
+                    <Border Background="#01000000" Padding="0" Height="280" Margin="0,0,0,8"
                             Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                             ToolTip="Click me rapidly! 💗">
                         <Image x:Name="ImgLogo" Stretch="Uniform" 
@@ -2089,32 +2106,32 @@ Bimbo" Foreground="#FF69B4"
                         </Grid>
                     </Border>
 
-                    <!-- Brain Drain - Lvl 90 -->
+                    <!-- Brain Drain - Lvl 70 -->
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
-                            ToolTip="Drains your thoughts with subliminal messaging.&#x0a;Unlocks at Level 90.">
+                            ToolTip="Drains your thoughts with subliminal messaging.&#x0a;Unlocks at Level 70.">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            
+
                             <Grid Grid.Column="0">
                                 <!-- Locked State -->
                                 <StackPanel x:Name="BrainDrainLocked" Visibility="Visible">
                                     <Grid>
                                         <TextBlock Text="💧 Brain Drain" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                        <TextBlock Text="🔒 Lvl 90" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
+                                        <TextBlock Text="🔒 Lvl 70" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                     </Grid>
-                                    <TextBlock Text="Reach Level 90 to Unlock" Foreground="{StaticResource PinkBrush}" 
+                                    <TextBlock Text="Reach Level 70 to Unlock" Foreground="{StaticResource PinkBrush}"
                                                FontSize="12" Margin="0,8,0,0"/>
                                 </StackPanel>
-                            
+
                                 <!-- Unlocked State -->
                                 <StackPanel x:Name="BrainDrainUnlocked" Visibility="Collapsed">
                                     <Grid>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="💧 Brain Drain" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
-                                            <TextBlock Text="✔ Lvl 90" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
+                                            <TextBlock Text="✔ Lvl 70" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
                                         </StackPanel>
                                         <CheckBox x:Name="ChkBrainDrainEnabled" Style="{StaticResource ToggleStyle}" 
                                                   HorizontalAlignment="Right"
@@ -2377,7 +2394,7 @@ Bimbo" Foreground="#FF69B4"
         </Border>
 
         <!-- Global Drop Overlay (shown when dragging JSON anywhere) -->
-        <Border x:Name="GlobalDropOverlay" Visibility="Collapsed" Background="#D0000000" IsHitTestVisible="False">
+        <Border x:Name="GlobalDropOverlay" Grid.RowSpan="5" Visibility="Collapsed" Background="#D0000000" IsHitTestVisible="False">
             <Border Background="#1E1E3A" CornerRadius="16" BorderBrush="#FF69B4" BorderThickness="3"
                     MaxWidth="400" MaxHeight="200" VerticalAlignment="Center" HorizontalAlignment="Center"
                     Padding="40,30">
@@ -2389,6 +2406,129 @@ Bimbo" Foreground="#FF69B4"
                                HorizontalAlignment="Center"/>
                 </StackPanel>
             </Border>
+        </Border>
+
+        <!-- Main App Tutorial Overlay -->
+        <Border x:Name="MainTutorialOverlay" Grid.RowSpan="5" Panel.ZIndex="1000" Visibility="Collapsed" Background="#E8000000">
+            <Grid>
+                <Border Background="Transparent" MouseLeftButtonDown="MainTutorial_Close"/>
+                <Border Background="#1E1E3A" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2"
+                        MaxWidth="700" MaxHeight="600" VerticalAlignment="Center" HorizontalAlignment="Center"
+                        Margin="40" MouseLeftButtonDown="MainTutorial_ContentClick">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Header -->
+                        <Border Grid.Row="0" Background="#252542" CornerRadius="10,10,0,0" Padding="20,15">
+                            <Grid>
+                                <TextBlock Text="📖 How to Use the App" Foreground="#FF69B4" FontSize="18" FontWeight="Bold"
+                                           HorizontalAlignment="Center"/>
+                                <Button Content="✕" Click="MainTutorial_Close" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                        Background="Transparent" Foreground="#888" FontSize="14" BorderThickness="0" Cursor="Hand"
+                                        Margin="0,-5,-5,0"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Tutorial Content -->
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20,15">
+                            <StackPanel>
+                                <!-- Hover Tip -->
+                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="🔍 Hover for Details" Foreground="#FF69B4" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Hover over any setting or feature to see a tooltip explaining what it does. Most sliders and options have helpful descriptions." Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Settings -->
+                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="⚙️ Settings Tab" Foreground="#FF69B4" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Configure all your conditioning effects here. Toggle features on/off, adjust frequencies, opacity, and more. Changes apply in real-time when running." Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Presets -->
+                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="💾 Presets" Foreground="#FF69B4" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Save your favorite settings as presets. Click a preset to see its details, then 'Load' to apply it. Create new presets from your current settings." Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Sessions -->
+                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="🎯 Sessions" Foreground="#FF69B4" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Timed experiences with carefully crafted effect sequences. Click a session to see details, then 'Start Session' to begin. Use the Session Editor to create your own custom sessions with timeline-based effects." Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Session Editor -->
+                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="✏️ Session Editor" Foreground="#FF69B4" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Create custom sessions by dragging feature icons onto the timeline. Each effect has a start (green) and optional stop (red) point. Click the ? button in the editor for detailed instructions." Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Import/Export -->
+                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="📂 Import &amp; Export" Foreground="#FF69B4" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Drag and drop .session.json files anywhere in the app to import sessions. Use the Export button on any session to share it with others." Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Level Unlocks -->
+                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="⭐ Level Unlocks" Foreground="#FF69B4" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Gain XP by using the app. New features unlock as you level up. All features are available by level 75. Sessions always have access to all features regardless of your level." Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Testing -->
+                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                                    <StackPanel>
+                                        <TextBlock Text="▶️ Testing Effects" Foreground="#FF69B4" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <TextBlock Text="Most features have a 'Test Now' button to preview the effect. Use the main ▶ Start/Stop button to run your configured settings, or start a session for a timed experience." Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Tips -->
+                                <Border Background="#3A2542" CornerRadius="8" Padding="15" BorderBrush="#FF69B4" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="💡 Pro Tips" Foreground="#FF69B4" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <TextBlock Foreground="#D0B0C0" FontSize="12" TextWrapping="Wrap">
+                                            <Run Text="• Add images to"/><Run Text=" assets/images " FontWeight="SemiBold"/><Run Text="for flashes"/>
+                                        </TextBlock>
+                                        <TextBlock Foreground="#D0B0C0" FontSize="12" TextWrapping="Wrap" Margin="0,3,0,0">
+                                            <Run Text="• Add audio to"/><Run Text=" assets/audio " FontWeight="SemiBold"/><Run Text="for whispers"/>
+                                        </TextBlock>
+                                        <TextBlock Foreground="#D0B0C0" FontSize="12" TextWrapping="Wrap" Margin="0,3,0,0">
+                                            <Run Text="• Use Borderless Windowed mode in games"/>
+                                        </TextBlock>
+                                        <TextBlock Foreground="#D0B0C0" FontSize="12" TextWrapping="Wrap" Margin="0,3,0,0">
+                                            <Run Text="• Right-click features for more options"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <!-- Footer -->
+                        <Border Grid.Row="2" Background="#252542" CornerRadius="0,0,10,10" Padding="20,15">
+                            <Button Content="Got it!" Style="{StaticResource PinkButton}" HorizontalAlignment="Center"
+                                    Click="MainTutorial_Close" Padding="40,10"/>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
         </Border>
     </Grid>
 </Window>
