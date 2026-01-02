@@ -55,7 +55,7 @@
                             <Run Text="• Hover over any setting to see what it does"/>
                         </TextBlock>
                         <TextBlock Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
-                            <Run Text="• Add images to 'assets/images' and audio to 'assets/sounds'"/>
+                            <Run Text="• Add videos to 'assets/startle_videos' and images to 'assets/images'"/>
                         </TextBlock>
                         <TextBlock Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
                             <Run Text="• For gaming: Use 'Borderless Windowed' mode for overlays"/>
