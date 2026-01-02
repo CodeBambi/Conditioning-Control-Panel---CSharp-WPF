@@ -87,6 +87,10 @@ Place your content files here:
 "@
     Set-Content -Path (Join-Path $OutputDir "assets/README.txt") -Value $readmePlaceholder
 
+    # Copy Resources folder
+    Write-Host "`n🖼️ Copying Resources folder..." -ForegroundColor Cyan
+    Copy-Item -Path (Join-Path $ProjectDir "Resources") -Destination $OutputDir -Recurse -Force
+
     Write-Host "`n✅ Build complete!" -ForegroundColor Green
     Write-Host "📂 Output: $OutputDir" -ForegroundColor White
     
