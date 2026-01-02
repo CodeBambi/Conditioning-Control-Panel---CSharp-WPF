@@ -35,8 +35,8 @@ namespace ConditioningControlPanel
             Directory.CreateDirectory(logPath);
             
             Logger = new LoggerConfiguration()
-                .MinimumLevel.Debug()
-                .WriteTo.File(Path.Combine(logPath, "app-.log"), 
+                .MinimumLevel.Information() // Security: Changed from Debug to avoid exposing sensitive data in logs
+                .WriteTo.File(Path.Combine(logPath, "app-.log"),
                     rollingInterval: RollingInterval.Day,
                     retainedFileCountLimit: 7)
                 .CreateLogger();

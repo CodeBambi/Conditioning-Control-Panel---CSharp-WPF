@@ -891,67 +891,24 @@ namespace ConditioningControlPanel
         {
             if (sender is Border border && border.Tag is string sessionType)
             {
-                // Clear preset selection
-                _selectedPreset = null;
-                RefreshPresetsList();
-                
-                // Hide preset panel, show session panel
-                PresetDetailScroller.Visibility = Visibility.Collapsed;
-                PresetButtonsPanel.Visibility = Visibility.Collapsed;
-                SessionDetailScroller.Visibility = Visibility.Visible;
-                SessionButtonsPanel.Visibility = Visibility.Visible;
-                SessionSpoilerPanel.Visibility = Visibility.Collapsed;
-                BtnRevealSpoilers.Content = "👁 Reveal Details";
-                
                 // Find the session
-                var sessions = Models.Session.GetAllSessions();
-                _selectedSession = sessions.FirstOrDefault(s => s.Id == sessionType);
-                
-                if (_selectedSession != null)
+                var session = GetSessionById(sessionType);
+
+                if (session != null)
                 {
-                    TxtDetailTitle.Text = $"{_selectedSession.Icon} {_selectedSession.Name}";
-                    TxtDetailSubtitle.Text = _selectedSession.IsAvailable ? "" : "🔒 Coming Soon";
-                    TxtSessionDuration.Text = $"{_selectedSession.DurationMinutes} minutes";
-                    TxtSessionXP.Text = $"+{_selectedSession.BonusXP} XP";
-                    TxtSessionDifficulty.Text = _selectedSession.GetDifficultyText();
-                    TxtSessionDescription.Text = _selectedSession.Description;
-                    
-                    // Update XP color based on difficulty
-                    TxtSessionXP.Foreground = _selectedSession.Difficulty switch
-                    {
-                        Models.SessionDifficulty.Easy => new SolidColorBrush(Color.FromRgb(144, 238, 144)), // Light green
-                        Models.SessionDifficulty.Medium => new SolidColorBrush(Color.FromRgb(255, 215, 0)), // Gold
-                        Models.SessionDifficulty.Hard => new SolidColorBrush(Color.FromRgb(255, 165, 0)), // Orange
-                        Models.SessionDifficulty.Extreme => new SolidColorBrush(Color.FromRgb(255, 99, 71)), // Tomato
-                        _ => new SolidColorBrush(Color.FromRgb(144, 238, 144))
-                    };
-                    
+                    SelectSession(session);
+
                     // Show corner GIF option if applicable
-                    if (_selectedSession.HasCornerGifOption)
+                    if (session.HasCornerGifOption)
                     {
-                        CornerGifOptionPanel.Visibility = Visibility.Visible;
-                        TxtCornerGifDesc.Text = _selectedSession.CornerGifDescription;
+                        TxtCornerGifDesc.Text = session.CornerGifDescription;
                         ChkCornerGifEnabled.IsChecked = false;
                         CornerGifSettings.Visibility = Visibility.Collapsed;
                     }
-                    else
-                    {
-                        CornerGifOptionPanel.Visibility = Visibility.Collapsed;
-                    }
-                    
-                    // Populate spoiler details
-                    TxtSessionFlash.Text = _selectedSession.GetSpoilerFlash();
-                    TxtSessionSubliminal.Text = _selectedSession.GetSpoilerSubliminal();
-                    TxtSessionAudio.Text = _selectedSession.GetSpoilerAudio();
-                    TxtSessionOverlays.Text = _selectedSession.GetSpoilerOverlays();
-                                            TxtSessionExtras.Text = _selectedSession.GetSpoilerInteractive();
-                                            TxtSessionTimeline.Text = _selectedSession.GetSpoilerTimeline();                    // Enable/disable start button
-                    BtnStartSession.IsEnabled = _selectedSession.IsAvailable;
-                    BtnStartSession.Content = _selectedSession.IsAvailable ? "▶ Start Session" : "🔒 Coming Soon";
                 }
             }
         }
-        
+
         private Models.Session? _selectedSession;
         
         private void ChkCornerGifEnabled_Changed(object sender, RoutedEventArgs e)
@@ -1521,6 +1478,738 @@ namespace ConditioningControlPanel
 
         #endregion
 
+        #region Session Import/Export
+
+        private Services.SessionManager? _sessionManager;
+        private Services.SessionFileService? _sessionFileService;
+
+        private void InitializeSessionManager()
+        {
+            _sessionFileService = new Services.SessionFileService();
+            _sessionManager = new Services.SessionManager();
+            _sessionManager.SessionAdded += OnSessionAdded;
+            _sessionManager.SessionRemoved += OnSessionRemoved;
+            _sessionManager.LoadAllSessions();
+        }
+
+        private void OnSessionAdded(Models.Session session)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                App.Logger?.Information("Session imported: {Name}", session.Name);
+                AddCustomSessionCard(session);
+
+                // Show "Session loaded!" notification
+                ShowDropZoneStatus($"Session loaded: {session.Name}", isError: false);
+
+                // Auto-select the new session
+                SelectSession(session);
+            });
+        }
+
+        private void OnSessionRemoved(Models.Session session)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                App.Logger?.Information("Session removed: {Name}", session.Name);
+                RemoveCustomSessionCard(session);
+            });
+        }
+
+        private void AddCustomSessionCard(Models.Session session)
+        {
+            // Show the "Your Sessions" header
+            TxtCustomSessionsHeader.Visibility = Visibility.Visible;
+
+            var border = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(42, 42, 74)), // #2A2A4A
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(16, 14, 16, 14),
+                Margin = new Thickness(0, 0, 0, 8),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Tag = session.Id
+            };
+
+            // Style with border
+            border.SetValue(Border.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(64, 64, 96)));
+            border.SetValue(Border.BorderThicknessProperty, new Thickness(2));
+
+            border.MouseEnter += (s, e) => border.BorderBrush = FindResource("PinkBrush") as SolidColorBrush;
+            border.MouseLeave += (s, e) => border.BorderBrush = new SolidColorBrush(Color.FromRgb(64, 64, 96));
+            border.MouseLeftButtonUp += SessionCard_Click;
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // Left side: Session info
+            var infoPanel = new StackPanel();
+            Grid.SetColumn(infoPanel, 0);
+
+            var headerPanel = new StackPanel { Orientation = Orientation.Horizontal };
+
+            var nameText = new TextBlock
+            {
+                Text = $"{session.Icon} {session.Name}",
+                Foreground = new SolidColorBrush(Colors.White),
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 15
+            };
+            headerPanel.Children.Add(nameText);
+
+            // Duration badge
+            var durationBadge = new Border
+            {
+                Background = FindResource("PinkBrush") as SolidColorBrush,
+                CornerRadius = new CornerRadius(3),
+                Padding = new Thickness(8, 3, 8, 3),
+                Margin = new Thickness(10, 0, 0, 0)
+            };
+            durationBadge.Child = new TextBlock
+            {
+                Text = $"{session.DurationMinutes} MIN",
+                Foreground = new SolidColorBrush(Colors.White),
+                FontSize = 10,
+                FontWeight = FontWeights.Bold
+            };
+            headerPanel.Children.Add(durationBadge);
+
+            // Difficulty badge
+            var (diffBg, diffFg) = session.Difficulty switch
+            {
+                Models.SessionDifficulty.Easy => ("#2A3A2A", "#90EE90"),
+                Models.SessionDifficulty.Medium => ("#3A3A2A", "#FFD700"),
+                Models.SessionDifficulty.Hard => ("#4A3A2A", "#FFA500"),
+                Models.SessionDifficulty.Extreme => ("#4A2A2A", "#FF6347"),
+                _ => ("#2A3A2A", "#90EE90")
+            };
+            var diffBadge = new Border
+            {
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(diffBg)),
+                CornerRadius = new CornerRadius(3),
+                Padding = new Thickness(8, 3, 8, 3),
+                Margin = new Thickness(6, 0, 0, 0)
+            };
+            diffBadge.Child = new TextBlock
+            {
+                Text = session.GetDifficultyText(),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(diffFg)),
+                FontSize = 10,
+                FontWeight = FontWeights.Bold
+            };
+            headerPanel.Children.Add(diffBadge);
+
+            // Custom badge
+            var customBadge = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(106, 90, 205)), // Purple
+                CornerRadius = new CornerRadius(3),
+                Padding = new Thickness(8, 3, 8, 3),
+                Margin = new Thickness(6, 0, 0, 0)
+            };
+            customBadge.Child = new TextBlock
+            {
+                Text = "CUSTOM",
+                Foreground = new SolidColorBrush(Colors.White),
+                FontSize = 10,
+                FontWeight = FontWeights.Bold
+            };
+            headerPanel.Children.Add(customBadge);
+
+            infoPanel.Children.Add(headerPanel);
+
+            // Description
+            var descText = new TextBlock
+            {
+                Text = string.IsNullOrEmpty(session.Description)
+                    ? "Custom session"
+                    : session.Description.Split('\n')[0].Substring(0, Math.Min(60, session.Description.Split('\n')[0].Length)) + "...",
+                Foreground = new SolidColorBrush(Color.FromRgb(160, 160, 160)),
+                FontSize = 13,
+                Margin = new Thickness(0, 6, 0, 0)
+            };
+            infoPanel.Children.Add(descText);
+
+            grid.Children.Add(infoPanel);
+
+            // Right side: Action buttons
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(buttonPanel, 1);
+
+            var editBtn = CreateSessionActionButton("✏", "Edit Session", session.Id, SessionBtn_Edit);
+            var exportBtn = CreateSessionActionButton("📤", "Export Session", session.Id, SessionBtn_Export);
+            var deleteBtn = CreateSessionDeleteButton("🗑", "Delete Session", session.Id, SessionBtn_Delete);
+
+            buttonPanel.Children.Add(editBtn);
+            buttonPanel.Children.Add(exportBtn);
+            buttonPanel.Children.Add(deleteBtn);
+
+            grid.Children.Add(buttonPanel);
+            border.Child = grid;
+
+            CustomSessionsPanel.Children.Add(border);
+        }
+
+        private Button CreateSessionActionButton(string content, string tooltip, string tag, RoutedEventHandler handler)
+        {
+            var btn = new Button
+            {
+                Content = content,
+                ToolTip = tooltip,
+                Tag = tag,
+                Width = 26,
+                Height = 26,
+                Background = new SolidColorBrush(Color.FromRgb(53, 53, 85)),
+                Foreground = new SolidColorBrush(Color.FromRgb(144, 144, 144)),
+                BorderThickness = new Thickness(0),
+                FontSize = 12,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Margin = new Thickness(2, 0, 0, 0)
+            };
+            btn.Click += handler;
+
+            // Create template for rounded corners and hover effect
+            var template = new ControlTemplate(typeof(Button));
+            var borderFactory = new FrameworkElementFactory(typeof(Border));
+            borderFactory.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+            borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+            var contentFactory = new FrameworkElementFactory(typeof(ContentPresenter));
+            contentFactory.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            contentFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            borderFactory.AppendChild(contentFactory);
+            template.VisualTree = borderFactory;
+
+            var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new Setter(Control.BackgroundProperty, FindResource("PinkBrush")));
+            hoverTrigger.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(Colors.White)));
+            template.Triggers.Add(hoverTrigger);
+
+            btn.Template = template;
+            return btn;
+        }
+
+        private Button CreateSessionDeleteButton(string content, string tooltip, string tag, RoutedEventHandler handler)
+        {
+            var btn = CreateSessionActionButton(content, tooltip, tag, handler);
+
+            // Update hover to red
+            var template = new ControlTemplate(typeof(Button));
+            var borderFactory = new FrameworkElementFactory(typeof(Border));
+            borderFactory.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+            borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+            var contentFactory = new FrameworkElementFactory(typeof(ContentPresenter));
+            contentFactory.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            contentFactory.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            borderFactory.AppendChild(contentFactory);
+            template.VisualTree = borderFactory;
+
+            var hoverTrigger = new Trigger { Property = UIElement.IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Color.FromRgb(232, 17, 35))));
+            hoverTrigger.Setters.Add(new Setter(Control.ForegroundProperty, new SolidColorBrush(Colors.White)));
+            template.Triggers.Add(hoverTrigger);
+
+            btn.Template = template;
+            return btn;
+        }
+
+        private void RemoveCustomSessionCard(Models.Session session)
+        {
+            var cardToRemove = CustomSessionsPanel.Children
+                .OfType<Border>()
+                .FirstOrDefault(b => b.Tag as string == session.Id);
+
+            if (cardToRemove != null)
+            {
+                CustomSessionsPanel.Children.Remove(cardToRemove);
+            }
+
+            // Hide header if no more custom sessions
+            if (CustomSessionsPanel.Children.Count == 0)
+            {
+                TxtCustomSessionsHeader.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void SelectSession(Models.Session session)
+        {
+            _selectedSession = session;
+
+            // Clear preset selection
+            _selectedPreset = null;
+            RefreshPresetsList();
+
+            // Hide preset panel, show session panel
+            PresetDetailScroller.Visibility = Visibility.Collapsed;
+            PresetButtonsPanel.Visibility = Visibility.Collapsed;
+            SessionDetailScroller.Visibility = Visibility.Visible;
+            SessionButtonsPanel.Visibility = Visibility.Visible;
+            SessionSpoilerPanel.Visibility = Visibility.Collapsed;
+            BtnRevealSpoilers.Content = "👁 Reveal Details";
+
+            TxtDetailTitle.Text = $"{session.Icon} {session.Name}";
+            TxtDetailSubtitle.Text = GenerateSessionTimelineDescription(session);
+            TxtSessionDuration.Text = $"{session.DurationMinutes} minutes";
+            TxtSessionXP.Text = $"+{session.BonusXP} XP";
+            TxtSessionDifficulty.Text = session.GetDifficultyText();
+            TxtSessionDescription.Text = session.Description;
+
+            // Update XP color based on difficulty
+            TxtSessionXP.Foreground = session.Difficulty switch
+            {
+                Models.SessionDifficulty.Easy => new SolidColorBrush(Color.FromRgb(144, 238, 144)),
+                Models.SessionDifficulty.Medium => new SolidColorBrush(Color.FromRgb(255, 215, 0)),
+                Models.SessionDifficulty.Hard => new SolidColorBrush(Color.FromRgb(255, 165, 0)),
+                Models.SessionDifficulty.Extreme => new SolidColorBrush(Color.FromRgb(255, 99, 71)),
+                _ => new SolidColorBrush(Color.FromRgb(144, 238, 144))
+            };
+
+            // Hide corner GIF option for custom sessions
+            CornerGifOptionPanel.Visibility = session.HasCornerGifOption ? Visibility.Visible : Visibility.Collapsed;
+
+            // Populate spoiler details
+            TxtSessionFlash.Text = session.GetSpoilerFlash();
+            TxtSessionSubliminal.Text = session.GetSpoilerSubliminal();
+            TxtSessionAudio.Text = session.GetSpoilerAudio();
+            TxtSessionOverlays.Text = session.GetSpoilerOverlays();
+            TxtSessionExtras.Text = session.GetSpoilerInteractive();
+            TxtSessionTimeline.Text = session.GetSpoilerTimeline();
+
+            BtnStartSession.IsEnabled = session.IsAvailable;
+            BtnStartSession.Content = session.IsAvailable ? "▶ Start Session" : "🔒 Coming Soon";
+            BtnExportSession.IsEnabled = true;
+        }
+
+        private string GenerateSessionTimelineDescription(Models.Session session)
+        {
+            var parts = new List<string>();
+
+            if (session.Settings.FlashEnabled)
+                parts.Add($"⚡ Flashes ({session.Settings.FlashPerHour}/hr)");
+            if (session.Settings.SubliminalEnabled)
+                parts.Add($"💭 Subliminals ({session.Settings.SubliminalPerMin}/min)");
+            if (session.Settings.AudioWhispersEnabled)
+                parts.Add("🔊 Audio Whispers");
+            if (session.Settings.PinkFilterEnabled)
+                parts.Add("💗 Pink Filter");
+            if (session.Settings.SpiralEnabled)
+                parts.Add("🌀 Spiral");
+            if (session.Settings.BouncingTextEnabled)
+                parts.Add("📝 Bouncing Text");
+            if (session.Settings.BubblesEnabled)
+                parts.Add("🫧 Bubbles");
+            if (session.Settings.LockCardEnabled)
+                parts.Add("🔒 Lock Cards");
+            if (session.Settings.MandatoryVideosEnabled)
+                parts.Add("🎬 Videos");
+            if (session.Settings.MindWipeEnabled)
+                parts.Add("🧠 Mind Wipe");
+
+            if (parts.Count == 0)
+                return "";
+
+            return string.Join(" • ", parts);
+        }
+
+        private void SessionDropZone_DragEnter(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                if (files.Length == 1 && files[0].EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    e.Effects = DragDropEffects.Copy;
+                    SessionDropZone.BorderBrush = FindResource("PinkBrush") as SolidColorBrush;
+                    DropZoneIcon.Text = "📥";
+                    DropZoneIcon.Foreground = FindResource("PinkBrush") as SolidColorBrush;
+                }
+                else
+                {
+                    e.Effects = DragDropEffects.None;
+                    SessionDropZone.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 100, 100));
+                    DropZoneIcon.Text = "❌";
+                    DropZoneIcon.Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 100));
+                }
+            }
+            else
+            {
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        }
+
+        private void SessionDropZone_DragOver(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                if (files.Length == 1 && files[0].EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    e.Effects = DragDropEffects.Copy;
+                }
+                else
+                {
+                    e.Effects = DragDropEffects.None;
+                }
+            }
+            else
+            {
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        }
+
+        private void SessionDropZone_DragLeave(object sender, DragEventArgs e)
+        {
+            SessionDropZone.BorderBrush = new SolidColorBrush(Color.FromRgb(64, 64, 96));
+            DropZoneIcon.Text = "📂";
+            DropZoneIcon.Foreground = new SolidColorBrush(Color.FromRgb(112, 112, 144));
+            DropZoneStatus.Visibility = Visibility.Collapsed;
+        }
+
+        // Global window drag-drop handlers
+        private void Window_DragEnter(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                if (files.Length == 1 && files[0].EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    e.Effects = DragDropEffects.Copy;
+                    GlobalDropOverlay.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    e.Effects = DragDropEffects.None;
+                }
+            }
+            else
+            {
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        }
+
+        private void Window_DragOver(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                if (files.Length == 1 && files[0].EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    e.Effects = DragDropEffects.Copy;
+                }
+                else
+                {
+                    e.Effects = DragDropEffects.None;
+                }
+            }
+            else
+            {
+                e.Effects = DragDropEffects.None;
+            }
+            e.Handled = true;
+        }
+
+        private void Window_DragLeave(object sender, DragEventArgs e)
+        {
+            GlobalDropOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private void Window_Drop(object sender, DragEventArgs e)
+        {
+            GlobalDropOverlay.Visibility = Visibility.Collapsed;
+
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+
+            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+            if (files.Length != 1) return;
+
+            var filePath = files[0];
+            if (!filePath.EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            // Validate and import
+            if (_sessionFileService == null)
+            {
+                _sessionFileService = new Services.SessionFileService();
+            }
+
+            if (!_sessionFileService.ValidateSessionFile(filePath, out var errorMessage))
+            {
+                ShowDropZoneStatus($"Invalid: {errorMessage}", isError: true);
+                return;
+            }
+
+            if (_sessionManager == null)
+            {
+                InitializeSessionManager();
+            }
+
+            var result = _sessionManager!.ImportSession(filePath);
+            if (result.success)
+            {
+                ShowDropZoneStatus($"Session loaded: {result.session?.Name}", isError: false);
+                App.Logger?.Information("Session imported via global drag-drop: {Name}", result.session?.Name);
+            }
+            else
+            {
+                ShowDropZoneStatus($"Failed: {result.message}", isError: true);
+            }
+        }
+
+        // Session action button handlers
+        private void SessionBtn_Edit(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is string sessionId)
+            {
+                var session = GetSessionById(sessionId);
+                if (session == null) return;
+
+                var editor = new SessionEditorWindow(session);
+                editor.Owner = this;
+                if (editor.ShowDialog() == true && editor.ResultSession != null)
+                {
+                    // Save the updated session
+                    if (_sessionFileService == null)
+                    {
+                        _sessionFileService = new Services.SessionFileService();
+                    }
+
+                    var definition = Models.SessionDefinition.FromSession(editor.ResultSession);
+                    _sessionFileService.SaveCustomSession(definition);
+
+                    // If it's a custom session, refresh the card
+                    if (session.Source != Models.SessionSource.BuiltIn)
+                    {
+                        RemoveCustomSessionCard(session);
+                        AddCustomSessionCard(editor.ResultSession);
+                    }
+
+                    // Re-select to update the details panel
+                    SelectSession(editor.ResultSession);
+
+                    ShowDropZoneStatus($"Session updated: {editor.ResultSession.Name}", isError: false);
+                }
+            }
+            e.Handled = true; // Prevent triggering the parent's click
+        }
+
+        private void SessionBtn_Export(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is string sessionId)
+            {
+                var session = GetSessionById(sessionId);
+                if (session != null)
+                {
+                    ExportSessionToFile(session);
+                }
+            }
+            e.Handled = true;
+        }
+
+        private void SessionBtn_Delete(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is string sessionId)
+            {
+                var session = GetSessionById(sessionId);
+                if (session == null) return;
+
+                // Confirm deletion
+                var result = ShowStyledDialog(
+                    "Delete Session",
+                    $"Are you sure you want to delete '{session.Name}'?\n\nThis cannot be undone.",
+                    "Delete", "Cancel");
+
+                if (result && _sessionManager != null)
+                {
+                    _sessionManager.DeleteSession(session);
+                    ShowDropZoneStatus($"Deleted: {session.Name}", isError: false);
+
+                    // Clear selection if this was selected
+                    if (_selectedSession?.Id == sessionId)
+                    {
+                        _selectedSession = null;
+                        TxtDetailTitle.Text = "Select a Session";
+                        TxtDetailSubtitle.Text = "Click on a session to see details";
+                    }
+                }
+            }
+            e.Handled = true;
+        }
+
+        private Models.Session? GetSessionById(string sessionId)
+        {
+            // Check session manager first
+            if (_sessionManager != null)
+            {
+                var session = _sessionManager.GetSession(sessionId);
+                if (session != null) return session;
+            }
+
+            // Fall back to hardcoded sessions
+            return Models.Session.GetAllSessions().FirstOrDefault(s => s.Id == sessionId);
+        }
+
+        private void SessionDropZone_Drop(object sender, DragEventArgs e)
+        {
+            // Reset visual state
+            SessionDropZone.BorderBrush = new SolidColorBrush(Color.FromRgb(64, 64, 96));
+            DropZoneIcon.Text = "📂";
+            DropZoneIcon.Foreground = new SolidColorBrush(Color.FromRgb(112, 112, 144));
+
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+
+            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+            if (files.Length != 1) return;
+
+            var filePath = files[0];
+            if (!filePath.EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowDropZoneStatus("Only .session.json files allowed", isError: true);
+                return;
+            }
+
+            // Validate and import
+            if (_sessionFileService == null)
+            {
+                _sessionFileService = new Services.SessionFileService();
+            }
+
+            if (!_sessionFileService.ValidateSessionFile(filePath, out var errorMessage))
+            {
+                ShowDropZoneStatus($"Invalid: {errorMessage}", isError: true);
+                return;
+            }
+
+            if (_sessionManager == null)
+            {
+                InitializeSessionManager();
+            }
+
+            var result = _sessionManager!.ImportSession(filePath);
+            if (result.success)
+            {
+                ShowDropZoneStatus($"Imported: {result.session?.Name}", isError: false);
+                App.Logger?.Information("Session imported via drag-drop: {Name}", result.session?.Name);
+            }
+            else
+            {
+                ShowDropZoneStatus($"Failed: {result.message}", isError: true);
+            }
+        }
+
+        private void ShowDropZoneStatus(string message, bool isError)
+        {
+            DropZoneStatus.Text = message;
+            DropZoneStatus.Foreground = isError
+                ? new SolidColorBrush(Color.FromRgb(255, 100, 100))
+                : FindResource("PinkBrush") as SolidColorBrush;
+            DropZoneStatus.Visibility = Visibility.Visible;
+
+            // Auto-hide after 3 seconds
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(3)
+            };
+            timer.Tick += (s, e) =>
+            {
+                DropZoneStatus.Visibility = Visibility.Collapsed;
+                timer.Stop();
+            };
+            timer.Start();
+        }
+
+        private void BtnExportSession_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedSession == null) return;
+            ExportSessionToFile(_selectedSession);
+        }
+
+        private void BtnCreateSession_Click(object sender, RoutedEventArgs e)
+        {
+            var editor = new SessionEditorWindow();
+            editor.Owner = this;
+            if (editor.ShowDialog() == true && editor.ResultSession != null)
+            {
+                // Save the new session
+                if (_sessionFileService == null)
+                {
+                    _sessionFileService = new Services.SessionFileService();
+                }
+
+                var definition = Models.SessionDefinition.FromSession(editor.ResultSession);
+                _sessionFileService.SaveCustomSession(definition);
+
+                // Set source and mark as available
+                editor.ResultSession.Source = Models.SessionSource.Custom;
+                editor.ResultSession.IsAvailable = true;
+
+                // Add to the UI
+                AddCustomSessionCard(editor.ResultSession);
+
+                // Auto-select the new session
+                SelectSession(editor.ResultSession);
+
+                // Show notification
+                ShowDropZoneStatus($"Session created: {editor.ResultSession.Name}", isError: false);
+
+                App.Logger?.Information("Session created: {Name}", editor.ResultSession.Name);
+            }
+        }
+
+        private void SessionContextMenu_Export(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is string sessionId)
+            {
+                var sessions = Models.Session.GetAllSessions();
+                var session = sessions.FirstOrDefault(s => s.Id == sessionId);
+                if (session != null)
+                {
+                    ExportSessionToFile(session);
+                }
+            }
+        }
+
+        private void ExportSessionToFile(Models.Session session)
+        {
+            if (_sessionFileService == null)
+            {
+                _sessionFileService = new Services.SessionFileService();
+            }
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "Export Session",
+                Filter = "Session files (*.session.json)|*.session.json",
+                FileName = Services.SessionFileService.GetExportFileName(session),
+                DefaultExt = ".session.json"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                try
+                {
+                    _sessionFileService.ExportSession(session, dialog.FileName);
+                    ShowStyledDialog("Export Complete", $"Session exported to:\n{dialog.FileName}", "OK", "");
+                    App.Logger?.Information("Session exported: {Name} to {Path}", session.Name, dialog.FileName);
+                }
+                catch (Exception ex)
+                {
+                    ShowStyledDialog("Export Failed", $"Failed to export session:\n{ex.Message}", "OK", "");
+                    App.Logger?.Error(ex, "Failed to export session");
+                }
+            }
+        }
+
+        #endregion
+
         #region Browser
 
         private async System.Threading.Tasks.Task InitializeBrowserAsync()
@@ -1747,13 +2436,16 @@ namespace ConditioningControlPanel
             App.MindWipe.Stop();
             App.BrainDrain.Stop();
             App.Audio.Unduck();
-            
+
+            // Force close any open lock card windows (panic button should close them immediately)
+            LockCardWindow.ForceCloseAll();
+
             // Stop ramp timer and reset sliders
             StopRampTimer();
-            
+
             _isRunning = false;
             UpdateStartButton();
-            
+
             App.Logger?.Information("Engine stopped");
         }
 

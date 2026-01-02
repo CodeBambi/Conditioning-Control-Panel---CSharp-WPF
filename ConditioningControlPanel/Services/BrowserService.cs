@@ -170,17 +170,50 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Navigate to a URL
+        /// Navigate to a URL (only HTTPS allowed for security)
         /// </summary>
         public void Navigate(string url)
         {
             if (!_isInitialized || _webView?.CoreWebView2 == null) return;
-            
+
             try
             {
-                if (!url.StartsWith("http://") && !url.StartsWith("https://"))
+                // Security: Sanitize and validate URL
+                url = url?.Trim() ?? "";
+
+                // Block dangerous URL schemes
+                var lowerUrl = url.ToLowerInvariant();
+                if (lowerUrl.StartsWith("javascript:") ||
+                    lowerUrl.StartsWith("file:") ||
+                    lowerUrl.StartsWith("data:") ||
+                    lowerUrl.StartsWith("vbscript:"))
+                {
+                    App.Logger?.Warning("Blocked potentially dangerous URL scheme: {Url}", url);
+                    return;
+                }
+
+                // Force HTTPS for security
+                if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                    !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
                     url = "https://" + url;
-                    
+                }
+
+                // Upgrade HTTP to HTTPS
+                if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                {
+                    url = "https://" + url.Substring(7);
+                    App.Logger?.Debug("Upgraded HTTP to HTTPS: {Url}", url);
+                }
+
+                // Validate URL format
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttps))
+                {
+                    App.Logger?.Warning("Invalid URL rejected: {Url}", url);
+                    return;
+                }
+
                 _webView.CoreWebView2.Navigate(url);
                 App.Logger?.Debug("Navigating to: {Url}", url);
             }

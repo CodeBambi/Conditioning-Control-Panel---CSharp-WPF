@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Services;
 /// </summary>
 public class BubbleService : IDisposable
 {
-    private const int MAX_BUBBLES = 8;
+    private const int MAX_BUBBLES = 3;
     private readonly List<Bubble> _bubbles = new();
     private readonly Random _random = new();
     private DispatcherTimer? _spawnTimer;
@@ -215,17 +215,53 @@ public class BubbleService : IDisposable
         }
     }
 
+    // Performance: Pool of audio devices to avoid creating new ones for each sound
+    private static readonly Queue<WaveOutEvent> _audioDevicePool = new();
+    private static readonly object _audioPoolLock = new();
+    private const int MAX_POOLED_DEVICES = 4;
+
+    private WaveOutEvent GetPooledAudioDevice()
+    {
+        lock (_audioPoolLock)
+        {
+            if (_audioDevicePool.Count > 0)
+            {
+                return _audioDevicePool.Dequeue();
+            }
+        }
+        return new WaveOutEvent();
+    }
+
+    private void ReturnAudioDevice(WaveOutEvent device)
+    {
+        lock (_audioPoolLock)
+        {
+            if (_audioDevicePool.Count < MAX_POOLED_DEVICES)
+            {
+                _audioDevicePool.Enqueue(device);
+            }
+            else
+            {
+                device.Dispose();
+            }
+        }
+    }
+
     private void PlaySoundAsync(string path, float volume)
     {
         Task.Run(() =>
         {
+            WaveOutEvent? outputDevice = null;
+            AudioFileReader? audioFile = null;
             try
             {
-                using var audioFile = new AudioFileReader(path);
+                audioFile = new AudioFileReader(path);
                 audioFile.Volume = volume;
-                using var outputDevice = new WaveOutEvent();
+
+                outputDevice = GetPooledAudioDevice();  // Performance: Reuse pooled device
                 outputDevice.Init(audioFile);
                 outputDevice.Play();
+
                 while (outputDevice.PlaybackState == PlaybackState.Playing)
                 {
                     Thread.Sleep(50);
@@ -234,6 +270,15 @@ public class BubbleService : IDisposable
             catch (Exception ex)
             {
                 App.Logger?.Debug("Audio playback failed: {Error}", ex.Message);
+            }
+            finally
+            {
+                audioFile?.Dispose();
+                if (outputDevice != null)
+                {
+                    try { outputDevice.Stop(); } catch { }
+                    ReturnAudioDevice(outputDevice);  // Performance: Return to pool
+                }
             }
         });
     }

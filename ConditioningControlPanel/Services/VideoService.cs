@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Services
     public class VideoService : IDisposable
     {
         private readonly Random _random = new();
-        private readonly List<string> _videoQueue = new();
+        private Queue<string> _videoQueue = new();  // Performance: Changed to Queue for O(1) dequeue
         private readonly List<Window> _windows = new();
         private readonly List<FloatingText> _targets = new();
 
@@ -543,18 +543,39 @@ namespace ConditioningControlPanel.Services
         {
             if (_videoQueue.Count == 0)
             {
-                var files = Directory.Exists(_videosPath)
-                    ? Directory.GetFiles(_videosPath)
-                        .Where(f => new[] { ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm" }
-                            .Contains(Path.GetExtension(f).ToLowerInvariant()))
-                        .ToList()
-                    : new List<string>();
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                var validExtensions = new[] { ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm" };
+
+                var files = new List<string>();
+                if (Directory.Exists(_videosPath))
+                {
+                    foreach (var file in Directory.GetFiles(_videosPath))
+                    {
+                        var ext = Path.GetExtension(file).ToLowerInvariant();
+                        if (!validExtensions.Contains(ext)) continue;
+
+                        // Security: Validate path is within allowed directory
+                        if (!SecurityHelper.IsPathSafe(file, baseDir))
+                        {
+                            App.Logger?.Warning("Blocked video outside allowed directory: {Path}", file);
+                            continue;
+                        }
+
+                        // Security: Sanitize filename
+                        var fileName = SecurityHelper.SanitizeFilename(Path.GetFileName(file));
+                        if (string.IsNullOrEmpty(fileName)) continue;
+
+                        files.Add(file);
+                    }
+                }
+
                 if (files.Count == 0) return null;
-                _videoQueue.AddRange(files.OrderBy(_ => _random.Next()));
+
+                // Performance: Shuffle and enqueue all at once
+                _videoQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
             }
-            var v = _videoQueue[0];
-            _videoQueue.RemoveAt(0);
-            return v;
+
+            return _videoQueue.Count > 0 ? _videoQueue.Dequeue() : null;  // Performance: O(1) instead of O(n)
         }
 
         public void Dispose() => Stop();

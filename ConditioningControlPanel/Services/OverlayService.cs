@@ -777,18 +777,19 @@ public class OverlayService : IDisposable
                     }
                 }
 
-                // Match capture rate to highest monitor refresh rate
-                int maxRefreshRate = screens.Max(s => GetScreenRefreshRate(s));
+                // Performance: Cap capture rate to 60 FPS for balance between smoothness and efficiency
+                const int MAX_CAPTURE_FPS = 60;
+                int maxRefreshRate = Math.Min(MAX_CAPTURE_FPS, screens.Max(s => GetScreenRefreshRate(s)));
                 double intervalMs = 1000.0 / maxRefreshRate;
-                
+
                 _brainDrainCaptureTimer = new DispatcherTimer
                 {
                     Interval = TimeSpan.FromMilliseconds(intervalMs)
                 };
                 _brainDrainCaptureTimer.Tick += BrainDrainCaptureTick;
                 _brainDrainCaptureTimer.Start();
-                
-                App.Logger?.Debug("Brain Drain capture rate: {RefreshRate}Hz ({IntervalMs:F2}ms)", 
+
+                App.Logger?.Debug("Brain Drain capture rate: {RefreshRate}Hz ({IntervalMs:F2}ms)",
                     maxRefreshRate, intervalMs);
 
                 App.Logger?.Debug("Brain Drain started on {Count} screens at intensity {Intensity}% using DXGI",

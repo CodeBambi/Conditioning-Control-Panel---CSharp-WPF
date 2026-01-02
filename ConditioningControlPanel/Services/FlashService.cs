@@ -29,10 +29,15 @@ namespace ConditioningControlPanel.Services
 
         private readonly Random _random = new();
         private readonly List<FlashWindow> _activeWindows = new();
-        private readonly List<string> _imageQueue = new();
-        private readonly List<string> _soundQueue = new();
+        private Queue<string> _imageQueue = new();  // Performance: Changed to Queue for O(1) dequeue
+        private Queue<string> _soundQueue = new();  // Performance: Changed to Queue for O(1) dequeue
         private readonly object _lockObj = new();
-        
+
+        // Performance: Cache for directory file listings to avoid repeated disk scans
+        private static readonly Dictionary<string, (List<string> files, DateTime lastScan)> _fileListCache = new();
+        private static readonly object _cacheLock = new();
+        private const int CACHE_EXPIRY_SECONDS = 60;  // Re-scan directories every 60 seconds
+
         private DispatcherTimer? _schedulerTimer;
         private DispatcherTimer? _heartbeatTimer;
         private CancellationTokenSource? _cancellationSource;
@@ -122,9 +127,10 @@ namespace ConditioningControlPanel.Services
         {
             lock (_lockObj)
             {
-                _imageQueue.Clear();
-                _soundQueue.Clear();
+                _imageQueue = new Queue<string>();  // Performance: Reset queues
+                _soundQueue = new Queue<string>();
             }
+            ClearFileCache();  // Performance: Clear cached file listings to pick up new files
             App.Logger.Information("Assets reloaded");
         }
 
@@ -276,7 +282,7 @@ namespace ConditioningControlPanel.Services
                 using var gif = System.Drawing.Image.FromFile(path);
                 var dimension = new FrameDimension(gif.FrameDimensionsList[0]);
                 var frameCount = gif.GetFrameCount(dimension);
-                
+
                 // Get frame delay from metadata
                 var frameDelay = 100; // Default 100ms
                 try
@@ -290,9 +296,22 @@ namespace ConditioningControlPanel.Services
                 }
                 catch { /* Use default */ }
 
-                // Limit frames for performance
-                var maxFrames = Math.Min(frameCount, 60);
-                var step = frameCount > 60 ? frameCount / 60 : 1;
+                // Performance: Dynamically limit frames based on image dimensions
+                // Large images need fewer frames to avoid memory pressure
+                var pixelsPerFrame = gif.Width * gif.Height * 4; // BGRA32 = 4 bytes per pixel
+                var estimatedMemoryMB = (pixelsPerFrame * frameCount) / (1024.0 * 1024.0);
+
+                // Cap at 30MB per GIF to prevent memory issues
+                const double MAX_MEMORY_MB = 30.0;
+                var maxFrames = frameCount;
+                if (estimatedMemoryMB > MAX_MEMORY_MB)
+                {
+                    maxFrames = (int)(frameCount * (MAX_MEMORY_MB / estimatedMemoryMB));
+                    maxFrames = Math.Max(10, maxFrames); // At least 10 frames for animation
+                }
+                maxFrames = Math.Min(maxFrames, 60); // Hard cap at 60 frames
+
+                var step = frameCount > maxFrames ? frameCount / maxFrames : 1;
                 
                 for (int i = 0; i < frameCount && data.Frames.Count < maxFrames; i += step)
                 {
@@ -852,16 +871,15 @@ namespace ConditioningControlPanel.Services
                 {
                     var files = GetMediaFiles(_imagesPath, new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" });
                     if (files.Count == 0) return new List<string>();
-                    
-                    // Shuffle
-                    _imageQueue.AddRange(files.OrderBy(_ => _random.Next()));
+
+                    // Performance: Shuffle and enqueue all at once
+                    _imageQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
                 }
 
-                var result = new List<string>();
+                var result = new List<string>(count);
                 for (int i = 0; i < count && _imageQueue.Count > 0; i++)
                 {
-                    result.Add(_imageQueue[0]);
-                    _imageQueue.RemoveAt(0);
+                    result.Add(_imageQueue.Dequeue()); // Performance: O(1) instead of O(n)
                 }
                 return result;
             }
@@ -875,30 +893,78 @@ namespace ConditioningControlPanel.Services
                 {
                     var files = GetMediaFiles(_soundsPath, new[] { ".mp3", ".wav", ".ogg" });
                     if (files.Count == 0) return null;
-                    
-                    _soundQueue.AddRange(files.OrderBy(_ => _random.Next()));
+
+                    // Performance: Shuffle and enqueue all at once
+                    _soundQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
                 }
 
-                if (_soundQueue.Count > 0)
-                {
-                    var sound = _soundQueue[0];
-                    _soundQueue.RemoveAt(0);
-                    return sound;
-                }
-                return null;
+                return _soundQueue.Count > 0 ? _soundQueue.Dequeue() : null; // Performance: O(1) instead of O(n)
             }
         }
 
         private List<string> GetMediaFiles(string folder, string[] extensions)
         {
             if (!Directory.Exists(folder)) return new List<string>();
-            
+
+            // Performance: Create cache key from folder + extensions
+            var cacheKey = $"{folder}|{string.Join(",", extensions)}";
+
+            lock (_cacheLock)
+            {
+                // Check if we have a valid cached result
+                if (_fileListCache.TryGetValue(cacheKey, out var cached))
+                {
+                    var age = (DateTime.UtcNow - cached.lastScan).TotalSeconds;
+                    if (age < CACHE_EXPIRY_SECONDS)
+                    {
+                        return new List<string>(cached.files);  // Return copy to prevent modification
+                    }
+                }
+            }
+
+            // Scan directory (cache miss or expired)
             var files = new List<string>();
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+
             foreach (var ext in extensions)
             {
-                files.AddRange(Directory.GetFiles(folder, $"*{ext}", SearchOption.TopDirectoryOnly));
+                foreach (var file in Directory.GetFiles(folder, $"*{ext}", SearchOption.TopDirectoryOnly))
+                {
+                    // Security: Validate path is within allowed directory
+                    if (SecurityHelper.IsPathSafe(file, baseDir))
+                    {
+                        // Security: Sanitize filename to prevent path traversal
+                        var fileName = SecurityHelper.SanitizeFilename(Path.GetFileName(file));
+                        if (!string.IsNullOrEmpty(fileName))
+                        {
+                            files.Add(file);
+                        }
+                    }
+                    else
+                    {
+                        App.Logger?.Warning("Blocked file outside allowed directory: {Path}", file);
+                    }
+                }
             }
+
+            // Update cache
+            lock (_cacheLock)
+            {
+                _fileListCache[cacheKey] = (new List<string>(files), DateTime.UtcNow);
+            }
+
             return files;
+        }
+
+        /// <summary>
+        /// Clear the file list cache (called when assets are reloaded)
+        /// </summary>
+        private void ClearFileCache()
+        {
+            lock (_cacheLock)
+            {
+                _fileListCache.Clear();
+            }
         }
 
         #endregion

@@ -23,6 +23,10 @@ namespace ConditioningControlPanel.Models
         public bool IsAvailable { get; set; } = false;
         public SessionDifficulty Difficulty { get; set; } = SessionDifficulty.Easy;
         public int BonusXP { get; set; } = 50;
+
+        // Source tracking for import/export
+        public SessionSource Source { get; set; } = SessionSource.BuiltIn;
+        public string SourceFilePath { get; set; } = "";
         
         // Spoiler-free description (shown by default)
         public string Description { get; set; } = "";
@@ -709,7 +713,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         public bool BubblesIntermittent { get; set; }
         public bool BubblesClickable { get; set; } = true;
         public int BubblesBurstCount { get; set; } = 5; // Total bursts in session
-        public int BubblesPerBurst { get; set; } = 5; // Bubbles per burst
+        public int BubblesPerBurst { get; set; } = 3; // Bubbles per burst (max 3 on screen)
         public int BubblesGapMin { get; set; } = 5;
         public int BubblesGapMax { get; set; } = 8;
         public int BubblesStartMinute { get; set; } = 0;

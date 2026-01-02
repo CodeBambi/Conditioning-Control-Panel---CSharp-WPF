@@ -378,13 +378,21 @@ namespace ConditioningControlPanel
 
         private void CloseAllWindows()
         {
+            ForceCloseAll();
+        }
+
+        /// <summary>
+        /// Force close all lock card windows (used by panic button)
+        /// </summary>
+        public static void ForceCloseAll()
+        {
             // Create a copy of the list to avoid modification during iteration
             var windowsToClose = new List<LockCardWindow>(_allWindows);
             _allWindows.Clear();
-            
+
             foreach (var window in windowsToClose)
             {
-                window._isCompleted = true; // Allow closing
+                window._isCompleted = true; // Allow closing even in strict mode
                 try
                 {
                     window.Close();
