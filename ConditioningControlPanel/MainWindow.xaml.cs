@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
@@ -332,6 +333,8 @@ namespace ConditioningControlPanel
 
         private void BtnMinimize_Click(object sender, RoutedEventArgs e)
         {
+            // Hide avatar tube BEFORE minimizing to prevent visual artifacts
+            HideAvatarTube();
             WindowState = WindowState.Minimized;
         }
 
@@ -358,29 +361,46 @@ namespace ConditioningControlPanel
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            // Hook window messages to intercept minimize BEFORE it happens
+            var hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            hwndSource?.AddHook(WndProc);
+
             // Re-center after load in case DPI wasn't available in constructor
             CenterOnPrimaryScreen();
-            
+
             // Update panic key button
             UpdatePanicKeyButton();
-            
+
             // Handle start minimized (to tray)
             if (App.Settings.Current.StartMinimized)
             {
                 _trayIcon?.MinimizeToTray();
             }
-            
+
             // Handle auto-start engine
             if (App.Settings.Current.AutoStartEngine)
             {
                 StartEngine();
             }
-            
+
             // Auto-initialize browser on startup
             await InitializeBrowserAsync();
-            
+
             // Initialize Avatar Tube Window
             InitializeAvatarTube();
+        }
+
+        private const int WM_SYSCOMMAND = 0x0112;
+        private const int SC_MINIMIZE = 0xF020;
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            // Intercept minimize command to hide avatar tube BEFORE minimize animation
+            if (msg == WM_SYSCOMMAND && (wParam.ToInt32() & 0xFFF0) == SC_MINIMIZE)
+            {
+                HideAvatarTube();
+            }
+            return IntPtr.Zero;
         }
 
         #region Avatar Tube Window
