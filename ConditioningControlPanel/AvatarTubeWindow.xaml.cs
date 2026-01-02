@@ -58,9 +58,10 @@ namespace ConditioningControlPanel
         public AvatarTubeWindow(Window parentWindow)
         {
             InitializeComponent();
-            
+
             _parentWindow = parentWindow;
-            Owner = parentWindow;
+            // Don't set Owner - it causes black window artifacts during minimize
+            // We manage visibility manually via event handlers instead
             
             // Determine which avatar set to load based on player level
             int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
