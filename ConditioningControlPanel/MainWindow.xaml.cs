@@ -390,8 +390,14 @@ namespace ConditioningControlPanel
             try
             {
                 _avatarTubeWindow = new AvatarTubeWindow(this);
-                _avatarTubeWindow.Show();
-                _avatarTubeWindow.StartPoseAnimation();
+
+                // Only show if main window is visible and not minimized
+                if (IsVisible && WindowState != WindowState.Minimized)
+                {
+                    _avatarTubeWindow.Show();
+                    _avatarTubeWindow.StartPoseAnimation();
+                }
+
                 App.Logger?.Information("Avatar Tube Window initialized");
             }
             catch (Exception ex)

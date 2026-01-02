@@ -159,9 +159,13 @@ namespace ConditioningControlPanel
             // Calculate scale factor based on screen size and DPI
             CalculateScaleFactor();
 
-            UpdatePosition();
-            StartFloatingAnimation();
-            SyncZOrder();
+            // Only update position and show if parent is visible and not minimized
+            if (_parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized)
+            {
+                UpdatePosition();
+                StartFloatingAnimation();
+                SyncZOrder();
+            }
         }
 
         private void CalculateScaleFactor()
@@ -335,6 +339,9 @@ namespace ConditioningControlPanel
 
         private void ParentWindow_PositionChanged(object? sender, EventArgs e)
         {
+            // Skip position updates when parent is minimized (Windows moves minimized windows off-screen)
+            if (_parentWindow.WindowState == WindowState.Minimized) return;
+
             UpdatePosition();
             SyncZOrder();
         }
@@ -395,6 +402,7 @@ namespace ConditioningControlPanel
         {
             Show();
             UpdatePosition();
+            StartFloatingAnimation();
             SyncZOrder();
         }
 
