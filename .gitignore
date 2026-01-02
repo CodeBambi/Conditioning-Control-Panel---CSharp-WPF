@@ -17,6 +17,7 @@ release/
 # User data (don't commit personal settings or content)
 settings.json
 logs/
+.claude/settings.local.json
 
 # Asset folders (users add their own content)
 assets/images/*
