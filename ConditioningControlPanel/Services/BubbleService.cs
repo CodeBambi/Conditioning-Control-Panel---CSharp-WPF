@@ -141,7 +141,8 @@ public class BubbleService : IDisposable
                     : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
                 
                 var screen = screens[_random.Next(screens.Length)];
-                var bubble = new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss);
+                var isClickable = settings.BubblesClickable;
+                var bubble = new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, isClickable);
                 _bubbles.Add(bubble);
                 
                 App.Logger?.Debug("Spawned bubble, total: {Count}", _bubbles.Count);
@@ -265,7 +266,8 @@ internal class Bubble
     private readonly Random _random;
     private readonly Action<Bubble> _onPop;
     private readonly Action<Bubble> _onMiss;
-    
+    private readonly bool _isClickable;
+
     private double _posX, _posY;
     private double _startX;
     private double _speed;
@@ -277,17 +279,18 @@ internal class Bubble
     private int _animType;
     private bool _isPopping;
     private bool _isAlive = true;
-    
+
     private readonly Image _bubbleImage;
     private readonly int _size;
     private readonly double _screenTop;
 
-    public Bubble(System.Windows.Forms.Screen screen, BitmapImage? image, Random random, 
-                  Action<Bubble> onPop, Action<Bubble> onMiss)
+    public Bubble(System.Windows.Forms.Screen screen, BitmapImage? image, Random random,
+                  Action<Bubble> onPop, Action<Bubble> onMiss, bool isClickable = true)
     {
         _random = random;
         _onPop = onPop;
         _onMiss = onMiss;
+        _isClickable = isClickable;
         
         // Random properties
         _size = random.Next(150, 250);
@@ -313,7 +316,8 @@ internal class Bubble
             Height = _size,
             Stretch = Stretch.Uniform,
             RenderTransformOrigin = new Point(0.5, 0.5),
-            Cursor = Cursors.Hand
+            Cursor = _isClickable ? Cursors.Hand : Cursors.Arrow,
+            IsHitTestVisible = _isClickable
         };
 
         if (image != null)
@@ -341,28 +345,35 @@ internal class Bubble
         transformGroup.Children.Add(new RotateTransform(0));
         _bubbleImage.RenderTransform = transformGroup;
 
-        // Make bubble image clickable
-        _bubbleImage.MouseLeftButtonDown += (s, e) => 
+        // Make bubble image clickable only if enabled
+        if (_isClickable)
         {
-            Pop();
-            e.Handled = true;
-        };
+            _bubbleImage.MouseLeftButtonDown += (s, e) =>
+            {
+                Pop();
+                e.Handled = true;
+            };
+        }
 
         // Create container grid with the bubble
-        var grid = new Grid 
-        { 
+        var grid = new Grid
+        {
             Background = Brushes.Transparent,
+            IsHitTestVisible = _isClickable,
             Children = { _bubbleImage }
         };
-        
-        // Grid click as backup
-        grid.MouseLeftButtonDown += (s, e) => 
-        {
-            Pop();
-            e.Handled = true;
-        };
 
-        // Single window - clickable, not click-through
+        // Grid click as backup (only if clickable)
+        if (_isClickable)
+        {
+            grid.MouseLeftButtonDown += (s, e) =>
+            {
+                Pop();
+                e.Handled = true;
+            };
+        }
+
+        // Single window - clickable or click-through based on setting
         _window = new Window
         {
             WindowStyle = WindowStyle.None,
@@ -375,11 +386,15 @@ internal class Bubble
             Left = _posX - 20,
             Top = _posY - 20,
             Content = grid,
-            Cursor = Cursors.Hand
+            Cursor = _isClickable ? Cursors.Hand : Cursors.Arrow,
+            IsHitTestVisible = _isClickable
         };
 
-        // Window click as final backup
-        _window.MouseLeftButtonDown += (s, e) => Pop();
+        // Window click as final backup (only if clickable)
+        if (_isClickable)
+        {
+            _window.MouseLeftButtonDown += (s, e) => Pop();
+        }
 
         // Show window
         _window.Show();

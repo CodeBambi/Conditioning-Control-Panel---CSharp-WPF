@@ -648,6 +648,12 @@ namespace ConditioningControlPanel.Models
             get => _bubblesLinkRamp;
             set { _bubblesLinkRamp = value; OnPropertyChanged(); }
         }
+        private bool _bubblesClickable = true;
+        public bool BubblesClickable
+        {
+            get => _bubblesClickable;
+            set { _bubblesClickable = value; OnPropertyChanged(); }
+        }
         #endregion
 
         #region Lock Card (Unlocks Lv.35)

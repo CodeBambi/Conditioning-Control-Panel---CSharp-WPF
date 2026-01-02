@@ -519,7 +519,8 @@ namespace ConditioningControlPanel.Services
             
             _savedSettings.BubblesEnabled = current.BubblesEnabled;
             _savedSettings.BubblesFrequency = current.BubblesFrequency;
-            
+            _savedSettings.BubblesClickable = current.BubblesClickable;
+
             _savedSettings.BouncingTextEnabled = current.BouncingTextEnabled;
             _savedSettings.BouncingTextSpeed = current.BouncingTextSpeed;
             
@@ -602,8 +603,13 @@ namespace ConditioningControlPanel.Services
                 {
                     App.BouncingText.Stop(); // Stop first to reset state
                     App.BouncingText.Start();
-                    App.Logger?.Information("Session: Started bouncing text with phrases: {Phrases}", 
+                    App.Logger?.Information("Session: Started bouncing text with phrases: {Phrases}",
                         string.Join(", ", settings.BouncingTextPhrases));
+                }
+                else
+                {
+                    App.Logger?.Information("Session: Bouncing text skipped - requires Level 60 (current: {Level})",
+                        current.PlayerLevel);
                 }
             }
             else
@@ -638,6 +644,7 @@ namespace ConditioningControlPanel.Services
             if (settings.BubblesEnabled)
             {
                 current.BubblesFrequency = settings.BubblesFrequency;
+                current.BubblesClickable = settings.BubblesClickable;
                 // Start immediately if no start minute is set. Otherwise, CheckDelayedFeatures will handle it.
                 current.BubblesEnabled = settings.BubblesStartMinute == 0 && !settings.BubblesIntermittent;
             }
@@ -700,7 +707,8 @@ namespace ConditioningControlPanel.Services
             
             current.BubblesEnabled = _savedSettings.BubblesEnabled;
             current.BubblesFrequency = _savedSettings.BubblesFrequency;
-            
+            current.BubblesClickable = _savedSettings.BubblesClickable;
+
             current.BouncingTextEnabled = _savedSettings.BouncingTextEnabled;
             current.BouncingTextSpeed = _savedSettings.BouncingTextSpeed;
             

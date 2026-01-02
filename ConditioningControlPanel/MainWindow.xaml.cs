@@ -1327,11 +1327,25 @@ namespace ConditioningControlPanel
         public void SetBubblesActive(bool active, int bubblesPerBurst = 5)
         {
             // Bubbles are handled by BubbleService through the settings
-            // Just toggle the enabled state temporarily for bursts
+            // Toggle the enabled state and actually start/stop the service
             if (active)
             {
                 App.Settings.Current.BubblesEnabled = true;
                 App.Settings.Current.BubblesFrequency = bubblesPerBurst * 2; // Higher frequency during burst
+
+                // Actually start the bubble service if not running
+                if (!App.Bubbles.IsRunning && App.Settings.Current.PlayerLevel >= 20)
+                {
+                    App.Bubbles.Start();
+                    App.Logger?.Information("Bubble burst started via SetBubblesActive");
+                }
+            }
+            else
+            {
+                // Stop bubbles when burst ends
+                App.Bubbles.Stop();
+                App.Settings.Current.BubblesEnabled = false;
+                App.Logger?.Information("Bubble burst ended via SetBubblesActive");
             }
         }
 
