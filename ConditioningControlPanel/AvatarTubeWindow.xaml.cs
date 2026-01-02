@@ -23,16 +23,24 @@ namespace ConditioningControlPanel
         // ============================================================
         // POSITIONING & SCALING - ADJUST THESE VALUES AS NEEDED
         // ============================================================
-        
+
+        // Design reference size (what the XAML is designed for)
+        private const double DesignWidth = 780;
+        private const double DesignHeight = 1020;
+
         // Gap between tube window and main window (negative = overlap)
-        private const double OffsetFromParent = -350;
-        
+        // This will be scaled based on actual window size
+        private const double BaseOffsetFromParent = -350;
+
         // Vertical offset from center (positive = lower, negative = higher)
         private const double VerticalOffset = 20;
-        
+
         // Floating animation settings
         private const double FloatDistance = 8;
         private const double FloatDuration = 2.0;
+
+        // Current scale factor
+        private double _scaleFactor = 1.0;
 
         // Win32 API
         [DllImport("user32.dll", SetLastError = true)]
@@ -147,10 +155,51 @@ namespace ConditioningControlPanel
         {
             _tubeHandle = new WindowInteropHelper(this).Handle;
             _parentHandle = new WindowInteropHelper(_parentWindow).Handle;
-            
+
+            // Calculate scale factor based on screen size and DPI
+            CalculateScaleFactor();
+
             UpdatePosition();
             StartFloatingAnimation();
             SyncZOrder();
+        }
+
+        private void CalculateScaleFactor()
+        {
+            try
+            {
+                // Get DPI scaling
+                var source = PresentationSource.FromVisual(this);
+                double dpiScale = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+
+                // Get primary screen working area
+                var screen = System.Windows.Forms.Screen.PrimaryScreen;
+                if (screen == null) return;
+
+                double screenHeight = screen.WorkingArea.Height / dpiScale;
+                double screenWidth = screen.WorkingArea.Width / dpiScale;
+
+                // Calculate max scale that fits on screen (leave some margin)
+                double maxHeightScale = (screenHeight * 0.85) / DesignHeight;
+                double maxWidthScale = (screenWidth * 0.3) / DesignWidth; // Tube shouldn't be more than 30% of screen width
+
+                _scaleFactor = Math.Min(maxHeightScale, maxWidthScale);
+                _scaleFactor = Math.Max(0.4, Math.Min(1.0, _scaleFactor)); // Clamp between 40% and 100%
+
+                // Apply scale to viewbox
+                ContentViewbox.Width = DesignWidth * _scaleFactor;
+                ContentViewbox.Height = DesignHeight * _scaleFactor;
+
+                App.Logger?.Information("AvatarTube scale factor: {Scale:F2} (Screen: {W}x{H}, DPI: {DPI:F2})",
+                    _scaleFactor, screenWidth, screenHeight, dpiScale);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to calculate scale factor: {Error}", ex.Message);
+                _scaleFactor = 0.7; // Safe default for smaller screens
+                ContentViewbox.Width = DesignWidth * _scaleFactor;
+                ContentViewbox.Height = DesignHeight * _scaleFactor;
+            }
         }
 
         private void SyncZOrder()
@@ -271,10 +320,17 @@ namespace ConditioningControlPanel
         private void UpdatePosition()
         {
             if (!_isAttached || _parentWindow == null) return;
-            
+
+            // Get actual window dimensions (scaled)
+            double actualWidth = ActualWidth > 0 ? ActualWidth : DesignWidth * _scaleFactor;
+            double actualHeight = ActualHeight > 0 ? ActualHeight : DesignHeight * _scaleFactor;
+
+            // Scale the offset based on current scale factor
+            double scaledOffset = BaseOffsetFromParent * _scaleFactor;
+
             // Position to the LEFT of the parent window
-            Left = _parentWindow.Left - Width - OffsetFromParent;
-            Top = _parentWindow.Top + (_parentWindow.ActualHeight - Height) / 2 + VerticalOffset;
+            Left = _parentWindow.Left - actualWidth - scaledOffset;
+            Top = _parentWindow.Top + (_parentWindow.ActualHeight - actualHeight) / 2 + (VerticalOffset * _scaleFactor);
         }
 
         private void ParentWindow_PositionChanged(object? sender, EventArgs e)

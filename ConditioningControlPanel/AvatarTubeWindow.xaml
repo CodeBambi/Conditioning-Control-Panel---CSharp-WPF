@@ -2,42 +2,46 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Avatar Tube"
-        
+
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
-        
-        Width="780" 
-        Height="1020">
-    
-    <Grid>
-        <!-- Tube frame FIRST (behind) -->
-        <Image x:Name="ImgTubeFrame"
-               Source="pack://application:,,,/Resources/tube.png"
-               Stretch="Uniform"
-               HorizontalAlignment="Center"
-               VerticalAlignment="Center"
-               IsHitTestVisible="False"/>
-        
-        <!-- Avatar/Sprite SECOND (on top) with floating animation -->
-        <Image x:Name="ImgAvatar" 
-               Stretch="Uniform"
-               HorizontalAlignment="Center"
-               VerticalAlignment="Bottom"
-               Margin="155,100,258,175"
-               MaxHeight="340"
-               RenderTransformOrigin="0.5,0.5"
-               IsHitTestVisible="True"
-               Cursor="Hand"
-               MouseLeftButtonDown="ImgAvatar_MouseLeftButtonDown">
-            <Image.RenderTransform>
-                <TranslateTransform x:Name="AvatarTranslate" Y="0"/>
-            </Image.RenderTransform>
-            <Image.Effect>
-                <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
-            </Image.Effect>
-        </Image>
-    </Grid>
+        SizeToContent="WidthAndHeight">
+
+    <!-- Viewbox scales content uniformly to fit any screen size -->
+    <Viewbox x:Name="ContentViewbox" Stretch="Uniform">
+        <!-- Design canvas at fixed reference size - will be scaled -->
+        <Grid Width="780" Height="1020">
+            <!-- Tube frame FIRST (behind) -->
+            <Image x:Name="ImgTubeFrame"
+                   Source="pack://application:,,,/Resources/tube.png"
+                   Stretch="Uniform"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   IsHitTestVisible="False"/>
+
+            <!-- Avatar container - centered within the tube area -->
+            <Grid Margin="140,180,240,160">
+                <!-- Avatar/Sprite with floating animation -->
+                <Image x:Name="ImgAvatar"
+                       Stretch="Uniform"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       MaxHeight="380"
+                       RenderTransformOrigin="0.5,0.5"
+                       IsHitTestVisible="True"
+                       Cursor="Hand"
+                       MouseLeftButtonDown="ImgAvatar_MouseLeftButtonDown">
+                    <Image.RenderTransform>
+                        <TranslateTransform x:Name="AvatarTranslate" Y="0"/>
+                    </Image.RenderTransform>
+                    <Image.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                    </Image.Effect>
+                </Image>
+            </Grid>
+        </Grid>
+    </Viewbox>
 </Window>
