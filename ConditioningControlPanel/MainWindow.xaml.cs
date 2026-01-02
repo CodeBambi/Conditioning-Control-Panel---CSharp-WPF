@@ -371,9 +371,11 @@ namespace ConditioningControlPanel
             // Update panic key button
             UpdatePanicKeyButton();
 
-            // Handle start minimized (to tray)
+            // Handle start minimized (to tray) - delay briefly to let window render properly first
             if (App.Settings.Current.StartMinimized)
             {
+                // Let the window fully render before minimizing to avoid black window artifacts
+                await Task.Delay(100);
                 _trayIcon?.MinimizeToTray();
             }
 
@@ -2835,27 +2837,16 @@ namespace ConditioningControlPanel
                     Orientation = Orientation.Horizontal,
                     Children =
                     {
-                        new TextBlock { Text = "⏹", Margin = new Thickness(0, 0, 10, 0) },
-                        new TextBlock { Text = "STOP" }
+                        new TextBlock { Text = "■", Width = 20, TextAlignment = TextAlignment.Center },
+                        new TextBlock { Text = "STOP", Width = 50 }
                     }
                 };
-                
+
                 // Also update Presets tab button using direct reference
                 if (TxtPresetsStatus != null)
                 {
                     TxtPresetsStatus.Visibility = Visibility.Visible;
                 }
-                
-                BtnStart.Background = new SolidColorBrush(Color.FromRgb(255, 107, 107)); // Red
-                BtnStart.Content = new StackPanel
-                {
-                    Orientation = Orientation.Horizontal,
-                    Children =
-                    {
-                        new TextBlock { Text = "⏹", Margin = new Thickness(0, 0, 10, 0) },
-                        new TextBlock { Text = "STOP" }
-                    }
-                };
             }
             else
             {
@@ -2865,28 +2856,17 @@ namespace ConditioningControlPanel
                     Orientation = Orientation.Horizontal,
                     Children =
                     {
-                        new TextBlock { Text = "▶", Margin = new Thickness(0, 0, 10, 0) },
-                        new TextBlock { Text = "START" }
+                        new TextBlock { Text = "▶", Width = 20, TextAlignment = TextAlignment.Center },
+                        new TextBlock { Text = "START", Width = 50 }
                     }
                 };
-                
+
                 // Also update Presets tab button
                 if (TxtPresetsStatus != null)
                 {
                     TxtPresetsStatus.Visibility = Visibility.Collapsed;
                     TxtPresetsStatus.Text = "";
                 }
-                
-                BtnStart.Background = FindResource("PinkBrush") as SolidColorBrush;
-                BtnStart.Content = new StackPanel
-                {
-                    Orientation = Orientation.Horizontal,
-                    Children =
-                    {
-                        new TextBlock { Text = "▶", Margin = new Thickness(0, 0, 10, 0) },
-                        new TextBlock { Text = "START" }
-                    }
-                };
             }
         }
         
