@@ -2835,10 +2835,11 @@ namespace ConditioningControlPanel
                 BtnStart.Content = new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
+                    VerticalAlignment = VerticalAlignment.Center,
                     Children =
                     {
-                        new TextBlock { Text = "■", Width = 20, TextAlignment = TextAlignment.Center },
-                        new TextBlock { Text = "STOP", Width = 50 }
+                        new TextBlock { Text = "⏹", FontSize = 18, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center },
+                        new TextBlock { Text = "STOP", FontSize = 18, VerticalAlignment = VerticalAlignment.Center }
                     }
                 };
 
@@ -2854,10 +2855,11 @@ namespace ConditioningControlPanel
                 BtnStart.Content = new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
+                    VerticalAlignment = VerticalAlignment.Center,
                     Children =
                     {
-                        new TextBlock { Text = "▶", Width = 20, TextAlignment = TextAlignment.Center },
-                        new TextBlock { Text = "START", Width = 50 }
+                        new TextBlock { Text = "▶", FontSize = 18, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center },
+                        new TextBlock { Text = "START", FontSize = 18, VerticalAlignment = VerticalAlignment.Center }
                     }
                 };
 
