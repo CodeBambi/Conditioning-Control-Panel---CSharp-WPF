@@ -301,7 +301,19 @@ Earn XP through interaction:
 - 🫧 **Bubble Pop**: Floating bubbles you can pop for XP
 
 **Level 35 Unlocks:**
-- 🔐 **Passphrase Unlock**: Require a passphrase to stop the engine
+- 🔐 **Lock Card**: Require a passphrase to stop the engine
+
+**Level 50 Unlocks:**
+- 🔢 **Bubble Count**: A challenge to count bubbles that appear on screen.
+
+**Level 60 Unlocks:**
+- 📝 **Bouncing Text**: Customizable text that bounces around the screen.
+
+**Level 70 Unlocks:**
+- 💧 **Brain Drain**: Drains your thoughts with subliminal messaging.
+
+**Level 75 Unlocks:**
+- 🧠 **Mind Wipe**: Random mind wipe audio effects.
 
 ### Level Up Sound
 Place a `lvlup.mp3` in `Resources/` or `Assets/Audio/` to play a sound on level up.
