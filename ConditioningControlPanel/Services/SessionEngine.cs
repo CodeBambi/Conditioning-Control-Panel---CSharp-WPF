@@ -803,35 +803,33 @@ namespace ConditioningControlPanel.Services
             try
             {
                 var gifPath = settings.CornerGifPath;
-                if (string.IsNullOrEmpty(gifPath) || !System.IO.File.Exists(gifPath))
-                {
-                    // Fallback to spiral.gif
-                    gifPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "spiral.gif");
-                    App.Logger?.Information("Corner GIF not set, defaulting to spiral.gif");
+                Uri gifUri;
+                System.Drawing.Image img = null;
 
-                    if (!System.IO.File.Exists(gifPath))
-                    {
-                        App.Logger?.Warning("Default spiral.gif not found at {Path}", gifPath);
-                        return; // Exit if default is also not found
-                    }
+                if (!string.IsNullOrEmpty(gifPath) && System.IO.File.Exists(gifPath))
+                {
+                    gifUri = new Uri(gifPath);
+                    img = System.Drawing.Image.FromFile(gifPath);
+                }
+                else
+                {
+                    gifUri = new Uri("pack://application:,,,/Resources/spiral.gif", UriKind.Absolute);
+                    var resourceStream = Application.GetResourceStream(gifUri).Stream;
+                    img = System.Drawing.Image.FromStream(resourceStream);
+                    App.Logger?.Information("Corner GIF not set or found, defaulting to spiral.gif resource");
+                }
+
+                if(img == null) {
+                    App.Logger?.Warning("Could not load corner GIF image.");
+                    return;
                 }
 
                 // Get GIF dimensions to maintain aspect ratio
                 double gifWidth, gifHeight;
-                try
-                {
-                    using (var img = System.Drawing.Image.FromFile(gifPath))
-                    {
-                        gifWidth = img.Width;
-                        gifHeight = img.Height;
-                    }
-                }
-                catch
-                {
-                    // Default to square if can't read dimensions
-                    gifWidth = gifHeight = 300;
-                }
-
+                gifWidth = img.Width;
+                gifHeight = img.Height;
+                img.Dispose();
+                
                 // Scale based on user's size setting (default 300)
                 var targetSize = settings.CornerGifSize > 0 ? settings.CornerGifSize : 300;
                 double scale = targetSize / Math.Max(gifWidth, gifHeight);
@@ -897,7 +895,7 @@ namespace ConditioningControlPanel.Services
                 // Use MediaElement for GIF animation - Uniform stretch maintains aspect ratio
                 var mediaElement = new System.Windows.Controls.MediaElement
                 {
-                    Source = new Uri(gifPath),
+                    Source = gifUri,
                     LoadedBehavior = System.Windows.Controls.MediaState.Play,
                     UnloadedBehavior = System.Windows.Controls.MediaState.Manual,
                     Stretch = System.Windows.Media.Stretch.Uniform
@@ -920,7 +918,7 @@ namespace ConditioningControlPanel.Services
                 MakeWindowClickThrough(_cornerGifWindow);
 
                 // Start timer-based GIF looping (MediaEnded doesn't reliably fire for GIFs)
-                if (gifPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+                if (gifUri.ToString().EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
                 {
                     _cornerGifStartTime = DateTime.Now;
                     _cornerGifLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
@@ -929,7 +927,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 App.Logger?.Information("Corner GIF shown at {Position}: {Path} (pos: {Left},{Top}, size: {Width}x{Height}px, opacity: {Opacity}%)",
-                    settings.CornerGifPosition, gifPath, left, top, (int)windowWidth, (int)windowHeight, settings.CornerGifOpacity);
+                    settings.CornerGifPosition, gifUri.ToString(), left, top, (int)windowWidth, (int)windowHeight, settings.CornerGifOpacity);
             }
             catch (Exception ex)
             {
@@ -999,25 +997,26 @@ namespace ConditioningControlPanel.Services
 
                 // Get GIF path
                 var gifPath = _currentSession.Settings.CornerGifPath;
-                if (string.IsNullOrEmpty(gifPath) || !System.IO.File.Exists(gifPath))
+                System.Drawing.Image img = null;
+
+                if (!string.IsNullOrEmpty(gifPath) && System.IO.File.Exists(gifPath))
                 {
-                    gifPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "spiral.gif");
+                    img = System.Drawing.Image.FromFile(gifPath);
                 }
+                else
+                {
+                    var resourceUri = new Uri("pack://application:,,,/Resources/spiral.gif", UriKind.Absolute);
+                    var resourceStream = Application.GetResourceStream(resourceUri).Stream;
+                    img = System.Drawing.Image.FromStream(resourceStream);
+                }
+
+                if (img == null) return;
 
                 // Get GIF dimensions
                 double gifWidth, gifHeight;
-                try
-                {
-                    using (var img = System.Drawing.Image.FromFile(gifPath))
-                    {
-                        gifWidth = img.Width;
-                        gifHeight = img.Height;
-                    }
-                }
-                catch
-                {
-                    gifWidth = gifHeight = 300;
-                }
+                gifWidth = img.Width;
+                gifHeight = img.Height;
+                img.Dispose();
 
                 // Calculate new window size
                 double scale = newSize / Math.Max(gifWidth, gifHeight);

@@ -96,32 +96,24 @@ public class BubbleService : IDisposable
         App.Logger?.Information("BubbleService frequency updated to {Freq} bubbles/min", App.Settings.Current.BubblesFrequency);
     }
 
-    private void LoadBubbleImage()
-    {
-        try
-        {
-            var imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "bubble.png");
-            if (File.Exists(imagePath))
+            private void LoadBubbleImage()
             {
-                _bubbleImage = new BitmapImage();
-                _bubbleImage.BeginInit();
-                _bubbleImage.UriSource = new Uri(imagePath);
-                _bubbleImage.CacheOption = BitmapCacheOption.OnLoad;
-                _bubbleImage.EndInit();
-                _bubbleImage.Freeze();
-                App.Logger?.Debug("Bubble image loaded from {Path}", imagePath);
+                try
+                {
+                    var resourceUri = new Uri("pack://application:,,,/Resources/bubble.png", UriKind.Absolute);
+                    _bubbleImage = new BitmapImage();
+                    _bubbleImage.BeginInit();
+                    _bubbleImage.UriSource = resourceUri;
+                    _bubbleImage.CacheOption = BitmapCacheOption.OnLoad;
+                    _bubbleImage.EndInit();
+                    _bubbleImage.Freeze();
+                    App.Logger?.Debug("Bubble image loaded from embedded resource");
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error("Failed to load bubble image: {Error}", ex.Message);
+                }
             }
-            else
-            {
-                App.Logger?.Warning("Bubble image not found at {Path}", imagePath);
-            }
-        }
-        catch (Exception ex)
-        {
-            App.Logger?.Error("Failed to load bubble image: {Error}", ex.Message);
-        }
-    }
-
     private void SpawnBubble()
     {
         if (!_isRunning) return;

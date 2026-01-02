@@ -109,24 +109,17 @@ public class OverlayService : IDisposable
     private const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
     private const int WCA_ACCENT_POLICY = 19;
 
-    private string GetSpiralPath()
-    {
-        var settings = App.Settings.Current;
-        
-        if (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
-        {
-            return settings.SpiralPath;
-        }
-        
-        var resourceSpiral = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "spiral.gif");
-        if (File.Exists(resourceSpiral))
-        {
-            return resourceSpiral;
-        }
-        
-        return "";
-    }
-
+            private string GetSpiralPath()
+            {
+                var settings = App.Settings.Current;
+                
+                if (!string.IsNullOrEmpty(settings.SpiralPath) && File.Exists(settings.SpiralPath))
+                {
+                    return settings.SpiralPath;
+                }
+                
+                return "pack://application:,,,/Resources/spiral.gif";
+            }
     public void Start()
     {
         if (_isRunning) return;

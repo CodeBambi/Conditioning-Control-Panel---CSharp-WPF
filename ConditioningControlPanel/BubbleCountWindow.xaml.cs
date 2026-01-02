@@ -203,16 +203,14 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var imagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "bubble.png");
-                if (File.Exists(imagePath))
-                {
-                    _bubbleImage = new BitmapImage();
-                    _bubbleImage.BeginInit();
-                    _bubbleImage.UriSource = new Uri(imagePath);
-                    _bubbleImage.CacheOption = BitmapCacheOption.OnLoad;
-                    _bubbleImage.EndInit();
-                    _bubbleImage.Freeze();
-                }
+                var resourceUri = new Uri("pack://application:,,,/Resources/bubble.png", UriKind.Absolute);
+                _bubbleImage = new BitmapImage();
+                _bubbleImage.BeginInit();
+                _bubbleImage.UriSource = resourceUri;
+                _bubbleImage.CacheOption = BitmapCacheOption.OnLoad;
+                _bubbleImage.EndInit();
+                _bubbleImage.Freeze();
+                App.Logger?.Debug("Bubble image loaded from embedded resource");
             }
             catch (Exception ex)
             {

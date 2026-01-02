@@ -85,6 +85,9 @@
   <ItemGroup>
     <!-- App icon -->
     <Resource Include="Resources\app.ico" />
+    <Resource Include="Resources\logo.png" />
+    <Resource Include="Resources\bubble.png" />
+    <Resource Include="Resources\spiral.gif" />
     
     <!-- Avatar Tube images - MUST be Resource for pack:// URIs to work -->
     <Resource Include="Resources\tube.png" />

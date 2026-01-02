@@ -272,40 +272,9 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Try multiple paths for the logo
-                var possiblePaths = new[]
-                {
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "logo.png"),
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logo.png"),
-                    Path.Combine(Directory.GetCurrentDirectory(), "Resources", "logo.png"),
-                };
-
-                foreach (var path in possiblePaths)
-                {
-                    if (File.Exists(path))
-                    {
-                        var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-                        bitmap.BeginInit();
-                        bitmap.UriSource = new Uri(path, UriKind.Absolute);
-                        bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                        bitmap.EndInit();
-                        ImgLogo.Source = bitmap;
-                        App.Logger?.Debug("Logo loaded from: {Path}", path);
-                        return;
-                    }
-                }
-
-                // Try embedded resource as fallback
-                try
-                {
-                    var resourceUri = new Uri("pack://application:,,,/Resources/logo.png", UriKind.Absolute);
-                    ImgLogo.Source = new System.Windows.Media.Imaging.BitmapImage(resourceUri);
-                    App.Logger?.Debug("Logo loaded from embedded resource");
-                }
-                catch
-                {
-                    App.Logger?.Warning("Could not load logo from any location");
-                }
+                var resourceUri = new Uri("pack://application:,,,/Resources/logo.png", UriKind.Absolute);
+                ImgLogo.Source = new System.Windows.Media.Imaging.BitmapImage(resourceUri);
+                App.Logger?.Debug("Logo loaded from embedded resource");
             }
             catch (Exception ex)
             {
