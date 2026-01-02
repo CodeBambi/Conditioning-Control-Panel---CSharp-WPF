@@ -97,6 +97,10 @@ namespace ConditioningControlPanel
             LoadSettings();
             InitializePresets();
             UpdateUI();
+
+            // Sync startup registration with settings
+            StartupManager.SyncWithSettings(App.Settings.Current.RunOnStartup);
+
             _isLoading = false;
             
             // Initialize achievement grid and subscribe to unlock events
@@ -4169,6 +4173,68 @@ namespace ConditioningControlPanel
             else
             {
                 ChkNoPanic.IsChecked = false;
+            }
+        }
+
+        private void ChkWinStart_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkWinStart.IsChecked ?? false;
+            var isHidden = ChkStartHidden.IsChecked ?? false;
+
+            if (isEnabled && isHidden)
+            {
+                // Show warning when both startup and hidden are enabled
+                var result = MessageBox.Show(this,
+                    "The app will launch minimized to system tray on startup.\n\n" +
+                    "You will need to click the tray icon to show the main window.\n\n" +
+                    "Are you sure you want to enable this?",
+                    "Startup Warning",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (result != MessageBoxResult.Yes)
+                {
+                    ChkWinStart.IsChecked = false;
+                    return;
+                }
+            }
+
+            // Apply the startup setting
+            if (!StartupManager.SetStartupState(isEnabled))
+            {
+                MessageBox.Show(this,
+                    "Failed to update Windows startup setting.\nPlease check your permissions.",
+                    "Startup Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                ChkWinStart.IsChecked = StartupManager.IsRegistered();
+            }
+        }
+
+        private void ChkStartHidden_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isStartup = ChkWinStart.IsChecked ?? false;
+            var isHidden = ChkStartHidden.IsChecked ?? false;
+
+            if (isStartup && isHidden)
+            {
+                // Show warning when enabling hidden while startup is already enabled
+                var result = MessageBox.Show(this,
+                    "The app will launch minimized to system tray on startup.\n\n" +
+                    "You will need to click the tray icon to show the main window.\n\n" +
+                    "Are you sure you want to enable this?",
+                    "Startup Warning",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (result != MessageBoxResult.Yes)
+                {
+                    ChkStartHidden.IsChecked = false;
+                }
             }
         }
 

@@ -848,7 +848,7 @@ Bimbo" Foreground="#FF69B4"
                                 </StackPanel>
                                 <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
                                             ToolTip="Launch automatically when Windows starts">
-                                    <CheckBox x:Name="ChkWinStart" Style="{StaticResource ToggleStyle}"/>
+                                    <CheckBox x:Name="ChkWinStart" Style="{StaticResource ToggleStyle}" Click="ChkWinStart_Click"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Win Start" Margin="6,0,0,0"/>
                                 </StackPanel>
                                 
@@ -865,7 +865,7 @@ Bimbo" Foreground="#FF69B4"
                                 
                                 <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
                                             ToolTip="Start minimized to system tray">
-                                    <CheckBox x:Name="ChkStartHidden" Style="{StaticResource ToggleStyle}"/>
+                                    <CheckBox x:Name="ChkStartHidden" Style="{StaticResource ToggleStyle}" Click="ChkStartHidden_Click"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Start Hidden" Margin="6,0,0,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
