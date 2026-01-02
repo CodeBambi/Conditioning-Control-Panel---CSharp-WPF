@@ -2379,29 +2379,24 @@ Bimbo" Foreground="#FF69B4"
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                
-                <!-- Status Text (spans full width) -->
-                <TextBlock x:Name="TxtPresetsStatus" Grid.Row="0" Grid.ColumnSpan="2" 
-                           Text="" Foreground="#808090" FontSize="11" 
-                           HorizontalAlignment="Center" Margin="0,0,0,8"
-                           Visibility="Collapsed"/>
-                
+
+                <!-- Status Text (overlaid on top of buttons, shown when running) -->
+                <TextBlock x:Name="TxtPresetsStatus" Grid.ColumnSpan="2"
+                           Text="" Foreground="#808090" FontSize="11"
+                           HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-20,0,0"/>
+
                 <!-- START Button (half width) -->
-                <Button x:Name="BtnStart" Grid.Row="1" Grid.Column="0" Style="{StaticResource PinkButton}"
+                <Button x:Name="BtnStart" Grid.Column="0" Style="{StaticResource PinkButton}"
                         Height="50" FontSize="18" Margin="0,0,8,0" Click="BtnStart_Click"
                         ToolTip="Start/Stop the conditioning engine">
                     <StackPanel Orientation="Horizontal" Height="24" VerticalAlignment="Center">
-                        <TextBlock Text="▶" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="START" VerticalAlignment="Center"/>
+                        <TextBlock Text="▶" FontSize="16" Width="20" Margin="0,0,10,0" VerticalAlignment="Center" TextAlignment="Center"/>
+                        <TextBlock Text="START" FontSize="18" Width="60" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
                 
                 <!-- Save / Exit (other half) -->
-                <Grid Grid.Row="1" Grid.Column="1" Margin="8,0,0,0">
+                <Grid Grid.Column="1" Margin="8,0,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>

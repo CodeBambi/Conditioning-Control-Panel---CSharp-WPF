@@ -2839,15 +2839,15 @@ namespace ConditioningControlPanel
                     VerticalAlignment = VerticalAlignment.Center,
                     Children =
                     {
-                        new TextBlock { Text = "⏹", Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center },
-                        new TextBlock { Text = "STOP", VerticalAlignment = VerticalAlignment.Center }
+                        new TextBlock { Text = "■", FontSize = 16, Width = 20, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center },
+                        new TextBlock { Text = "STOP", FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
                     }
                 };
 
                 // Also update Presets tab button using direct reference
                 if (TxtPresetsStatus != null)
                 {
-                    TxtPresetsStatus.Visibility = Visibility.Visible;
+                    TxtPresetsStatus.Text = "Running...";
                 }
             }
             else
@@ -2860,15 +2860,14 @@ namespace ConditioningControlPanel
                     VerticalAlignment = VerticalAlignment.Center,
                     Children =
                     {
-                        new TextBlock { Text = "▶", Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center },
-                        new TextBlock { Text = "START", VerticalAlignment = VerticalAlignment.Center }
+                        new TextBlock { Text = "▶", FontSize = 16, Width = 20, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center },
+                        new TextBlock { Text = "START", FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
                     }
                 };
 
                 // Also update Presets tab button
                 if (TxtPresetsStatus != null)
                 {
-                    TxtPresetsStatus.Visibility = Visibility.Collapsed;
                     TxtPresetsStatus.Text = "";
                 }
             }

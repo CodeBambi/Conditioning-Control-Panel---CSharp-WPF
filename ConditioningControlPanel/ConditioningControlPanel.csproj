@@ -119,11 +119,15 @@
     
     <!-- Achievement images -->
     <Resource Include="Resources\achievements\*.png" />
-    
+
     <!-- Feature images -->
     <Resource Include="Resources\features\*.png" />
+  </ItemGroup>
 
-    <!-- Sound files -->
-    <Resource Include="Resources\sounds\**\*" />
+  <ItemGroup>
+    <!-- Sound files - must be copied to output for file system access -->
+    <Content Include="Resources\sounds\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>

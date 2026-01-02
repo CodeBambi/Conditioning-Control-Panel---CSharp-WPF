@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Media;
+using System.Threading;
 using System.Windows;
 using ConditioningControlPanel.Services;
 using Serilog;
@@ -9,6 +10,10 @@ namespace ConditioningControlPanel
 {
     public partial class App : Application
     {
+        // Single instance mutex
+        private static Mutex? _mutex;
+        private const string MutexName = "ConditioningControlPanel_SingleInstance_Mutex";
+
         // Static service references
         public static ILogger Logger { get; private set; } = null!;
         public static SettingsService Settings { get; private set; } = null!;
@@ -28,6 +33,20 @@ namespace ConditioningControlPanel
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // Check for single instance
+            _mutex = new Mutex(true, MutexName, out bool createdNew);
+            if (!createdNew)
+            {
+                // Another instance is already running
+                MessageBox.Show(
+                    "Conditioning Control Panel is already running.\n\nCheck your system tray if the window is minimized.",
+                    "Already Running",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                Shutdown();
+                return;
+            }
+
             base.OnStartup(e);
 
             // Setup logging
@@ -151,8 +170,8 @@ namespace ConditioningControlPanel
 
         protected override void OnExit(ExitEventArgs e)
         {
-            Logger.Information("Application shutting down...");
-            
+            Logger?.Information("Application shutting down...");
+
             Flash?.Dispose();
             Video?.Dispose();
             Subliminal?.Dispose();
@@ -166,6 +185,10 @@ namespace ConditioningControlPanel
             Achievements?.Dispose();
             Audio?.Dispose();
             Settings?.Save();
+
+            // Release single instance mutex
+            _mutex?.ReleaseMutex();
+            _mutex?.Dispose();
 
             base.OnExit(e);
         }

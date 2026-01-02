@@ -34,24 +34,45 @@ public class TrayIconService : IDisposable
                 Visible = false
             };
 
-            // Try to load icon from multiple paths
-            var iconPaths = new[]
-            {
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "app.ico"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico"),
-            };
-
             Icon? icon = null;
-            foreach (var path in iconPaths)
+
+            // First try to load from embedded resource
+            try
             {
-                if (File.Exists(path))
+                var resourceUri = new Uri("pack://application:,,,/Resources/app.ico", UriKind.Absolute);
+                var streamInfo = System.Windows.Application.GetResourceStream(resourceUri);
+                if (streamInfo != null)
                 {
-                    try
+                    icon = new Icon(streamInfo.Stream);
+                    App.Logger?.Debug("Loaded tray icon from embedded resource");
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Could not load embedded icon: {Error}", ex.Message);
+            }
+
+            // Fallback: try to load icon from file paths
+            if (icon == null)
+            {
+                var iconPaths = new[]
+                {
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "app.ico"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico"),
+                };
+
+                foreach (var path in iconPaths)
+                {
+                    if (File.Exists(path))
                     {
-                        icon = new Icon(path);
-                        break;
+                        try
+                        {
+                            icon = new Icon(path);
+                            App.Logger?.Debug("Loaded tray icon from file: {Path}", path);
+                            break;
+                        }
+                        catch { }
                     }
-                    catch { }
                 }
             }
 
