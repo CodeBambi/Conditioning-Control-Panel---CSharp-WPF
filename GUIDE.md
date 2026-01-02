@@ -16,10 +16,13 @@ This comprehensive guide covers every feature of the Conditioning Control Panel 
 8. [Audio Settings](#audio-settings)
 9. [Browser](#browser)
 10. [Progression System](#progression-system)
-11. [Scheduler](#scheduler)
-12. [Intensity Ramp](#intensity-ramp)
-13. [Dangerous Features](#dangerous-features)
-14. [Tips & Best Practices](#tips--best-practices)
+11. [Sessions](#sessions)
+12. [Achievements](#achievements)
+13. [Scheduler](#scheduler)
+14. [Intensity Ramp](#intensity-ramp)
+15. [Dangerous Features](#dangerous-features)
+16. [Presets](#presets)
+17. [Tips & Best Practices](#tips--best-practices)
 
 ---
 
@@ -278,18 +281,20 @@ Earn XP through interaction:
 - **Popping bubbles**: +2 XP
 - **Completing attention checks**: +10 XP
 - **Watching videos**: +20 XP
+- **Completing sessions**: Bonus XP based on difficulty (400-2000 XP)
+
+**XP Formula**: Each level requires `50 + (level × 20)` XP to advance.
 
 ### Level Titles
 
-| Level | Title | XP Required |
-|-------|-------|-------------|
-| 1-4 | Beginner Bimbo | 0-400 |
-| 5-9 | Eager Student | 500-1400 |
-| 10-14 | Devoted Follower | 1500-2400 |
-| 15-19 | Conditioned Mind | 2500-3900 |
-| 20-24 | Perfect Doll | 4000-5900 |
-| 25-29 | Mindless Beauty | 6000-7900 |
-| 30+ | Eternal Bambi | 8000+ |
+| Level | Title |
+|-------|-------|
+| 1-4 | Beginner Bimbo |
+| 5-9 | Training Bimbo |
+| 10-19 | Eager Bimbo |
+| 20-29 | Devoted Bimbo |
+| 30-49 | Advanced Bimbo |
+| 50+ | Perfect Bimbo |
 
 ### Unlockables
 
@@ -301,22 +306,128 @@ Earn XP through interaction:
 - 🫧 **Bubble Pop**: Floating bubbles you can pop for XP
 
 **Level 35 Unlocks:**
-- 🔐 **Lock Card**: Require a passphrase to stop the engine
+- 🔐 **Lock Card**: Require typing passphrases to continue
 
 **Level 50 Unlocks:**
-- 🔢 **Bubble Count**: A challenge to count bubbles that appear on screen.
+- 🔢 **Bubble Count**: A mini-game challenge to count bubbles on screen
 
 **Level 60 Unlocks:**
-- 📝 **Bouncing Text**: Customizable text that bounces around the screen.
+- 📝 **Bouncing Text**: DVD-screensaver style text bouncing around
 
 **Level 70 Unlocks:**
-- 💧 **Brain Drain**: Drains your thoughts with subliminal messaging.
+- 💧 **Brain Drain**: Visual blur overlay that drains your thoughts
 
 **Level 75 Unlocks:**
-- 🧠 **Mind Wipe**: Random mind wipe audio effects.
+- 🧠 **Mind Wipe**: Random mind wipe audio effects
 
 ### Level Up Sound
-Place a `lvlup.mp3` in `Resources/` or `Assets/Audio/` to play a sound on level up.
+Place a `lvlup.mp3` in `Resources/` or `assets/audio/` to play a sound on level up.
+
+---
+
+## Sessions
+
+### Overview
+Sessions are pre-configured conditioning experiences with specific settings, timelines, and phases. They provide structured sessions with curated settings optimized for different scenarios.
+
+### Built-in Sessions
+
+| Session | Duration | Difficulty | Description |
+|---------|----------|------------|-------------|
+| **Morning Drift** | 30 min | Easy | Gentle passive conditioning for your morning routine |
+| **Gamer Girl** | 45 min | Medium | Subtle conditioning while gaming (use borderless windowed mode) |
+| **The Distant Doll** | 45 min | Easy | Passive couch session for watching videos |
+| **Good Girls Don't Cum** | 60 min | Hard | Intense denial/edging session with heavy conditioning |
+
+### Session Features
+- **Timeline Phases**: Sessions progress through different phases with changing intensity
+- **Curated Settings**: Each session has optimized settings for its purpose
+- **Bonus XP**: Earn extra XP for completing sessions (400-2000 based on difficulty)
+- **Spoiler Protection**: Session details hidden until you choose to reveal them
+
+### Custom Sessions
+You can create and manage your own sessions:
+
+1. **Create**: Use the Session Editor to design custom sessions
+2. **Import**: Drag and drop `.session.json` files into the app
+3. **Export**: Share your sessions with others
+4. **Edit**: Modify custom sessions anytime
+
+### Session Files
+Sessions are stored as `.session.json` files:
+- **Built-in**: `assets/sessions/` folder
+- **Custom**: `custom_sessions/` folder in your app data
+
+### Starting a Session
+1. Click on the **Sessions** tab
+2. Select a session card
+3. Optionally reveal spoilers to see exact settings
+4. Click **Start Session**
+5. The session will run for its full duration with all phases
+
+### Session Difficulty XP Bonuses
+
+| Difficulty | Bonus XP |
+|------------|----------|
+| Easy | 400 XP |
+| Medium | 800 XP |
+| Hard | 1200 XP |
+| Extreme | 2000 XP |
+
+---
+
+## Achievements
+
+### Overview
+Achievements are unlockable rewards for various accomplishments. They track your progress and provide goals to work toward.
+
+### Achievement Categories
+
+#### Progression Achievements
+| Achievement | Requirement |
+|-------------|-------------|
+| **Plastic Initiation** | Reach Level 10 |
+| **Dumb Bimbo** | Reach Level 20 |
+| **Fully Synthetic** | Reach Level 50 |
+| **Perfect Plastic Puppet** | Reach Level 100 |
+
+#### Time & Sessions Achievements
+| Achievement | Requirement |
+|-------------|-------------|
+| **Rose-Tinted Reality** | Keep Pink Filter active for 10 cumulative hours |
+| **Deep Sleep Mode** | Complete a session lasting longer than 3 hours |
+| **Daily Maintenance** | Launch the app 7 days in a row |
+| **Retinal Burn** | Have 5,000 Flash Images displayed |
+| **Morning Glory** | Complete Morning Drift between 6-9 AM |
+| **Player 2 Disconnected** | Complete Gamer Girl without Alt+Tab |
+| **Sofa Decor** | Complete The Distant Doll session |
+| **Look, But Don't Touch** | Complete Good Girls Don't Cum with Strict Lock |
+| **Spiral Eyes** | Stare at the Spiral Overlay for 20 minutes |
+
+#### Minigames Achievements
+| Achievement | Requirement |
+|-------------|-------------|
+| **Mathematician's Nightmare** | Guess correct bubble count 5 times in a row |
+| **Pop Goes The Thought** | Pop 1,000 bubbles total |
+| **Typing Tutor** | Complete Lock Card with 100% accuracy |
+| **Obedience Reflex** | Complete Lock Card (3 phrases) in under 15 seconds |
+| **Mercy Beggar** | Fail the attention check 3 times |
+| **Clean Slate** | Let Mind Wipers run for 60 seconds |
+| **Corner Hit** | Watch Bouncing Text hit the exact corner |
+| **Neon Obsession** | Click on the Avatar 20 times rapidly |
+
+#### Hardcore Achievements
+| Achievement | Requirement |
+|-------------|-------------|
+| **Panic Button? What Panic Button?** | Complete any session with Disable Panic enabled |
+| **Relapse** | Press ESC to stop, then restart within 10 seconds |
+| **Total Lockdown** | Activate Strict Lock, No Panic, and Pink Filter together |
+| **System Overload** | Have Bubbles, Bouncing Text, and Spiral all active |
+
+### Viewing Achievements
+- Achievement popups appear when you unlock new achievements
+- View all achievements and progress in the Progression tab
+- Locked achievements show requirements, unlocked show completion date
 
 ---
 
@@ -424,6 +535,27 @@ If both Strict Lock AND No Panic are enabled:
 - Only options: wait for video to end, or Task Manager
 
 **Use extreme caution with these features.**
+
+---
+
+## Presets
+
+### Overview
+Presets allow you to save and quickly load different setting configurations.
+
+### Using Presets
+1. Configure your settings as desired
+2. Click **Save Preset** and give it a name
+3. Load presets anytime from the preset dropdown
+4. Delete presets you no longer need
+
+### Built-in Presets
+- **Custom**: Your current modified settings (default)
+
+### Tips
+- Create presets for different scenarios (e.g., "Morning Light", "Intense Session", "Gaming Mode")
+- Presets save all settings including unlockable features
+- Presets do not affect your XP or level progress
 
 ---
 

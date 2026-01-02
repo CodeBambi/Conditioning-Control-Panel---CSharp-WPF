@@ -160,7 +160,7 @@
                            VerticalAlignment="Center" Margin="0,0,15,0"/>
 
                 <Slider x:Name="SliderDuration" Grid.Column="1"
-                        Minimum="5" Maximum="120" Value="30"
+                        Minimum="5" Maximum="181" Value="30"
                         TickFrequency="5" IsSnapToTickEnabled="True"
                         ValueChanged="SliderDuration_ValueChanged"/>
 

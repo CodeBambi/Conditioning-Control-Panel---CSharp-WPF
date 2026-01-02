@@ -2286,17 +2286,56 @@ Bimbo" Foreground="#FF69B4"
                     </StackPanel>
                 </Border>
                 
-                <!-- Coming Soon: Community -->
-                <Border Style="{StaticResource SectionPanel}" Margin="5" MinHeight="70"
-                        ToolTip="Coming Soon: Connect with other users!">
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="🌐" FontSize="24" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Community" Foreground="{StaticResource PinkBrush}" 
-                                       FontSize="14" FontWeight="Bold"/>
-                            <TextBlock Text="Coming Soon - Connect, share &amp; compete" Foreground="#888888" 
-                                       FontSize="10" FontStyle="Italic"/>
-                        </StackPanel>
+                <!-- Community Discord -->
+                <Border Style="{StaticResource SectionPanel}" Margin="5" MinHeight="140"
+                        ToolTip="Join our Discord community!">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="💬 Community" Foreground="{StaticResource PinkBrush}"
+                                   FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,5,0,8"/>
+                        <Button x:Name="BtnDiscord" Click="BtnDiscord_Click" Cursor="Hand"
+                                ToolTip="Click to join our Discord server!">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="Transparent">
+                                        <Image x:Name="DiscordImage"
+                                               Source="pack://application:,,,/Resources/discord.png"
+                                               Width="210" Stretch="Uniform" RenderTransformOrigin="0.5,0.5">
+                                            <Image.RenderTransform>
+                                                <ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/>
+                                            </Image.RenderTransform>
+                                        </Image>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <EventTrigger RoutedEvent="MouseEnter">
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetName="ImageScale"
+                                                                     Storyboard.TargetProperty="ScaleX"
+                                                                     To="1.08" Duration="0:0:0.15"/>
+                                                    <DoubleAnimation Storyboard.TargetName="ImageScale"
+                                                                     Storyboard.TargetProperty="ScaleY"
+                                                                     To="1.08" Duration="0:0:0.15"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                        <EventTrigger RoutedEvent="MouseLeave">
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetName="ImageScale"
+                                                                     Storyboard.TargetProperty="ScaleX"
+                                                                     To="1" Duration="0:0:0.15"/>
+                                                    <DoubleAnimation Storyboard.TargetName="ImageScale"
+                                                                     Storyboard.TargetProperty="ScaleY"
+                                                                     To="1" Duration="0:0:0.15"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                        <TextBlock Text="Click to join!" Foreground="#888888"
+                                   FontSize="10" FontStyle="Italic" HorizontalAlignment="Center" Margin="0,5,0,5"/>
                     </StackPanel>
                 </Border>
             </StackPanel>

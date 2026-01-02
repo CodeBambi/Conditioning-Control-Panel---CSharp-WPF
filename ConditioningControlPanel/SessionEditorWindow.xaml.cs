@@ -412,8 +412,8 @@ namespace ConditioningControlPanel
             var duration = _session.DurationMinutes;
             var width = CanvasMarkers.ActualWidth > 0 ? CanvasMarkers.ActualWidth : 800;
 
-            // Calculate interval (aim for 5-10 markers)
-            int interval = duration <= 30 ? 5 : (duration <= 60 ? 10 : 15);
+            // Calculate interval (aim for 5-10 markers, more for longer durations)
+            int interval = duration <= 30 ? 5 : (duration <= 60 ? 10 : (duration <= 120 ? 15 : 30));
 
             for (int min = 0; min <= duration; min += interval)
             {
@@ -431,10 +431,22 @@ namespace ConditioningControlPanel
                 };
                 CanvasMarkers.Children.Add(line);
 
-                // Marker text
+                // Marker text - show hours:minutes for durations over 60 min
+                string markerText;
+                if (duration > 60)
+                {
+                    int hours = min / 60;
+                    int mins = min % 60;
+                    markerText = hours > 0 ? $"{hours}:{mins:D2}" : mins.ToString();
+                }
+                else
+                {
+                    markerText = min.ToString();
+                }
+
                 var text = new TextBlock
                 {
-                    Text = min.ToString(),
+                    Text = markerText,
                     Foreground = new SolidColorBrush(Color.FromRgb(136, 136, 136)),
                     FontSize = 10
                 };
@@ -571,15 +583,22 @@ namespace ConditioningControlPanel
             e.Handled = true;
         }
 
+        // Padding to prevent icons from being clipped at edges
+        private const double TimelinePadding = 15;
+
         private double MinuteToPosition(int minute, double width)
         {
-            return (minute / (double)_session.DurationMinutes) * width;
+            // Add padding on both sides so icons at 0 and end aren't clipped
+            var usableWidth = width - (TimelinePadding * 2);
+            return TimelinePadding + (minute / (double)_session.DurationMinutes) * usableWidth;
         }
 
         private int PositionToMinute(double x)
         {
             var width = CanvasTimeline.ActualWidth > 0 ? CanvasTimeline.ActualWidth : 800;
-            var minute = (int)Math.Round((x / width) * _session.DurationMinutes);
+            var usableWidth = width - (TimelinePadding * 2);
+            var adjustedX = x - TimelinePadding;
+            var minute = (int)Math.Round((adjustedX / usableWidth) * _session.DurationMinutes);
             return Math.Max(0, Math.Min(minute, _session.DurationMinutes));
         }
 

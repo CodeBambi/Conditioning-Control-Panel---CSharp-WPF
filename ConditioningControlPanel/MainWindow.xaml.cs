@@ -438,6 +438,23 @@ namespace ConditioningControlPanel
             ShowTab("achievements");
         }
 
+        private void BtnDiscord_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://discord.gg/M6kpnrTPa9",
+                    UseShellExecute = true
+                });
+                App.Logger?.Information("Opened Discord invite link");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open Discord link");
+            }
+        }
+
         private void ShowTab(string tab)
         {
             // Hide all tabs
