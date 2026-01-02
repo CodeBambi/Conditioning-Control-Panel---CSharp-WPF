@@ -55,7 +55,11 @@ namespace ConditioningControlPanel.Services
         
         // Corner GIF window (for Gamer Girl session)
         private Window? _cornerGifWindow;
-        
+        private System.Windows.Controls.MediaElement? _cornerGifMedia;
+        private DispatcherTimer? _cornerGifLoopTimer;
+        private DateTime _cornerGifStartTime;
+        private const double CORNER_GIF_LOOP_INTERVAL_SECONDS = 4.0; // Restart GIF every 4 seconds
+
         // Reference to main window for service access
         private readonly MainWindow _mainWindow;
         
@@ -734,45 +738,75 @@ namespace ConditioningControlPanel.Services
                     // Fallback to spiral.gif
                     gifPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "spiral.gif");
                     App.Logger?.Information("Corner GIF not set, defaulting to spiral.gif");
-                    
+
                     if (!System.IO.File.Exists(gifPath))
                     {
                         App.Logger?.Warning("Default spiral.gif not found at {Path}", gifPath);
                         return; // Exit if default is also not found
                     }
                 }
-                
-                var gifSize = 500; // User requested size
-                var margin = 0; // Margin from screen edge, set to 0 to be as close as possible
-                
-                // Use WPF's SystemParameters for accurate screen dimensions
-                var screenWidth = SystemParameters.PrimaryScreenWidth;
-                var screenHeight = SystemParameters.PrimaryScreenHeight;
-                var workAreaHeight = SystemParameters.WorkArea.Height;
-                
+
+                // Get GIF dimensions to maintain aspect ratio
+                double gifWidth, gifHeight;
+                try
+                {
+                    using (var img = System.Drawing.Image.FromFile(gifPath))
+                    {
+                        gifWidth = img.Width;
+                        gifHeight = img.Height;
+                    }
+                }
+                catch
+                {
+                    // Default to square if can't read dimensions
+                    gifWidth = gifHeight = 300;
+                }
+
+                // Scale based on user's size setting (default 300)
+                var targetSize = settings.CornerGifSize > 0 ? settings.CornerGifSize : 300;
+                double scale = targetSize / Math.Max(gifWidth, gifHeight);
+                double windowWidth = gifWidth * scale;
+                double windowHeight = gifHeight * scale;
+
+                // Get actual screen bounds using Forms.Screen (more reliable for DPI)
+                var screen = System.Windows.Forms.Screen.PrimaryScreen;
+                if (screen == null) return;
+
+                // Calculate DPI scale
+                double dpiScale;
+                using (var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero))
+                {
+                    dpiScale = g.DpiX / 96.0;
+                }
+
+                // Convert physical pixels to WPF logical units
+                double screenWidth = screen.Bounds.Width / dpiScale;
+                double screenHeight = screen.Bounds.Height / dpiScale;
+
+                // Position at the exact screen edges (0 offset)
                 double left = 0, top = 0;
                 switch (settings.CornerGifPosition)
                 {
                     case CornerPosition.TopLeft:
-                        left = margin;
-                        top = margin;
+                        left = 0;
+                        top = 0;
                         break;
                     case CornerPosition.TopRight:
-                        left = screenWidth - gifSize - margin;
-                        top = margin;
+                        left = screenWidth - windowWidth;
+                        top = 0;
                         break;
                     case CornerPosition.BottomLeft:
-                        left = margin;
-                        top = workAreaHeight - gifSize - margin;
+                        left = 0;
+                        top = screenHeight - windowHeight;
                         break;
                     case CornerPosition.BottomRight:
-                        left = screenWidth - gifSize - margin;
-                        top = workAreaHeight - gifSize - margin;
+                        left = screenWidth - windowWidth;
+                        top = screenHeight - windowHeight;
                         break;
                 }
-                
-                // Increase opacity by 20%
-                var opacity = Math.Min(100, settings.CornerGifOpacity + 20) / 100.0;
+
+                // Very subtle opacity - 90% reduction (same as background spiral)
+                var opacity = (settings.CornerGifOpacity / 100.0) * 0.1;
 
                 _cornerGifWindow = new Window
                 {
@@ -782,56 +816,187 @@ namespace ConditioningControlPanel.Services
                     Topmost = true,
                     ShowInTaskbar = false,
                     ShowActivated = false,
-                    Width = gifSize,
-                    Height = gifSize,
+                    Width = windowWidth,
+                    Height = windowHeight,
                     Left = left,
                     Top = top,
-                    Opacity = opacity
+                    Opacity = opacity,
+                    WindowStartupLocation = WindowStartupLocation.Manual
                 };
-                
-                // Use MediaElement for GIF animation (better than WebBrowser for transparency)
+
+                // Use MediaElement for GIF animation - Uniform stretch maintains aspect ratio
                 var mediaElement = new System.Windows.Controls.MediaElement
                 {
                     Source = new Uri(gifPath),
                     LoadedBehavior = System.Windows.Controls.MediaState.Play,
                     UnloadedBehavior = System.Windows.Controls.MediaState.Manual,
-                    Stretch = System.Windows.Media.Stretch.Uniform,
-                    Width = gifSize,
-                    Height = gifSize
+                    Stretch = System.Windows.Media.Stretch.Uniform
                 };
-                
-                // Loop the GIF
+
+                // Store reference for timer-based looping
+                _cornerGifMedia = mediaElement;
+
+                // MediaEnded event handler (backup for video files)
                 mediaElement.MediaEnded += (s, e) =>
                 {
-                    mediaElement.Stop();
                     mediaElement.Position = TimeSpan.Zero;
                     mediaElement.Play();
                 };
-                
+
                 _cornerGifWindow.Content = mediaElement;
                 _cornerGifWindow.Show();
-                
+
                 // Make click-through
                 MakeWindowClickThrough(_cornerGifWindow);
-                
-                App.Logger?.Information("Corner GIF shown at {Position}: {Path} (pos: {Left},{Top}, size: {Size}px, opacity: {Opacity}%)", 
-                    settings.CornerGifPosition, gifPath, left, top, gifSize, settings.CornerGifOpacity);
+
+                // Start timer-based GIF looping (MediaEnded doesn't reliably fire for GIFs)
+                if (gifPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+                {
+                    _cornerGifStartTime = DateTime.Now;
+                    _cornerGifLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+                    _cornerGifLoopTimer.Tick += CornerGifLoopTimer_Tick;
+                    _cornerGifLoopTimer.Start();
+                }
+
+                App.Logger?.Information("Corner GIF shown at {Position}: {Path} (pos: {Left},{Top}, size: {Width}x{Height}px, opacity: {Opacity}%)",
+                    settings.CornerGifPosition, gifPath, left, top, (int)windowWidth, (int)windowHeight, settings.CornerGifOpacity);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Failed to show corner GIF");
             }
         }
-        
+
+        private void CornerGifLoopTimer_Tick(object? sender, EventArgs e)
+        {
+            if (_cornerGifMedia == null) return;
+
+            try
+            {
+                // For video files with known duration - use position-based looping
+                if (_cornerGifMedia.NaturalDuration.HasTimeSpan)
+                {
+                    var currentPos = _cornerGifMedia.Position;
+                    if (currentPos >= _cornerGifMedia.NaturalDuration.TimeSpan - TimeSpan.FromMilliseconds(100))
+                    {
+                        _cornerGifMedia.Position = TimeSpan.Zero;
+                        _cornerGifMedia.Play();
+                        _cornerGifStartTime = DateTime.Now;
+                    }
+                    return;
+                }
+
+                // For GIFs - use time-based restart (WPF Position doesn't work for GIFs)
+                var elapsed = (DateTime.Now - _cornerGifStartTime).TotalSeconds;
+                if (elapsed >= CORNER_GIF_LOOP_INTERVAL_SECONDS)
+                {
+                    // Restart the GIF by seeking to start
+                    _cornerGifMedia.Position = TimeSpan.Zero;
+                    _cornerGifMedia.Play();
+                    _cornerGifStartTime = DateTime.Now;
+                }
+            }
+            catch
+            {
+                // Ignore errors during tick
+            }
+        }
+
         private void CloseCornerGif()
         {
+            _cornerGifLoopTimer?.Stop();
+            _cornerGifLoopTimer = null;
+            _cornerGifMedia = null;
+
             if (_cornerGifWindow != null)
             {
                 _cornerGifWindow.Close();
                 _cornerGifWindow = null;
             }
         }
-        
+
+        /// <summary>
+        /// Updates the corner GIF size during an active session
+        /// </summary>
+        public void UpdateCornerGifSize(int newSize)
+        {
+            if (_cornerGifWindow == null || _currentSession == null) return;
+
+            try
+            {
+                // Update the session settings
+                _currentSession.Settings.CornerGifSize = newSize;
+
+                // Get GIF path
+                var gifPath = _currentSession.Settings.CornerGifPath;
+                if (string.IsNullOrEmpty(gifPath) || !System.IO.File.Exists(gifPath))
+                {
+                    gifPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "spiral.gif");
+                }
+
+                // Get GIF dimensions
+                double gifWidth, gifHeight;
+                try
+                {
+                    using (var img = System.Drawing.Image.FromFile(gifPath))
+                    {
+                        gifWidth = img.Width;
+                        gifHeight = img.Height;
+                    }
+                }
+                catch
+                {
+                    gifWidth = gifHeight = 300;
+                }
+
+                // Calculate new window size
+                double scale = newSize / Math.Max(gifWidth, gifHeight);
+                double windowWidth = gifWidth * scale;
+                double windowHeight = gifHeight * scale;
+
+                // Get screen bounds
+                var screen = System.Windows.Forms.Screen.PrimaryScreen;
+                if (screen == null) return;
+
+                double dpiScale;
+                using (var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero))
+                {
+                    dpiScale = g.DpiX / 96.0;
+                }
+
+                double screenWidth = screen.Bounds.Width / dpiScale;
+                double screenHeight = screen.Bounds.Height / dpiScale;
+
+                // Recalculate position
+                double left = 0, top = 0;
+                switch (_currentSession.Settings.CornerGifPosition)
+                {
+                    case CornerPosition.TopLeft:
+                        left = 0; top = 0;
+                        break;
+                    case CornerPosition.TopRight:
+                        left = screenWidth - windowWidth; top = 0;
+                        break;
+                    case CornerPosition.BottomLeft:
+                        left = 0; top = screenHeight - windowHeight;
+                        break;
+                    case CornerPosition.BottomRight:
+                        left = screenWidth - windowWidth; top = screenHeight - windowHeight;
+                        break;
+                }
+
+                // Update window
+                _cornerGifWindow.Width = windowWidth;
+                _cornerGifWindow.Height = windowHeight;
+                _cornerGifWindow.Left = left;
+                _cornerGifWindow.Top = top;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to update corner GIF size");
+            }
+        }
+
         private void MakeWindowClickThrough(Window window)
         {
             var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;

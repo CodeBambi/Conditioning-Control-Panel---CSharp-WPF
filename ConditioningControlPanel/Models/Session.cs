@@ -227,7 +227,8 @@ Just play your game. Let everything else happen on its own.
                 // Corner GIF option (user configurable)
                 CornerGifEnabled = false,
                 CornerGifOpacity = 18,
-                
+                CornerGifSize = 300,
+
                 // Disabled features - no interruptions while gaming
                 MandatoryVideosEnabled = false,
                 LockCardEnabled = false,
@@ -671,6 +672,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         public int CornerGifOpacity { get; set; } = 20;
         public string CornerGifPath { get; set; } = "";
         public CornerPosition CornerGifPosition { get; set; } = CornerPosition.BottomLeft;
+        public int CornerGifSize { get; set; } = 300; // Size in pixels (width, maintains aspect ratio)
         
         // Interactive Features
         public bool MandatoryVideosEnabled { get; set; }

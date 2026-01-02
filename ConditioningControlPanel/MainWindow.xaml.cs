@@ -975,14 +975,28 @@ namespace ConditioningControlPanel
                 Filter = "GIF files (*.gif)|*.gif|All files (*.*)|*.*",
                 InitialDirectory = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "images")
             };
-            
+
             if (dialog.ShowDialog() == true)
             {
                 _selectedCornerGifPath = dialog.FileName;
                 BtnSelectCornerGif.Content = $"📁 {System.IO.Path.GetFileName(dialog.FileName)}";
             }
         }
-        
+
+        private void SliderCornerGifSize_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtCornerGifSize != null)
+            {
+                TxtCornerGifSize.Text = $"{(int)e.NewValue}px";
+            }
+
+            // Live update during session
+            if (_sessionEngine != null && _sessionEngine.IsRunning)
+            {
+                _sessionEngine.UpdateCornerGifSize((int)e.NewValue);
+            }
+        }
+
         private string _selectedCornerGifPath = "";
         
         private Models.CornerPosition GetSelectedCornerPosition()
@@ -1159,6 +1173,7 @@ namespace ConditioningControlPanel
                 session.Settings.CornerGifEnabled = true;
                 session.Settings.CornerGifPath = _selectedCornerGifPath;
                 session.Settings.CornerGifPosition = GetSelectedCornerPosition();
+                session.Settings.CornerGifSize = (int)SliderCornerGifSize.Value;
             }
             
             // Initialize session engine if needed
@@ -3354,7 +3369,14 @@ namespace ConditioningControlPanel
                 _trayIcon?.Dispose();
                 _browser?.Dispose();
                 _avatarTubeWindow?.Close();
-                
+
+                // Stop and dispose session engine (closes corner GIF window)
+                try
+                {
+                    _sessionEngine?.Dispose();
+                }
+                catch { }
+
                 // Explicitly stop all overlay windows before app exits
                 try
                 {

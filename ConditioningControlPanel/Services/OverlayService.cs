@@ -41,6 +41,8 @@ public class OverlayService : IDisposable
     private bool _isDisposed;
     private bool _isGifSpiral;
     private string _spiralPath = "";
+    private Dictionary<MediaElement, DateTime> _mediaStartTimes = new();
+    private const double GIF_LOOP_INTERVAL_SECONDS = 4.0; // Restart GIFs every 4 seconds
 
     public bool IsRunning => _isRunning;
 
@@ -308,13 +310,14 @@ public class OverlayService : IDisposable
             double monitorDpi = GetMonitorDpi(screen);
             double primaryDpi = GetPrimaryMonitorDpi();
             double scale = primaryDpi / 96.0;
-            
+
             double left = screen.Bounds.X / scale;
             double top = screen.Bounds.Y / scale;
             double width = screen.Bounds.Width / scale;
             double height = screen.Bounds.Height / scale;
 
-            var actualOpacity = Math.Pow(opacity / 100.0, 2);
+            // Linear opacity (no exponential curve)
+            var actualOpacity = opacity / 100.0;
 
             var pinkOverlay = new Border
             {
@@ -374,7 +377,7 @@ public class OverlayService : IDisposable
 
     private void UpdatePinkFilterOpacity()
     {
-        var actualOpacity = Math.Pow(App.Settings.Current.PinkFilterOpacity / 100.0, 2);
+        var actualOpacity = App.Settings.Current.PinkFilterOpacity / 100.0;
         foreach (var window in _pinkFilterWindows)
         {
             if (window.Content is Border border)
@@ -438,10 +441,40 @@ public class OverlayService : IDisposable
     {
         foreach (var media in _spiralMediaElements)
         {
-            if (media.NaturalDuration.HasTimeSpan && 
-                media.Position >= media.NaturalDuration.TimeSpan - TimeSpan.FromMilliseconds(100))
+            try
             {
-                media.Position = TimeSpan.Zero;
+                // For video files with known duration - use position-based looping
+                if (media.NaturalDuration.HasTimeSpan)
+                {
+                    var currentPos = media.Position;
+                    if (currentPos >= media.NaturalDuration.TimeSpan - TimeSpan.FromMilliseconds(100))
+                    {
+                        media.Position = TimeSpan.Zero;
+                        media.Play();
+                        _mediaStartTimes[media] = DateTime.Now;
+                    }
+                    continue;
+                }
+
+                // For GIFs - use time-based restart (WPF Position doesn't work for GIFs)
+                if (!_mediaStartTimes.TryGetValue(media, out var startTime))
+                {
+                    _mediaStartTimes[media] = DateTime.Now;
+                    continue;
+                }
+
+                var elapsed = (DateTime.Now - startTime).TotalSeconds;
+                if (elapsed >= GIF_LOOP_INTERVAL_SECONDS)
+                {
+                    // Restart the GIF by seeking to start
+                    media.Position = TimeSpan.Zero;
+                    media.Play();
+                    _mediaStartTimes[media] = DateTime.Now;
+                }
+            }
+            catch
+            {
+                // Ignore errors during tick
             }
         }
     }
@@ -453,13 +486,14 @@ public class OverlayService : IDisposable
             double monitorDpi = GetMonitorDpi(screen);
             double primaryDpi = GetPrimaryMonitorDpi();
             double scale = primaryDpi / 96.0;
-            
+
             double left = screen.Bounds.X / scale;
             double top = screen.Bounds.Y / scale;
             double width = screen.Bounds.Width / scale;
             double height = screen.Bounds.Height / scale;
 
-            var actualOpacity = Math.Pow(opacity / 100.0, 2);
+            // Very subtle opacity - 90% reduction
+            var actualOpacity = (opacity / 100.0) * 0.1;
 
             var mediaElement = new MediaElement
             {
@@ -523,6 +557,7 @@ public class OverlayService : IDisposable
             try { media.Stop(); media.Close(); } catch { }
         }
         _spiralMediaElements.Clear();
+        _mediaStartTimes.Clear();
 
         foreach (var window in _spiralWindows.ToList())
         {
@@ -534,7 +569,8 @@ public class OverlayService : IDisposable
 
     private void UpdateSpiralOpacity()
     {
-        var opacity = Math.Pow(App.Settings.Current.SpiralOpacity / 100.0, 2);
+        // Very subtle opacity - 90% reduction
+        var opacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
         foreach (var media in _spiralMediaElements)
         {
             media.Opacity = opacity;

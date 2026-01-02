@@ -984,7 +984,7 @@ Bimbo" Foreground="#FF69B4"
                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                             <StackPanel x:Name="SessionsPanel">
                                 <!-- Morning Drift - Available -->
-                                <Border Background="#2A2A4A" CornerRadius="6" Padding="12,10" Margin="0,0,0,6"
+                                <Border Background="#2A2A4A" CornerRadius="8" Padding="16,14" Margin="0,0,0,8"
                                         Cursor="Hand" x:Name="SessionMorningDrift" MouseLeftButtonUp="SessionCard_Click" Tag="morning_drift">
                                     <Border.Style>
                                         <Style TargetType="Border">
@@ -1000,25 +1000,25 @@ Bimbo" Foreground="#FF69B4"
                                     <Grid>
                                         <StackPanel>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🌅 Morning Drift" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
-                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
-                                                    <TextBlock Text="30 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                                <TextBlock Text="🌅 Morning Drift" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
+                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
+                                                    <TextBlock Text="30 MIN" Foreground="White" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
-                                                <Border Background="#2A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="⭐ Easy" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                <Border Background="#2A3A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
+                                                    <TextBlock Text="⭐ Easy" Foreground="#90EE90" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
-                                                <Border Background="#2A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="+400 XP" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                <Border Background="#2A4A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
+                                                    <TextBlock Text="+400 XP" Foreground="#90EE90" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="Gentle subliminals &amp; bouncing text with gradual pink filter" 
-                                                       Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
+                                            <TextBlock Text="Gentle subliminals &amp; bouncing text with gradual pink filter"
+                                                       Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
                                         </StackPanel>
                                                                             </Grid>
                                 </Border>
                                 
                                 <!-- Gamer Girl - Available -->
-                                <Border Background="#2A2A4A" CornerRadius="6" Padding="12,10" Margin="0,0,0,6"
+                                <Border Background="#2A2A4A" CornerRadius="8" Padding="16,14" Margin="0,0,0,8"
                                         Cursor="Hand" x:Name="SessionGamerGirl" MouseLeftButtonUp="SessionCard_Click" Tag="gamer_girl">
                                     <Border.Style>
                                         <Style TargetType="Border">
@@ -1034,25 +1034,25 @@ Bimbo" Foreground="#FF69B4"
                                     <Grid>
                                         <StackPanel>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🎮 Gamer Girl" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
-                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
-                                                    <TextBlock Text="45 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                                <TextBlock Text="🎮 Gamer Girl" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
+                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
+                                                    <TextBlock Text="45 MIN" Foreground="White" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
-                                                <Border Background="#3A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="⭐⭐ Medium" Foreground="#FFD700" FontSize="9" FontWeight="Bold"/>
+                                                <Border Background="#3A3A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
+                                                    <TextBlock Text="⭐⭐ Medium" Foreground="#FFD700" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
-                                                <Border Background="#3A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="+800 XP" Foreground="#FFD700" FontSize="9" FontWeight="Bold"/>
+                                                <Border Background="#3A4A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
+                                                    <TextBlock Text="+800 XP" Foreground="#FFD700" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="Non-intrusive conditioning with pink filter &amp; spiral overlay" 
-                                                       Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
+                                            <TextBlock Text="Non-intrusive conditioning with pink filter &amp; spiral overlay"
+                                                       Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
                                         </StackPanel>
                                                                             </Grid>
                                 </Border>
                                 
                                 <!-- The Distant Doll - Available -->
-                                <Border Background="#2A2A4A" CornerRadius="6" Padding="12,10" Margin="0,0,0,6"
+                                <Border Background="#2A2A4A" CornerRadius="8" Padding="16,14" Margin="0,0,0,8"
                                         Cursor="Hand" x:Name="SessionDistantDoll" MouseLeftButtonUp="SessionCard_Click" Tag="distant_doll">
                                     <Border.Style>
                                         <Style TargetType="Border">
@@ -1068,25 +1068,25 @@ Bimbo" Foreground="#FF69B4"
                                     <Grid>
                                         <StackPanel>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🛋️ The Distant Doll" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
-                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
-                                                    <TextBlock Text="45 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                                <TextBlock Text="🛋️ The Distant Doll" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
+                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
+                                                    <TextBlock Text="45 MIN" Foreground="White" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
-                                                <Border Background="#2A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="⭐ Easy" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                <Border Background="#2A3A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
+                                                    <TextBlock Text="⭐ Easy" Foreground="#90EE90" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
-                                                <Border Background="#2A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="+400 XP" Foreground="#90EE90" FontSize="9" FontWeight="Bold"/>
+                                                <Border Background="#2A4A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
+                                                    <TextBlock Text="+400 XP" Foreground="#90EE90" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="Large visuals for couch viewing, no audio ducking" 
-                                                       Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
+                                            <TextBlock Text="Large visuals for couch viewing, no audio ducking"
+                                                       Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
                                         </StackPanel>
                                                                             </Grid>
                                 </Border>
                                 
                                 <!-- Good Girls Don't Cum - Available -->
-                                <Border Background="#2A2A4A" CornerRadius="6" Padding="12,10" Margin="0,0,0,6"
+                                <Border Background="#2A2A4A" CornerRadius="8" Padding="16,14" Margin="0,0,0,8"
                                         Cursor="Hand" x:Name="SessionGoodGirls" MouseLeftButtonUp="SessionCard_Click" Tag="good_girls_dont_cum">
                                     <Border.Style>
                                         <Style TargetType="Border">
@@ -1102,76 +1102,96 @@ Bimbo" Foreground="#FF69B4"
                                     <Grid>
                                         <StackPanel>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🔒 Good Girls Don't Cum" Foreground="White" FontWeight="SemiBold" FontSize="13"/>
-                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="6,2" Margin="10,0,0,0">
-                                                    <TextBlock Text="60 MIN" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                                <TextBlock Text="🔒 Good Girls Don't Cum" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
+                                                <Border Background="{StaticResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
+                                                    <TextBlock Text="60 MIN" Foreground="White" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
-                                                <Border Background="#4A3A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="⭐⭐⭐ Hard" Foreground="#FFA500" FontSize="9" FontWeight="Bold"/>
+                                                <Border Background="#4A3A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
+                                                    <TextBlock Text="⭐⭐⭐ Hard" Foreground="#FFA500" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
-                                                <Border Background="#4A4A2A" CornerRadius="3" Padding="6,2" Margin="6,0,0,0">
-                                                    <TextBlock Text="+1200 XP" Foreground="#FFA500" FontSize="9" FontWeight="Bold"/>
+                                                <Border Background="#4A4A2A" CornerRadius="3" Padding="8,3" Margin="6,0,0,0">
+                                                    <TextBlock Text="+1200 XP" Foreground="#FFA500" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="Denial session with heavy conditioning, videos &amp; lock cards" 
-                                                       Foreground="#A0A0A0" FontSize="11" Margin="0,4,0,0"/>
+                                            <TextBlock Text="Denial session with heavy conditioning, videos &amp; lock cards"
+                                                       Foreground="#A0A0A0" FontSize="13" Margin="0,6,0,0"/>
                                         </StackPanel>
                                                                             </Grid>
                                 </Border>
                                 
                                 <!-- Coming Soon Sessions -->
-                                <TextBlock Text="More sessions coming soon:" Foreground="#707090" 
-                                           FontSize="11" Margin="0,14,0,8"/>
-                                
-                                <Border Background="#252540" CornerRadius="6" Padding="12,10" Margin="0,0,0,5" Opacity="0.5"
-                                        Cursor="Hand" x:Name="SessionDeepDive" MouseLeftButtonUp="SessionCard_Click" Tag="deep_dive">
+                                <TextBlock Text="More sessions coming soon:" Foreground="#707090"
+                                           FontSize="13" Margin="0,16,0,10"/>
+
+                                <Border Background="#252540" CornerRadius="8" Padding="16,14" Margin="0,0,0,8" Opacity="0.6"
+                                        x:Name="SessionDeepDive" Tag="deep_dive">
                                     <Grid>
                                         <StackPanel>
-                                            <TextBlock Text="🌙 Deep Dive" Foreground="#808080" FontWeight="SemiBold" FontSize="12"/>
-                                            <TextBlock Text="60 minute immersive experience" 
-                                                       Foreground="#606070" FontSize="10" Margin="0,2,0,0"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🌙 Deep Dive" Foreground="#808080" FontWeight="SemiBold" FontSize="15"/>
+                                                <Border Background="#404050" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
+                                                    <TextBlock Text="COMING SOON" Foreground="#909090" FontSize="10" FontWeight="Bold"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="60 minute immersive experience"
+                                                       Foreground="#606070" FontSize="13" Margin="0,6,0,0"/>
                                         </StackPanel>
-                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="#505060" FontSize="16"/>
+                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                   Foreground="#505060" FontSize="18"/>
                                     </Grid>
                                 </Border>
-                                
-                                <Border Background="#252540" CornerRadius="6" Padding="12,10" Margin="0,0,0,5" Opacity="0.5"
-                                        Cursor="Hand" x:Name="SessionBambiTime" MouseLeftButtonUp="SessionCard_Click" Tag="bambi_time">
+
+                                <Border Background="#252540" CornerRadius="8" Padding="16,14" Margin="0,0,0,8" Opacity="0.6"
+                                        x:Name="SessionBambiTime" Tag="bambi_time">
                                     <Grid>
                                         <StackPanel>
-                                            <TextBlock Text="💗 Bambi Time" Foreground="#808080" FontWeight="SemiBold" FontSize="12"/>
-                                            <TextBlock Text="Full surrender experience" 
-                                                       Foreground="#606070" FontSize="10" Margin="0,2,0,0"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="💗 Bambi Time" Foreground="#808080" FontWeight="SemiBold" FontSize="15"/>
+                                                <Border Background="#404050" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
+                                                    <TextBlock Text="COMING SOON" Foreground="#909090" FontSize="10" FontWeight="Bold"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="Full surrender experience"
+                                                       Foreground="#606070" FontSize="13" Margin="0,6,0,0"/>
                                         </StackPanel>
-                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="#505060" FontSize="16"/>
+                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                   Foreground="#505060" FontSize="18"/>
                                     </Grid>
                                 </Border>
-                                
-                                <Border Background="#252540" CornerRadius="6" Padding="12,10" Margin="0,0,0,5" Opacity="0.5"
-                                        Cursor="Hand" x:Name="SessionRandomDrop" MouseLeftButtonUp="SessionCard_Click" Tag="random_drop">
+
+                                <Border Background="#252540" CornerRadius="8" Padding="16,14" Margin="0,0,0,8" Opacity="0.6"
+                                        x:Name="SessionRandomDrop" Tag="random_drop">
                                     <Grid>
                                         <StackPanel>
-                                            <TextBlock Text="🎲 Random Drop" Foreground="#808080" FontWeight="SemiBold" FontSize="12"/>
-                                            <TextBlock Text="Surprise settings, let go of control" 
-                                                       Foreground="#606070" FontSize="10" Margin="0,2,0,0"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🎲 Random Drop" Foreground="#808080" FontWeight="SemiBold" FontSize="15"/>
+                                                <Border Background="#404050" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
+                                                    <TextBlock Text="COMING SOON" Foreground="#909090" FontSize="10" FontWeight="Bold"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="Surprise settings, let go of control"
+                                                       Foreground="#606070" FontSize="13" Margin="0,6,0,0"/>
                                         </StackPanel>
-                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="#505060" FontSize="16"/>
+                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                   Foreground="#505060" FontSize="18"/>
                                     </Grid>
                                 </Border>
-                                
-                                <Border Background="#252540" CornerRadius="6" Padding="12,10" Margin="0,0,0,5" Opacity="0.5"
-                                        Cursor="Hand" x:Name="SessionEdgeWalk" MouseLeftButtonUp="SessionCard_Click" Tag="edge_walk">
+
+                                <Border Background="#252540" CornerRadius="8" Padding="16,14" Margin="0,0,0,8" Opacity="0.6"
+                                        x:Name="SessionEdgeWalk" Tag="edge_walk">
                                     <Grid>
                                         <StackPanel>
-                                            <TextBlock Text="📈 Edge Walk" Foreground="#808080" FontWeight="SemiBold" FontSize="12"/>
-                                            <TextBlock Text="Progressive intensity climb" 
-                                                       Foreground="#606070" FontSize="10" Margin="0,2,0,0"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="📈 Edge Walk" Foreground="#808080" FontWeight="SemiBold" FontSize="15"/>
+                                                <Border Background="#404050" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
+                                                    <TextBlock Text="COMING SOON" Foreground="#909090" FontSize="10" FontWeight="Bold"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="Progressive intensity climb"
+                                                       Foreground="#606070" FontSize="13" Margin="0,6,0,0"/>
                                         </StackPanel>
-                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center" 
-                                                   Foreground="#505060" FontSize="16"/>
+                                        <TextBlock Text="🔒" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                   Foreground="#505060" FontSize="18"/>
                                     </Grid>
                                 </Border>
                             </StackPanel>
@@ -1284,14 +1304,28 @@ Bimbo" Foreground="#FF69B4"
                                                 <RowDefinition Height="Auto"/>
                                                 <RowDefinition Height="Auto"/>
                                             </Grid.RowDefinitions>
-                                            <RadioButton x:Name="RbCornerTL" Content="↖ Top-Left" Foreground="White" 
+                                            <RadioButton x:Name="RbCornerTL" Content="↖ Top-Left" Foreground="White"
                                                          GroupName="CornerPos" Margin="0,2" FontSize="10"/>
-                                            <RadioButton x:Name="RbCornerTR" Grid.Column="1" Content="↗ Top-Right" 
+                                            <RadioButton x:Name="RbCornerTR" Grid.Column="1" Content="↗ Top-Right"
                                                          Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10"/>
-                                            <RadioButton x:Name="RbCornerBL" Grid.Row="1" Content="↙ Bottom-Left" 
+                                            <RadioButton x:Name="RbCornerBL" Grid.Row="1" Content="↙ Bottom-Left"
                                                          Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10" IsChecked="True"/>
-                                            <RadioButton x:Name="RbCornerBR" Grid.Row="1" Grid.Column="1" Content="↘ Bottom-Right" 
+                                            <RadioButton x:Name="RbCornerBR" Grid.Row="1" Grid.Column="1" Content="↘ Bottom-Right"
                                                          Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10"/>
+                                        </Grid>
+
+                                        <!-- Size Slider -->
+                                        <TextBlock Text="Size:" Foreground="#909090" FontSize="10" Margin="0,10,0,4"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="50"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Slider x:Name="SliderCornerGifSize" Minimum="100" Maximum="600" Value="300"
+                                                    VerticalAlignment="Center" ValueChanged="SliderCornerGifSize_ValueChanged"/>
+                                            <TextBlock x:Name="TxtCornerGifSize" Grid.Column="1" Text="300px"
+                                                       Foreground="#C0C0C0" FontSize="10" VerticalAlignment="Center"
+                                                       HorizontalAlignment="Right"/>
                                         </Grid>
                                     </StackPanel>
                                 </StackPanel>
