@@ -428,14 +428,26 @@ namespace ConditioningControlPanel
 
         public void ShowAvatarTube()
         {
-            _avatarTubeWindow?.ShowTube();
-            _avatarTubeWindow?.StartPoseAnimation();
+            // Recreate if closed
+            if (_avatarTubeWindow == null)
+            {
+                InitializeAvatarTube();
+            }
+            else
+            {
+                _avatarTubeWindow.ShowTube();
+                _avatarTubeWindow.StartPoseAnimation();
+            }
         }
 
         public void HideAvatarTube()
         {
-            _avatarTubeWindow?.StopPoseAnimation();
-            _avatarTubeWindow?.HideTube();
+            if (_avatarTubeWindow != null)
+            {
+                _avatarTubeWindow.StopPoseAnimation();
+                _avatarTubeWindow.Close();
+                _avatarTubeWindow = null;
+            }
         }
 
         public void SetAvatarPose(int poseNumber)
