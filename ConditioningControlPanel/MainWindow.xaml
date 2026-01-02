@@ -890,12 +890,12 @@ Bimbo" Foreground="#FF69B4"
                     Background="{StaticResource PanelBgBrush}" CornerRadius="8"
                     Padding="12,20" Margin="5,2,5,4">
                 <TextBlock Foreground="{StaticResource PinkBrush}"
-                           FontSize="14" FontStyle="Italic"
+                           FontSize="16" FontStyle="Italic"
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            TextAlignment="Center">
-                    <Run Text="✨ Good girls condition daily ✨"/>
-                    <LineBreak/>
-                    <Run Text="If you love the project please consider supporting it "/>
+                    <Run Text="✨ Good girls condition daily ✨ If you love the project please "/>
+                    <Run Text="consider supporting" FontWeight="Bold"/>
+                    <Run Text=" "/>
                     <Hyperlink NavigateUri="https://linktr.ee/CodeBambi" RequestNavigate="HandleHyperlinkClick">
                         <Run Text="https://linktr.ee/CodeBambi"/>
                     </Hyperlink>
