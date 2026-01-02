@@ -148,6 +148,33 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Adds a new session created in the editor
+        /// </summary>
+        public void AddNewSession(Session session, string filePath)
+        {
+            // Ensure folder exists and set source
+            _fileService.EnsureCustomFolderExists();
+            session.Source = SessionSource.Custom;
+            session.SourceFilePath = filePath;
+
+            // Check for duplicate ID and generate a new one if needed
+            if (_sessions.Any(s => s.Id == session.Id))
+            {
+                session.Id = Guid.NewGuid().ToString();
+            }
+
+            // Save the session to the specified file path
+            var definition = SessionDefinition.FromSession(session);
+            _fileService.ExportSession(definition, filePath);
+
+            // Add to collections
+            _sessions.Add(session);
+            AllSessions.Add(session);
+
+            SessionAdded?.Invoke(session);
+        }
+
+        /// <summary>
         /// Delete a custom/imported session
         /// </summary>
         public bool DeleteSession(Session session)

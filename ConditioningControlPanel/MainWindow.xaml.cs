@@ -2156,29 +2156,30 @@ namespace ConditioningControlPanel
             editor.Owner = this;
             if (editor.ShowDialog() == true && editor.ResultSession != null)
             {
-                // Save the new session
                 if (_sessionFileService == null)
                 {
                     _sessionFileService = new Services.SessionFileService();
                 }
 
-                var definition = Models.SessionDefinition.FromSession(editor.ResultSession);
-                _sessionFileService.SaveCustomSession(definition);
+                var session = editor.ResultSession;
 
-                // Set source and mark as available
-                editor.ResultSession.Source = Models.SessionSource.Custom;
-                editor.ResultSession.IsAvailable = true;
+                var dialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "Session Files (*.session.json)|*.session.json",
+                    Title = "Save New Session",
+                    InitialDirectory = SessionFileService.CustomSessionsFolder,
+                    FileName = SessionFileService.GetExportFileName(session)
+                };
 
-                // Add to the UI
-                AddCustomSessionCard(editor.ResultSession);
+                if (dialog.ShowDialog() == true)
+                {
+                    if (_sessionManager == null) InitializeSessionManager();
+                    _sessionManager.AddNewSession(session, dialog.FileName);
 
-                // Auto-select the new session
-                SelectSession(editor.ResultSession);
-
-                // Show notification
-                ShowDropZoneStatus($"Session created: {editor.ResultSession.Name}", isError: false);
-
-                App.Logger?.Information("Session created: {Name}", editor.ResultSession.Name);
+                    // The OnSessionAdded event will handle UI updates
+                    MessageBox.Show("New session saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    App.Logger?.Information("Session created: {Name} at {Path}", session.Name, dialog.FileName);
+                }
             }
         }
 
