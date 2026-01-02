@@ -2657,17 +2657,38 @@ namespace ConditioningControlPanel
         private void CheckSchedulerOnStartup()
         {
             var settings = App.Settings.Current;
+            App.Logger?.Information("Scheduler startup check: Enabled={Enabled}, InWindow={InWindow}",
+                settings.SchedulerEnabled, IsInScheduledTimeWindow());
+
             if (!settings.SchedulerEnabled) return;
-            
+
             if (IsInScheduledTimeWindow())
             {
                 App.Logger?.Information("Scheduler: App started within scheduled time window - auto-starting");
-                
+
                 // Minimize to tray and start engine
                 WindowState = WindowState.Minimized;
                 Hide();
                 _trayIcon?.ShowNotification("Scheduler Active", "Session auto-started based on schedule.", System.Windows.Forms.ToolTipIcon.Info);
-                
+
+                StartEngine();
+                _schedulerAutoStarted = true;
+            }
+        }
+
+        private void CheckSchedulerAfterSettingsChange()
+        {
+            var settings = App.Settings.Current;
+            if (!settings.SchedulerEnabled) return;
+
+            App.Logger?.Information("Scheduler settings changed - checking time window");
+
+            if (IsInScheduledTimeWindow() && !_isRunning)
+            {
+                App.Logger?.Information("Scheduler: In time window after settings change - auto-starting");
+
+                _trayIcon?.ShowNotification("Scheduler Active", "Session auto-started based on schedule.", System.Windows.Forms.ToolTipIcon.Info);
+
                 StartEngine();
                 _schedulerAutoStarted = true;
             }
@@ -2719,7 +2740,7 @@ namespace ConditioningControlPanel
         {
             var settings = App.Settings.Current;
             var now = DateTime.Now;
-            
+
             // Check if today is an active day
             bool isDayActive = now.DayOfWeek switch
             {
@@ -2732,29 +2753,45 @@ namespace ConditioningControlPanel
                 DayOfWeek.Sunday => settings.SchedulerSunday,
                 _ => false
             };
-            
-            if (!isDayActive) return false;
-            
+
+            if (!isDayActive)
+            {
+                App.Logger?.Debug("Scheduler: {Day} is not an active day", now.DayOfWeek);
+                return false;
+            }
+
             // Parse start and end times
             if (!TimeSpan.TryParse(settings.SchedulerStartTime, out var startTime))
-                startTime = new TimeSpan(16, 0, 0); // Default 16:00
-            
+            {
+                App.Logger?.Warning("Scheduler: Could not parse start time '{Time}', using default 16:00", settings.SchedulerStartTime);
+                startTime = new TimeSpan(16, 0, 0);
+            }
+
             if (!TimeSpan.TryParse(settings.SchedulerEndTime, out var endTime))
-                endTime = new TimeSpan(22, 0, 0); // Default 22:00
-            
+            {
+                App.Logger?.Warning("Scheduler: Could not parse end time '{Time}', using default 22:00", settings.SchedulerEndTime);
+                endTime = new TimeSpan(22, 0, 0);
+            }
+
             var currentTime = now.TimeOfDay;
-            
+
+            bool inWindow;
             // Handle case where end time is after midnight (e.g., 22:00 - 02:00)
             if (endTime < startTime)
             {
                 // Overnight schedule
-                return currentTime >= startTime || currentTime < endTime;
+                inWindow = currentTime >= startTime || currentTime < endTime;
             }
             else
             {
                 // Same-day schedule
-                return currentTime >= startTime && currentTime < endTime;
+                inWindow = currentTime >= startTime && currentTime < endTime;
             }
+
+            App.Logger?.Debug("Scheduler: Current={Current}, Start={Start}, End={End}, InWindow={InWindow}",
+                currentTime.ToString(@"hh\:mm"), startTime.ToString(@"hh\:mm"), endTime.ToString(@"hh\:mm"), inWindow);
+
+            return inWindow;
         }
 
         #endregion
@@ -3114,7 +3151,8 @@ namespace ConditioningControlPanel
             s.BrainDrainEnabled = ChkBrainDrainEnabled.IsChecked ?? false;
             s.BrainDrainIntensity = (int)SliderBrainDrainIntensity.Value;
 
-            // Scheduler
+            // Scheduler - track if settings changed
+            var schedulerWasEnabled = s.SchedulerEnabled;
             s.SchedulerEnabled = ChkSchedulerEnabled.IsChecked ?? false;
             s.SchedulerStartTime = TxtStartTime.Text;
             s.SchedulerEndTime = TxtEndTime.Text;
@@ -3125,6 +3163,15 @@ namespace ConditioningControlPanel
             s.SchedulerFriday = ChkFri.IsChecked ?? true;
             s.SchedulerSaturday = ChkSat.IsChecked ?? true;
             s.SchedulerSunday = ChkSun.IsChecked ?? true;
+
+            // If scheduler was just enabled or settings changed, reset flags and check immediately
+            if (s.SchedulerEnabled && !schedulerWasEnabled)
+            {
+                _schedulerAutoStarted = false;
+                _manuallyStoppedDuringSchedule = false;
+                // Check scheduler immediately after save completes
+                Dispatcher.BeginInvoke(new Action(() => CheckSchedulerAfterSettingsChange()), System.Windows.Threading.DispatcherPriority.Background);
+            }
             s.IntensityRampEnabled = ChkRampEnabled.IsChecked ?? false;
             s.RampDurationMinutes = (int)SliderRampDuration.Value;
             s.SchedulerMultiplier = SliderMultiplier.Value;

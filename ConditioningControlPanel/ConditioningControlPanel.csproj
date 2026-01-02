@@ -129,5 +129,9 @@
     <Content Include="Resources\sounds\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- Subliminal audio files -->
+    <Content Include="Resources\sub_audio\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>
