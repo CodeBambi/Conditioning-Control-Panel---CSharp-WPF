@@ -417,6 +417,10 @@ If both Strict Lock AND No Panic are enabled:
 
 ## Tips & Best Practices
 
+### Performance Considerations
+
+**WARNING:** Running many features simultaneously, especially with high frequencies, multiple images, or high-resolution videos/GIFs, can be resource-intensive. If you are using a low-end PC or experience performance issues (stuttering, slow response), consider reducing the number of active features or their intensity/frequency.
+
 ### For Beginners
 1. Start with low frequencies (2-3 per minute)
 2. Keep Clickable enabled

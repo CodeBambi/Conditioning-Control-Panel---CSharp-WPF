@@ -62,6 +62,19 @@
                         </TextBlock>
                     </StackPanel>
                 </Border>
+
+                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,20,0,0">
+                    <StackPanel>
+                        <TextBlock Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center">
+                            <Run Text="⚠️ Performance Warning"/>
+                        </TextBlock>
+                        <TextBlock Foreground="#FFB347" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0">
+                            <Run Text="Running many features, especially with high frequencies or large media, can be resource-intensive."/>
+                            <LineBreak/>
+                            <Run Text="If you experience performance issues on low-end PCs, consider reducing active features."/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
             </StackPanel>
             
             <!-- Button -->
