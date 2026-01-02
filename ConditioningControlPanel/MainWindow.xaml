@@ -894,7 +894,7 @@ Bimbo" Foreground="#FF69B4"
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            TextAlignment="Center">
                     <Run Text="✨ Good girls condition daily ✨ If you love the project please "/>
-                    <Run Text="consider supporting" FontWeight="Bold"/>
+                    <Run Text="consider supporting it" FontWeight="Bold"/>
                     <Run Text=" "/>
                     <Hyperlink NavigateUri="https://linktr.ee/CodeBambi" RequestNavigate="HandleHyperlinkClick">
                         <Run Text="https://linktr.ee/CodeBambi"/>
