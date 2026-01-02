@@ -148,10 +148,9 @@ namespace ConditioningControlPanel
             {
                 var soundPaths = new[]
                 {
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "lvup.mp3"),
                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "lvlup.mp3"),
                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "sounds", "lvlup.mp3"),
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Audio", "lvlup.mp3"),
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "lvlup.mp3"),
                 };
 
                 foreach (var path in soundPaths)

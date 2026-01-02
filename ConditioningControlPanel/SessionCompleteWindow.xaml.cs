@@ -44,11 +44,15 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var soundPath = System.IO.Path.Combine(
-                    AppDomain.CurrentDomain.BaseDirectory, 
-                    "assets", "sounds", "lvlup.mp3");
-                    
-                if (System.IO.File.Exists(soundPath))
+                var soundPaths = new[]
+                {
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "lvup.mp3"),
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "lvlup.mp3"),
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "sounds", "lvlup.mp3"),
+                };
+
+                var soundPath = soundPaths.FirstOrDefault(System.IO.File.Exists);
+                if (soundPath != null)
                 {
                     var player = new System.Windows.Media.MediaPlayer();
                     player.Open(new Uri(soundPath));
