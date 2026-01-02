@@ -1098,8 +1098,6 @@ Bimbo" Foreground="#FF69B4"
                                                     Tag="morning_drift" Click="SessionBtn_Edit"/>
                                             <Button Style="{StaticResource SessionActionButton}" Content="📤" ToolTip="Export Session"
                                                     Tag="morning_drift" Click="SessionBtn_Export"/>
-                                            <Button Style="{StaticResource SessionDeleteButton}" Content="🗑" ToolTip="Delete Session"
-                                                    Tag="morning_drift" Click="SessionBtn_Delete"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -1144,8 +1142,6 @@ Bimbo" Foreground="#FF69B4"
                                                     Tag="gamer_girl" Click="SessionBtn_Edit"/>
                                             <Button Style="{StaticResource SessionActionButton}" Content="📤" ToolTip="Export Session"
                                                     Tag="gamer_girl" Click="SessionBtn_Export"/>
-                                            <Button Style="{StaticResource SessionDeleteButton}" Content="🗑" ToolTip="Delete Session"
-                                                    Tag="gamer_girl" Click="SessionBtn_Delete"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -1190,8 +1186,6 @@ Bimbo" Foreground="#FF69B4"
                                                     Tag="distant_doll" Click="SessionBtn_Edit"/>
                                             <Button Style="{StaticResource SessionActionButton}" Content="📤" ToolTip="Export Session"
                                                     Tag="distant_doll" Click="SessionBtn_Export"/>
-                                            <Button Style="{StaticResource SessionDeleteButton}" Content="🗑" ToolTip="Delete Session"
-                                                    Tag="distant_doll" Click="SessionBtn_Delete"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -1236,8 +1230,6 @@ Bimbo" Foreground="#FF69B4"
                                                     Tag="good_girls_dont_cum" Click="SessionBtn_Edit"/>
                                             <Button Style="{StaticResource SessionActionButton}" Content="📤" ToolTip="Export Session"
                                                     Tag="good_girls_dont_cum" Click="SessionBtn_Export"/>
-                                            <Button Style="{StaticResource SessionDeleteButton}" Content="🗑" ToolTip="Delete Session"
-                                                    Tag="good_girls_dont_cum" Click="SessionBtn_Delete"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
