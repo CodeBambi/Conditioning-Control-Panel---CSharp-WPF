@@ -215,12 +215,12 @@ Just play your game. Let everything else happen on its own.
                 SpiralOpacity = 1,
                 SpiralOpacityEnd = 10,
                 
-                // Bubbles - floating only, no clicking required
+                // Bubbles - floating only, no clicking required (reduced for performance)
                 BubblesEnabled = true,
                 BubblesIntermittent = true,
                 BubblesClickable = false, // Float and auto-disappear
                 BubblesBurstCount = 6,
-                BubblesPerBurst = 5,
+                BubblesPerBurst = 2, // Reduced from 5 for performance
                 BubblesGapMin = 6,
                 BubblesGapMax = 10,
                 
@@ -306,12 +306,12 @@ Everything is designed to be viewed from a distance while your mind drifts away.
                 SpiralOpacity = 5,
                 SpiralOpacityEnd = 15,
                 
-                // Bubbles - Rare visual-only bursts
+                // Bubbles - Rare visual-only bursts (reduced for performance)
                 BubblesEnabled = true,
                 BubblesIntermittent = true,
                 BubblesClickable = false, // Visual only
                 BubblesBurstCount = 5, // ~5 times in 45 min
-                BubblesPerBurst = 3,
+                BubblesPerBurst = 1, // Reduced from 3 for performance
                 BubblesGapMin = 7,
                 BubblesGapMax = 12,
                 
@@ -398,19 +398,25 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                 // Bouncing Text - Denial phrases
                 BouncingTextEnabled = true,
                 BouncingTextSpeed = 4,
-                BouncingTextPhrases = new List<string> 
-                { 
+                BouncingTextPhrases = new List<string>
+                {
                     "Good Girls Don't Cum",
                     "Denied",
-                    "Obey Your Cock",
                     "Frustrated and Leaky",
-                    "No Touch"
+                    "No Touch",
+                    "Stay Denied"
                 },
-                
+
                 // Mind Wipe - Starts at 2/min, escalates
                 MindWipeEnabled = true,
                 MindWipeBaseMultiplier = 2, // Medium start (2 per 5min block)
                 MindWipeVolume = 25,
+
+                // Brain Drain - Last 10 minutes, ramps from 1% to 10%
+                BrainDrainEnabled = true,
+                BrainDrainStartMinute = 50, // Start at 50 min (last 10 min of 60)
+                BrainDrainStartIntensity = 1,
+                BrainDrainEndIntensity = 10,
 
                 // Bubbles (ramping)
                 BubblesEnabled = true,
@@ -687,6 +693,12 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         public bool MindWipeEnabled { get; set; }
         public int MindWipeBaseMultiplier { get; set; } = 1; // Starting frequency multiplier (Easy=1, Medium=2, Hard=3)
         public int MindWipeVolume { get; set; } = 50; // Volume for this session
+
+        // Brain Drain (blur overlay during sessions)
+        public bool BrainDrainEnabled { get; set; }
+        public int BrainDrainStartMinute { get; set; } = 0; // When to start
+        public int BrainDrainStartIntensity { get; set; } = 5; // Starting intensity
+        public int BrainDrainEndIntensity { get; set; } = 5; // Ending intensity (for ramping)
     }
     
     public enum CornerPosition

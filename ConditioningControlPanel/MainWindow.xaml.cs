@@ -1323,7 +1323,51 @@ namespace ConditioningControlPanel
                 }
             });
         }
-        
+
+        public void EnableBrainDrain(bool enabled, int intensity = 5)
+        {
+            App.Settings.Current.BrainDrainEnabled = enabled;
+            App.Settings.Current.BrainDrainIntensity = intensity;
+
+            if (enabled)
+            {
+                App.BrainDrain.Start(bypassLevelCheck: true);
+            }
+            else
+            {
+                App.BrainDrain.Stop();
+            }
+
+            Dispatcher.Invoke(() =>
+            {
+                if (ChkBrainDrainEnabled != null && !_isLoading)
+                {
+                    _isLoading = true;
+                    ChkBrainDrainEnabled.IsChecked = enabled;
+                    if (SliderBrainDrainIntensity != null) SliderBrainDrainIntensity.Value = intensity;
+                    if (TxtBrainDrainIntensity != null) TxtBrainDrainIntensity.Text = $"{intensity}%";
+                    _isLoading = false;
+                }
+            });
+        }
+
+        public void UpdateBrainDrainIntensity(int intensity)
+        {
+            App.Settings.Current.BrainDrainIntensity = intensity;
+            App.BrainDrain.UpdateSettings();
+
+            Dispatcher.Invoke(() =>
+            {
+                if (SliderBrainDrainIntensity != null && !_isLoading)
+                {
+                    _isLoading = true;
+                    SliderBrainDrainIntensity.Value = intensity;
+                    if (TxtBrainDrainIntensity != null) TxtBrainDrainIntensity.Text = $"{intensity}%";
+                    _isLoading = false;
+                }
+            });
+        }
+
         public void SetBubblesActive(bool active, int bubblesPerBurst = 5)
         {
             // Bubbles are handled by BubbleService through the settings
@@ -1333,10 +1377,10 @@ namespace ConditioningControlPanel
                 App.Settings.Current.BubblesEnabled = true;
                 App.Settings.Current.BubblesFrequency = bubblesPerBurst * 2; // Higher frequency during burst
 
-                // Actually start the bubble service if not running
-                if (!App.Bubbles.IsRunning && App.Settings.Current.PlayerLevel >= 20)
+                // Actually start the bubble service if not running (bypass level check for sessions)
+                if (!App.Bubbles.IsRunning)
                 {
-                    App.Bubbles.Start();
+                    App.Bubbles.Start(bypassLevelCheck: true);
                     App.Logger?.Information("Bubble burst started via SetBubblesActive");
                 }
             }

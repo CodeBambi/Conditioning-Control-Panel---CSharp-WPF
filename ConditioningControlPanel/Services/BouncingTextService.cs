@@ -41,14 +41,14 @@ public class BouncingTextService : IDisposable
     
     public event EventHandler? OnBounce;
 
-    public void Start()
+    public void Start(bool bypassLevelCheck = false)
     {
         if (_isRunning) return;
-        
+
         var settings = App.Settings.Current;
-        
-        // Check level requirement (Level 60)
-        if (settings.PlayerLevel < 60)
+
+        // Check level requirement (Level 60) unless bypassed (e.g., during sessions)
+        if (!bypassLevelCheck && settings.PlayerLevel < 60)
         {
             App.Logger?.Information("BouncingTextService: Level {Level} is below 60, not available", settings.PlayerLevel);
             return;

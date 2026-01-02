@@ -48,7 +48,9 @@ namespace ConditioningControlPanel.Services
         private double _currentFlashOpacity;
         private double _currentPinkOpacity;
         private double _currentSpiralOpacity;
-        
+        private double _currentBrainDrainIntensity;
+        private bool _brainDrainActive;
+
         // Randomized start times (±3 min from session defaults)
         private double _randomizedPinkStartMinute;
         private double _randomizedSpiralStartMinute;
@@ -171,10 +173,17 @@ namespace ConditioningControlPanel.Services
             
             // Stop Mind Wipe
             App.MindWipe?.Stop();
-            
+
             // Stop Bubbles
             App.Bubbles?.Stop();
-            
+
+            // Stop Brain Drain if it was active during session
+            if (_brainDrainActive)
+            {
+                App.BrainDrain?.Stop();
+                _brainDrainActive = false;
+            }
+
             // Restore original settings
             RestoreSettings();
             
@@ -339,6 +348,16 @@ namespace ConditioningControlPanel.Services
                     }
                 }
             }
+
+            // Brain Drain intensity ramp (only after start minute)
+            if (settings.BrainDrainEnabled && _brainDrainActive && elapsedMinutes >= settings.BrainDrainStartMinute)
+            {
+                var brainDrainDuration = totalMinutes - settings.BrainDrainStartMinute;
+                var brainDrainProgress = (elapsedMinutes - settings.BrainDrainStartMinute) / brainDrainDuration;
+                brainDrainProgress = Math.Clamp(brainDrainProgress, 0, 1);
+                _currentBrainDrainIntensity = Lerp(settings.BrainDrainStartIntensity, settings.BrainDrainEndIntensity, brainDrainProgress);
+                _mainWindow.UpdateBrainDrainIntensity((int)_currentBrainDrainIntensity);
+            }
         }
         
         private void CheckDelayedFeatures(double elapsedMinutes)
@@ -391,8 +410,18 @@ namespace ConditioningControlPanel.Services
                 if (elapsedMinutes >= settings.BubblesStartMinute)
                 {
                     App.Settings.Current.BubblesEnabled = true;
-                    if(App.Settings.Current.PlayerLevel >= 20)
-                        App.Bubbles.Start();
+                    App.Bubbles.Start(bypassLevelCheck: true); // Bypass level check during sessions
+                }
+            }
+
+            // Brain Drain delayed start
+            if (settings.BrainDrainEnabled && !_brainDrainActive && settings.BrainDrainStartMinute > 0)
+            {
+                if (elapsedMinutes >= settings.BrainDrainStartMinute)
+                {
+                    _brainDrainActive = true;
+                    _mainWindow.EnableBrainDrain(true, settings.BrainDrainStartIntensity);
+                    App.Logger?.Information("Brain Drain activated at {Minutes:F1} minutes", elapsedMinutes);
                 }
             }
         }
@@ -598,19 +627,11 @@ namespace ConditioningControlPanel.Services
                     }
                 }
                 
-                // Start bouncing text if level requirement met
-                if (current.PlayerLevel >= 60)
-                {
-                    App.BouncingText.Stop(); // Stop first to reset state
-                    App.BouncingText.Start();
-                    App.Logger?.Information("Session: Started bouncing text with phrases: {Phrases}",
-                        string.Join(", ", settings.BouncingTextPhrases));
-                }
-                else
-                {
-                    App.Logger?.Information("Session: Bouncing text skipped - requires Level 60 (current: {Level})",
-                        current.PlayerLevel);
-                }
+                // Start bouncing text (bypass level requirement during sessions)
+                App.BouncingText.Stop(); // Stop first to reset state
+                App.BouncingText.Start(bypassLevelCheck: true);
+                App.Logger?.Information("Session: Started bouncing text with phrases: {Phrases}",
+                    string.Join(", ", settings.BouncingTextPhrases));
             }
             else
             {

@@ -32,19 +32,19 @@ public class BubbleService : IDisposable
     public event Action? OnBubblePopped;
     public event Action? OnBubbleMissed;
 
-    public void Start()
+    public void Start(bool bypassLevelCheck = false)
     {
         if (_isRunning) return;
-        
+
         var settings = App.Settings.Current;
-        
-        // Check level requirement
-        if (settings.PlayerLevel < 20)
+
+        // Check level requirement unless bypassed (e.g., during sessions)
+        if (!bypassLevelCheck && settings.PlayerLevel < 20)
         {
             App.Logger?.Information("BubbleService: Level {Level} is below 20, bubbles not available", settings.PlayerLevel);
             return;
         }
-        
+
         _isRunning = true;
 
         _assetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets");
@@ -399,6 +399,9 @@ internal class Bubble
         // Show window
         _window.Show();
 
+        // Hide from Alt+Tab
+        HideFromAltTab();
+
         // Animation timer (~20 FPS)
         _animTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         _animTimer.Tick += Animate;
@@ -521,6 +524,26 @@ internal class Bubble
             return 1.0;
         }
     }
+
+    private void HideFromAltTab()
+    {
+        try
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(_window).Handle;
+            var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+        }
+        catch { }
+    }
+
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hwnd, int index);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
 
     #endregion
 }

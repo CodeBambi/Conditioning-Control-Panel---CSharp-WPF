@@ -84,9 +84,9 @@ namespace ConditioningControlPanel.Services
             LoadAudioFiles();
         }
         
-        public void Start()
+        public void Start(bool bypassLevelCheck = false)
         {
-            if (App.Settings.Current.PlayerLevel < 90)
+            if (!bypassLevelCheck && App.Settings.Current.PlayerLevel < 90)
             {
                 App.Logger?.Information("BrainDrain: Level {Level} is below 90, not available", App.Settings.Current.PlayerLevel);
                 return;
