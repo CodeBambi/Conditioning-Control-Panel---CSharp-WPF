@@ -66,8 +66,8 @@ namespace ConditioningControlPanel.Services
         {
             var assetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets");
             _imagesPath = Path.Combine(assetsPath, "images");
-            _soundsPath = Path.Combine(assetsPath, "sounds");
-            
+            _soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "flashes_audio");
+
             Directory.CreateDirectory(_imagesPath);
             Directory.CreateDirectory(_soundsPath);
 

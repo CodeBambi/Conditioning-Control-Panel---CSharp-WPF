@@ -358,7 +358,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var soundsPath = Path.Combine(_assetsPath, "sounds");
+                var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
                 var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
                 var chosenPop = popFiles[_random.Next(popFiles.Length)];
                 var popPath = Path.Combine(soundsPath, chosenPop);

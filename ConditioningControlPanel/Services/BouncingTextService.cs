@@ -29,7 +29,7 @@ public class BouncingTextService : IDisposable
     private Color _currentColor;
     
     // Text size - base size that gets scaled by settings
-    private const int BASE_FONT_SIZE = 48;
+    private const int BASE_FONT_SIZE = 72;
     private double _textWidth = 200;
     private double _textHeight = 60;
     private int _currentFontSize = BASE_FONT_SIZE;
@@ -85,8 +85,8 @@ public class BouncingTextService : IDisposable
         _currentColor = GetRandomColor();
         
         // Create windows for each screen
-        CreateWindows(settings.DualMonitorEnabled);
-        
+        CreateWindows(settings.DualMonitorEnabled, settings.BouncingTextOpacity);
+
         // Start animation timer (~60 FPS)
         _animTimer = new DispatcherTimer
         {
@@ -185,19 +185,19 @@ public class BouncingTextService : IDisposable
         _totalHeight = _maxY - _minY;
     }
 
-    private void CreateWindows(bool dualMonitor)
+    private void CreateWindows(bool dualMonitor, int opacity = 100)
     {
-        var screens = dualMonitor 
-            ? System.Windows.Forms.Screen.AllScreens 
+        var screens = dualMonitor
+            ? System.Windows.Forms.Screen.AllScreens
             : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
-        
+
         foreach (var screen in screens)
         {
-            var window = new BouncingTextWindow(screen, _currentFontSize);
+            var window = new BouncingTextWindow(screen, _currentFontSize, opacity);
             window.Show();
             _windows.Add(window);
         }
-        
+
         // Update text in all windows
         UpdateWindowsText();
     }
@@ -400,11 +400,11 @@ internal class BouncingTextWindow : Window
     private readonly System.Windows.Forms.Screen _screen;
     private readonly double _dpiScale;
 
-    public BouncingTextWindow(System.Windows.Forms.Screen screen, int fontSize = 48)
+    public BouncingTextWindow(System.Windows.Forms.Screen screen, int fontSize = 48, int opacity = 100)
     {
         _screen = screen;
         _dpiScale = GetDpiScale();
-        
+
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -413,19 +413,20 @@ internal class BouncingTextWindow : Window
         ShowActivated = false;
         IsHitTestVisible = false;
         ResizeMode = ResizeMode.NoResize;
-        
+
         // Cover the entire screen
         Left = screen.Bounds.X / _dpiScale;
         Top = screen.Bounds.Y / _dpiScale;
         Width = screen.Bounds.Width / _dpiScale;
         Height = screen.Bounds.Height / _dpiScale;
-        
+
         // Create text block
         _textBlock = new TextBlock
         {
             FontSize = fontSize,
             FontWeight = FontWeights.Bold,
             Foreground = Brushes.HotPink,
+            Opacity = opacity / 100.0,
             Effect = new System.Windows.Media.Effects.DropShadowEffect
             {
                 Color = Colors.Black,

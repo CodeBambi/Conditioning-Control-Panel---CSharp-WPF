@@ -81,10 +81,10 @@ namespace ConditioningControlPanel.Models
 
 This session is designed for your morning routine - while you work, browse, or prepare for the day. No interruptions, no demands. Just gentle whispers and soft reminders that help good girls drift into that comfortable, familiar headspace.
 
-Features gentle, positive subliminal reinforcement to help you start your day in a blissful, obedient haze.
+Features gentle subliminals like 'Good Girl', 'Bambi Sleep', and 'Giggletime' to help you start your day in a blissful, obedient haze.
 
 You don't need to do anything special. Just... let it happen. 💗",
-            
+
             Settings = new SessionSettings
             {
                 // Flash Images
@@ -96,23 +96,33 @@ You don't need to do anything special. Just... let it happen. 💗",
                 FlashOpacityEnd = 30,
                 FlashClickable = true,
                 FlashAudioEnabled = false,
-                
-                // Subliminals
+
+                // Subliminals - gentle, positive phrases for morning
                 SubliminalEnabled = true,
                 SubliminalPerMin = 2,
                 SubliminalFrames = 3,
                 SubliminalOpacity = 45,
+                SubliminalPhrases = new List<string>
+                {
+                    "GOOD GIRL",
+                    "BAMBI SLEEP",
+                    "BIMBO DOLL",
+                    "PRIMPED AND PAMPERED",
+                    "GIGGLETIME"
+                },
                 
                 // Audio Whispers
                 AudioWhispersEnabled = true,
                 WhisperVolume = 12,
                 AudioDuckLevel = 40, // 40% ducking for morning session
                 
-                // Bouncing Text
+                // Bouncing Text - smaller and subtler for morning
                 BouncingTextEnabled = true,
                 BouncingTextSpeed = 2,
+                BouncingTextSize = 50,
+                BouncingTextOpacity = 80,
                 BouncingTextPhrases = new List<string> { "Good Girl", "Such a good girl", "Drifting peacefully", "Waking up pink" },
-                
+
                 // Pink Filter (delayed start, gradual)
                 PinkFilterEnabled = true,
                 PinkFilterStartMinute = 10,
@@ -187,22 +197,31 @@ Just play your game. Let everything else happen on its own.
                 FlashAudioEnabled = false,
                 FlashSmallSize = true, // New: smaller images for gaming
                 
-                // Subliminals
+                // Subliminals - gaming-friendly, focus-based phrases
                 SubliminalEnabled = true,
                 SubliminalPerMin = 2,
                 SubliminalFrames = 2,
                 SubliminalOpacity = 45,
-                
+                SubliminalPhrases = new List<string>
+                {
+                    "GOOD GIRL",
+                    "BIMBO DOLL",
+                    "PRIMPED AND PAMPERED",
+                    "GIGGLETIME"
+                },
+
                 // Audio Whispers - barely audible, under game audio
                 AudioWhispersEnabled = true,
                 WhisperVolume = 12,
                 AudioDuckLevel = 55, // 55% ducking for gaming session
-                
-                // Bouncing Text
+
+                // Bouncing Text - smaller and subtler for gaming
                 BouncingTextEnabled = true,
                 BouncingTextSpeed = 3,
+                BouncingTextSize = 50,
+                BouncingTextOpacity = 80,
                 BouncingTextPhrases = new List<string> { "Good Girl", "GG", "Focus", "Obey", "Good Game" },
-                
+
                 // Pink Filter (delayed start at 15min)
                 PinkFilterEnabled = true,
                 PinkFilterStartMinute = 15,
@@ -264,12 +283,12 @@ Just play your game. Let everything else happen on its own.
             IsAvailable = true,
             Difficulty = SessionDifficulty.Easy,
             BonusXP = 400,
-            Description = @"No need to get up, sweetheart. Stay comfortable, soft, and empty. 
+            Description = @"No need to get up, sweetheart. Stay comfortable, soft, and empty.
 
-Filled with passive subliminals about being a pretty, empty doll.
+Filled with gentle, dreamy subliminals like 'Good Girl', 'Bambi Sleep', and 'Bimbo Doll' that wash over you.
 
 Everything is designed to be viewed from a distance while your mind drifts away. Perfect for turning your relaxation time into a passive reprogramming session.",
-            
+
             Settings = new SessionSettings
             {
                 // Flash Images - Relaxed pace, large format for distance viewing
@@ -282,12 +301,19 @@ Everything is designed to be viewed from a distance while your mind drifts away.
                 FlashScale = 150, // Large for distance viewing
                 FlashClickable = false, // Ghost mode
                 FlashAudioEnabled = false, // Silent flashes
-                
-                // Subliminals - Low frequency
+
+                // Subliminals - dreamy, doll-themed phrases
                 SubliminalEnabled = true,
                 SubliminalPerMin = 2,
                 SubliminalFrames = 2,
                 SubliminalOpacity = 60,
+                SubliminalPhrases = new List<string>
+                {
+                    "GOOD GIRL",
+                    "BAMBI SLEEP",
+                    "BIMBO DOLL",
+                    "PRIMPED AND PAMPERED"
+                },
                 
                 // Audio Whispers - Low volume background
                 AudioWhispersEnabled = true,
@@ -353,12 +379,12 @@ Everything is designed to be viewed from a distance while your mind drifts away.
             IsAvailable = true,
             Difficulty = SessionDifficulty.Hard,
             BonusXP = 1200,
-            Description = @"A challenging denial and edging session designed to test your obedience and focus. 
+            Description = @"A challenging denial and edging session designed to test your obedience and focus.
 
-This session is filled with intense denial and obedience subliminals.
+This session uses intense, hardcore subliminals including triggers like 'Bambi Freeze', 'Drop for Cock', and 'Cock Zombie Now'. The final 10 minutes feature Mind Drain to melt away any remaining thoughts.
 
 Your only purpose is to sit prettily and let the pink fog consume you. And remember not to touch that clitty, Good Girls Don't Cum.",
-            
+
             Settings = new SessionSettings
             {
                 // Flash Images - Starts slow, RAMPS UP to block view
@@ -371,12 +397,24 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                 FlashScale = 100,
                 FlashClickable = false, // Ghost mode
                 FlashAudioEnabled = false, // Silent - denial is quiet
-                
-                // Subliminals - Frequent
+
+                // Subliminals - Intense, hardcore triggers
                 SubliminalEnabled = true,
                 SubliminalPerMin = 4,
                 SubliminalFrames = 3,
                 SubliminalOpacity = 70,
+                SubliminalPhrases = new List<string>
+                {
+                    "BAMBI FREEZE",
+                    "BAMBI RESET",
+                    "DROP FOR COCK",
+                    "ZAP COCK DRAIN OBEY",
+                    "COCK ZOMBIE NOW",
+                    "BAMBI CUM AND COLLAPSE",
+                    "BAMBI UNIFORM LOCK",
+                    "SNAP AND FORGET",
+                    "BAMBI DOES AS SHE'S TOLD"
+                },
                 
                 // Audio Whispers
                 AudioWhispersEnabled = true,
@@ -639,7 +677,8 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         public int SubliminalPerMin { get; set; } = 5;
         public int SubliminalFrames { get; set; } = 2;
         public int SubliminalOpacity { get; set; } = 80;
-        
+        public List<string> SubliminalPhrases { get; set; } = new(); // Session-specific phrases (empty = use global pool)
+
         // Audio
         public bool AudioWhispersEnabled { get; set; }
         public int WhisperVolume { get; set; } = 50;
@@ -648,6 +687,8 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         // Bouncing Text
         public bool BouncingTextEnabled { get; set; }
         public int BouncingTextSpeed { get; set; } = 5;
+        public int BouncingTextSize { get; set; } = 100; // Default 100% size
+        public int BouncingTextOpacity { get; set; } = 100; // Default 100% when bypassing level requirement
         public List<string> BouncingTextPhrases { get; set; } = new();
         
         // Pink Filter

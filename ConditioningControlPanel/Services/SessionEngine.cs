@@ -533,7 +533,10 @@ namespace ConditioningControlPanel.Services
             _savedSettings.SubliminalEnabled = current.SubliminalEnabled;
             _savedSettings.SubliminalFrequency = current.SubliminalFrequency;
             _savedSettings.SubliminalOpacity = current.SubliminalOpacity;
-            
+
+            // Save subliminal pool (deep copy)
+            _savedSubliminalPool = new Dictionary<string, bool>(current.SubliminalPool);
+
             _savedSettings.SubAudioEnabled = current.SubAudioEnabled;
             _savedSettings.SubAudioVolume = current.SubAudioVolume;
             
@@ -552,7 +555,9 @@ namespace ConditioningControlPanel.Services
 
             _savedSettings.BouncingTextEnabled = current.BouncingTextEnabled;
             _savedSettings.BouncingTextSpeed = current.BouncingTextSpeed;
-            
+            _savedSettings.BouncingTextSize = current.BouncingTextSize;
+            _savedSettings.BouncingTextOpacity = current.BouncingTextOpacity;
+
             // Save bouncing text pool (deep copy)
             _savedBouncingTextPool = new Dictionary<string, bool>(current.BouncingTextPool);
             
@@ -565,6 +570,7 @@ namespace ConditioningControlPanel.Services
         }
         
         private Dictionary<string, bool>? _savedBouncingTextPool;
+        private Dictionary<string, bool>? _savedSubliminalPool;
         
         private void ApplySessionSettings(SessionSettings settings)
         {
@@ -581,15 +587,35 @@ namespace ConditioningControlPanel.Services
                 current.FlashAudioEnabled = settings.FlashAudioEnabled;
             }
             
-            // Subliminals
+            // Subliminals - override phrases with session-specific ones
             current.SubliminalEnabled = settings.SubliminalEnabled;
             if (settings.SubliminalEnabled)
             {
                 current.SubliminalFrequency = settings.SubliminalPerMin;
                 current.SubliminalOpacity = settings.SubliminalOpacity;
                 current.SubliminalDuration = settings.SubliminalFrames;
+
+                // Override the subliminal pool with session phrases
+                if (settings.SubliminalPhrases.Count > 0)
+                {
+                    // Disable all existing phrases
+                    var keys = current.SubliminalPool.Keys.ToList();
+                    foreach (var key in keys)
+                    {
+                        current.SubliminalPool[key] = false;
+                    }
+
+                    // Add/enable session phrases
+                    foreach (var phrase in settings.SubliminalPhrases)
+                    {
+                        current.SubliminalPool[phrase] = true;
+                    }
+
+                    App.Logger?.Information("Session: Using subliminal phrases: {Phrases}",
+                        string.Join(", ", settings.SubliminalPhrases));
+                }
             }
-            
+
             // Audio Whispers (Sub Audio)
             current.SubAudioEnabled = settings.AudioWhispersEnabled;
             if (settings.AudioWhispersEnabled)
@@ -609,7 +635,9 @@ namespace ConditioningControlPanel.Services
             if (settings.BouncingTextEnabled)
             {
                 current.BouncingTextSpeed = settings.BouncingTextSpeed;
-                
+                current.BouncingTextSize = settings.BouncingTextSize;
+                current.BouncingTextOpacity = settings.BouncingTextOpacity;
+
                 // Override the bouncing text pool with session phrases
                 if (settings.BouncingTextPhrases.Count > 0)
                 {
@@ -713,7 +741,18 @@ namespace ConditioningControlPanel.Services
             current.SubliminalEnabled = _savedSettings.SubliminalEnabled;
             current.SubliminalFrequency = _savedSettings.SubliminalFrequency;
             current.SubliminalOpacity = _savedSettings.SubliminalOpacity;
-            
+
+            // Restore subliminal pool
+            if (_savedSubliminalPool != null)
+            {
+                current.SubliminalPool.Clear();
+                foreach (var kvp in _savedSubliminalPool)
+                {
+                    current.SubliminalPool[kvp.Key] = kvp.Value;
+                }
+                _savedSubliminalPool = null;
+            }
+
             current.SubAudioEnabled = _savedSettings.SubAudioEnabled;
             current.SubAudioVolume = _savedSettings.SubAudioVolume;
             
@@ -732,7 +771,9 @@ namespace ConditioningControlPanel.Services
 
             current.BouncingTextEnabled = _savedSettings.BouncingTextEnabled;
             current.BouncingTextSpeed = _savedSettings.BouncingTextSpeed;
-            
+            current.BouncingTextSize = _savedSettings.BouncingTextSize;
+            current.BouncingTextOpacity = _savedSettings.BouncingTextOpacity;
+
             // Restore bouncing text pool
             if (_savedBouncingTextPool != null)
             {

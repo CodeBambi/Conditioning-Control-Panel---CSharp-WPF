@@ -791,6 +791,13 @@ namespace ConditioningControlPanel.Models
             set { _bouncingTextSize = Math.Clamp(value, 50, 300); OnPropertyChanged(); }
         }
 
+        private int _bouncingTextOpacity = 100; // 0-100%
+        public int BouncingTextOpacity
+        {
+            get => _bouncingTextOpacity;
+            set { _bouncingTextOpacity = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
         private Dictionary<string, bool> _bouncingTextPool = new()
         {
             { "GOOD GIRL", true },
