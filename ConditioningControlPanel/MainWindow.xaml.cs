@@ -1354,6 +1354,19 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void HandleHyperlinkClick(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+                e.Handled = true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error("Failed to open hyperlink: {Uri} - {Error}", e.Uri.AbsoluteUri, ex.Message);
+            }
+        }
+
         private void LoadPreset(Models.Preset preset)
         {
             preset.ApplyTo(App.Settings.Current);
