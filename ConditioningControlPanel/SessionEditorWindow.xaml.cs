@@ -509,19 +509,12 @@ namespace ConditioningControlPanel
 
         private FrameworkElement CreateFeatureIconContent(FeatureDefinition feature, double size)
         {
-            // Try to load PNG image
+            // Try to load PNG image with rounded corners
             if (!string.IsNullOrEmpty(feature.ImagePath))
             {
                 try
                 {
-                    var image = new System.Windows.Controls.Image
-                    {
-                        Width = size,
-                        Height = size,
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center,
-                        Stretch = System.Windows.Media.Stretch.Uniform
-                    };
+                    System.Windows.Media.Imaging.BitmapImage? bitmap = null;
 
                     // Normalize path separators for Windows
                     var normalizedPath = feature.ImagePath.Replace('/', System.IO.Path.DirectorySeparatorChar);
@@ -530,19 +523,35 @@ namespace ConditioningControlPanel
                     var filePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, normalizedPath);
                     if (System.IO.File.Exists(filePath))
                     {
-                        var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                        bitmap = new System.Windows.Media.Imaging.BitmapImage();
                         bitmap.BeginInit();
                         bitmap.UriSource = new Uri(filePath, UriKind.Absolute);
                         bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
                         bitmap.EndInit();
-                        image.Source = bitmap;
-                        return image;
+                    }
+                    else
+                    {
+                        // Then try as embedded resource (pack URI)
+                        var packUri = new Uri($"pack://application:,,,/{feature.ImagePath}", UriKind.Absolute);
+                        bitmap = new System.Windows.Media.Imaging.BitmapImage(packUri);
                     }
 
-                    // Then try as embedded resource (pack URI)
-                    var packUri = new Uri($"pack://application:,,,/{feature.ImagePath}", UriKind.Absolute);
-                    image.Source = new System.Windows.Media.Imaging.BitmapImage(packUri);
-                    return image;
+                    // Use Rectangle with ImageBrush for rounded corners
+                    var rect = new System.Windows.Shapes.Rectangle
+                    {
+                        Width = size,
+                        Height = size,
+                        RadiusX = size * 0.15, // 15% corner radius
+                        RadiusY = size * 0.15,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Fill = new System.Windows.Media.ImageBrush
+                        {
+                            ImageSource = bitmap,
+                            Stretch = System.Windows.Media.Stretch.UniformToFill
+                        }
+                    };
+                    return rect;
                 }
                 catch { /* Fall back to emoji */ }
             }

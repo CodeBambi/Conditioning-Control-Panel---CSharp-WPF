@@ -332,6 +332,15 @@
             <Setter Property="Margin" Value="10,0,0,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+
+        <!-- Rounded Image Rectangle Style -->
+        <Style x:Key="RoundedFeatureImage" TargetType="Rectangle">
+            <Setter Property="Width" Value="180"/>
+            <Setter Property="Height" Value="180"/>
+            <Setter Property="RadiusX" Value="15"/>
+            <Setter Property="RadiusY" Value="15"/>
+            <Setter Property="Margin" Value="10,0,0,0"/>
+        </Style>
     </Window.Resources>
 
     <!-- Viewbox scales all content proportionally with window size -->
@@ -1635,9 +1644,11 @@ Bimbo" Foreground="#FF69B4"
                             </Grid>
                             
                             <!-- Feature Image -->
-                            <Border x:Name="SpiralFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/spiral_overlay.png" Stretch="Uniform"/>
-                            </Border>
+                            <Rectangle x:Name="SpiralFeatureImage" Grid.Column="1" Style="{StaticResource RoundedFeatureImage}">
+                                <Rectangle.Fill>
+                                    <ImageBrush ImageSource="pack://application:,,,/Resources/features/spiral_overlay.png" Stretch="UniformToFill"/>
+                                </Rectangle.Fill>
+                            </Rectangle>
                         </Grid>
                     </Border>
 
@@ -1692,9 +1703,11 @@ Bimbo" Foreground="#FF69B4"
                             </Grid>
                             
                             <!-- Feature Image -->
-                            <Border x:Name="PinkFilterFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/Pink_filter.png" Stretch="Uniform"/>
-                            </Border>
+                            <Rectangle x:Name="PinkFilterFeatureImage" Grid.Column="1" Style="{StaticResource RoundedFeatureImage}">
+                                <Rectangle.Fill>
+                                    <ImageBrush ImageSource="pack://application:,,,/Resources/features/Pink_filter.png" Stretch="UniformToFill"/>
+                                </Rectangle.Fill>
+                            </Rectangle>
                         </Grid>
                     </Border>
 
@@ -1749,9 +1762,11 @@ Bimbo" Foreground="#FF69B4"
                             </Grid>
                             
                             <!-- Feature Image -->
-                            <Border x:Name="BubblePopFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/Bubble_pop.png" Stretch="Uniform"/>
-                            </Border>
+                            <Rectangle x:Name="BubblePopFeatureImage" Grid.Column="1" Style="{StaticResource RoundedFeatureImage}">
+                                <Rectangle.Fill>
+                                    <ImageBrush ImageSource="pack://application:,,,/Resources/features/Bubble_pop.png" Stretch="UniformToFill"/>
+                                </Rectangle.Fill>
+                            </Rectangle>
                         </Grid>
                     </Border>
 
@@ -1844,9 +1859,11 @@ Bimbo" Foreground="#FF69B4"
                             </Grid>
                             
                             <!-- Feature Image -->
-                            <Border x:Name="LockCardFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/Phrase_Lock.png" Stretch="Uniform"/>
-                            </Border>
+                            <Rectangle x:Name="LockCardFeatureImage" Grid.Column="1" Style="{StaticResource RoundedFeatureImage}">
+                                <Rectangle.Fill>
+                                    <ImageBrush ImageSource="pack://application:,,,/Resources/features/Phrase_Lock.png" Stretch="UniformToFill"/>
+                                </Rectangle.Fill>
+                            </Rectangle>
                         </Grid>
                     </Border>
 
@@ -1933,9 +1950,11 @@ Bimbo" Foreground="#FF69B4"
                             </Grid>
                             
                             <!-- Feature Image -->
-                            <Border x:Name="BubbleCountFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/Bubble_count.png" Stretch="Uniform"/>
-                            </Border>
+                            <Rectangle x:Name="BubbleCountFeatureImage" Grid.Column="1" Style="{StaticResource RoundedFeatureImage}">
+                                <Rectangle.Fill>
+                                    <ImageBrush ImageSource="pack://application:,,,/Resources/features/Bubble_count.png" Stretch="UniformToFill"/>
+                                </Rectangle.Fill>
+                            </Rectangle>
                         </Grid>
                     </Border>
 
@@ -2016,9 +2035,11 @@ Bimbo" Foreground="#FF69B4"
                             </Grid>
                             
                             <!-- Feature Image -->
-                            <Border x:Name="BouncingTextFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/bouncing_text.png" Stretch="Uniform"/>
-                            </Border>
+                            <Rectangle x:Name="BouncingTextFeatureImage" Grid.Column="1" Style="{StaticResource RoundedFeatureImage}">
+                                <Rectangle.Fill>
+                                    <ImageBrush ImageSource="pack://application:,,,/Resources/features/bouncing_text.png" Stretch="UniformToFill"/>
+                                </Rectangle.Fill>
+                            </Rectangle>
                         </Grid>
                     </Border>
 
@@ -2086,9 +2107,11 @@ Bimbo" Foreground="#FF69B4"
                             </Grid>
 
                             <!-- Feature Image -->
-                            <Border x:Name="BrainDrainFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/brain_drain.png" Stretch="Uniform"/>
-                            </Border>
+                            <Rectangle x:Name="BrainDrainFeatureImage" Grid.Column="1" Style="{StaticResource RoundedFeatureImage}">
+                                <Rectangle.Fill>
+                                    <ImageBrush ImageSource="pack://application:,,,/Resources/features/brain_drain.png" Stretch="UniformToFill"/>
+                                </Rectangle.Fill>
+                            </Rectangle>
                         </Grid>
                     </Border>
 
@@ -2173,9 +2196,11 @@ Bimbo" Foreground="#FF69B4"
                             </Grid>
 
                             <!-- Feature Image -->
-                            <Border x:Name="MindWipeFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/Mind_Wipers.png" Stretch="Uniform"/>
-                            </Border>
+                            <Rectangle x:Name="MindWipeFeatureImage" Grid.Column="1" Style="{StaticResource RoundedFeatureImage}">
+                                <Rectangle.Fill>
+                                    <ImageBrush ImageSource="pack://application:,,,/Resources/features/Mind_Wipers.png" Stretch="UniformToFill"/>
+                                </Rectangle.Fill>
+                            </Rectangle>
                         </Grid>
                     </Border>
                 </StackPanel>

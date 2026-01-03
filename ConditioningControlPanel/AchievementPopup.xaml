@@ -28,8 +28,7 @@
             </Grid.ColumnDefinitions>
             
             <!-- Achievement Image -->
-            <Border Grid.Column="0" Width="120" Height="120" CornerRadius="15" 
-                    Background="#1A1A2E" Margin="0,0,15,0">
+            <Border Grid.Column="0" Width="120" Height="120" Background="#1A1A2E" Margin="0,0,15,0">
                 <Image x:Name="AchievementImage" Stretch="Uniform" Margin="5"/>
             </Border>
             

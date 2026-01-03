@@ -11,6 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Rectangle = System.Windows.Shapes.Rectangle;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 
@@ -397,9 +398,11 @@ namespace ConditioningControlPanel
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            // Intercept minimize command to hide avatar tube BEFORE minimize animation
+            // Intercept minimize command to hide to tray instead
             if (msg == WM_SYSCOMMAND && (wParam.ToInt32() & 0xFFF0) == SC_MINIMIZE)
             {
+                handled = true; // Mark as handled to prevent default minimize
+                _trayIcon?.MinimizeToTray();
                 HideAvatarTube();
             }
             return IntPtr.Zero;
@@ -584,25 +587,25 @@ namespace ConditioningControlPanel
                 var isUnlocked = App.Achievements?.Progress.IsUnlocked(achievement.Id) ?? false;
                 
                 var border = new Border { Style = tileStyle };
-                border.ToolTip = isUnlocked 
+                border.ToolTip = isUnlocked
                     ? $"{achievement.Name}\n\n\"{achievement.FlavorText}\""
                     : $"???\n\nRequirement: {achievement.Requirement}";
-                
+
                 var image = new Image
                 {
                     Stretch = Stretch.Uniform,
                     Source = LoadAchievementImage(achievement.ImageName)
                 };
-                
+
                 // Apply blur if locked
                 if (!isUnlocked)
                 {
                     image.Effect = new BlurEffect { Radius = 15 };
                 }
-                
+
                 border.Child = image;
                 AchievementGrid.Children.Add(border);
-                
+
                 // Store reference for later updates
                 _achievementImages[achievement.Id] = image;
             }
@@ -655,24 +658,24 @@ namespace ConditioningControlPanel
         private void RefreshAchievementTile(string achievementId)
         {
             if (!_achievementImages.TryGetValue(achievementId, out var image)) return;
-            
+
             var isUnlocked = App.Achievements?.Progress.IsUnlocked(achievementId) ?? false;
-            
+
             // Update blur
             image.Effect = isUnlocked ? null : new BlurEffect { Radius = 15 };
-            
+
             // Update tooltip
             if (Models.Achievement.All.TryGetValue(achievementId, out var achievement))
             {
                 var parent = image.Parent as Border;
                 if (parent != null)
                 {
-                    parent.ToolTip = isUnlocked 
+                    parent.ToolTip = isUnlocked
                         ? $"{achievement.Name}\n\n\"{achievement.FlavorText}\""
                         : $"???\n\nRequirement: {achievement.Requirement}";
                 }
             }
-            
+
             UpdateAchievementCount();
         }
         
@@ -3354,38 +3357,30 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Applies or removes blur effect on feature images based on lock state
         /// </summary>
-        private void SetFeatureImageBlur(Border? featureImageBorder, bool blur)
+        private void SetFeatureImageBlur(Rectangle? featureImageRect, bool blur)
         {
             try
             {
-                if (featureImageBorder == null)
+                if (featureImageRect == null)
                 {
-                    App.Logger?.Warning("SetFeatureImageBlur: featureImageBorder is null.");
+                    App.Logger?.Warning("SetFeatureImageBlur: featureImageRect is null.");
                     return;
                 }
-                
-                // Ensure the child is an Image before attempting to set its effect
-                if (featureImageBorder.Child is Image image)
+
+                if (blur)
                 {
-                    if (blur)
-                    {
-                        image.Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 15 };
-                        App.Logger?.Debug("SetFeatureImageBlur: Applied blur to {ElementName}", featureImageBorder.Name);
-                    }
-                    else
-                    {
-                        image.Effect = null;
-                        App.Logger?.Debug("SetFeatureImageBlur: Removed blur from {ElementName}", featureImageBorder.Name);
-                    }
+                    featureImageRect.Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 15 };
+                    App.Logger?.Debug("SetFeatureImageBlur: Applied blur to {ElementName}", featureImageRect.Name);
                 }
                 else
                 {
-                    App.Logger?.Warning("SetFeatureImageBlur: Child of featureImageBorder is not an Image. Child type: {ChildType}", featureImageBorder.Child?.GetType().Name);
+                    featureImageRect.Effect = null;
+                    App.Logger?.Debug("SetFeatureImageBlur: Removed blur from {ElementName}", featureImageRect.Name);
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Error("SetFeatureImageBlur: Error setting blur effect for {ElementName}: {Error}", featureImageBorder?.Name, ex.Message);
+                App.Logger?.Error("SetFeatureImageBlur: Error setting blur effect for {ElementName}: {Error}", featureImageRect?.Name, ex.Message);
             }
         }
 
@@ -4357,13 +4352,8 @@ namespace ConditioningControlPanel
         {
             base.OnStateChanged(e);
             
-            // Minimize to tray when minimized
-            if (WindowState == WindowState.Minimized)
-            {
-                _trayIcon?.MinimizeToTray();
-                HideAvatarTube();
-            }
-            else if (WindowState == WindowState.Normal || WindowState == WindowState.Maximized)
+            // Handle restoring from tray or maximizing
+            if (WindowState == WindowState.Normal || WindowState == WindowState.Maximized)
             {
                 ShowAvatarTube();
             }

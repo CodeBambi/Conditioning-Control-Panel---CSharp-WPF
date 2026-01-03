@@ -69,16 +69,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="appsettings.json">
+    <Content Include="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
     <!-- Session files -->
-    <None Update="assets\sessions\*.session.json">
+    <Content Include="assets\sessions\*.session.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
 
@@ -122,35 +124,42 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Feature images - explicitly listed to ensure all are included in publish -->
-    <Content Include="Resources\features\4new.png;Resources\features\audio_whispers.png;Resources\features\bouncing_text.png;Resources\features\brain_drain.png;Resources\features\Bubble_count.png;Resources\features\Bubble_pop.png;Resources\features\corner_gif.png;Resources\features\flash.png;Resources\features\mandatory_videos.png;Resources\features\Mind_Wipers.png;Resources\features\Phrase_Lock.png;Resources\features\Pink_filter.png;Resources\features\spiral_overlay.png;Resources\features\subliminal.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
+    <!-- Feature images - embedded as Resource for pack:// URIs to work -->
+    <Resource Include="Resources\features\*.png" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Sound files - must be copied to output for file system access -->
+    <!-- Sound files - must be copied to output and publish for file system access -->
     <Content Include="Resources\sounds\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
     <!-- Subliminal audio files -->
     <Content Include="Resources\sub_audio\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
     <!-- Custom spirals folder -->
     <Content Include="Spirals\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
 
-  <!-- Ensure all feature images are copied during publish -->
-  <Target Name="CopyFeatureImagesAfterPublish" AfterTargets="Publish">
+  <!-- Ensure all content files are copied during publish -->
+  <Target Name="CopyContentAfterPublish" AfterTargets="Publish">
     <ItemGroup>
-      <FeatureImages Include="$(ProjectDir)Resources\features\*.png" />
+      <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" />
+      <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
+      <SpiralFiles Include="$(ProjectDir)Spirals\**\*" />
     </ItemGroup>
-    <MakeDir Directories="$(PublishDir)Resources\features" />
-    <Copy SourceFiles="@(FeatureImages)" DestinationFolder="$(PublishDir)Resources\features" SkipUnchangedFiles="true" />
-    <Message Importance="High" Text="Copied @(FeatureImages->Count()) feature images to publish folder" />
+    <Copy SourceFiles="@(SoundFiles)" DestinationFolder="$(PublishDir)Resources\sounds\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(SubAudioFiles)" DestinationFolder="$(PublishDir)Resources\sub_audio\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(SpiralFiles)" DestinationFolder="$(PublishDir)Spirals\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Message Importance="High" Text="Copied content files to publish folder" />
   </Target>
+
 </Project>
