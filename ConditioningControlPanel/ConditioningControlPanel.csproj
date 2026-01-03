@@ -119,15 +119,13 @@
     
     <!-- Achievement images -->
     <Resource Include="Resources\achievements\*.png" />
-
-    <!-- Feature images (embedded as resources) -->
-    <Resource Include="Resources\features\*.png" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Feature images (also copied to output for user customization) -->
-    <Content Include="Resources\features\**\*">
+    <!-- Feature images - explicitly listed to ensure all are included in publish -->
+    <Content Include="Resources\features\4new.png;Resources\features\audio_whispers.png;Resources\features\bouncing_text.png;Resources\features\brain_drain.png;Resources\features\Bubble_count.png;Resources\features\Bubble_pop.png;Resources\features\corner_gif.png;Resources\features\flash.png;Resources\features\mandatory_videos.png;Resources\features\Mind_Wipers.png;Resources\features\Phrase_Lock.png;Resources\features\Pink_filter.png;Resources\features\spiral_overlay.png;Resources\features\subliminal.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
 
@@ -145,4 +143,14 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+
+  <!-- Ensure all feature images are copied during publish -->
+  <Target Name="CopyFeatureImagesAfterPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <FeatureImages Include="$(ProjectDir)Resources\features\*.png" />
+    </ItemGroup>
+    <MakeDir Directories="$(PublishDir)Resources\features" />
+    <Copy SourceFiles="@(FeatureImages)" DestinationFolder="$(PublishDir)Resources\features" SkipUnchangedFiles="true" />
+    <Message Importance="High" Text="Copied @(FeatureImages->Count()) feature images to publish folder" />
+  </Target>
 </Project>
