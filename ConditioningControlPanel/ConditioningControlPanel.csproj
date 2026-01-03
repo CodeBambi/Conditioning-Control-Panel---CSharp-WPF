@@ -133,5 +133,9 @@
     <Content Include="Resources\sub_audio\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- Custom spirals folder -->
+    <Content Include="Spirals\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 </Project>
