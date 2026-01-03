@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(git restore:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(dotnet publish:*)",
+      "Bash(dotnet build:*)",
+      "Bash(git reset:*)",
+      "Bash(grep:*)",
+      "Bash(where:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(dotnet clean:*)",
+      "Bash(rm:*)",
+      "Bash(dotnet restore:*)"
+    ]
+  }
+}

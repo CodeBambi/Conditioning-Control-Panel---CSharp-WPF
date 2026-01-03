@@ -2210,7 +2210,7 @@ Bimbo" Foreground="#FF69B4"
             <!-- Right Column: Scheduler + Ramp + Community stacked -->
             <StackPanel Grid.Column="1">
                 <!-- Scheduler Box -->
-                <Border Style="{StaticResource SectionPanel}" Margin="5">
+                <Border x:Name="SchedulerPanel" Style="{StaticResource SectionPanel}" Margin="5">
                     <StackPanel>
                         <TextBlock Style="{StaticResource SectionHeader}" Text="📅 Scheduler" FontSize="14"/>
                         
@@ -2250,7 +2250,7 @@ Bimbo" Foreground="#FF69B4"
                 </Border>
                 
                 <!-- Intensity Ramp Box -->
-                <Border Style="{StaticResource SectionPanel}" Margin="5">
+                <Border x:Name="RampPanel" Style="{StaticResource SectionPanel}" Margin="5">
                     <StackPanel>
                         <TextBlock Style="{StaticResource SectionHeader}" Text="⚡ Intensity Ramp" FontSize="14"/>
                         
@@ -2592,8 +2592,29 @@ Bimbo" Foreground="#FF69B4"
 
                         <!-- Footer -->
                         <Border Grid.Row="2" Background="#252542" CornerRadius="0,0,10,10" Padding="20,15">
-                            <Button Content="Got it!" Style="{StaticResource PinkButton}" HorizontalAlignment="Center"
-                                    Click="MainTutorial_Close" Padding="40,10"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button Content="Start Interactive Tutorial" Click="BtnStartTutorial_Click" Margin="0,0,15,0"
+                                        Background="Transparent" Foreground="#FF69B4" BorderBrush="#FF69B4" BorderThickness="1"
+                                        Padding="20,10" FontWeight="SemiBold" Cursor="Hand">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="#20FF69B4"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <Button Content="Got it!" Style="{StaticResource PinkButton}"
+                                        Click="MainTutorial_Close" Padding="40,10"/>
+                            </StackPanel>
                         </Border>
                     </Grid>
                 </Border>

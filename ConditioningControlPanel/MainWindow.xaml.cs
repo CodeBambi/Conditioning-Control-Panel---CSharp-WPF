@@ -116,8 +116,12 @@ namespace ConditioningControlPanel
             App.BouncingText.Stop();
             App.Overlay.Stop();
             
-            // Show welcome dialog on first launch
-            WelcomeDialog.ShowIfNeeded();
+            // Show welcome dialog on first launch, then start tutorial
+            if (WelcomeDialog.ShowIfNeeded())
+            {
+                Dispatcher.BeginInvoke(new Action(() => StartTutorial()),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
+            }
             
             // Initialize scheduler timer (checks every 30 seconds)
             _schedulerTimer = new DispatcherTimer
@@ -3234,6 +3238,54 @@ namespace ConditioningControlPanel
         {
             // Prevent closing when clicking on the content
             e.Handled = true;
+        }
+
+        private TutorialOverlay? _tutorialOverlay;
+
+        private void BtnStartTutorial_Click(object sender, RoutedEventArgs e)
+        {
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Visible;
+            StartTutorial();
+        }
+
+        public void StartTutorial()
+        {
+            if (_tutorialOverlay != null) return;
+
+            if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Hidden;
+
+            // Configure tutorial callbacks for tab switching
+            App.Tutorial.ConfigureCallbacks(
+                showSettings: () => ShowTab("settings"),
+                showPresets: () => { ShowTab("presets"); RefreshPresetsList(); },
+                showProgression: () => ShowTab("progression"),
+                showAchievements: () => ShowTab("achievements"),
+                openSessionEditor: () => { },  // Just highlight the button, don't open editor
+                openLinktree: () => { }  // Not used, support step now ends on settings
+            );
+
+            App.Tutorial.Start();
+            _tutorialOverlay = new TutorialOverlay(this, App.Tutorial);
+            _tutorialOverlay.Closed += (s, e) =>
+            {
+                _tutorialOverlay = null;
+                if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Visible;
+            };
+            _tutorialOverlay.Show();
+        }
+
+        private void OpenLinktree()
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://linktr.ee/CodeBambi",
+                    UseShellExecute = true
+                });
+            }
+            catch { }
         }
 
         #endregion

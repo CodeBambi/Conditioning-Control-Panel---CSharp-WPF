@@ -30,6 +30,7 @@ namespace ConditioningControlPanel
         public static MindWipeService MindWipe { get; private set; } = null!;
         public static BrainDrainService BrainDrain { get; private set; } = null!;
         public static AchievementService Achievements { get; private set; } = null!;
+        public static TutorialService Tutorial { get; private set; } = null!;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -92,7 +93,8 @@ namespace ConditioningControlPanel
             MindWipe = new MindWipeService();
             BrainDrain = new BrainDrainService();
             Achievements = new AchievementService();
-            
+            Tutorial = new TutorialService();
+
             // Wire up achievement popup BEFORE checking any achievements
             Achievements.AchievementUnlocked += OnAchievementUnlocked;
             

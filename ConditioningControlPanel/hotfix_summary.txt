@@ -1,0 +1,14 @@
+This hotfix addresses several UI and functionality issues, including visual adjustments and additional visual bug fixes.
+
+**Resolved:**
+*   **UI Scaling & Layout:** Session editor window scaled, feature icons resized in editor grid and timeline, timeline icons' vertical and horizontal positioning adjusted.
+*   **Timeline Interaction:** Prevention of overlapping segments for the same feature on the timeline implemented.
+*   **Visual Enhancements:** Timeline view made vertically scrollable, colored borders removed from timeline icons, rounded corners added to all displayed PNG images across the application.
+*   **Additional Visual Bugs:** Various visual bugs have been identified and fixed.
+
+**Outstanding Issues:**
+*   **Pink Filter Achievement:** The pink filter achievement is not working correctly.
+*   **Focus Stealing:** Subliminals and bubbles steal focus from the current window for a split second, causing disruption (especially when playing games).
+*   **Duplicate Notifications:** Double Windows notifications occur when the application is minimized.
+
+**Action:** Investigate and resolve outstanding issues.
