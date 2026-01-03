@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Windows.Forms;
+using NAudio.Wave;
 using Application = System.Windows.Application;
 using Screen = System.Windows.Forms.Screen;
 
@@ -668,6 +670,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (clicked) return;
                 clicked = true;
+                PlayPopSound();
                 onHit();
                 FadeOut();
             };
@@ -688,6 +691,39 @@ namespace ConditioningControlPanel.Services
 
             _win.Loaded += (s, e) => _timer.Start();
             _win.Show();
+        }
+
+        private void PlayPopSound()
+        {
+            try
+            {
+                var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
+                var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
+                var rnd = new Random();
+                var chosenPop = popFiles[rnd.Next(popFiles.Length)];
+                var popPath = Path.Combine(soundsPath, chosenPop);
+
+                if (File.Exists(popPath))
+                {
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            using var audioFile = new AudioFileReader(popPath);
+                            audioFile.Volume = 0.6f; // 60% volume for attention target pop
+                            using var outputDevice = new WaveOutEvent();
+                            outputDevice.Init(audioFile);
+                            outputDevice.Play();
+                            while (outputDevice.PlaybackState == PlaybackState.Playing)
+                            {
+                                Thread.Sleep(50);
+                            }
+                        }
+                        catch { }
+                    });
+                }
+            }
+            catch { }
         }
 
         private void FadeOut()

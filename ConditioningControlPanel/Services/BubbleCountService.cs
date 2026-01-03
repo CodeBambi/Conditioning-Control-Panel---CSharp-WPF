@@ -105,15 +105,18 @@ public class BubbleCountService : IDisposable
     public void TriggerGame()
     {
         if (!_isRunning || _isBusy) return;
-        
+
         var settings = App.Settings.Current;
         if (settings.PlayerLevel < 50) return;
-        
+
         _isBusy = true;
-        
+
+        // Pause and clear bubble popping challenge to avoid confusion during counting
+        App.Bubbles?.PauseAndClear();
+
         // Trigger Bambi Freeze subliminal+audio BEFORE bubble count game
         App.Subliminal?.TriggerBambiFreeze();
-        
+
         // Small delay to let the freeze effect register before game starts
         Task.Delay(800).ContinueWith(_ =>
         {
@@ -148,7 +151,10 @@ public class BubbleCountService : IDisposable
     private void OnGameComplete(bool success)
     {
         _isBusy = false;
-        
+
+        // Resume bubble popping challenge
+        App.Bubbles?.Resume();
+
         if (success)
         {
             App.Progression?.AddXP(100);

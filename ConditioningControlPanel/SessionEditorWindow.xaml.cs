@@ -21,8 +21,25 @@ namespace ConditioningControlPanel
         private readonly SessionFileService _fileService;
         private readonly Dictionary<string, FeatureIconState> _iconStates = new();
 
-        // Drag-drop state
+        // Drag-drop state (from feature palette)
         private bool _isDragging;
+
+        // Timeline icon drag state
+        private bool _isTimelineDragging;
+        private Border? _draggedTimelineIcon;
+        private TimelineEvent? _draggedEvent;
+        private Point _dragStartPoint;
+        private double _dragStartCanvasLeft;
+        private int _dragOriginalMinute; // To restore if cancelled
+
+        // Segment (bar) drag state - moves both start and stop together
+        private bool _isSegmentDragging;
+        private Rectangle? _draggedBar;
+        private TimelineEvent? _draggedStartEvent;
+        private TimelineEvent? _draggedStopEvent;
+        private int _segmentDragOriginalStartMinute;
+        private int _segmentDragOriginalStopMinute;
+        private double _segmentDragStartX;
 
         /// <summary>
         /// Result session after save (null if cancelled)
@@ -36,6 +53,10 @@ namespace ConditioningControlPanel
             InitializeComponent();
 
             _fileService = new SessionFileService();
+
+            // Canvas-level mouse handlers for smooth dragging
+            CanvasTimeline.MouseMove += CanvasTimeline_MouseMove;
+            CanvasTimeline.MouseLeftButtonUp += CanvasTimeline_MouseLeftButtonUp;
 
             if (existingSession != null)
             {
@@ -476,6 +497,8 @@ namespace ConditioningControlPanel
             }
         }
 
+        private const int TimelineRowHeight = 28;
+
         private void RenderEvents()
         {
             CanvasTimeline.Children.Clear();
@@ -483,25 +506,33 @@ namespace ConditioningControlPanel
 
             var width = CanvasTimeline.ActualWidth > 0 ? CanvasTimeline.ActualWidth : 800;
 
-            // Track icon positions to detect overlaps
-            var iconPositions = new List<(double x, double y, int minute)>();
+            // Build stable feature row assignments (alphabetically by feature ID for consistency)
+            var featureIds = _session.Events
+                .Select(e => e.FeatureId)
+                .Distinct()
+                .OrderBy(id => id)
+                .ToList();
 
-            // Group events by feature for vertical positioning
             var featureRows = new Dictionary<string, int>();
-            int rowIndex = 0;
+            for (int i = 0; i < featureIds.Count; i++)
+            {
+                featureRows[featureIds[i]] = i;
+            }
 
+            // Update canvas height to fit all rows
+            var requiredHeight = Math.Max(50, featureIds.Count * TimelineRowHeight + 20);
+            CanvasTimeline.Height = requiredHeight;
+
+            // Render each start event with its paired stop
             foreach (var evt in _session.Events.Where(e => e.EventType == TimelineEventType.Start).OrderBy(e => e.Minute))
             {
-                if (!featureRows.ContainsKey(evt.FeatureId))
-                {
-                    featureRows[evt.FeatureId] = rowIndex++;
-                }
-
                 var feature = FeatureDefinition.GetById(evt.FeatureId);
                 if (feature == null) continue;
 
-                var row = featureRows[evt.FeatureId];
-                var baseY = 10 + (row % 4) * 20; // Max 4 rows visible
+                if (!featureRows.TryGetValue(evt.FeatureId, out var row))
+                    continue;
+
+                var rowY = 5 + row * TimelineRowHeight;
 
                 var startX = MinuteToPosition(evt.Minute, width);
                 var stopEvt = _session.GetPairedStopEvent(evt);
@@ -509,45 +540,29 @@ namespace ConditioningControlPanel
                     ? MinuteToPosition(stopEvt.Minute, width)
                     : MinuteToPosition(_session.DurationMinutes, width);
 
-                // Calculate vertical offset for overlapping start icons
-                var startY = baseY;
-                int startOverlapCount = iconPositions.Count(p => Math.Abs(p.x - startX) < 22 && Math.Abs(p.y - baseY) < 22);
-                if (startOverlapCount > 0)
-                {
-                    startY = baseY + (startOverlapCount * 22);
-                }
-                iconPositions.Add((startX, startY, evt.Minute));
-
-                // Calculate vertical offset for overlapping stop icons
-                var stopY = baseY;
-                if (stopEvt != null)
-                {
-                    int stopOverlapCount = iconPositions.Count(p => Math.Abs(p.x - endX) < 22 && Math.Abs(p.y - baseY) < 22);
-                    if (stopOverlapCount > 0)
-                    {
-                        stopY = baseY + (stopOverlapCount * 22);
-                    }
-                    iconPositions.Add((endX, stopY, stopEvt.Minute));
-                }
-
-                // Draw connection bar at the lower of the two positions
-                var barY = Math.Max(startY, stopY);
+                // Draw connection bar (pink duration bar) - draggable to move segment
                 var bar = new Rectangle
                 {
                     Width = Math.Max(endX - startX, 10),
-                    Height = 14,
-                    Fill = new SolidColorBrush(Color.FromArgb(80, 255, 105, 180)),
+                    Height = 16,
+                    Fill = new SolidColorBrush(Color.FromArgb(100, 255, 105, 180)),
                     RadiusX = 4,
-                    RadiusY = 4
+                    RadiusY = 4,
+                    Cursor = Cursors.Hand,
+                    Tag = evt.Id // Store start event ID
                 };
+                bar.MouseLeftButtonDown += SegmentBar_MouseLeftButtonDown;
+                bar.MouseMove += SegmentBar_MouseMove;
+                bar.MouseLeftButtonUp += SegmentBar_MouseLeftButtonUp;
+                bar.MouseRightButtonDown += SegmentBar_RightClick;
                 Canvas.SetLeft(bar, startX);
-                Canvas.SetTop(bar, barY + 3);
+                Canvas.SetTop(bar, rowY + 2);
                 CanvasTimeline.Children.Add(bar);
 
                 // Start icon (green)
                 var startIcon = CreateTimelineIcon(evt, feature, true);
                 Canvas.SetLeft(startIcon, startX - 10);
-                Canvas.SetTop(startIcon, startY);
+                Canvas.SetTop(startIcon, rowY);
                 CanvasTimeline.Children.Add(startIcon);
 
                 // Stop icon (red) if exists
@@ -555,7 +570,7 @@ namespace ConditioningControlPanel
                 {
                     var stopIcon = CreateTimelineIcon(stopEvt, feature, false);
                     Canvas.SetLeft(stopIcon, endX - 10);
-                    Canvas.SetTop(stopIcon, stopY);
+                    Canvas.SetTop(stopIcon, rowY);
                     CanvasTimeline.Children.Add(stopIcon);
                 }
             }
@@ -571,9 +586,9 @@ namespace ConditioningControlPanel
                 Background = isStart
                     ? new SolidColorBrush(Color.FromRgb(76, 175, 80))
                     : new SolidColorBrush(Color.FromRgb(244, 67, 54)),
-                Cursor = Cursors.Hand,
+                Cursor = Cursors.SizeWE, // Horizontal resize cursor to indicate draggable
                 Tag = evt.Id,
-                ToolTip = $"{feature.Name} - {(isStart ? "Start" : "Stop")} at {evt.Minute} min\nClick to edit settings"
+                ToolTip = $"{feature.Name} - {(isStart ? "Start" : "Stop")} at {evt.Minute} min\nDrag to move • Right-click to edit"
             };
 
             var text = new TextBlock
@@ -585,12 +600,43 @@ namespace ConditioningControlPanel
             };
 
             border.Child = text;
-            border.MouseLeftButtonDown += TimelineIcon_Click;
+
+            // Drag handlers for repositioning (left button)
+            border.MouseLeftButtonDown += TimelineIcon_MouseLeftButtonDown;
+            border.MouseMove += TimelineIcon_MouseMove;
+            border.MouseLeftButtonUp += TimelineIcon_MouseLeftButtonUp;
+
+            // Right-click for settings popup
+            border.MouseRightButtonDown += TimelineIcon_RightClick;
 
             return border;
         }
 
-        private void TimelineIcon_Click(object sender, MouseButtonEventArgs e)
+        private void TimelineIcon_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var border = sender as Border;
+            if (border == null) return;
+
+            var eventId = border.Tag as string;
+            if (eventId == null) return;
+
+            var evt = _session.Events.FirstOrDefault(ev => ev.Id == eventId);
+            if (evt == null) return;
+
+            // Start potential drag
+            _draggedTimelineIcon = border;
+            _draggedEvent = evt;
+            _dragStartPoint = e.GetPosition(CanvasTimeline);
+            _dragStartCanvasLeft = Canvas.GetLeft(border);
+            _dragOriginalMinute = evt.Minute; // Store original to restore if needed
+            _isTimelineDragging = false; // Not yet - need to move first
+
+            // Capture mouse on canvas for smooth tracking even when mouse moves fast
+            CanvasTimeline.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void TimelineIcon_RightClick(object sender, MouseButtonEventArgs e)
         {
             var border = sender as Border;
             var eventId = border?.Tag as string;
@@ -601,6 +647,307 @@ namespace ConditioningControlPanel
 
             ShowFeatureSettingsPopup(evt);
             e.Handled = true;
+        }
+
+        private void TimelineIcon_MouseMove(object sender, MouseEventArgs e)
+        {
+            // Delegated to CanvasTimeline_MouseMove for smooth tracking
+        }
+
+        private void CanvasTimeline_MouseMove(object sender, MouseEventArgs e)
+        {
+            // Handle icon dragging
+            if (_draggedTimelineIcon != null && _draggedEvent != null)
+            {
+                HandleIconDrag(e);
+                return;
+            }
+
+            // Handle segment bar dragging
+            if (_draggedBar != null && _draggedStartEvent != null)
+            {
+                HandleSegmentDrag(e);
+            }
+        }
+
+        private void HandleIconDrag(MouseEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                // Cancelled - restore original minute
+                if (_isTimelineDragging && _draggedEvent != null)
+                {
+                    _draggedEvent.Minute = _dragOriginalMinute;
+                    RefreshTimeline();
+                }
+                CanvasTimeline.ReleaseMouseCapture();
+                ResetTimelineDrag();
+                return;
+            }
+
+            var currentPos = e.GetPosition(CanvasTimeline);
+            var delta = currentPos.X - _dragStartPoint.X;
+
+            // Start dragging if moved more than 5 pixels
+            if (!_isTimelineDragging && Math.Abs(delta) > 5)
+            {
+                _isTimelineDragging = true;
+            }
+
+            if (_isTimelineDragging && _draggedTimelineIcon != null && _draggedEvent != null)
+            {
+                // Calculate new position
+                var newLeft = _dragStartCanvasLeft + delta;
+                newLeft = Math.Max(0, Math.Min(newLeft, CanvasTimeline.ActualWidth - 20));
+
+                // Move the icon visually
+                Canvas.SetLeft(_draggedTimelineIcon, newLeft);
+
+                // Calculate and validate new minute
+                var newMinute = PositionToMinute(newLeft + 10);
+                ApplyTimelineDrag(_draggedEvent, newMinute);
+
+                // Update the associated bar visually
+                UpdateBarVisual(_draggedEvent);
+            }
+        }
+
+        private void HandleSegmentDrag(MouseEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                if (_isSegmentDragging && _draggedStartEvent != null)
+                {
+                    _draggedStartEvent.Minute = _segmentDragOriginalStartMinute;
+                    if (_draggedStopEvent != null)
+                        _draggedStopEvent.Minute = _segmentDragOriginalStopMinute;
+                    RefreshTimeline();
+                }
+                CanvasTimeline.ReleaseMouseCapture();
+                ResetSegmentDrag();
+                return;
+            }
+
+            var currentX = e.GetPosition(CanvasTimeline).X;
+            var deltaX = currentX - _segmentDragStartX;
+
+            if (!_isSegmentDragging && Math.Abs(deltaX) > 5)
+            {
+                _isSegmentDragging = true;
+                if (_draggedBar != null) _draggedBar.Opacity = 0.7;
+            }
+
+            if (_isSegmentDragging && _draggedBar != null && _draggedStartEvent != null)
+            {
+                var width = CanvasTimeline.ActualWidth > 0 ? CanvasTimeline.ActualWidth : 800;
+
+                // Calculate minute delta
+                var originalStartX = MinuteToPosition(_segmentDragOriginalStartMinute, width);
+                var newStartX = originalStartX + deltaX;
+                var newStartMinute = PositionToMinute(newStartX);
+
+                // Calculate the duration to preserve
+                var duration = _segmentDragOriginalStopMinute - _segmentDragOriginalStartMinute;
+
+                // Clamp so segment stays in bounds
+                newStartMinute = Math.Max(0, newStartMinute);
+                if (_draggedStopEvent != null)
+                {
+                    newStartMinute = Math.Min(newStartMinute, _session.DurationMinutes - duration);
+                }
+
+                var newStopMinute = newStartMinute + duration;
+
+                // Apply new minutes
+                _draggedStartEvent.Minute = newStartMinute;
+                if (_draggedStopEvent != null)
+                    _draggedStopEvent.Minute = newStopMinute;
+
+                // Update visuals directly
+                var startX = MinuteToPosition(newStartMinute, width);
+                var endX = MinuteToPosition(newStopMinute, width);
+
+                Canvas.SetLeft(_draggedBar, startX);
+
+                // Find and move the icons too
+                foreach (var child in CanvasTimeline.Children)
+                {
+                    if (child is Border icon)
+                    {
+                        var iconEventId = icon.Tag as string;
+                        if (iconEventId == _draggedStartEvent.Id)
+                        {
+                            Canvas.SetLeft(icon, startX - 10);
+                        }
+                        else if (_draggedStopEvent != null && iconEventId == _draggedStopEvent.Id)
+                        {
+                            Canvas.SetLeft(icon, endX - 10);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void UpdateBarVisual(TimelineEvent evt)
+        {
+            // Find the bar associated with this event
+            var width = CanvasTimeline.ActualWidth > 0 ? CanvasTimeline.ActualWidth : 800;
+
+            TimelineEvent? startEvt = null;
+            TimelineEvent? stopEvt = null;
+
+            if (evt.EventType == TimelineEventType.Start)
+            {
+                startEvt = evt;
+                stopEvt = _session.GetPairedStopEvent(evt);
+            }
+            else
+            {
+                // Find the start event for this stop
+                startEvt = _session.Events.FirstOrDefault(e =>
+                    e.EventType == TimelineEventType.Start && e.PairedEventId == evt.Id);
+                stopEvt = evt;
+            }
+
+            if (startEvt == null) return;
+
+            // Find the bar with this start event ID
+            foreach (var child in CanvasTimeline.Children)
+            {
+                if (child is Rectangle bar && bar.Tag as string == startEvt.Id)
+                {
+                    var startX = MinuteToPosition(startEvt.Minute, width);
+                    var endX = stopEvt != null
+                        ? MinuteToPosition(stopEvt.Minute, width)
+                        : MinuteToPosition(_session.DurationMinutes, width);
+
+                    Canvas.SetLeft(bar, startX);
+                    bar.Width = Math.Max(endX - startX, 10);
+                    break;
+                }
+            }
+        }
+
+        private void TimelineIcon_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            // Delegated to CanvasTimeline_MouseLeftButtonUp
+        }
+
+        private void CanvasTimeline_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            CanvasTimeline.ReleaseMouseCapture();
+
+            if (_isTimelineDragging)
+            {
+                RefreshTimeline();
+                RefreshStats();
+            }
+
+            if (_isSegmentDragging)
+            {
+                if (_draggedBar != null) _draggedBar.Opacity = 1.0;
+                RefreshTimeline();
+                RefreshStats();
+            }
+
+            ResetTimelineDrag();
+            ResetSegmentDrag();
+        }
+
+        #region Segment Bar Dragging
+
+        private void SegmentBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var bar = sender as Rectangle;
+            if (bar == null) return;
+
+            var startEventId = bar.Tag as string;
+            if (startEventId == null) return;
+
+            var startEvt = _session.Events.FirstOrDefault(ev => ev.Id == startEventId);
+            if (startEvt == null) return;
+
+            var stopEvt = _session.GetPairedStopEvent(startEvt);
+
+            _draggedBar = bar;
+            _draggedStartEvent = startEvt;
+            _draggedStopEvent = stopEvt;
+            _segmentDragOriginalStartMinute = startEvt.Minute;
+            _segmentDragOriginalStopMinute = stopEvt?.Minute ?? _session.DurationMinutes;
+            _segmentDragStartX = e.GetPosition(CanvasTimeline).X;
+            _isSegmentDragging = false;
+
+            // Capture mouse on canvas for smooth tracking
+            CanvasTimeline.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void SegmentBar_MouseMove(object sender, MouseEventArgs e)
+        {
+            // Delegated to CanvasTimeline_MouseMove
+        }
+
+        private void SegmentBar_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            // Delegated to CanvasTimeline_MouseLeftButtonUp
+        }
+
+        private void SegmentBar_RightClick(object sender, MouseButtonEventArgs e)
+        {
+            var bar = sender as Rectangle;
+            var startEventId = bar?.Tag as string;
+            if (startEventId == null) return;
+
+            var evt = _session.Events.FirstOrDefault(ev => ev.Id == startEventId);
+            if (evt == null) return;
+
+            ShowFeatureSettingsPopup(evt);
+            e.Handled = true;
+        }
+
+        private void ResetSegmentDrag()
+        {
+            _isSegmentDragging = false;
+            _draggedBar = null;
+            _draggedStartEvent = null;
+            _draggedStopEvent = null;
+        }
+
+        #endregion
+
+        private void ApplyTimelineDrag(TimelineEvent evt, int newMinute)
+        {
+            // Clamp to valid range
+            newMinute = Math.Max(0, Math.Min(newMinute, _session.DurationMinutes));
+
+            if (evt.EventType == TimelineEventType.Start)
+            {
+                // For start events, ensure it doesn't go past its stop event
+                var stopEvt = _session.GetPairedStopEvent(evt);
+                if (stopEvt != null && newMinute >= stopEvt.Minute)
+                {
+                    newMinute = Math.Max(0, stopEvt.Minute - 1);
+                }
+                evt.Minute = newMinute;
+            }
+            else // Stop event
+            {
+                // For stop events, ensure it doesn't go before its start event
+                var startEvt = _session.Events.FirstOrDefault(e =>
+                    e.EventType == TimelineEventType.Start && e.PairedEventId == evt.Id);
+                if (startEvt != null && newMinute <= startEvt.Minute)
+                {
+                    newMinute = Math.Min(_session.DurationMinutes, startEvt.Minute + 1);
+                }
+                evt.Minute = newMinute;
+            }
+        }
+
+        private void ResetTimelineDrag()
+        {
+            _isTimelineDragging = false;
+            _draggedTimelineIcon = null;
+            _draggedEvent = null;
         }
 
         // Padding to prevent icons from being clipped at edges

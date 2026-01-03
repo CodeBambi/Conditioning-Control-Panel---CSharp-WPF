@@ -8,7 +8,8 @@
         WindowState="Maximized"
         Topmost="True"
         ShowInTaskbar="False"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        FontFamily="Comic Sans MS, Segoe UI">
     
     <Grid>
         <!-- Semi-transparent background -->
@@ -29,11 +30,15 @@
             <StackPanel>
                 <!-- Title -->
                 <TextBlock Text="🫧 How Many Bubbles? 🫧"
-                           FontSize="36"
+                           FontSize="40"
                            FontWeight="Bold"
                            Foreground="#FF69B4"
                            HorizontalAlignment="Center"
-                           Margin="0,0,0,20"/>
+                           Margin="0,0,0,20">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.6"/>
+                    </TextBlock.Effect>
+                </TextBlock>
                 
                 <!-- Instruction -->
                 <TextBlock Text="Enter the number of bubbles you counted:"

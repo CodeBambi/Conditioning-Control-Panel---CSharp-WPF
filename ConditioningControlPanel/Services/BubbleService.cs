@@ -27,7 +27,10 @@ public class BubbleService : IDisposable
     private string _assetsPath = "";
 
     public bool IsRunning => _isRunning;
+    public bool IsPaused => _isPaused;
     public int ActiveBubbles => _bubbles.Count;
+
+    private bool _isPaused;
 
     public event Action? OnBubblePopped;
     public event Action? OnBubbleMissed;
@@ -85,15 +88,42 @@ public class BubbleService : IDisposable
     public void RefreshFrequency()
     {
         if (!_isRunning || _spawnTimer == null) return;
-        
+
         _spawnTimer.Stop();
-        
+
         var intervalMs = 60000.0 / Math.Max(1, App.Settings.Current.BubblesFrequency);
         _spawnTimer.Interval = TimeSpan.FromMilliseconds(intervalMs);
-        
+
         _spawnTimer.Start();
-        
+
         App.Logger?.Information("BubbleService frequency updated to {Freq} bubbles/min", App.Settings.Current.BubblesFrequency);
+    }
+
+    /// <summary>
+    /// Pause bubble spawning and clear all active bubbles (for bubble count minigame)
+    /// </summary>
+    public void PauseAndClear()
+    {
+        if (!_isRunning) return;
+
+        _isPaused = true;
+        _spawnTimer?.Stop();
+        PopAllBubbles();
+
+        App.Logger?.Debug("BubbleService paused and cleared for minigame");
+    }
+
+    /// <summary>
+    /// Resume bubble spawning after pause
+    /// </summary>
+    public void Resume()
+    {
+        if (!_isRunning || !_isPaused) return;
+
+        _isPaused = false;
+        _spawnTimer?.Start();
+
+        App.Logger?.Debug("BubbleService resumed");
     }
 
             private void LoadBubbleImage()

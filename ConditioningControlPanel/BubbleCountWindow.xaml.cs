@@ -327,17 +327,20 @@ namespace ConditioningControlPanel
                 // Use canvas actual size for positioning
                 var canvasWidth = BubbleCanvas.ActualWidth > 0 ? BubbleCanvas.ActualWidth : ActualWidth;
                 var canvasHeight = BubbleCanvas.ActualHeight > 0 ? BubbleCanvas.ActualHeight : ActualHeight;
-                
+
                 var x = relX * canvasWidth - size / 2;
                 var y = relY * canvasHeight - size / 2;
-                
-                // Only primary plays sound
-                var bubble = new CountBubble(_bubbleImage, size, x, y, _random, 
+
+                // Play pop sound when bubble appears (only primary)
+                if (_isPrimary) PlayPopSound();
+
+                // Only primary plays sound on pop
+                var bubble = new CountBubble(_bubbleImage, size, x, y, _random,
                     _isPrimary ? PlayPopSound : null, OnBubblePopped);
                 _activeBubbles.Add(bubble);
                 BubbleCanvas.Children.Add(bubble.Visual);
-                
-                App.Logger?.Debug("Spawned bubble #{Count} at ({X:F0}, {Y:F0}) on {Primary}", 
+
+                App.Logger?.Debug("Spawned bubble #{Count} at ({X:F0}, {Y:F0}) on {Primary}",
                     _sharedBubbleCount, x, y, _isPrimary ? "primary" : "secondary");
             }
             catch (Exception ex)
@@ -368,7 +371,7 @@ namespace ConditioningControlPanel
                         try
                         {
                             using var audioFile = new AudioFileReader(popPath);
-                            audioFile.Volume = 0.5f;
+                            audioFile.Volume = 0.1f; // 10% volume - subtle sound for counting bubbles
                             using var outputDevice = new WaveOutEvent();
                             outputDevice.Init(audioFile);
                             outputDevice.Play();

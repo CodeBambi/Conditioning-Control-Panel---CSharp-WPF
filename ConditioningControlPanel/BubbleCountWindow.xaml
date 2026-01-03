@@ -8,55 +8,61 @@
         Topmost="True"
         ShowInTaskbar="False"
         ShowActivated="True"
-        ResizeMode="NoResize">
-    
+        ResizeMode="NoResize"
+        FontFamily="Comic Sans MS, Segoe UI">
+
     <Grid x:Name="MainGrid">
         <!-- Video Player Background -->
-        <MediaElement x:Name="VideoPlayer" 
+        <MediaElement x:Name="VideoPlayer"
                       LoadedBehavior="Manual"
                       UnloadedBehavior="Manual"
                       Stretch="Uniform"
                       MediaEnded="VideoPlayer_MediaEnded"
                       MediaOpened="VideoPlayer_MediaOpened"
                       MediaFailed="VideoPlayer_MediaFailed"/>
-        
+
         <!-- Bubble Overlay Canvas -->
-        <Canvas x:Name="BubbleCanvas" 
+        <Canvas x:Name="BubbleCanvas"
                 Background="Transparent"
                 IsHitTestVisible="False"/>
-        
+
         <!-- Top Info Bar -->
-        <Border Background="#80000000" 
-                VerticalAlignment="Top" 
+        <Border Background="#80000000"
+                VerticalAlignment="Top"
                 Padding="20,10">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <TextBlock Text="🫧 COUNT THE BUBBLES! 🫧" 
-                           FontSize="28" 
-                           FontWeight="Bold" 
-                           Foreground="#FF69B4"/>
+                <TextBlock Text="🫧 COUNT THE BUBBLES! 🫧"
+                           FontSize="32"
+                           FontWeight="Bold"
+                           Foreground="#FF69B4">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.6"/>
+                    </TextBlock.Effect>
+                </TextBlock>
                 <TextBlock x:Name="TxtDifficulty"
-                           Text=" (Medium)" 
-                           FontSize="20" 
+                           Text=" (Medium)"
+                           FontSize="22"
                            Foreground="#FFB6C1"
                            VerticalAlignment="Center"
                            Margin="10,0,0,0"/>
             </StackPanel>
         </Border>
-        
+
         <!-- Strict Mode Indicator -->
         <TextBlock x:Name="TxtStrict"
                    Text="🔒 STRICT"
-                   FontSize="16"
+                   FontSize="18"
+                   FontWeight="Bold"
                    Foreground="#FF6B6B"
                    VerticalAlignment="Top"
                    HorizontalAlignment="Right"
                    Margin="0,15,20,0"
                    Visibility="Collapsed"/>
-        
+
         <!-- ESC Hint -->
         <TextBlock x:Name="TxtEscHint"
                    Text="Press ESC to skip (won't earn XP)"
-                   FontSize="14"
+                   FontSize="16"
                    Foreground="#888888"
                    VerticalAlignment="Bottom"
                    HorizontalAlignment="Center"

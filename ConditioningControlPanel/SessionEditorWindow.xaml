@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:ConditioningControlPanel"
         Title="Session Editor"
-        Height="630" Width="630"
-        MinHeight="560" MinWidth="560"
+        Height="765" Width="765"
+        MinHeight="680" MinWidth="680"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -87,7 +87,7 @@
 
     <Grid>
         <Grid.LayoutTransform>
-            <ScaleTransform ScaleX="0.7" ScaleY="0.7"/>
+            <ScaleTransform ScaleX="0.85" ScaleY="0.85"/>
         </Grid.LayoutTransform>
         <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
             <Grid>
@@ -174,34 +174,35 @@
             </Grid>
 
             <!-- Timeline -->
-            <Border Grid.Row="3" Background="#1E1E3A" CornerRadius="8" Margin="30,10,30,10" Padding="15">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>  <!-- Minute markers -->
-                            <RowDefinition Height="200"/>    <!-- Timeline track -->
-                        </Grid.RowDefinitions>
+            <Border Grid.Row="3" Background="#1E1E3A" CornerRadius="8" Margin="30,10,30,10" Padding="15"
+                    MaxHeight="220">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>  <!-- Minute markers -->
+                        <RowDefinition Height="*"/>     <!-- Timeline track (scrollable) -->
+                    </Grid.RowDefinitions>
 
-                        <!-- Minute Markers -->
-                        <Canvas x:Name="CanvasMarkers" Grid.Row="0" Height="20" Margin="0,0,0,5"/>
+                    <!-- Minute Markers -->
+                    <Canvas x:Name="CanvasMarkers" Grid.Row="0" Height="20" Margin="0,0,0,5"/>
 
-                        <!-- Timeline Track (drop zone) -->
-                        <Border Grid.Row="1" Background="#252542" CornerRadius="6"
-                                AllowDrop="True"
-                                DragEnter="Timeline_DragEnter"
-                                DragOver="Timeline_DragOver"
-                                DragLeave="Timeline_DragLeave"
-                                Drop="Timeline_Drop">
-                            <Canvas x:Name="CanvasTimeline" ClipToBounds="True">
+                    <!-- Timeline Track (drop zone) with scroll -->
+                    <Border Grid.Row="1" Background="#252542" CornerRadius="6"
+                            AllowDrop="True"
+                            DragEnter="Timeline_DragEnter"
+                            DragOver="Timeline_DragOver"
+                            DragLeave="Timeline_DragLeave"
+                            Drop="Timeline_Drop">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <Canvas x:Name="CanvasTimeline" ClipToBounds="True" MinHeight="50">
                                 <!-- Timeline events will be added here dynamically -->
                                 <TextBlock Text="Drag features here to add them to the timeline"
                                            Foreground="#555" FontSize="12" FontStyle="Italic"
-                                           Canvas.Left="10" Canvas.Top="30"
+                                           Canvas.Left="10" Canvas.Top="15"
                                            x:Name="TxtTimelineHint"/>
                             </Canvas>
-                        </Border>
-                    </Grid>
-                </ScrollViewer>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
             </Border>
 
             <!-- Feature Icons Grid - Horizontal Layout -->
