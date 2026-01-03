@@ -523,11 +523,19 @@ namespace ConditioningControlPanel
                         Stretch = System.Windows.Media.Stretch.Uniform
                     };
 
+                    // Normalize path separators for Windows
+                    var normalizedPath = feature.ImagePath.Replace('/', System.IO.Path.DirectorySeparatorChar);
+
                     // First try file system path (allows user customization)
-                    var filePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, feature.ImagePath);
+                    var filePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, normalizedPath);
                     if (System.IO.File.Exists(filePath))
                     {
-                        image.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(filePath, UriKind.Absolute));
+                        var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                        bitmap.BeginInit();
+                        bitmap.UriSource = new Uri(filePath, UriKind.Absolute);
+                        bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                        bitmap.EndInit();
+                        image.Source = bitmap;
                         return image;
                     }
 
