@@ -486,14 +486,15 @@ namespace ConditioningControlPanel
     /// </summary>
     internal class CountBubble : IDisposable
     {
-        public Image Visual { get; }
-        
+        public FrameworkElement Visual { get; }
+        private readonly Image _imageElement;
+
         private readonly DispatcherTimer _lifeTimer;
         private readonly DispatcherTimer _animTimer;
         private readonly Action? _playSound;
         private readonly Action<CountBubble> _onPopped;
         private readonly Random _random;
-        
+
         private double _scale = 0.1;
         private double _targetScale = 1.0;
         private double _opacity = 1.0;
@@ -501,31 +502,36 @@ namespace ConditioningControlPanel
         private bool _isPopping = false;
         private bool _isDisposed = false;
 
-        public CountBubble(BitmapImage? image, int size, double x, double y, 
+        public CountBubble(BitmapImage? image, int size, double x, double y,
             Random random, Action? playSound, Action<CountBubble> onPopped)
         {
             _random = random;
             _playSound = playSound;
             _onPopped = onPopped;
             _rotation = random.Next(360);
-            
-            Visual = new Image
+
+            _imageElement = new Image
+            {
+                Stretch = Stretch.Uniform,
+                Source = image
+            };
+
+            var border = new Border
             {
                 Width = size,
                 Height = size,
-                Stretch = Stretch.Uniform,
+                CornerRadius = new CornerRadius(size / 2.0),
+                ClipToBounds = true,
+                Child = _imageElement,
                 RenderTransformOrigin = new Point(0.5, 0.5),
                 Opacity = 0
             };
-            
+            Visual = border;
+
             Canvas.SetLeft(Visual, x);
             Canvas.SetTop(Visual, y);
-            
-            if (image != null)
-            {
-                Visual.Source = image;
-            }
-            else
+
+            if (image == null)
             {
                 // Fallback gradient bubble
                 var drawing = new DrawingGroup();
@@ -537,20 +543,20 @@ namespace ConditioningControlPanel
                     ctx.DrawEllipse(gradientBrush, new Pen(Brushes.White, 2),
                         new Point(size / 2, size / 2), size / 2 - 5, size / 2 - 5);
                 }
-                Visual.Source = new DrawingImage(drawing);
+                _imageElement.Source = new DrawingImage(drawing);
             }
-            
+
             // Transform for scale and rotation
             var transformGroup = new TransformGroup();
             transformGroup.Children.Add(new ScaleTransform(_scale, _scale));
             transformGroup.Children.Add(new RotateTransform(_rotation));
             Visual.RenderTransform = transformGroup;
-            
+
             // Animation timer
             _animTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
             _animTimer.Tick += Animate;
             _animTimer.Start();
-            
+
             // Life timer - bubble stays for 1-1.5 seconds then pops
             var lifespan = 1000 + random.Next(500);
             _lifeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(lifespan) };
@@ -565,7 +571,7 @@ namespace ConditioningControlPanel
         private void Animate(object? sender, EventArgs e)
         {
             if (_isDisposed) return;
-            
+
             try
             {
                 if (_isPopping)
@@ -573,7 +579,7 @@ namespace ConditioningControlPanel
                     _scale += 0.08;
                     _opacity -= 0.12;
                     _rotation += 5;
-                    
+
                     if (_opacity <= 0)
                     {
                         _animTimer.Stop();
@@ -589,9 +595,9 @@ namespace ConditioningControlPanel
                     }
                     _rotation += 0.5;
                 }
-                
+
                 Visual.Opacity = Math.Max(0, _opacity);
-                
+
                 if (Visual.RenderTransform is TransformGroup tg && tg.Children.Count >= 2)
                 {
                     if (tg.Children[0] is ScaleTransform st)

@@ -697,5 +697,32 @@ namespace ConditioningControlPanel.Models
                 Settings = ToSessionSettings()
             };
         }
+
+        /// <summary>
+        /// Checks if a new time range for a feature overlaps with existing segments.
+        /// </summary>
+        public bool IsOverlapping(string featureId, int startMinute, int endMinute, string? excludeEventId = null)
+        {
+            var featureStartEvents = Events.Where(e =>
+                e.FeatureId == featureId &&
+                e.EventType == TimelineEventType.Start &&
+                e.Id != excludeEventId &&
+                (e.PairedEventId != excludeEventId || excludeEventId == null));
+
+            foreach (var startEvt in featureStartEvents)
+            {
+                var stopEvt = GetPairedStopEvent(startEvt);
+                if (stopEvt != null)
+                {
+                    // Check for overlap: (StartA < EndB) and (EndA > StartB)
+                    if (startMinute < stopEvt.Minute && endMinute > startEvt.Minute)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
     }
 }

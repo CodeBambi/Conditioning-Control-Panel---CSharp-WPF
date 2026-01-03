@@ -71,8 +71,8 @@
         <Style x:Key="FeatureIcon" TargetType="Border">
             <Setter Property="Background" Value="#252542"/>
             <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Width" Value="75"/>
-            <Setter Property="Height" Value="75"/>
+            <Setter Property="Width" Value="98"/>
+            <Setter Property="Height" Value="98"/>
             <Setter Property="Margin" Value="6"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
@@ -87,7 +87,7 @@
 
     <Grid>
         <Grid.LayoutTransform>
-            <ScaleTransform ScaleX="0.85" ScaleY="0.85"/>
+            <ScaleTransform ScaleX="0.935" ScaleY="0.935"/>
         </Grid.LayoutTransform>
         <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
             <Grid>
@@ -186,21 +186,22 @@
                     <Canvas x:Name="CanvasMarkers" Grid.Row="0" Height="20" Margin="0,0,0,5"/>
 
                     <!-- Timeline Track (drop zone) - scrollable canvas without ScrollViewer for proper drag handling -->
-                    <Border Grid.Row="1" Background="#252542" CornerRadius="6"
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,20,0">
+                        <Border Background="#252542" CornerRadius="6"
                             AllowDrop="True"
                             DragEnter="Timeline_DragEnter"
                             DragOver="Timeline_DragOver"
                             DragLeave="Timeline_DragLeave"
-                            Drop="Timeline_Drop"
-                            ClipToBounds="True">
-                        <Canvas x:Name="CanvasTimeline" ClipToBounds="True" MinHeight="50" Background="Transparent">
-                            <!-- Timeline events will be added here dynamically -->
-                            <TextBlock Text="Drag features here to add them to the timeline"
+                            Drop="Timeline_Drop">
+                            <Canvas x:Name="CanvasTimeline" ClipToBounds="True" MinHeight="50" Background="Transparent">
+                                <!-- Timeline events will be added here dynamically -->
+                                <TextBlock Text="Drag features here to add them to the timeline"
                                        Foreground="#555" FontSize="12" FontStyle="Italic"
                                        Canvas.Left="10" Canvas.Top="15"
                                        x:Name="TxtTimelineHint"/>
-                        </Canvas>
-                    </Border>
+                            </Canvas>
+                        </Border>
+                    </ScrollViewer>
                 </Grid>
             </Border>
 

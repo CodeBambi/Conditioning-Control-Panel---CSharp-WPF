@@ -316,7 +316,7 @@
         <!-- Achievement Tile Style -->
         <Style x:Key="AchievementTile" TargetType="Border">
             <Setter Property="Background" Value="#1E1E3A"/>
-            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="CornerRadius" Value="15"/>
             <Setter Property="Margin" Value="4"/>
             <Setter Property="Padding" Value="5"/>
             <Setter Property="MinHeight" Value="100"/>
@@ -327,7 +327,7 @@
         <Style x:Key="FeatureImageBorder" TargetType="Border">
             <Setter Property="Width" Value="180"/>
             <Setter Property="Height" Value="180"/>
-            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="CornerRadius" Value="15"/>
             <Setter Property="Background" Value="#1A1A2E"/>
             <Setter Property="Margin" Value="10,0,0,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -685,9 +685,11 @@ Bimbo" Foreground="#FF69B4"
                     <Border Background="#01000000" Padding="0" Height="280" Margin="0,0,0,8"
                             Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                             ToolTip="Click me rapidly! 💗">
-                        <Image x:Name="ImgLogo" Stretch="Uniform" 
-                               HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <Border CornerRadius="20" ClipToBounds="True">
+                            <Image x:Name="ImgLogo" Stretch="Uniform"
+                                   HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                        </Border>
                     </Border>
                 </StackPanel>
             </ScrollViewer>
@@ -2305,13 +2307,15 @@ Bimbo" Foreground="#FF69B4"
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border Background="Transparent">
-                                        <Image x:Name="DiscordImage"
-                                               Source="pack://application:,,,/Resources/discord.png"
-                                               Width="210" Stretch="Uniform" RenderTransformOrigin="0.5,0.5">
-                                            <Image.RenderTransform>
-                                                <ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/>
-                                            </Image.RenderTransform>
-                                        </Image>
+                                        <Border CornerRadius="15" ClipToBounds="True">
+                                            <Image x:Name="DiscordImage"
+                                                   Source="pack://application:,,,/Resources/discord.png"
+                                                   Width="210" Stretch="Uniform" RenderTransformOrigin="0.5,0.5">
+                                                <Image.RenderTransform>
+                                                    <ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/>
+                                                </Image.RenderTransform>
+                                            </Image>
+                                        </Border>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <EventTrigger RoutedEvent="MouseEnter">

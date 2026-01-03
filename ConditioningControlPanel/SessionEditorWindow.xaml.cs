@@ -173,8 +173,8 @@ namespace ConditioningControlPanel
             {
                 Background = new SolidColorBrush(Color.FromRgb(37, 37, 66)), // #252542
                 CornerRadius = new CornerRadius(10),
-                Width = 75,
-                Height = 75,
+                Width = 98,
+                Height = 98,
                 Margin = new Thickness(6),
                 Cursor = Cursors.Hand,
                 Tag = feature.Id,
@@ -184,7 +184,7 @@ namespace ConditioningControlPanel
             var grid = new Grid();
 
             // Try to load PNG image, fallback to emoji
-            var content = CreateFeatureIconContent(feature, 67);
+            var content = CreateFeatureIconContent(feature, 89);
             grid.Children.Add(content);
 
             border.Child = grid;
@@ -313,6 +313,13 @@ namespace ConditioningControlPanel
             if (defaultDuration < 1) defaultDuration = 1;
             var endMinute = Math.Min(startMinute + defaultDuration, _session.DurationMinutes);
 
+            // Prevent overlapping segments
+            if (_session.IsOverlapping(featureId, startMinute, endMinute))
+            {
+                MessageBox.Show("Segments for the same feature cannot overlap.", "Overlap Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             // Add start event
             var startEvt = _session.AddStartEvent(featureId, startMinute);
 
@@ -390,7 +397,7 @@ namespace ConditioningControlPanel
             }
         }
 
-        private const int TimelineRowHeight = 34;
+        private const int TimelineRowHeight = 64;
 
         private void RenderEvents()
         {
@@ -455,16 +462,16 @@ namespace ConditioningControlPanel
 
                 // Start icon (green)
                 var startIcon = CreateTimelineIcon(evt, feature, true);
-                Canvas.SetLeft(startIcon, startX - 10);
-                Canvas.SetTop(startIcon, rowY);
+                Canvas.SetLeft(startIcon, startX - 27);
+                Canvas.SetTop(startIcon, rowY - 22);
                 CanvasTimeline.Children.Add(startIcon);
 
                 // Stop icon (red) if exists
                 if (stopEvt != null)
                 {
                     var stopIcon = CreateTimelineIcon(stopEvt, feature, false);
-                    Canvas.SetLeft(stopIcon, endX - 10);
-                    Canvas.SetTop(stopIcon, rowY);
+                    Canvas.SetLeft(stopIcon, endX - 27);
+                    Canvas.SetTop(stopIcon, rowY - 22);
                     CanvasTimeline.Children.Add(stopIcon);
                 }
             }
@@ -474,19 +481,19 @@ namespace ConditioningControlPanel
         {
             var border = new Border
             {
-                Width = 28,
-                Height = 28,
-                CornerRadius = new CornerRadius(4),
-                Background = isStart
-                    ? new SolidColorBrush(Color.FromRgb(76, 175, 80))   // Green
-                    : new SolidColorBrush(Color.FromRgb(244, 67, 54)), // Red
+                Width = 54,
+                Height = 54,
+                CornerRadius = new CornerRadius(15),
+                Background = Brushes.Transparent, // Removed green/red color
                 Cursor = Cursors.SizeWE, // Horizontal resize cursor to indicate draggable
                 Tag = evt.Id,
-                ToolTip = $"{feature.Name} - {(isStart ? "Start" : "Stop")} at {evt.Minute} min\nDrag to move • Right-click to edit"
+                ToolTip = $"{feature.Name} - {(isStart ? "Start" : "Stop")} at {evt.Minute} min\nDrag to move • Right-click to edit",
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 5, 0, 5)
             };
 
             // Try to load PNG image, fallback to emoji
-            var content = CreateFeatureIconContent(feature, 20);
+            var content = CreateFeatureIconContent(feature, 44);
             border.Child = content;
 
             // Drag handlers for repositioning (left button)
@@ -669,6 +676,12 @@ namespace ConditioningControlPanel
 
                 var newStopMinute = newStartMinute + duration;
 
+                if (_session.IsOverlapping(_draggedStartEvent.FeatureId, newStartMinute, newStopMinute, _draggedStartEvent.Id))
+                {
+                    // Overlap detected, do not apply change.
+                    return;
+                }
+
                 // Apply new minutes
                 _draggedStartEvent.Minute = newStartMinute;
                 if (_draggedStopEvent != null)
@@ -831,27 +844,42 @@ namespace ConditioningControlPanel
             // Clamp to valid range
             newMinute = Math.Max(0, Math.Min(newMinute, _session.DurationMinutes));
 
+            int startMinute, endMinute;
+            
             if (evt.EventType == TimelineEventType.Start)
             {
-                // For start events, ensure it doesn't go past its stop event
                 var stopEvt = _session.GetPairedStopEvent(evt);
-                if (stopEvt != null && newMinute >= stopEvt.Minute)
+                if (stopEvt == null) return;
+                startMinute = newMinute;
+                endMinute = stopEvt.Minute;
+
+                // For start events, ensure it doesn't go past its stop event
+                if (startMinute >= endMinute)
                 {
-                    newMinute = Math.Max(0, stopEvt.Minute - 1);
+                    startMinute = Math.Max(0, endMinute - 1);
                 }
-                evt.Minute = newMinute;
             }
             else // Stop event
             {
+                var startEvt = _session.Events.FirstOrDefault(e => e.EventType == TimelineEventType.Start && e.PairedEventId == evt.Id);
+                if (startEvt == null) return;
+                startMinute = startEvt.Minute;
+                endMinute = newMinute;
+
                 // For stop events, ensure it doesn't go before its start event
-                var startEvt = _session.Events.FirstOrDefault(e =>
-                    e.EventType == TimelineEventType.Start && e.PairedEventId == evt.Id);
-                if (startEvt != null && newMinute <= startEvt.Minute)
+                if (endMinute <= startMinute)
                 {
-                    newMinute = Math.Min(_session.DurationMinutes, startEvt.Minute + 1);
+                    endMinute = Math.Min(_session.DurationMinutes, startMinute + 1);
                 }
-                evt.Minute = newMinute;
             }
+
+            if (_session.IsOverlapping(evt.FeatureId, startMinute, endMinute, evt.Id))
+            {
+                // Overlap detected, don't apply the change. The UI will snap back in RefreshTimeline.
+                return;
+            }
+            
+            evt.Minute = newMinute;
         }
 
         private void ResetTimelineDrag()
@@ -862,7 +890,7 @@ namespace ConditioningControlPanel
         }
 
         // Padding to prevent icons from being clipped at edges
-        private const double TimelinePadding = 15;
+        private const double TimelinePadding = 45;
 
         private double MinuteToPosition(int minute, double width)
         {
