@@ -3,13 +3,14 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:ConditioningControlPanel"
         Title="Session Editor"
-        Height="900" Width="900"
-        MinHeight="800" MinWidth="800"
+        Height="630" Width="630"
+        MinHeight="560" MinWidth="560"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
-        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+        MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        PreviewMouseDown="Window_PreviewMouseDown">
 
     <Window.Resources>
         <!-- Pink Button Style -->
@@ -85,6 +86,9 @@
     </Window.Resources>
 
     <Grid>
+        <Grid.LayoutTransform>
+            <ScaleTransform ScaleX="0.7" ScaleY="0.7"/>
+        </Grid.LayoutTransform>
         <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
             <Grid>
             <Grid.RowDefinitions>
@@ -296,7 +300,7 @@
         </Border>
 
         <!-- Popup overlay for settings -->
-        <Popup x:Name="SettingsPopup" Placement="Mouse" StaysOpen="False"
+        <Popup x:Name="SettingsPopup" Placement="Mouse" StaysOpen="True"
                AllowsTransparency="True" PopupAnimation="Fade">
             <local:FeatureSettingsPopup x:Name="FeatureSettings"/>
         </Popup>

@@ -64,6 +64,26 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            // Close popup if clicking outside of it
+            if (SettingsPopup.IsOpen)
+            {
+                // Check if click is inside the popup
+                var popupContent = FeatureSettings;
+                if (popupContent != null)
+                {
+                    var mousePos = e.GetPosition(popupContent);
+                    var bounds = new Rect(0, 0, popupContent.ActualWidth, popupContent.ActualHeight);
+
+                    if (!bounds.Contains(mousePos))
+                    {
+                        SettingsPopup.IsOpen = false;
+                    }
+                }
+            }
+        }
+
         private void BtnMinimize_Click(object sender, RoutedEventArgs e)
         {
             WindowState = WindowState.Minimized;
