@@ -49,6 +49,8 @@ namespace ConditioningControlPanel.Models
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Icon { get; set; } = "";              // Emoji icon
+        public string? ImagePath { get; set; }              // Optional PNG image path (e.g., "pack://application:,,,/Resources/features/audio.png")
+        public string Color { get; set; } = "#FF69B4";      // Feature color for timeline bar
         public FeatureCategory Category { get; set; }
         public bool SupportsRamping { get; set; }           // Can values ramp over time?
         public int XPBonus { get; set; }                    // XP contribution for calculation
@@ -68,6 +70,7 @@ namespace ConditioningControlPanel.Models
                 Id = "audio_whispers",
                 Name = "Audio Whispers",
                 Icon = "🔊",
+                ImagePath = "Resources/features/audio_whispers.png",
                 Category = FeatureCategory.Audio,
                 SupportsRamping = false,
                 XPBonus = 20,
@@ -83,6 +86,7 @@ namespace ConditioningControlPanel.Models
                 Id = "mind_wipe",
                 Name = "Mind Wipe",
                 Icon = "🧠",
+                ImagePath = "Resources/features/Mind_Wipers.png",
                 Category = FeatureCategory.Audio,
                 SupportsRamping = false,
                 XPBonus = 50,
@@ -103,6 +107,7 @@ namespace ConditioningControlPanel.Models
                 Id = "flash",
                 Name = "Flash Images",
                 Icon = "⚡",
+                ImagePath = "Resources/features/flash.png",
                 Category = FeatureCategory.Video,
                 SupportsRamping = true,
                 XPBonus = 50,
@@ -122,6 +127,7 @@ namespace ConditioningControlPanel.Models
                 Id = "mandatory_videos",
                 Name = "Mandatory Videos",
                 Icon = "🎬",
+                ImagePath = "Resources/features/mandatory_videos.png",
                 Category = FeatureCategory.Video,
                 SupportsRamping = false,
                 XPBonus = 100,
@@ -136,6 +142,7 @@ namespace ConditioningControlPanel.Models
                 Id = "subliminal",
                 Name = "Subliminal Text",
                 Icon = "💭",
+                ImagePath = "Resources/features/subliminal.png",
                 Category = FeatureCategory.Video,
                 SupportsRamping = false,
                 XPBonus = 30,
@@ -152,6 +159,7 @@ namespace ConditioningControlPanel.Models
                 Id = "bouncing_text",
                 Name = "Bouncing Text",
                 Icon = "📝",
+                ImagePath = "Resources/features/bouncing_text.png",
                 Category = FeatureCategory.Video,
                 SupportsRamping = false,
                 XPBonus = 20,
@@ -172,6 +180,7 @@ namespace ConditioningControlPanel.Models
                 Id = "pink_filter",
                 Name = "Pink Filter",
                 Icon = "💗",
+                ImagePath = "Resources/features/Pink_filter.png",
                 Category = FeatureCategory.Overlays,
                 SupportsRamping = true,
                 XPBonus = 40,
@@ -186,6 +195,7 @@ namespace ConditioningControlPanel.Models
                 Id = "spiral",
                 Name = "Spiral Overlay",
                 Icon = "🌀",
+                ImagePath = "Resources/features/spiral_overlay.png",
                 Category = FeatureCategory.Overlays,
                 SupportsRamping = true,
                 XPBonus = 50,
@@ -200,6 +210,7 @@ namespace ConditioningControlPanel.Models
                 Id = "brain_drain",
                 Name = "Brain Drain",
                 Icon = "😵",
+                ImagePath = "Resources/features/brain_drain.png",
                 Category = FeatureCategory.Overlays,
                 SupportsRamping = true,
                 XPBonus = 80,
@@ -218,6 +229,7 @@ namespace ConditioningControlPanel.Models
                 Id = "bubbles",
                 Name = "Bubbles",
                 Icon = "🫧",
+                ImagePath = "Resources/features/Bubble_pop.png",
                 Category = FeatureCategory.Interactive,
                 SupportsRamping = false,
                 XPBonus = 30,
@@ -236,6 +248,7 @@ namespace ConditioningControlPanel.Models
                 Id = "lock_cards",
                 Name = "Lock Cards",
                 Icon = "🔒",
+                ImagePath = "Resources/features/Phrase_Lock.png",
                 Category = FeatureCategory.Interactive,
                 SupportsRamping = false,
                 XPBonus = 60,
@@ -250,6 +263,7 @@ namespace ConditioningControlPanel.Models
                 Id = "bubble_count",
                 Name = "Bubble Count Game",
                 Icon = "🔢",
+                ImagePath = "Resources/features/Bubble_count.png",
                 Category = FeatureCategory.Interactive,
                 SupportsRamping = false,
                 XPBonus = 40,
@@ -268,6 +282,7 @@ namespace ConditioningControlPanel.Models
                 Id = "corner_gif",
                 Name = "Corner GIF",
                 Icon = "🖼️",
+                ImagePath = "Resources/features/corner_gif.png",
                 Category = FeatureCategory.Extras,
                 SupportsRamping = false,
                 XPBonus = 10,

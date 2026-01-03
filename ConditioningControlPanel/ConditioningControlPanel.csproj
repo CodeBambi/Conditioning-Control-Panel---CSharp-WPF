@@ -120,8 +120,15 @@
     <!-- Achievement images -->
     <Resource Include="Resources\achievements\*.png" />
 
-    <!-- Feature images -->
+    <!-- Feature images (embedded as resources) -->
     <Resource Include="Resources\features\*.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Feature images (also copied to output for user customization) -->
+    <Content Include="Resources\features\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

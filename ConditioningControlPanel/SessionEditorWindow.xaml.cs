@@ -19,7 +19,6 @@ namespace ConditioningControlPanel
     {
         private readonly TimelineSession _session;
         private readonly SessionFileService _fileService;
-        private readonly Dictionary<string, FeatureIconState> _iconStates = new();
 
         // Drag-drop state (from feature palette)
         private bool _isDragging;
@@ -152,18 +151,7 @@ namespace ConditioningControlPanel
 
                 var icon = CreateFeatureIcon(feature);
                 panel.Children.Add(icon);
-
-                // Initialize icon state
-                _iconStates[feature.Id] = new FeatureIconState
-                {
-                    FeatureId = feature.Id,
-                    IsStartMode = true,
-                    PendingStartEventId = null
-                };
             }
-
-            // Update icon states based on existing session events
-            UpdateIconStatesFromSession();
         }
 
         private Panel? GetCategoryPanel(FeatureCategory category)
@@ -190,33 +178,14 @@ namespace ConditioningControlPanel
                 Margin = new Thickness(6),
                 Cursor = Cursors.Hand,
                 Tag = feature.Id,
-                ToolTip = $"{feature.Name}\n{GetFeatureDescription(feature)}\n\nDrag to timeline to add"
+                ToolTip = $"{feature.Name}\n{GetFeatureDescription(feature)}\n\nDrag to timeline to add a segment"
             };
 
             var grid = new Grid();
 
-            // Icon emoji
-            var iconText = new TextBlock
-            {
-                Text = feature.Icon,
-                FontSize = 32,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            grid.Children.Add(iconText);
-
-            // Start/Stop indicator (small colored dot)
-            var indicator = new Ellipse
-            {
-                Width = 14,
-                Height = 14,
-                Fill = new SolidColorBrush(Color.FromRgb(76, 175, 80)), // Green for start
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(0, 0, 5, 5),
-                Tag = "indicator"
-            };
-            grid.Children.Add(indicator);
+            // Try to load PNG image, fallback to emoji
+            var content = CreateFeatureIconContent(feature, 67);
+            grid.Children.Add(content);
 
             border.Child = grid;
 
@@ -248,49 +217,6 @@ namespace ConditioningControlPanel
             };
         }
 
-        private void UpdateIconStatesFromSession()
-        {
-            // Find unpaired start events and set icon states accordingly
-            foreach (var evt in _session.Events.Where(e => e.EventType == TimelineEventType.Start))
-            {
-                if (string.IsNullOrEmpty(evt.PairedEventId))
-                {
-                    // This start event has no stop - icon should be in "stop" mode
-                    if (_iconStates.TryGetValue(evt.FeatureId, out var state))
-                    {
-                        state.IsStartMode = false;
-                        state.PendingStartEventId = evt.Id;
-                    }
-                }
-            }
-
-            RefreshIconIndicators();
-        }
-
-        private void RefreshIconIndicators()
-        {
-            foreach (var panel in new Panel[] { AudioFeatures, VideoFeatures, OverlayFeatures, InteractiveFeatures, ExtrasFeatures })
-            {
-                foreach (var child in panel.Children)
-                {
-                    if (child is not Border icon) continue;
-
-                    var featureId = icon.Tag as string;
-                    if (featureId == null || !_iconStates.TryGetValue(featureId, out var state))
-                        continue;
-
-                    var grid = icon.Child as Grid;
-                    var indicator = grid?.Children.OfType<Ellipse>().FirstOrDefault(e => e.Tag as string == "indicator");
-                    if (indicator != null)
-                    {
-                        indicator.Fill = state.IsStartMode
-                            ? new SolidColorBrush(Color.FromRgb(76, 175, 80))   // Green
-                            : new SolidColorBrush(Color.FromRgb(244, 67, 54));  // Red
-                    }
-                }
-            }
-        }
-
         #endregion
 
         #region Drag and Drop
@@ -312,13 +238,8 @@ namespace ConditioningControlPanel
             var featureId = border?.Tag as string;
             if (featureId == null) return;
 
-            if (!_iconStates.TryGetValue(featureId, out var state))
-                return;
-
             var data = new DataObject();
             data.SetData("FeatureId", featureId);
-            data.SetData("IsStart", state.IsStartMode);
-            data.SetData("PendingStartEventId", state.PendingStartEventId ?? "");
 
             DragDrop.DoDragDrop(border, data, DragDropEffects.Copy);
             _isDragging = false;
@@ -381,54 +302,26 @@ namespace ConditioningControlPanel
                 return;
 
             var featureId = e.Data.GetData("FeatureId") as string;
-            var isStart = (bool)e.Data.GetData("IsStart");
-            var pendingStartId = e.Data.GetData("PendingStartEventId") as string;
-
             if (featureId == null) return;
 
             // Calculate minute from drop position
             var position = e.GetPosition(CanvasTimeline);
-            var minute = PositionToMinute(position.X);
+            var startMinute = PositionToMinute(position.X);
 
-            if (isStart)
-            {
-                // Add start event
-                var evt = _session.AddStartEvent(featureId, minute);
+            // Create a segment with default duration (10 min or remaining time)
+            var defaultDuration = Math.Min(10, _session.DurationMinutes - startMinute);
+            if (defaultDuration < 1) defaultDuration = 1;
+            var endMinute = Math.Min(startMinute + defaultDuration, _session.DurationMinutes);
 
-                // Update icon state
-                if (_iconStates.TryGetValue(featureId, out var state))
-                {
-                    state.IsStartMode = false;
-                    state.PendingStartEventId = evt.Id;
-                }
-            }
-            else
-            {
-                // Add stop event paired to the pending start
-                if (!string.IsNullOrEmpty(pendingStartId))
-                {
-                    var startEvent = _session.Events.FirstOrDefault(ev => ev.Id == pendingStartId);
-                    if (startEvent != null)
-                    {
-                        // Ensure stop is after start
-                        if (minute <= startEvent.Minute)
-                        {
-                            minute = Math.Min(startEvent.Minute + 1, _session.DurationMinutes);
-                        }
+            // Add start event
+            var startEvt = _session.AddStartEvent(featureId, startMinute);
 
-                        _session.AddStopEvent(startEvent, minute);
-                    }
-                }
+            // Add paired stop event
+            _session.AddStopEvent(startEvt, endMinute);
 
-                // Reset icon state
-                if (_iconStates.TryGetValue(featureId, out var state))
-                {
-                    state.IsStartMode = true;
-                    state.PendingStartEventId = null;
-                }
-            }
+            // Icon stays in "start" mode (green) - user can drop again to add another segment
+            // No need to track "pending" state anymore
 
-            RefreshIconIndicators();
             RefreshTimeline();
             RefreshStats();
         }
@@ -497,7 +390,7 @@ namespace ConditioningControlPanel
             }
         }
 
-        private const int TimelineRowHeight = 28;
+        private const int TimelineRowHeight = 34;
 
         private void RenderEvents()
         {
@@ -549,7 +442,8 @@ namespace ConditioningControlPanel
                     RadiusX = 4,
                     RadiusY = 4,
                     Cursor = Cursors.Hand,
-                    Tag = evt.Id // Store start event ID
+                    Tag = evt.Id, // Store start event ID
+                    ToolTip = $"{feature.Name}\n{evt.Minute} - {stopEvt?.Minute ?? _session.DurationMinutes} min\n\nDrag to move • Right-click to edit"
                 };
                 bar.MouseLeftButtonDown += SegmentBar_MouseLeftButtonDown;
                 bar.MouseMove += SegmentBar_MouseMove;
@@ -580,26 +474,20 @@ namespace ConditioningControlPanel
         {
             var border = new Border
             {
-                Width = 20,
-                Height = 20,
+                Width = 28,
+                Height = 28,
                 CornerRadius = new CornerRadius(4),
                 Background = isStart
-                    ? new SolidColorBrush(Color.FromRgb(76, 175, 80))
-                    : new SolidColorBrush(Color.FromRgb(244, 67, 54)),
+                    ? new SolidColorBrush(Color.FromRgb(76, 175, 80))   // Green
+                    : new SolidColorBrush(Color.FromRgb(244, 67, 54)), // Red
                 Cursor = Cursors.SizeWE, // Horizontal resize cursor to indicate draggable
                 Tag = evt.Id,
                 ToolTip = $"{feature.Name} - {(isStart ? "Start" : "Stop")} at {evt.Minute} min\nDrag to move • Right-click to edit"
             };
 
-            var text = new TextBlock
-            {
-                Text = feature.Icon,
-                FontSize = 12,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-
-            border.Child = text;
+            // Try to load PNG image, fallback to emoji
+            var content = CreateFeatureIconContent(feature, 20);
+            border.Child = content;
 
             // Drag handlers for repositioning (left button)
             border.MouseLeftButtonDown += TimelineIcon_MouseLeftButtonDown;
@@ -610,6 +498,61 @@ namespace ConditioningControlPanel
             border.MouseRightButtonDown += TimelineIcon_RightClick;
 
             return border;
+        }
+
+        private FrameworkElement CreateFeatureIconContent(FeatureDefinition feature, double size)
+        {
+            // Try to load PNG image
+            if (!string.IsNullOrEmpty(feature.ImagePath))
+            {
+                try
+                {
+                    var image = new System.Windows.Controls.Image
+                    {
+                        Width = size,
+                        Height = size,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Stretch = System.Windows.Media.Stretch.Uniform
+                    };
+
+                    // First try file system path (allows user customization)
+                    var filePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, feature.ImagePath);
+                    if (System.IO.File.Exists(filePath))
+                    {
+                        image.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(filePath, UriKind.Absolute));
+                        return image;
+                    }
+
+                    // Then try as embedded resource (pack URI)
+                    var packUri = new Uri($"pack://application:,,,/{feature.ImagePath}", UriKind.Absolute);
+                    image.Source = new System.Windows.Media.Imaging.BitmapImage(packUri);
+                    return image;
+                }
+                catch { /* Fall back to emoji */ }
+            }
+
+            // Fallback to emoji
+            return new TextBlock
+            {
+                Text = feature.Icon,
+                FontSize = size,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+        }
+
+        private void TimelineIcon_RightClick(object sender, MouseButtonEventArgs e)
+        {
+            var border = sender as Border;
+            var eventId = border?.Tag as string;
+            if (eventId == null) return;
+
+            var evt = _session.Events.FirstOrDefault(ev => ev.Id == eventId);
+            if (evt == null) return;
+
+            ShowFeatureSettingsPopup(evt);
+            e.Handled = true;
         }
 
         private void TimelineIcon_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -636,19 +579,6 @@ namespace ConditioningControlPanel
             e.Handled = true;
         }
 
-        private void TimelineIcon_RightClick(object sender, MouseButtonEventArgs e)
-        {
-            var border = sender as Border;
-            var eventId = border?.Tag as string;
-            if (eventId == null) return;
-
-            var evt = _session.Events.FirstOrDefault(ev => ev.Id == eventId);
-            if (evt == null) return;
-
-            ShowFeatureSettingsPopup(evt);
-            e.Handled = true;
-        }
-
         private void TimelineIcon_MouseMove(object sender, MouseEventArgs e)
         {
             // Delegated to CanvasTimeline_MouseMove for smooth tracking
@@ -672,18 +602,9 @@ namespace ConditioningControlPanel
 
         private void HandleIconDrag(MouseEventArgs e)
         {
-            if (e.LeftButton != MouseButtonState.Pressed)
-            {
-                // Cancelled - restore original minute
-                if (_isTimelineDragging && _draggedEvent != null)
-                {
-                    _draggedEvent.Minute = _dragOriginalMinute;
-                    RefreshTimeline();
-                }
-                CanvasTimeline.ReleaseMouseCapture();
-                ResetTimelineDrag();
+            // Only process if we have a valid drag state
+            if (_draggedTimelineIcon == null || _draggedEvent == null)
                 return;
-            }
 
             var currentPos = e.GetPosition(CanvasTimeline);
             var delta = currentPos.X - _dragStartPoint.X;
@@ -694,7 +615,7 @@ namespace ConditioningControlPanel
                 _isTimelineDragging = true;
             }
 
-            if (_isTimelineDragging && _draggedTimelineIcon != null && _draggedEvent != null)
+            if (_isTimelineDragging)
             {
                 // Calculate new position
                 var newLeft = _dragStartCanvasLeft + delta;
@@ -714,19 +635,9 @@ namespace ConditioningControlPanel
 
         private void HandleSegmentDrag(MouseEventArgs e)
         {
-            if (e.LeftButton != MouseButtonState.Pressed)
-            {
-                if (_isSegmentDragging && _draggedStartEvent != null)
-                {
-                    _draggedStartEvent.Minute = _segmentDragOriginalStartMinute;
-                    if (_draggedStopEvent != null)
-                        _draggedStopEvent.Minute = _segmentDragOriginalStopMinute;
-                    RefreshTimeline();
-                }
-                CanvasTimeline.ReleaseMouseCapture();
-                ResetSegmentDrag();
+            // Only process if we have a valid drag state
+            if (_draggedBar == null || _draggedStartEvent == null)
                 return;
-            }
 
             var currentX = e.GetPosition(CanvasTimeline).X;
             var deltaX = currentX - _segmentDragStartX;
@@ -734,10 +645,10 @@ namespace ConditioningControlPanel
             if (!_isSegmentDragging && Math.Abs(deltaX) > 5)
             {
                 _isSegmentDragging = true;
-                if (_draggedBar != null) _draggedBar.Opacity = 0.7;
+                _draggedBar.Opacity = 0.7;
             }
 
-            if (_isSegmentDragging && _draggedBar != null && _draggedStartEvent != null)
+            if (_isSegmentDragging)
             {
                 var width = CanvasTimeline.ActualWidth > 0 ? CanvasTimeline.ActualWidth : 800;
 
@@ -1004,15 +915,6 @@ namespace ConditioningControlPanel
 
             _session.RemoveEvent(evt);
 
-            // Reset icon state if needed
-            var remainingStarts = _session.Events.Count(e => e.FeatureId == evt.FeatureId && e.EventType == TimelineEventType.Start);
-            if (remainingStarts == 0 && _iconStates.TryGetValue(evt.FeatureId, out var state))
-            {
-                state.IsStartMode = true;
-                state.PendingStartEventId = null;
-            }
-
-            RefreshIconIndicators();
             RefreshTimeline();
             RefreshStats();
         }
@@ -1103,14 +1005,6 @@ namespace ConditioningControlPanel
                 TxtDescription.Text = _session.Description;
                 SliderDuration.Value = _session.DurationMinutes;
 
-                // Reset icon states
-                foreach (var state in _iconStates.Values)
-                {
-                    state.IsStartMode = true;
-                    state.PendingStartEventId = null;
-                }
-                UpdateIconStatesFromSession();
-
                 RefreshTimeline();
                 RefreshStats();
 
@@ -1164,15 +1058,5 @@ namespace ConditioningControlPanel
         }
 
         #endregion
-    }
-
-    /// <summary>
-    /// Tracks the state of a feature icon (green/red mode)
-    /// </summary>
-    internal class FeatureIconState
-    {
-        public string FeatureId { get; set; } = "";
-        public bool IsStartMode { get; set; } = true;
-        public string? PendingStartEventId { get; set; }
     }
 }
