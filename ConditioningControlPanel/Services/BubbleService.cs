@@ -418,6 +418,8 @@ internal class Bubble
             Background = Brushes.Transparent,
             Topmost = true,
             ShowInTaskbar = false,
+            ShowActivated = false,
+            Focusable = false,
             Width = _size + 40,
             Height = _size + 40,
             Left = _posX - 20,
@@ -568,13 +570,14 @@ internal class Bubble
         {
             var hwnd = new System.Windows.Interop.WindowInteropHelper(_window).Handle;
             var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
         }
         catch { }
     }
 
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int GetWindowLong(IntPtr hwnd, int index);

@@ -4345,11 +4345,6 @@ namespace ConditioningControlPanel
                 e.Cancel = true;
                 _trayIcon?.MinimizeToTray();
                 HideAvatarTube();
-                
-                // Show hint on first minimize
-                _trayIcon?.ShowNotification("Still Running", 
-                    "App minimized to tray. Use Exit button or double-tap panic key to quit.", 
-                    System.Windows.Forms.ToolTipIcon.Info);
             }
             base.OnClosing(e);
         }

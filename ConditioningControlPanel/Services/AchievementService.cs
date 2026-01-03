@@ -17,9 +17,9 @@ public class AchievementService : IDisposable
     private readonly DispatcherTimer _saveTimer;
     private readonly DispatcherTimer _trackingTimer;
     private bool _isDirty;
-    private DateTime _lastPinkFilterCheck;
-    private DateTime _lastSpiralCheck;
-    private DateTime _lastMindWipeCheck;
+    private DateTime _lastPinkFilterCheck = DateTime.Now;
+    private DateTime _lastSpiralCheck = DateTime.Now;
+    private DateTime _lastMindWipeCheck = DateTime.Now;
     
     public event EventHandler<Achievement>? AchievementUnlocked;
     
