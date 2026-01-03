@@ -3725,9 +3725,9 @@ namespace ConditioningControlPanel
         private void ChkBubbleCountStrict_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            
+
             var isEnabled = ChkBubbleCountStrict.IsChecked ?? false;
-            
+
             // Show warning when enabling strict mode
             if (isEnabled)
             {
@@ -3736,8 +3736,9 @@ namespace ConditioningControlPanel
                     "• You will NOT be able to skip the bubble count challenge\n" +
                     "• You MUST answer correctly to dismiss\n" +
                     "• After 3 wrong attempts, a mercy lock card appears\n" +
+                    "• The app will minimize to tray when this is enabled\n" +
                     "• This can be very restrictive!");
-                
+
                 if (!confirmed)
                 {
                     _isLoading = true;
@@ -3745,8 +3746,11 @@ namespace ConditioningControlPanel
                     _isLoading = false;
                     return;
                 }
+
+                // Minimize to tray immediately
+                _trayIcon?.MinimizeToTray();
             }
-            
+
             App.Settings.Current.BubbleCountStrictLock = isEnabled;
             App.Settings.Save();
         }

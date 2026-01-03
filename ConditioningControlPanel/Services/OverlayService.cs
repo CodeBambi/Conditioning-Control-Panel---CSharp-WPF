@@ -770,9 +770,8 @@ public class OverlayService : IDisposable
                     }
                 }
 
-                // Performance: Cap capture rate to 60 FPS for balance between smoothness and efficiency
-                const int MAX_CAPTURE_FPS = 60;
-                int maxRefreshRate = Math.Min(MAX_CAPTURE_FPS, screens.Max(s => GetScreenRefreshRate(s)));
+                // Use native refresh rate for smooth capture (no artificial cap)
+                int maxRefreshRate = screens.Max(s => GetScreenRefreshRate(s));
                 double intervalMs = 1000.0 / maxRefreshRate;
 
                 _brainDrainCaptureTimer = new DispatcherTimer
@@ -900,11 +899,11 @@ public class OverlayService : IDisposable
     public void UpdateBrainDrainBlurOpacity(int intensity)
     {
         _currentBrainDrainIntensity = intensity;
-    
-        // Scale intensity (0-25) to blur radius (0-30)
-        // Assuming slider max is 25, and this should map to the previous max blur radius of 30.
-        double blurRadius = (intensity / 25.0) * 30.0; // Max slider value 25 maps to max blur radius 30.
-    
+
+        // Scale intensity to blur radius - keep it subtle for performance
+        // intensity 0-25 maps to blur radius 0-12.5 (0.5x multiplier)
+        double blurRadius = intensity * 0.5;
+
         Application.Current.Dispatcher.Invoke(() =>
         {
             foreach (var img in _brainDrainImages.Values)
@@ -974,7 +973,9 @@ public class OverlayService : IDisposable
             double width = screen.Bounds.Width / scale;
             double height = screen.Bounds.Height / scale;
 
-            double blurRadius = intensity * 0.3;
+            // Scale intensity to blur radius - keep it subtle for performance
+            // intensity 0-25 maps to blur radius 0-12.5 (0.5x multiplier)
+            double blurRadius = intensity * 0.5;
 
             var image = new System.Windows.Controls.Image
             {

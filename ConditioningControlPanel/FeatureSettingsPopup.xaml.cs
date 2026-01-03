@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -18,6 +19,9 @@ namespace ConditioningControlPanel
         private int _maxMinute = 120;
         private readonly Dictionary<string, FrameworkElement> _settingControls = new();
 
+        // Reference to parent session for phrase management
+        private TimelineSession? _parentSession;
+
         public event EventHandler<TimelineEvent>? SettingsChanged;
         public event EventHandler<TimelineEvent>? DeleteRequested;
         public event EventHandler? CloseRequested;
@@ -30,10 +34,11 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Load an event for editing
         /// </summary>
-        public void LoadEvent(TimelineEvent evt, int maxMinute)
+        public void LoadEvent(TimelineEvent evt, int maxMinute, TimelineSession? parentSession = null)
         {
             _event = evt;
             _maxMinute = maxMinute;
+            _parentSession = parentSession;
             _feature = FeatureDefinition.GetById(evt.FeatureId);
 
             if (_feature == null) return;
@@ -85,6 +90,16 @@ namespace ConditioningControlPanel
             foreach (var setting in _feature.Settings)
             {
                 AddSettingControl(setting);
+            }
+
+            // Add phrase management for subliminal and bouncing text
+            if (_event.FeatureId == "subliminal" && _parentSession != null)
+            {
+                AddPhraseManagement("Subliminal Phrases", _parentSession.SubliminalPhrases, true);
+            }
+            else if (_event.FeatureId == "bouncing_text" && _parentSession != null)
+            {
+                AddPhraseManagement("Bouncing Text Phrases", _parentSession.BouncingTextPhrases, false);
             }
         }
 
@@ -381,6 +396,316 @@ namespace ConditioningControlPanel
         private void BtnDone_Click(object sender, RoutedEventArgs e)
         {
             CloseRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void AddPhraseManagement(string title, List<string> phrases, bool isSubliminal)
+        {
+            // Separator
+            var separator = new Border
+            {
+                Height = 1,
+                Background = new SolidColorBrush(Color.FromRgb(60, 60, 80)),
+                Margin = new Thickness(0, 10, 0, 10)
+            };
+            SettingsPanel.Children.Add(separator);
+
+            // Header with count
+            var headerGrid = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var headerText = new TextBlock
+            {
+                Text = title,
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(headerText, 0);
+            headerGrid.Children.Add(headerText);
+
+            var countText = new TextBlock
+            {
+                Text = phrases.Count == 0 ? "(using global)" : $"({phrases.Count} custom)",
+                Foreground = new SolidColorBrush(Color.FromRgb(136, 136, 136)),
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(countText, 1);
+            headerGrid.Children.Add(countText);
+
+            SettingsPanel.Children.Add(headerGrid);
+
+            // Phrase list (scrollable, max 3 visible)
+            var listBox = new ListBox
+            {
+                Background = new SolidColorBrush(Color.FromRgb(30, 30, 50)),
+                Foreground = new SolidColorBrush(Color.FromRgb(224, 224, 224)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(53, 53, 85)),
+                MaxHeight = 80,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+
+            foreach (var phrase in phrases)
+            {
+                listBox.Items.Add(phrase);
+            }
+
+            if (phrases.Count == 0)
+            {
+                listBox.Items.Add("(No custom phrases - using global pool)");
+                listBox.IsEnabled = false;
+            }
+
+            SettingsPanel.Children.Add(listBox);
+
+            // Button row
+            var buttonGrid = new Grid();
+            buttonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            buttonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            buttonGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            // Add button
+            var addButton = new Button
+            {
+                Content = "+ Add",
+                Background = new SolidColorBrush(Color.FromRgb(76, 175, 80)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(0, 0, 4, 0),
+                Cursor = System.Windows.Input.Cursors.Hand
+            };
+            addButton.Click += (s, e) => AddPhrase(phrases, listBox, countText, isSubliminal);
+            Grid.SetColumn(addButton, 0);
+            buttonGrid.Children.Add(addButton);
+
+            // Remove button
+            var removeButton = new Button
+            {
+                Content = "- Remove",
+                Background = new SolidColorBrush(Color.FromRgb(244, 67, 54)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(2, 0, 2, 0),
+                Cursor = System.Windows.Input.Cursors.Hand
+            };
+            removeButton.Click += (s, e) => RemovePhrase(phrases, listBox, countText);
+            Grid.SetColumn(removeButton, 1);
+            buttonGrid.Children.Add(removeButton);
+
+            // Clear button
+            var clearButton = new Button
+            {
+                Content = "Clear",
+                Background = new SolidColorBrush(Color.FromRgb(100, 100, 100)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(4, 0, 0, 0),
+                Cursor = System.Windows.Input.Cursors.Hand
+            };
+            clearButton.Click += (s, e) => ClearPhrases(phrases, listBox, countText);
+            Grid.SetColumn(clearButton, 2);
+            buttonGrid.Children.Add(clearButton);
+
+            SettingsPanel.Children.Add(buttonGrid);
+
+            // Import from global button
+            var importButton = new Button
+            {
+                Content = "📥 Import from Global Settings",
+                Background = new SolidColorBrush(Color.FromRgb(53, 53, 85)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(8, 6, 8, 6),
+                Margin = new Thickness(0, 8, 0, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            importButton.Click += (s, e) => ImportFromGlobal(phrases, listBox, countText, isSubliminal);
+            SettingsPanel.Children.Add(importButton);
+        }
+
+        private void AddPhrase(List<string> phrases, ListBox listBox, TextBlock countText, bool isSubliminal)
+        {
+            var dialog = new PhraseInputDialog("Add Phrase", "Enter a new phrase:")
+            {
+                Owner = Window.GetWindow(this)
+            };
+
+            if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.InputText))
+            {
+                // If this is the first phrase, clear the placeholder
+                if (phrases.Count == 0)
+                {
+                    listBox.Items.Clear();
+                    listBox.IsEnabled = true;
+                }
+
+                phrases.Add(dialog.InputText);
+                listBox.Items.Add(dialog.InputText);
+                countText.Text = $"({phrases.Count} custom)";
+
+                if (_event != null)
+                    SettingsChanged?.Invoke(this, _event);
+            }
+        }
+
+        private void RemovePhrase(List<string> phrases, ListBox listBox, TextBlock countText)
+        {
+            if (listBox.SelectedIndex >= 0 && listBox.SelectedIndex < phrases.Count)
+            {
+                phrases.RemoveAt(listBox.SelectedIndex);
+                listBox.Items.RemoveAt(listBox.SelectedIndex);
+
+                if (phrases.Count == 0)
+                {
+                    listBox.Items.Add("(No custom phrases - using global pool)");
+                    listBox.IsEnabled = false;
+                    countText.Text = "(using global)";
+                }
+                else
+                {
+                    countText.Text = $"({phrases.Count} custom)";
+                }
+
+                if (_event != null)
+                    SettingsChanged?.Invoke(this, _event);
+            }
+        }
+
+        private void ClearPhrases(List<string> phrases, ListBox listBox, TextBlock countText)
+        {
+            phrases.Clear();
+            listBox.Items.Clear();
+            listBox.Items.Add("(No custom phrases - using global pool)");
+            listBox.IsEnabled = false;
+            countText.Text = "(using global)";
+
+            if (_event != null)
+                SettingsChanged?.Invoke(this, _event);
+        }
+
+        private void ImportFromGlobal(List<string> phrases, ListBox listBox, TextBlock countText, bool isSubliminal)
+        {
+            // Get enabled phrases from global pool (Dictionary<string, bool>)
+            var globalPool = isSubliminal
+                ? App.Settings.Current.SubliminalPool
+                : App.Settings.Current.BouncingTextPool;
+
+            var enabledPhrases = globalPool?.Where(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
+
+            if (enabledPhrases == null || enabledPhrases.Count == 0)
+            {
+                MessageBox.Show("No enabled phrases found in global settings.", "Import", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // Clear existing and import
+            phrases.Clear();
+            phrases.AddRange(enabledPhrases);
+
+            listBox.Items.Clear();
+            listBox.IsEnabled = true;
+            foreach (var phrase in phrases)
+            {
+                listBox.Items.Add(phrase);
+            }
+
+            countText.Text = $"({phrases.Count} custom)";
+
+            if (_event != null)
+                SettingsChanged?.Invoke(this, _event);
+        }
+    }
+
+    /// <summary>
+    /// Simple input dialog for adding phrases
+    /// </summary>
+    public class PhraseInputDialog : Window
+    {
+        public string InputText { get; private set; } = "";
+
+        public PhraseInputDialog(string title, string prompt)
+        {
+            Title = title;
+            Width = 350;
+            Height = 150;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            WindowStyle = WindowStyle.ToolWindow;
+            ResizeMode = ResizeMode.NoResize;
+            Background = new SolidColorBrush(Color.FromRgb(30, 30, 58));
+
+            var grid = new Grid { Margin = new Thickness(15) };
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var label = new TextBlock
+            {
+                Text = prompt,
+                Foreground = Brushes.White,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            Grid.SetRow(label, 0);
+            grid.Children.Add(label);
+
+            var textBox = new TextBox
+            {
+                Background = new SolidColorBrush(Color.FromRgb(37, 37, 66)),
+                Foreground = Brushes.White,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                Padding = new Thickness(8, 5, 8, 5),
+                Margin = new Thickness(0, 0, 0, 15)
+            };
+            Grid.SetRow(textBox, 1);
+            grid.Children.Add(textBox);
+
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var okButton = new Button
+            {
+                Content = "Add",
+                Width = 70,
+                Padding = new Thickness(0, 5, 0, 5),
+                Background = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Margin = new Thickness(0, 0, 8, 0),
+                IsDefault = true
+            };
+            okButton.Click += (s, e) =>
+            {
+                InputText = textBox.Text;
+                DialogResult = true;
+            };
+            buttonPanel.Children.Add(okButton);
+
+            var cancelButton = new Button
+            {
+                Content = "Cancel",
+                Width = 70,
+                Padding = new Thickness(0, 5, 0, 5),
+                Background = new SolidColorBrush(Color.FromRgb(100, 100, 100)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                IsCancel = true
+            };
+            buttonPanel.Children.Add(cancelButton);
+
+            Grid.SetRow(buttonPanel, 2);
+            grid.Children.Add(buttonPanel);
+
+            Content = grid;
+
+            Loaded += (s, e) => textBox.Focus();
         }
     }
 }

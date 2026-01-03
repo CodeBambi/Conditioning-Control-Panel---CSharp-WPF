@@ -2020,93 +2020,6 @@ Bimbo" Foreground="#FF69B4"
                         </Grid>
                     </Border>
 
-                    <!-- Mind Wipe - Lvl 75 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
-                            ToolTip="Random mind wipe audio effects!&#x0a;Escalates in frequency during sessions.&#x0a;Unlocks at Level 75.">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            
-                            <Grid Grid.Column="0">
-                            <!-- Locked State -->
-                            <StackPanel x:Name="MindWipeLocked" Visibility="Visible">
-                                <Grid>
-                                    <TextBlock Text="🧠 Mind Wipe" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                    <TextBlock Text="🔒 Lvl 75" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
-                                </Grid>
-                                <TextBlock Text="Reach Level 75 to Unlock" Foreground="{StaticResource PinkBrush}" 
-                                           FontSize="12" Margin="0,8,0,0"/>
-                            </StackPanel>
-                            
-                            <!-- Unlocked State -->
-                            <StackPanel x:Name="MindWipeUnlocked" Visibility="Collapsed">
-                                <Grid>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="🧠 Mind Wipe" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
-                                        <TextBlock Text="✔ Lvl 75" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkMindWipeEnabled" Style="{StaticResource ToggleStyle}" 
-                                              HorizontalAlignment="Right"
-                                              Checked="ChkMindWipeEnabled_Changed" Unchecked="ChkMindWipeEnabled_Changed"/>
-                                </Grid>
-                                
-                                <StackPanel x:Name="MindWipeSettings" Margin="0,10,0,0">
-                                    <!-- Frequency -->
-                                    <Grid Margin="0,3,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Frequency"
-                                                   ToolTip="How many times per hour (outside sessions)"/>
-                                        <TextBlock x:Name="TxtMindWipeFreq" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="6/h"/>
-                                    </Grid>
-                                    <Slider x:Name="SliderMindWipeFreq" Minimum="1" Maximum="180" Value="6" 
-                                            Margin="0,1" ValueChanged="SliderMindWipeFreq_Changed"
-                                            ToolTip="Mind wipe frequency (1-180 per hour)"/>
-                                    
-                                    <!-- Volume -->
-                                    <Grid Margin="0,8,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Volume"
-                                                   ToolTip="Mind wipe audio volume (independent of other audio)"/>
-                                        <TextBlock x:Name="TxtMindWipeVolume" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="50%"/>
-                                    </Grid>
-                                    <Slider x:Name="SliderMindWipeVolume" Minimum="0" Maximum="100" Value="50" 
-                                            Margin="0,1" ValueChanged="SliderMindWipeVolume_Changed"
-                                            ToolTip="Volume level (0-100%)"/>
-                                    
-                                    <!-- Loop Toggle -->
-                                    <Grid Margin="0,10,0,0">
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="🔁 Loop in Background"
-                                                   ToolTip="Continuously loop a single track instead of random triggers"/>
-                                        <CheckBox x:Name="ChkMindWipeLoop" Style="{StaticResource ToggleStyle}" 
-                                                  HorizontalAlignment="Right"
-                                                  Checked="ChkMindWipeLoop_Changed" Unchecked="ChkMindWipeLoop_Changed"/>
-                                    </Grid>
-                                    
-                                    <!-- Test Button -->
-                                    <Button Content="🔊 Test Now" 
-                                            Background="#40FFFFFF" Foreground="White" 
-                                            BorderThickness="0" Padding="10,5" Margin="0,10,0,0"
-                                            Cursor="Hand" Click="BtnTestMindWipe_Click"
-                                            ToolTip="Play a mind wipe sound now"/>
-                                </StackPanel>
-                            </StackPanel>
-                            </Grid>
-                            
-                            <!-- Feature Image -->
-                            <Border x:Name="MindWipeFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
-                                <Image Source="pack://application:,,,/Resources/features/Mind_Wipers.png" Stretch="Uniform"/>
-                            </Border>
-                        </Grid>
-                    </Border>
-
                     <!-- Brain Drain - Lvl 70 -->
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Drains your thoughts with subliminal messaging.&#x0a;Unlocks at Level 70.">
@@ -2134,11 +2047,16 @@ Bimbo" Foreground="#FF69B4"
                                             <TextBlock Text="💧 Brain Drain" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
                                             <TextBlock Text="✔ Lvl 70" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
                                         </StackPanel>
-                                        <CheckBox x:Name="ChkBrainDrainEnabled" Style="{StaticResource ToggleStyle}" 
+                                        <CheckBox x:Name="ChkBrainDrainEnabled" Style="{StaticResource ToggleStyle}"
                                                   HorizontalAlignment="Right"
                                                   Checked="ChkBrainDrainEnabled_Changed" Unchecked="ChkBrainDrainEnabled_Changed"/>
                                     </Grid>
-                                
+
+                                    <!-- Resource warning -->
+                                    <TextBlock Text="⚠️ Resource intensive - may affect performance"
+                                               Foreground="#FFA500" FontSize="10" Margin="0,4,0,0"
+                                               ToolTip="This feature captures and processes the screen in real-time, which can be demanding on your system."/>
+
                                     <StackPanel x:Name="BrainDrainSettings" Margin="0,10,0,0">
                                         <!-- Intensity -->
                                         <Grid Margin="0,3,0,0">
@@ -2148,26 +2066,113 @@ Bimbo" Foreground="#FF69B4"
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Style="{StaticResource SettingLabel}" Text="Intensity"
                                                        ToolTip="Blur intensity (0-25%)"/>
-                                            <TextBlock x:Name="TxtBrainDrainIntensity" Grid.Column="1" Style="{StaticResource ValueLabel}" 
+                                            <TextBlock x:Name="TxtBrainDrainIntensity" Grid.Column="1" Style="{StaticResource ValueLabel}"
                                                        Text="10%"/>
                                         </Grid>
                                         <Slider x:Name="SliderBrainDrainIntensity" Style="{StaticResource PinkSlider}"
-                                                Minimum="0" Maximum="25" Value="10" 
+                                                Minimum="0" Maximum="25" Value="10"
                                                 Margin="0,1" ValueChanged="SliderBrainDrainIntensity_Changed"/>
-                                    
+
                                         <!-- Test Button -->
-                                        <Button Content="▶ Test Now" 
-                                                Background="#40FFFFFF" Foreground="White" 
+                                        <Button Content="▶ Test Now"
+                                                Background="#40FFFFFF" Foreground="White"
                                                 BorderThickness="0" Padding="10,5" Margin="0,10,0,0"
                                                 Cursor="Hand" Click="BtnTestBrainDrain_Click"
                                                 ToolTip="Test the brain drain effect now"/>
                                     </StackPanel>
                                 </StackPanel>
                             </Grid>
-                            
+
                             <!-- Feature Image -->
                             <Border x:Name="BrainDrainFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
                                 <Image Source="pack://application:,,,/Resources/features/brain_drain.png" Stretch="Uniform"/>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- Mind Wipe - Lvl 75 -->
+                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                            ToolTip="Random mind wipe audio effects!&#x0a;Escalates in frequency during sessions.&#x0a;Unlocks at Level 75.">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid Grid.Column="0">
+                            <!-- Locked State -->
+                            <StackPanel x:Name="MindWipeLocked" Visibility="Visible">
+                                <Grid>
+                                    <TextBlock Text="🧠 Mind Wipe" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock Text="🔒 Lvl 75" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
+                                </Grid>
+                                <TextBlock Text="Reach Level 75 to Unlock" Foreground="{StaticResource PinkBrush}"
+                                           FontSize="12" Margin="0,8,0,0"/>
+                            </StackPanel>
+
+                            <!-- Unlocked State -->
+                            <StackPanel x:Name="MindWipeUnlocked" Visibility="Collapsed">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🧠 Mind Wipe" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
+                                        <TextBlock Text="✔ Lvl 75" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkMindWipeEnabled" Style="{StaticResource ToggleStyle}"
+                                              HorizontalAlignment="Right"
+                                              Checked="ChkMindWipeEnabled_Changed" Unchecked="ChkMindWipeEnabled_Changed"/>
+                                </Grid>
+
+                                <StackPanel x:Name="MindWipeSettings" Margin="0,10,0,0">
+                                    <!-- Frequency -->
+                                    <Grid Margin="0,3,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Frequency"
+                                                   ToolTip="How many times per hour (outside sessions)"/>
+                                        <TextBlock x:Name="TxtMindWipeFreq" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="6/h"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderMindWipeFreq" Minimum="1" Maximum="180" Value="6"
+                                            Margin="0,1" ValueChanged="SliderMindWipeFreq_Changed"
+                                            ToolTip="Mind wipe frequency (1-180 per hour)"/>
+
+                                    <!-- Volume -->
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Volume"
+                                                   ToolTip="Mind wipe audio volume (independent of other audio)"/>
+                                        <TextBlock x:Name="TxtMindWipeVolume" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="50%"/>
+                                    </Grid>
+                                    <Slider x:Name="SliderMindWipeVolume" Minimum="0" Maximum="100" Value="50"
+                                            Margin="0,1" ValueChanged="SliderMindWipeVolume_Changed"
+                                            ToolTip="Volume level (0-100%)"/>
+
+                                    <!-- Loop Toggle -->
+                                    <Grid Margin="0,10,0,0">
+                                        <TextBlock Style="{StaticResource SettingLabel}" Text="🔁 Loop in Background"
+                                                   ToolTip="Continuously loop a single track instead of random triggers"/>
+                                        <CheckBox x:Name="ChkMindWipeLoop" Style="{StaticResource ToggleStyle}"
+                                                  HorizontalAlignment="Right"
+                                                  Checked="ChkMindWipeLoop_Changed" Unchecked="ChkMindWipeLoop_Changed"/>
+                                    </Grid>
+
+                                    <!-- Test Button -->
+                                    <Button Content="🔊 Test Now"
+                                            Background="#40FFFFFF" Foreground="White"
+                                            BorderThickness="0" Padding="10,5" Margin="0,10,0,0"
+                                            Cursor="Hand" Click="BtnTestMindWipe_Click"
+                                            ToolTip="Play a mind wipe sound now"/>
+                                </StackPanel>
+                            </StackPanel>
+                            </Grid>
+
+                            <!-- Feature Image -->
+                            <Border x:Name="MindWipeFeatureImage" Grid.Column="1" Style="{StaticResource FeatureImageBorder}">
+                                <Image Source="pack://application:,,,/Resources/features/Mind_Wipers.png" Stretch="Uniform"/>
                             </Border>
                         </Grid>
                     </Border>

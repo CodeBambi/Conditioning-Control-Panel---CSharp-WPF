@@ -608,8 +608,8 @@ namespace ConditioningControlPanel
 
         private void ShowFeatureSettingsPopup(TimelineEvent evt)
         {
-            // Load event into popup
-            FeatureSettings.LoadEvent(evt, _session.DurationMinutes);
+            // Load event into popup with session reference for phrase management
+            FeatureSettings.LoadEvent(evt, _session.DurationMinutes, _session);
 
             // Wire up events
             FeatureSettings.SettingsChanged -= OnSettingsChanged;
