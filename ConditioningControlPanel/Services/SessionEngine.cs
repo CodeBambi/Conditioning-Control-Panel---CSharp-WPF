@@ -5,8 +5,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
+using XamlAnimatedGif;
 
 namespace ConditioningControlPanel.Services
 {
@@ -57,10 +59,7 @@ namespace ConditioningControlPanel.Services
         
         // Corner GIF window (for Gamer Girl session)
         private Window? _cornerGifWindow;
-        private System.Windows.Controls.MediaElement? _cornerGifMedia;
-        private DispatcherTimer? _cornerGifLoopTimer;
-        private DateTime _cornerGifStartTime;
-        private const double CORNER_GIF_LOOP_INTERVAL_SECONDS = 4.0; // Restart GIF every 4 seconds
+        private Image? _cornerGifImage;
 
         // Reference to main window for service access
         private readonly MainWindow _mainWindow;
@@ -819,17 +818,17 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Information("Corner GIF not set or found, defaulting to spiral.gif resource");
                 }
 
-                if(img == null) {
+                if (img == null)
+                {
                     App.Logger?.Warning("Could not load corner GIF image.");
                     return;
                 }
 
                 // Get GIF dimensions to maintain aspect ratio
-                double gifWidth, gifHeight;
-                gifWidth = img.Width;
-                gifHeight = img.Height;
+                double gifWidth = img.Width;
+                double gifHeight = img.Height;
                 img.Dispose();
-                
+
                 // Scale based on user's size setting (default 300)
                 var targetSize = settings.CornerGifSize > 0 ? settings.CornerGifSize : 300;
                 double scale = targetSize / Math.Max(gifWidth, gifHeight);
@@ -873,8 +872,8 @@ namespace ConditioningControlPanel.Services
                         break;
                 }
 
-                // Very subtle opacity - 90% reduction (same as background spiral)
-                var opacity = (settings.CornerGifOpacity / 100.0) * 0.1;
+                // Apply user's opacity setting directly (no 90% reduction for corner GIF)
+                var opacity = settings.CornerGifOpacity / 100.0;
 
                 _cornerGifWindow = new Window
                 {
@@ -892,39 +891,22 @@ namespace ConditioningControlPanel.Services
                     WindowStartupLocation = WindowStartupLocation.Manual
                 };
 
-                // Use MediaElement for GIF animation - Uniform stretch maintains aspect ratio
-                var mediaElement = new System.Windows.Controls.MediaElement
+                // Use Image with XamlAnimatedGif for proper GIF animation
+                var imageElement = new Image
                 {
-                    Source = gifUri,
-                    LoadedBehavior = System.Windows.Controls.MediaState.Play,
-                    UnloadedBehavior = System.Windows.Controls.MediaState.Manual,
                     Stretch = System.Windows.Media.Stretch.Uniform
                 };
 
-                // Store reference for timer-based looping
-                _cornerGifMedia = mediaElement;
+                // Set the animated GIF source using XamlAnimatedGif
+                AnimationBehavior.SetSourceUri(imageElement, gifUri);
+                AnimationBehavior.SetRepeatBehavior(imageElement, System.Windows.Media.Animation.RepeatBehavior.Forever);
 
-                // MediaEnded event handler (backup for video files)
-                mediaElement.MediaEnded += (s, e) =>
-                {
-                    mediaElement.Position = TimeSpan.Zero;
-                    mediaElement.Play();
-                };
-
-                _cornerGifWindow.Content = mediaElement;
+                _cornerGifImage = imageElement;
+                _cornerGifWindow.Content = imageElement;
                 _cornerGifWindow.Show();
 
                 // Make click-through
                 MakeWindowClickThrough(_cornerGifWindow);
-
-                // Start timer-based GIF looping (MediaEnded doesn't reliably fire for GIFs)
-                if (gifUri.ToString().EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
-                {
-                    _cornerGifStartTime = DateTime.Now;
-                    _cornerGifLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
-                    _cornerGifLoopTimer.Tick += CornerGifLoopTimer_Tick;
-                    _cornerGifLoopTimer.Start();
-                }
 
                 App.Logger?.Information("Corner GIF shown at {Position}: {Path} (pos: {Left},{Top}, size: {Width}x{Height}px, opacity: {Opacity}%)",
                     settings.CornerGifPosition, gifUri.ToString(), left, top, (int)windowWidth, (int)windowHeight, settings.CornerGifOpacity);
@@ -935,52 +917,14 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void CornerGifLoopTimer_Tick(object? sender, EventArgs e)
-        {
-            if (_cornerGifMedia == null) return;
-
-            try
-            {
-                // For video files with known duration - use position-based looping
-                if (_cornerGifMedia.NaturalDuration.HasTimeSpan)
-                {
-                    var currentPos = _cornerGifMedia.Position;
-                    if (currentPos >= _cornerGifMedia.NaturalDuration.TimeSpan - TimeSpan.FromMilliseconds(100))
-                    {
-                        _cornerGifMedia.Position = TimeSpan.Zero;
-                        _cornerGifMedia.Play();
-                        _cornerGifStartTime = DateTime.Now;
-                    }
-                    return;
-                }
-
-                // For GIFs - use time-based restart (WPF Position doesn't work for GIFs)
-                var elapsed = (DateTime.Now - _cornerGifStartTime).TotalSeconds;
-                if (elapsed >= CORNER_GIF_LOOP_INTERVAL_SECONDS)
-                {
-                    // Restart the GIF by seeking to start
-                    _cornerGifMedia.Position = TimeSpan.Zero;
-                    _cornerGifMedia.Play();
-                    _cornerGifStartTime = DateTime.Now;
-                }
-            }
-            catch
-            {
-                // Ignore errors during tick
-            }
-        }
-
         private void CloseCornerGif()
         {
-            _cornerGifLoopTimer?.Stop();
-            _cornerGifLoopTimer = null;
-            _cornerGifMedia = null;
-
             if (_cornerGifWindow != null)
             {
                 _cornerGifWindow.Close();
                 _cornerGifWindow = null;
             }
+            _cornerGifImage = null;
         }
 
         /// <summary>
@@ -1063,6 +1007,29 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Failed to update corner GIF size");
+            }
+        }
+
+        /// <summary>
+        /// Updates the corner GIF opacity during an active session
+        /// </summary>
+        public void UpdateCornerGifOpacity(int newOpacity)
+        {
+            if (_cornerGifWindow == null || _currentSession == null) return;
+
+            try
+            {
+                // Update the session settings
+                _currentSession.Settings.CornerGifOpacity = newOpacity;
+
+                // Apply opacity directly (no reduction)
+                _cornerGifWindow.Opacity = newOpacity / 100.0;
+
+                App.Logger?.Debug("Corner GIF opacity updated to {Opacity}%", newOpacity);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to update corner GIF opacity");
             }
         }
 

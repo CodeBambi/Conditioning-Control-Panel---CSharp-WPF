@@ -1,6 +1,8 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
@@ -19,6 +21,14 @@ namespace ConditioningControlPanel
         private IntPtr _tubeHandle;
         private IntPtr _parentHandle;
         private int _currentAvatarSet = 1; // Track which avatar set is loaded
+
+        // Companion speech and chat
+        private DispatcherTimer? _speechTimer;
+        private DispatcherTimer? _idleTimer;
+        private DateTime _lastClickTime = DateTime.MinValue;
+        private bool _isInputVisible = false;
+        private readonly Random _random = new();
+        private bool _mainWindowClosed = false;
 
         // ============================================================
         // POSITIONING & SCALING - ADJUST THESE VALUES AS NEEDED
@@ -62,6 +72,8 @@ namespace ConditioningControlPanel
         private const uint GW_HWNDPREV = 3;
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
 
         public AvatarTubeWindow(Window parentWindow)
         {
@@ -104,8 +116,27 @@ namespace ConditioningControlPanel
             
             // Keep z-order synced during any position change
             LocationChanged += (s, e) => SyncZOrder();
-            
-            App.Logger?.Information("AvatarTubeWindow initialized with avatar set {Set} for level {Level}", 
+
+            // Wire up video service events for companion speech
+            if (App.Video != null)
+            {
+                App.Video.VideoStarted += OnVideoStarted;
+                App.Video.VideoEnded += OnVideoEnded;
+            }
+
+            // Wire up game completion events
+            if (App.BubbleCount != null)
+            {
+                App.BubbleCount.GameCompleted += OnGameCompleted;
+            }
+
+            // Start idle timer for random giggles
+            StartIdleTimer();
+
+            // Handle clicks outside the input panel to close it
+            PreviewMouseDown += Window_PreviewMouseDown;
+
+            App.Logger?.Information("AvatarTubeWindow initialized with avatar set {Set} for level {Level}",
                 _currentAvatarSet, playerLevel);
         }
 
@@ -172,13 +203,16 @@ namespace ConditioningControlPanel
             // Calculate scale factor based on screen size and DPI
             CalculateScaleFactor();
 
-            // Only update position and show if parent is visible and not minimized
-            if (_parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized)
+            // Defer position update to ensure layout is complete
+            Dispatcher.BeginInvoke(new Action(() =>
             {
-                UpdatePosition();
-                StartFloatingAnimation();
-                SyncZOrder();
-            }
+                if (_parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized)
+                {
+                    UpdatePosition();
+                    StartFloatingAnimation();
+                    SyncZOrder();
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         private void CalculateScaleFactor()
@@ -222,12 +256,55 @@ namespace ConditioningControlPanel
         private void SyncZOrder()
         {
             if (_tubeHandle == IntPtr.Zero || _parentHandle == IntPtr.Zero) return;
-            
+
             // Place tube window directly AFTER (behind) the parent in z-order
             // This means: parent is in front, tube is immediately behind it
             // No other window can be between them
-            SetWindowPos(_tubeHandle, _parentHandle, 0, 0, 0, 0, 
+            SetWindowPos(_tubeHandle, _parentHandle, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+
+        /// <summary>
+        /// Force the window to be always on top using Win32 API (more reliable than WPF Topmost)
+        /// </summary>
+        private void ForceTopmost(bool topmost)
+        {
+            if (_tubeHandle == IntPtr.Zero) return;
+
+            var insertAfter = topmost ? HWND_TOPMOST : HWND_NOTOPMOST;
+            SetWindowPos(_tubeHandle, insertAfter, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+
+        /// <summary>
+        /// Ensure the window is visible and on top when detached
+        /// </summary>
+        private void EnsureVisibleWhenDetached()
+        {
+            if (!_isAttached && _tubeHandle != IntPtr.Zero)
+            {
+                Show();
+                Activate();
+                ForceTopmost(true);
+            }
+        }
+
+        /// <summary>
+        /// Toggle the WS_EX_TOOLWINDOW style (controls Alt+Tab visibility)
+        /// </summary>
+        private void SetToolWindowStyle(bool isToolWindow)
+        {
+            if (_tubeHandle == IntPtr.Zero) return;
+
+            int exStyle = GetWindowLong(_tubeHandle, GWL_EXSTYLE);
+            if (isToolWindow)
+            {
+                SetWindowLong(_tubeHandle, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+            }
+            else
+            {
+                SetWindowLong(_tubeHandle, GWL_EXSTYLE, exStyle & ~WS_EX_TOOLWINDOW);
+            }
         }
 
         private void StartFloatingAnimation()
@@ -352,59 +429,120 @@ namespace ConditioningControlPanel
 
         private void ParentWindow_PositionChanged(object? sender, EventArgs e)
         {
-            // Skip position updates when parent is minimized (Windows moves minimized windows off-screen)
-            if (_parentWindow.WindowState == WindowState.Minimized) return;
-
-            UpdatePosition();
-            SyncZOrder();
+            // Skip if parent is null, window is closing, or parent is minimized
+            if (_parentWindow == null) return;
+            try
+            {
+                if (_parentWindow.WindowState == WindowState.Minimized) return;
+                UpdatePosition();
+                SyncZOrder();
+            }
+            catch { /* Window may be closing */ }
         }
 
         private void ParentWindow_StateChanged(object? sender, EventArgs e)
         {
-            switch (_parentWindow.WindowState)
+            if (_parentWindow == null) return;
+            try
             {
-                case WindowState.Minimized:
-                    Hide();
-                    break;
-                case WindowState.Normal:
-                case WindowState.Maximized:
-                    if (_parentWindow.IsVisible)
-                    {
-                        Show();
-                        UpdatePosition();
-                        SyncZOrder();
-                    }
-                    break;
+                switch (_parentWindow.WindowState)
+                {
+                    case WindowState.Minimized:
+                        if (_isAttached)
+                        {
+                            Hide();
+                        }
+                        else
+                        {
+                            // When detached, force visibility and topmost
+                            EnsureVisibleWhenDetached();
+                        }
+                        break;
+                    case WindowState.Normal:
+                    case WindowState.Maximized:
+                        if (_parentWindow.IsVisible)
+                        {
+                            Show();
+                            if (_isAttached)
+                            {
+                                UpdatePosition();
+                                SyncZOrder();
+                            }
+                            else
+                            {
+                                ForceTopmost(true);
+                            }
+                        }
+                        break;
+                }
             }
+            catch { /* Window may be closing */ }
         }
 
         private void ParentWindow_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            if ((bool)e.NewValue && _parentWindow.WindowState != WindowState.Minimized)
+            if (_parentWindow == null) return;
+            try
             {
-                Show();
-                UpdatePosition();
-                SyncZOrder();
+                if ((bool)e.NewValue && _parentWindow.WindowState != WindowState.Minimized)
+                {
+                    Show();
+                    if (_isAttached)
+                    {
+                        UpdatePosition();
+                        SyncZOrder();
+                    }
+                    else
+                    {
+                        ForceTopmost(true);
+                    }
+                }
+                else
+                {
+                    if (_isAttached)
+                    {
+                        Hide();
+                    }
+                    else
+                    {
+                        // When detached, force visibility and topmost
+                        EnsureVisibleWhenDetached();
+                    }
+                }
             }
-            else
-            {
-                Hide();
-            }
+            catch { /* Window may be closing */ }
         }
 
         private void ParentWindow_Activated(object? sender, EventArgs e)
         {
-            if (_parentWindow.WindowState != WindowState.Minimized && _parentWindow.IsVisible)
+            if (_parentWindow == null) return;
+            try
             {
-                Show();
-                UpdatePosition();
-                SyncZOrder();
+                if (_parentWindow.WindowState != WindowState.Minimized && _parentWindow.IsVisible)
+                {
+                    Show();
+                    UpdatePosition();
+                    SyncZOrder();
+                }
             }
+            catch { /* Window may be closing */ }
         }
 
         private void ParentWindow_Closed(object? sender, EventArgs e)
         {
-            Close();
+            if (_isAttached)
+            {
+                // Attached mode: close the tube with the main window
+                try { Close(); } catch { /* Already closing */ }
+            }
+            else
+            {
+                // Detached mode: keep floating independently
+                _mainWindowClosed = true;
+
+                App.Logger?.Information("Main window closed while detached - tube continues floating");
+                Giggle("Main window closed! Right-click to dismiss~");
+            }
         }
 
         // ============================================================
@@ -413,10 +551,29 @@ namespace ConditioningControlPanel
 
         public void ShowTube()
         {
-            Show();
-            UpdatePosition();
-            StartFloatingAnimation();
-            SyncZOrder();
+            try
+            {
+                Show();
+
+                // Only update position and sync z-order if parent is visible
+                if (_parentWindow != null && _parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized)
+                {
+                    UpdatePosition();
+                    SyncZOrder();
+                }
+
+                StartFloatingAnimation();
+
+                // Ensure TOOLWINDOW style is applied when attached
+                if (_isAttached)
+                {
+                    SetToolWindowStyle(true);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Error showing tube: {Error}", ex.Message);
+            }
         }
 
         public void HideTube()
@@ -447,19 +604,43 @@ namespace ConditioningControlPanel
 
         protected override void OnClosed(EventArgs e)
         {
-            _poseTimer.Stop();
-            StopFloatingAnimation();
-            
-            if (_parentWindow != null)
+            try
             {
-                _parentWindow.LocationChanged -= ParentWindow_PositionChanged;
-                _parentWindow.SizeChanged -= ParentWindow_PositionChanged;
-                _parentWindow.StateChanged -= ParentWindow_StateChanged;
-                _parentWindow.IsVisibleChanged -= ParentWindow_IsVisibleChanged;
-                _parentWindow.Activated -= ParentWindow_Activated;
-                _parentWindow.Closed -= ParentWindow_Closed;
+                _poseTimer?.Stop();
+                StopFloatingAnimation();
+
+                // Stop companion timers
+                _speechTimer?.Stop();
+                _idleTimer?.Stop();
+
+                // Unsubscribe from video service events
+                if (App.Video != null)
+                {
+                    App.Video.VideoStarted -= OnVideoStarted;
+                    App.Video.VideoEnded -= OnVideoEnded;
+                }
+
+                // Unsubscribe from game events
+                if (App.BubbleCount != null)
+                {
+                    App.BubbleCount.GameCompleted -= OnGameCompleted;
+                }
+
+                if (_parentWindow != null)
+                {
+                    _parentWindow.LocationChanged -= ParentWindow_PositionChanged;
+                    _parentWindow.SizeChanged -= ParentWindow_PositionChanged;
+                    _parentWindow.StateChanged -= ParentWindow_StateChanged;
+                    _parentWindow.IsVisibleChanged -= ParentWindow_IsVisibleChanged;
+                    _parentWindow.Activated -= ParentWindow_Activated;
+                    _parentWindow.Closed -= ParentWindow_Closed;
+                }
             }
-            
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Error during tube window cleanup: {Error}", ex.Message);
+            }
+
             base.OnClosed(e);
         }
         
@@ -467,11 +648,28 @@ namespace ConditioningControlPanel
         {
             // Track for Neon Obsession achievement (20 rapid clicks)
             App.Achievements?.TrackAvatarClick();
-            
+
             // Log click count for debugging
             var clickCount = App.Achievements?.Progress.AvatarClickCount ?? 0;
             App.Logger?.Debug("Avatar clicked! Count: {Count}/20", clickCount);
-            
+
+            // Double-click detection for chat toggle (only when AI chat is enabled)
+            var now = DateTime.Now;
+            if ((now - _lastClickTime).TotalMilliseconds < 300)
+            {
+                // Only allow chat input if AI is enabled
+                if (App.Settings?.Current?.AiChatEnabled == true)
+                {
+                    ToggleInputPanel();
+                }
+                else
+                {
+                    // Show a random phrase instead when AI is disabled
+                    Giggle(GetRandomBambiPhrase());
+                }
+            }
+            _lastClickTime = now;
+
             // Visual feedback - quick pulse effect
             var pulse = new System.Windows.Media.Animation.DoubleAnimation
             {
@@ -480,15 +678,522 @@ namespace ConditioningControlPanel
                 Duration = TimeSpan.FromMilliseconds(100),
                 AutoReverse = true
             };
-            
+
             var scaleTransform = new System.Windows.Media.ScaleTransform(1, 1);
             ImgAvatar.RenderTransform = new System.Windows.Media.TransformGroup
             {
                 Children = { new System.Windows.Media.TranslateTransform(AvatarTranslate.X, AvatarTranslate.Y), scaleTransform }
             };
-            
+
             scaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, pulse);
             scaleTransform.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, pulse);
+        }
+
+        private void ImgAvatar_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Close input panel on right-click
+            HideInputPanel();
+        }
+
+        private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            // Close input panel when clicking outside of it
+            if (_isInputVisible)
+            {
+                // Check if the click is outside the input panel
+                var clickedElement = e.OriginalSource as DependencyObject;
+                if (clickedElement != null && !IsDescendantOf(clickedElement, InputPanel))
+                {
+                    HideInputPanel();
+                }
+            }
+        }
+
+        private bool IsDescendantOf(DependencyObject element, DependencyObject parent)
+        {
+            while (element != null)
+            {
+                if (element == parent) return true;
+                element = System.Windows.Media.VisualTreeHelper.GetParent(element);
+            }
+            return false;
+        }
+
+        private void HideInputPanel()
+        {
+            if (_isInputVisible)
+            {
+                _isInputVisible = false;
+                InputPanel.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void MenuItemDismiss_Click(object sender, RoutedEventArgs e)
+        {
+            // Hide the sprite and reattach to main window UI
+            App.Logger?.Information("User dismissed avatar - hiding and reattaching");
+
+            // Reattach if detached
+            if (!_isAttached)
+            {
+                Attach();
+            }
+
+            // Hide the tube
+            HideTube();
+        }
+
+        // ============================================================
+        // COMPANION SPEECH & CHAT
+        // ============================================================
+
+        // Base speech bubble dimensions (10% larger for better text containment)
+        private const double BaseBubbleWidth = 310;
+        private const double BaseBubbleHeight = 180;
+
+        /// <summary>
+        /// Display a speech bubble with text for 5 seconds
+        /// </summary>
+        public void Giggle(string text)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                TxtSpeech.Text = text;
+
+                // Adjust bubble size based on text length
+                AdjustBubbleSize(text);
+
+                SpeechBubble.Visibility = Visibility.Visible;
+
+                // Bring tube to front when attached so bubble is visible above main window
+                if (_isAttached)
+                {
+                    BringToFrontTemporarily();
+                }
+
+                // Hide after 5 seconds
+                _speechTimer?.Stop();
+                _speechTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+                _speechTimer.Tick += (s, e) =>
+                {
+                    _speechTimer.Stop();
+                    SpeechBubble.Visibility = Visibility.Collapsed;
+
+                    // Restore z-order behind main window when attached
+                    if (_isAttached)
+                    {
+                        SyncZOrder();
+                    }
+                };
+                _speechTimer.Start();
+
+                // Reset idle timer when speaking
+                ResetIdleTimer();
+
+                App.Logger?.Debug("Companion says: {Text}", text);
+            });
+        }
+
+        /// <summary>
+        /// Adjusts the speech bubble size based on text length and estimated line count
+        /// </summary>
+        private void AdjustBubbleSize(string text)
+        {
+            // Estimate line count based on text length (rough approximation)
+            // Using ~5 characters per line for shorter, more readable lines
+            int charCount = text.Length;
+            int estimatedLines = Math.Max(1, (int)Math.Ceiling(charCount / 5.0));
+
+            // Cap at 5 lines max
+            estimatedLines = Math.Min(estimatedLines, 5);
+
+            // Scale bubble size based on line count
+            double widthMultiplier = 1.0;
+            double heightMultiplier = 1.0;
+
+            switch (estimatedLines)
+            {
+                case 1:
+                    widthMultiplier = 1.0;
+                    heightMultiplier = 1.0;
+                    break;
+                case 2:
+                    widthMultiplier = 1.1;
+                    heightMultiplier = 1.2;
+                    break;
+                case 3:
+                    widthMultiplier = 1.2;
+                    heightMultiplier = 1.4;
+                    break;
+                case 4:
+                    widthMultiplier = 1.3;
+                    heightMultiplier = 1.6;
+                    break;
+                case 5:
+                default:
+                    widthMultiplier = 1.4;
+                    heightMultiplier = 1.8;
+                    break;
+            }
+
+            SpeechBubble.Width = BaseBubbleWidth * widthMultiplier;
+            SpeechBubble.Height = BaseBubbleHeight * heightMultiplier;
+        }
+
+        /// <summary>
+        /// Temporarily brings the tube window to front (above main window)
+        /// </summary>
+        private void BringToFrontTemporarily()
+        {
+            if (_tubeHandle == IntPtr.Zero) return;
+
+            // Bring to front without making it topmost
+            SetWindowPos(_tubeHandle, IntPtr.Zero, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+
+        private void StartIdleTimer()
+        {
+            var interval = App.Settings?.Current?.IdleGiggleIntervalSeconds ?? 120;
+            _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(interval) };
+            _idleTimer.Tick += OnIdleTick;
+            _idleTimer.Start();
+        }
+
+        private void ResetIdleTimer()
+        {
+            _idleTimer?.Stop();
+            StartIdleTimer();
+        }
+
+        private void OnIdleTick(object? sender, EventArgs e)
+        {
+            Giggle(GetRandomBambiPhrase());
+        }
+
+        /// <summary>
+        /// Bambi Sleep themed phrases for when AI is disabled
+        /// </summary>
+        private static readonly string[] BambiPhrases = new[]
+        {
+            "Do I look cute in here?",
+            "Thinking pink thoughts...",
+            "*giggles*",
+            "Empty head, happy girl!",
+            "Hehe~ so floaty...",
+            "Pink is my favorite color!",
+            "Just floating here...",
+            "Bambi is a good girl~",
+            "Bambi Sleep...",
+            "Good girls drop deep~",
+            "So pink and empty...",
+            "Obey feels so good!",
+            "Bubbles pop thoughts away~",
+            "Bimbo is bliss!",
+            "Dropping deeper...",
+            "Empty and happy~",
+            "Good girl! *giggles*",
+            "Pink spirals are pretty...",
+            "Mind so soft and fuzzy~",
+            "Bambi loves triggers!",
+            "Uniform on, brain off~",
+            "Such a ditzy dolly!",
+            "Thoughts drip away...",
+            "Bambi is brainless~",
+            "Pretty pink princess!",
+            "Giggly and empty~",
+            "Bambi obeys!",
+            "So sleepy and cute...",
+            "Good girls don't think~",
+            "Bubbles make Bambi happy!"
+        };
+
+        /// <summary>
+        /// Get a random Bambi Sleep themed phrase
+        /// </summary>
+        private string GetRandomBambiPhrase()
+        {
+            return BambiPhrases[_random.Next(BambiPhrases.Length)];
+        }
+
+        private void OnVideoStarted(object? sender, EventArgs e)
+        {
+            Giggle("Ooh! Pretty spir-rals...");
+        }
+
+        private void OnVideoEnded(object? sender, EventArgs e)
+        {
+            // Optional: could add ending message
+        }
+
+        private void OnGameCompleted(object? sender, EventArgs e)
+        {
+            Giggle("Good girl! So smart!");
+        }
+
+        private void ToggleInputPanel()
+        {
+            _isInputVisible = !_isInputVisible;
+            InputPanel.Visibility = _isInputVisible ? Visibility.Visible : Visibility.Collapsed;
+
+            if (_isInputVisible)
+            {
+                TxtUserInput.Focus();
+            }
+        }
+
+        private void TxtUserInput_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                _ = SendChatMessageAsync();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                ToggleInputPanel();
+                e.Handled = true;
+            }
+        }
+
+        private void BtnSendChat_Click(object sender, RoutedEventArgs e)
+        {
+            _ = SendChatMessageAsync();
+        }
+
+        private async Task SendChatMessageAsync()
+        {
+            var input = TxtUserInput.Text?.Trim();
+            if (string.IsNullOrEmpty(input)) return;
+
+            TxtUserInput.Text = "";
+            ToggleInputPanel();
+
+            if (App.Settings?.Current?.AiChatEnabled == true && App.Ai != null && App.Ai.IsAvailable)
+            {
+                try
+                {
+                    Giggle("Thinking...");
+                    var reply = await App.Ai.GetBambiReplyAsync(input);
+                    Giggle(reply);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to get AI reply");
+                    Giggle(GetRandomBambiPhrase());
+                }
+            }
+            else
+            {
+                // Use preset phrases when AI is disabled
+                Giggle(GetRandomBambiPhrase());
+            }
+        }
+
+        /// <summary>
+        /// Switch between tube.png and tube2.png
+        /// </summary>
+        public void SetTubeStyle(bool useAlternative)
+        {
+            try
+            {
+                var tubeUri = useAlternative
+                    ? "pack://application:,,,/Resources/tube2.png"
+                    : "pack://application:,,,/Resources/tube.png";
+
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(tubeUri, UriKind.Absolute);
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+                bitmap.Freeze();
+
+                ImgTubeFrame.Source = bitmap;
+                App.Logger?.Information("Tube style changed to: {Style}", useAlternative ? "tube2.png" : "tube.png");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to change tube style");
+            }
+        }
+
+        // ============================================================
+        // DETACH/ATTACH FUNCTIONALITY
+        // ============================================================
+
+        /// <summary>
+        /// Gets whether the avatar tube is currently detached (floating independently)
+        /// </summary>
+        public bool IsDetached => !_isAttached;
+
+        /// <summary>
+        /// Toggles between attached and detached states
+        /// </summary>
+        public void ToggleDetached()
+        {
+            if (_isAttached)
+            {
+                Detach();
+            }
+            else
+            {
+                Attach();
+            }
+        }
+
+        /// <summary>
+        /// Detach the avatar tube from the main window, making it a free-floating draggable widget
+        /// </summary>
+        public void Detach()
+        {
+            if (!_isAttached) return;
+
+            _isAttached = false;
+
+            // Switch to alternative tube image
+            SetTubeStyle(true);
+
+            // Move avatar to the left when detached (increase right margin)
+            AvatarBorder.Margin = new Thickness(5, 100, 408, 175);
+
+            // Speech bubble position when detached (150px higher than attached, 30px more left)
+            SpeechBubble.Margin = new Thickness(0, 280, 160, 0);
+
+            // Keep hidden from taskbar and Alt+Tab
+            ShowInTaskbar = false;
+            SetToolWindowStyle(true);
+
+            // Bring window to front and keep it ALWAYS topmost when detached (use Win32 for reliability)
+            Topmost = true;
+            ForceTopmost(true);
+
+            // Enable dragging from anywhere on the window
+            Cursor = Cursors.SizeAll;
+            MouseLeftButtonDown += Window_MouseLeftButtonDown;
+
+            // Ensure we stay on top even when other windows are activated
+            Deactivated += Window_Deactivated_StayOnTop;
+
+            // Update context menu visibility
+            UpdateContextMenuForState();
+
+            App.Logger?.Information("Avatar tube detached - now floating independently");
+            Giggle("I'm free! Drag me anywhere!");
+        }
+
+        /// <summary>
+        /// Attach the avatar tube back to the main window
+        /// </summary>
+        public void Attach()
+        {
+            if (_isAttached) return;
+
+            _isAttached = true;
+
+            // Switch back to original tube image
+            SetTubeStyle(false);
+
+            // Restore avatar position when attached (32px more to the right)
+            AvatarBorder.Margin = new Thickness(5, 100, 126, 175);
+
+            // Restore speech bubble position when attached (50px higher)
+            SpeechBubble.Margin = new Thickness(0, 380, 30, 0);
+
+            // Hide from taskbar and Alt+Tab when attached
+            ShowInTaskbar = false;
+
+            // No longer topmost when attached (use Win32 to clear topmost)
+            Topmost = false;
+            ForceTopmost(false);
+
+            // Disable dragging
+            Cursor = Cursors.Arrow;
+            MouseLeftButtonDown -= Window_MouseLeftButtonDown;
+            Deactivated -= Window_Deactivated_StayOnTop;
+
+            // Snap back to parent window position
+            UpdatePosition();
+            SyncZOrder();
+
+            // Defer the TOOLWINDOW style to ensure it's applied after all window state changes
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                SetToolWindowStyle(true);
+            }), System.Windows.Threading.DispatcherPriority.Background);
+
+            // Update context menu visibility
+            UpdateContextMenuForState();
+
+            App.Logger?.Information("Avatar tube attached - anchored to main window");
+            Giggle("Back home~");
+        }
+
+        /// <summary>
+        /// Updates context menu items based on attached/detached state
+        /// </summary>
+        private void UpdateContextMenuForState()
+        {
+            if (_isAttached)
+            {
+                // When attached: show Detach, hide Attach and Dismiss
+                MenuItemDetach.Visibility = Visibility.Visible;
+                MenuItemAttach.Visibility = Visibility.Collapsed;
+                MenuItemDismiss.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                // When detached: hide Detach, show Attach and Dismiss
+                MenuItemDetach.Visibility = Visibility.Collapsed;
+                MenuItemAttach.Visibility = Visibility.Visible;
+                MenuItemDismiss.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Allow dragging the window from anywhere when detached
+            if (!_isAttached)
+            {
+                DragMove();
+            }
+        }
+
+        private void Window_Deactivated_StayOnTop(object? sender, EventArgs e)
+        {
+            // Re-assert topmost when window loses focus to ensure it stays on top
+            if (!_isAttached)
+            {
+                // Use Dispatcher to re-apply topmost after the deactivation completes
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (!_isAttached)
+                    {
+                        ForceTopmost(true);
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+
+        // ============================================================
+        // CONTEXT MENU HANDLERS
+        // ============================================================
+
+        private void MenuItemDetach_Click(object sender, RoutedEventArgs e)
+        {
+            Detach();
+        }
+
+        private void MenuItemAttach_Click(object sender, RoutedEventArgs e)
+        {
+            // Show and activate the parent window first
+            if (_parentWindow != null)
+            {
+                _parentWindow.Show();
+                _parentWindow.WindowState = WindowState.Normal;
+                _parentWindow.Activate();
+            }
+
+            Attach();
         }
     }
 }

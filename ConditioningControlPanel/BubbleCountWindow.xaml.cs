@@ -31,7 +31,8 @@ namespace ConditioningControlPanel
         private readonly Random _random = new();
         private readonly List<CountBubble> _activeBubbles = new();
         private DispatcherTimer? _bubbleSpawnTimer;
-        
+        private DispatcherTimer? _safetyTimer;
+
         private int _bubbleCount = 0;
         private int _targetBubbleCount = 0;
         private double _videoDurationSeconds = 30;
@@ -152,14 +153,17 @@ namespace ConditioningControlPanel
                 {
                     // Get video duration
                     _videoDurationSeconds = GetVideoDuration(_videoPath);
-                    
+
                     // Calculate target bubbles
                     CalculateTargetBubbles();
                     _sharedTargetCount = _targetBubbleCount;
-                    
+
                     // Start spawning bubbles
                     StartBubbleSpawning();
-                    
+
+                    // Start safety timer to prevent frozen fullscreen if MediaEnded doesn't fire
+                    StartSafetyTimer(_videoDurationSeconds);
+
                     App.Logger?.Information("Bubble Count game started - Target: {Target} bubbles, Duration: {Duration}s, Difficulty: {Diff}",
                         _targetBubbleCount, _videoDurationSeconds, _difficulty);
                 }
@@ -271,10 +275,36 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Starts a safety timer to force video end if MediaEnded never fires.
+        /// This prevents the game window from getting stuck on fullscreen.
+        /// </summary>
+        private void StartSafetyTimer(double videoDurationSeconds)
+        {
+            _safetyTimer?.Stop();
+
+            // Add 5 second buffer beyond video duration
+            var timeoutSeconds = videoDurationSeconds + 5;
+
+            _safetyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(timeoutSeconds) };
+            _safetyTimer.Tick += (s, e) =>
+            {
+                _safetyTimer?.Stop();
+                if (!_videoEnded)
+                {
+                    App.Logger?.Warning("BubbleCountWindow: Safety timeout triggered - MediaEnded did not fire. Forcing video end.");
+                    OnVideoEnded();
+                }
+            };
+            _safetyTimer.Start();
+
+            App.Logger?.Debug("BubbleCountWindow: Safety timer started for {Duration}s", timeoutSeconds);
+        }
+
         private void StartBubbleSpawning()
         {
             if (!_isPrimary) return;
-            
+
             var intervalMs = (_videoDurationSeconds * 1000) / Math.Max(1, _targetBubbleCount);
             
             _bubbleSpawnTimer = new DispatcherTimer
@@ -391,7 +421,8 @@ namespace ConditioningControlPanel
         {
             if (_videoEnded) return;
             _videoEnded = true;
-            
+
+            _safetyTimer?.Stop();
             _bubbleSpawnTimer?.Stop();
             
             // Mark all windows as ended
@@ -453,12 +484,13 @@ namespace ConditioningControlPanel
         {
             foreach (var window in _allWindows.ToArray())
             {
-                try 
-                { 
+                try
+                {
+                    window._safetyTimer?.Stop();
                     window._bubbleSpawnTimer?.Stop();
                     window.VideoPlayer?.Stop();
-                    window.Close(); 
-                } 
+                    window.Close();
+                }
                 catch { }
             }
             _allWindows.Clear();
@@ -466,17 +498,18 @@ namespace ConditioningControlPanel
 
         protected override void OnClosed(EventArgs e)
         {
+            _safetyTimer?.Stop();
             _bubbleSpawnTimer?.Stop();
             VideoPlayer?.Stop();
-            
+
             foreach (var bubble in _activeBubbles)
             {
                 bubble.Dispose();
             }
             _activeBubbles.Clear();
-            
+
             _allWindows.Remove(this);
-            
+
             base.OnClosed(e);
         }
     }

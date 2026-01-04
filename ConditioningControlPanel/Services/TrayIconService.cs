@@ -17,6 +17,7 @@ public class TrayIconService : IDisposable
 
     public event Action? OnShowRequested;
     public event Action? OnExitRequested;
+    public event Action? OnWakeBambiRequested;
 
     public TrayIconService(Window mainWindow)
     {
@@ -81,13 +82,17 @@ public class TrayIconService : IDisposable
 
             // Create context menu
             var contextMenu = new ContextMenuStrip();
-            
+
             var showItem = new ToolStripMenuItem("Show Dashboard");
             showItem.Click += (s, e) => ShowWindow();
             contextMenu.Items.Add(showItem);
-            
+
+            var wakeBambiItem = new ToolStripMenuItem("Wake Bambi Up!");
+            wakeBambiItem.Click += (s, e) => OnWakeBambiRequested?.Invoke();
+            contextMenu.Items.Add(wakeBambiItem);
+
             contextMenu.Items.Add(new ToolStripSeparator());
-            
+
             var exitItem = new ToolStripMenuItem("Exit");
             exitItem.Click += (s, e) => OnExitRequested?.Invoke();
             contextMenu.Items.Add(exitItem);

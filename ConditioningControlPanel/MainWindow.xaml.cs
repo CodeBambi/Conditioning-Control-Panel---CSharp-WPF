@@ -86,7 +86,11 @@ namespace ConditioningControlPanel
             {
                 ShowAvatarTube();
             };
-            
+            _trayIcon.OnWakeBambiRequested += () =>
+            {
+                WakeBambiUp();
+            };
+
             // Initialize global keyboard hook
             _keyboardHook = new GlobalKeyboardHook();
             _keyboardHook.KeyPressed += OnGlobalKeyPressed;
@@ -104,13 +108,16 @@ namespace ConditioningControlPanel
             StartupManager.SyncWithSettings(App.Settings.Current.RunOnStartup);
 
             _isLoading = false;
-            
+
             // Initialize achievement grid and subscribe to unlock events
             PopulateAchievementGrid();
             if (App.Achievements != null)
             {
                 App.Achievements.AchievementUnlocked += OnAchievementUnlockedInMainWindow;
             }
+
+            // Initialize Avatar tab settings
+            InitializeAvatarTabSettings();
             
             // Ensure all services are stopped on startup (cleanup any leftover state)
             App.BouncingText.Stop();
@@ -406,8 +413,9 @@ namespace ConditioningControlPanel
             if (msg == WM_SYSCOMMAND && (wParam.ToInt32() & 0xFFF0) == SC_MINIMIZE)
             {
                 handled = true; // Mark as handled to prevent default minimize
-                _trayIcon?.MinimizeToTray();
+                // Hide avatar tube FIRST to avoid event handler issues
                 HideAvatarTube();
+                _trayIcon?.MinimizeToTray();
             }
             return IntPtr.Zero;
         }
@@ -453,9 +461,42 @@ namespace ConditioningControlPanel
         {
             if (_avatarTubeWindow != null)
             {
+                // Don't hide or close if the tube is detached - let it float independently
+                if (_avatarTubeWindow.IsDetached)
+                {
+                    return;
+                }
+
                 _avatarTubeWindow.StopPoseAnimation();
-                _avatarTubeWindow.Close();
-                _avatarTubeWindow = null;
+                _avatarTubeWindow.HideTube();
+            }
+        }
+
+        /// <summary>
+        /// Shows only the avatar tube in detached mode (floating independently)
+        /// Called from tray icon "Wake Bambi Up!" option
+        /// </summary>
+        public void WakeBambiUp()
+        {
+            // Create tube if needed
+            if (_avatarTubeWindow == null)
+            {
+                InitializeAvatarTube();
+            }
+
+            if (_avatarTubeWindow != null)
+            {
+                // Show the tube
+                _avatarTubeWindow.Show();
+                _avatarTubeWindow.StartPoseAnimation();
+
+                // Detach it so it floats independently
+                if (!_avatarTubeWindow.IsDetached)
+                {
+                    _avatarTubeWindow.Detach();
+                }
+
+                _avatarTubeWindow.Giggle("Good morning~!");
             }
         }
 
@@ -489,6 +530,11 @@ namespace ConditioningControlPanel
             ShowTab("achievements");
         }
 
+        private void BtnAvatar_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("avatar");
+        }
+
         private void BtnDiscord_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -513,6 +559,7 @@ namespace ConditioningControlPanel
             PresetsTab.Visibility = Visibility.Collapsed;
             ProgressionTab.Visibility = Visibility.Collapsed;
             AchievementsTab.Visibility = Visibility.Collapsed;
+            AvatarTab.Visibility = Visibility.Collapsed;
 
             // Reset button styles
             var pinkBrush = FindResource("PinkBrush") as SolidColorBrush;
@@ -524,6 +571,8 @@ namespace ConditioningControlPanel
             BtnProgression.Foreground = pinkBrush;
             BtnAchievements.Background = Brushes.Transparent;
             BtnAchievements.Foreground = pinkBrush;
+            BtnAvatar.Background = Brushes.Transparent;
+            BtnAvatar.Foreground = pinkBrush;
 
             switch (tab)
             {
@@ -562,6 +611,13 @@ namespace ConditioningControlPanel
                     BtnAchievements.Foreground = Brushes.White;
                     UpdateAchievementCount();
                     break;
+
+                case "avatar":
+                    AvatarTab.Visibility = Visibility.Visible;
+                    BtnAvatar.Background = pinkBrush;
+                    BtnAvatar.Foreground = Brushes.White;
+                    UpdateAvatarTabStatus();
+                    break;
             }
         }
         
@@ -574,7 +630,105 @@ namespace ConditioningControlPanel
                 TxtAchievementCount.Text = $"{unlocked} / {total} Achievements Unlocked";
             }
         }
-        
+
+        #region Avatar Tab
+
+        private void UpdateAvatarTabStatus()
+        {
+            if (TxtAiStatus == null) return;
+
+            if (App.Ai == null)
+            {
+                TxtAiStatus.Text = "AI Service not initialized";
+            }
+            else if (!App.Ai.IsAvailable)
+            {
+                TxtAiStatus.Text = "OPENAI_API_KEY not found - AI chat disabled";
+            }
+            else
+            {
+                TxtAiStatus.Text = $"AI Ready - {App.Ai.DailyRequestsRemaining} requests remaining today";
+            }
+        }
+
+        private void InitializeAvatarTabSettings()
+        {
+            if (_isLoading) return;
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            ChkAvatarEnabled.IsChecked = settings.AvatarEnabled;
+            ChkAiChat.IsChecked = settings.AiChatEnabled;
+            SliderIdleInterval.Value = settings.IdleGiggleIntervalSeconds;
+            TxtIdleInterval.Text = $"{settings.IdleGiggleIntervalSeconds}s";
+
+            // Hide avatar if disabled
+            if (!settings.AvatarEnabled)
+            {
+                HideAvatarTube();
+            }
+
+            UpdateAvatarTabStatus();
+        }
+
+        private void ChkAvatarEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkAvatarEnabled.IsChecked == true;
+            App.Settings.Current.AvatarEnabled = isEnabled;
+
+            if (isEnabled)
+            {
+                ShowAvatarTube();
+            }
+            else
+            {
+                HideAvatarTube();
+            }
+
+            App.Settings.Save();
+        }
+
+        private void BtnDetachCompanion_Click(object sender, RoutedEventArgs e)
+        {
+            if (_avatarTubeWindow == null) return;
+
+            _avatarTubeWindow.ToggleDetached();
+
+            // Update button and status text
+            if (_avatarTubeWindow.IsDetached)
+            {
+                BtnDetachCompanion.Content = "🔗 Attach";
+                TxtDetachStatus.Text = "Floating freely - drag to reposition";
+            }
+            else
+            {
+                BtnDetachCompanion.Content = "🔗 Detach";
+                TxtDetachStatus.Text = "Anchored to window";
+            }
+        }
+
+        private void ChkAiChat_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            App.Settings.Current.AiChatEnabled = ChkAiChat.IsChecked == true;
+            App.Settings.Save();
+        }
+
+        private void SliderIdleInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtIdleInterval == null) return;
+
+            var value = (int)SliderIdleInterval.Value;
+            TxtIdleInterval.Text = $"{value}s";
+            App.Settings.Current.IdleGiggleIntervalSeconds = value;
+        }
+
+        #endregion
+
         private void PopulateAchievementGrid()
         {
             if (AchievementGrid == null) return;
@@ -995,6 +1149,20 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void SliderCornerGifOpacity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtCornerGifOpacity != null)
+            {
+                TxtCornerGifOpacity.Text = $"{(int)e.NewValue}%";
+            }
+
+            // Live update during session
+            if (_sessionEngine != null && _sessionEngine.IsRunning)
+            {
+                _sessionEngine.UpdateCornerGifOpacity((int)e.NewValue);
+            }
+        }
+
         private string _selectedCornerGifPath = "";
         
         private Models.CornerPosition GetSelectedCornerPosition()
@@ -1172,6 +1340,7 @@ namespace ConditioningControlPanel
                 session.Settings.CornerGifPath = _selectedCornerGifPath;
                 session.Settings.CornerGifPosition = GetSelectedCornerPosition();
                 session.Settings.CornerGifSize = (int)SliderCornerGifSize.Value;
+                session.Settings.CornerGifOpacity = (int)SliderCornerGifOpacity.Value;
             }
             
             // Initialize session engine if needed
@@ -2594,25 +2763,30 @@ namespace ConditioningControlPanel
             var elapsed = (DateTime.Now - _rampStartTime).TotalMinutes;
             var duration = settings.RampDurationMinutes;
             var multiplier = settings.SchedulerMultiplier;
-            
+
+            // Skip visual effect ramping if a session is active - sessions have their own built-in ramping
+            // This prevents the two systems from fighting and causing values to jump around
+            var sessionActive = _sessionEngine?.IsRunning == true;
+
             // Calculate progress (0.0 to 1.0)
             var progress = Math.Min(elapsed / duration, 1.0);
-            
+
             // Calculate current multiplier based on progress (linear interpolation from 1.0 to max)
             var currentMult = 1.0 + (multiplier - 1.0) * progress;
-            
+
             // Update linked sliders and settings
             Dispatcher.Invoke(() =>
             {
-                if (settings.RampLinkFlashOpacity && _rampBaseValues.TryGetValue("FlashOpacity", out var flashBase))
+                // Only apply visual effect ramps when no session is active
+                if (!sessionActive && settings.RampLinkFlashOpacity && _rampBaseValues.TryGetValue("FlashOpacity", out var flashBase))
                 {
                     var newVal = (int)Math.Min(flashBase * currentMult, 100);
                     SliderOpacity.Value = newVal;
                     TxtOpacity.Text = $"{newVal}%";
                     settings.FlashOpacity = newVal;
                 }
-                
-                if (settings.RampLinkSpiralOpacity && _rampBaseValues.TryGetValue("SpiralOpacity", out var spiralBase))
+
+                if (!sessionActive && settings.RampLinkSpiralOpacity && _rampBaseValues.TryGetValue("SpiralOpacity", out var spiralBase))
                 {
                     var newVal = (int)Math.Min(spiralBase * currentMult, 50);
                     SliderSpiralOpacity.Value = newVal;
@@ -2620,7 +2794,7 @@ namespace ConditioningControlPanel
                     settings.SpiralOpacity = newVal;
                 }
                 
-                if (settings.RampLinkPinkFilterOpacity && _rampBaseValues.TryGetValue("PinkFilterOpacity", out var pinkBase))
+                if (!sessionActive && settings.RampLinkPinkFilterOpacity && _rampBaseValues.TryGetValue("PinkFilterOpacity", out var pinkBase))
                 {
                     var newVal = (int)Math.Min(pinkBase * currentMult, 50);
                     SliderPinkOpacity.Value = newVal;

@@ -31,6 +31,7 @@ namespace ConditioningControlPanel
         public static BrainDrainService BrainDrain { get; private set; } = null!;
         public static AchievementService Achievements { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
+        public static AiService Ai { get; private set; } = null!;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -94,6 +95,7 @@ namespace ConditioningControlPanel
             BrainDrain = new BrainDrainService();
             Achievements = new AchievementService();
             Tutorial = new TutorialService();
+            Ai = new AiService();
 
             // Wire up achievement popup BEFORE checking any achievements
             Achievements.AchievementUnlocked += OnAchievementUnlocked;
@@ -185,14 +187,21 @@ namespace ConditioningControlPanel
             MindWipe?.Dispose();
             BrainDrain?.Dispose();
             Achievements?.Dispose();
+            Ai?.Dispose();
             Audio?.Dispose();
             Settings?.Save();
+
+            // Close and flush the logger
+            Log.CloseAndFlush();
 
             // Release single instance mutex
             _mutex?.ReleaseMutex();
             _mutex?.Dispose();
 
             base.OnExit(e);
+
+            // Force exit to ensure no background threads keep process alive
+            Environment.Exit(0);
         }
     }
 }

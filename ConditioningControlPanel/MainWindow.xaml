@@ -421,8 +421,10 @@ Bimbo" Foreground="#FF69B4"
                             Margin="5,0" Click="BtnPresets_Click"/>
                     <Button x:Name="BtnProgression" Content="📊 Progression" Style="{StaticResource OutlineButton}" 
                             Margin="5,0" Click="BtnProgression_Click"/>
-                    <Button x:Name="BtnAchievements" Content="🏆 Achievements" Style="{StaticResource OutlineButton}" 
+                    <Button x:Name="BtnAchievements" Content="🏆 Achievements" Style="{StaticResource OutlineButton}"
                             Margin="5,0" Click="BtnAchievements_Click"/>
+                    <Button x:Name="BtnAvatar" Content="Companion" Style="{StaticResource OutlineButton}"
+                            Margin="5,0" Click="BtnAvatar_Click" Visibility="Collapsed"/>
                 </StackPanel>
 
                 <!-- Preset Dropdown -->
@@ -1498,6 +1500,20 @@ Bimbo" Foreground="#FF69B4"
                                                        Foreground="#C0C0C0" FontSize="10" VerticalAlignment="Center"
                                                        HorizontalAlignment="Right"/>
                                         </Grid>
+
+                                        <!-- Opacity Slider -->
+                                        <TextBlock Text="Opacity:" Foreground="#909090" FontSize="10" Margin="0,10,0,4"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="50"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Slider x:Name="SliderCornerGifOpacity" Minimum="5" Maximum="100" Value="20"
+                                                    VerticalAlignment="Center" ValueChanged="SliderCornerGifOpacity_ValueChanged"/>
+                                            <TextBlock x:Name="TxtCornerGifOpacity" Grid.Column="1" Text="20%"
+                                                       Foreground="#C0C0C0" FontSize="10" VerticalAlignment="Center"
+                                                       HorizontalAlignment="Right"/>
+                                        </Grid>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -2400,11 +2416,130 @@ Bimbo" Foreground="#FF69B4"
                     <UniformGrid x:Name="AchievementGrid" Columns="7" Margin="0,5">
                     </UniformGrid>
                     
-                    <TextBlock x:Name="TxtAchievementCount" Text="0 / 25 Achievements Unlocked" Foreground="#888888" FontSize="14" 
+                    <TextBlock x:Name="TxtAchievementCount" Text="0 / 25 Achievements Unlocked" Foreground="#888888" FontSize="14"
                                HorizontalAlignment="Center" Margin="0,15,0,0"/>
                 </StackPanel>
             </ScrollViewer>
         </Border>
+
+        <!-- Avatar/Companion Tab -->
+        <Grid x:Name="AvatarTab" Grid.Row="3" Margin="10,5,10,10" Visibility="Collapsed">
+            <Border Style="{StaticResource SectionPanel}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="15">
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="Bambi Companion" FontSize="18" Margin="0,0,0,15"/>
+
+                        <!-- Activate Toggle -->
+                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock Text="Activate Specimen" Foreground="White" FontSize="14" FontWeight="Bold"/>
+                                    <TextBlock Text="Show the avatar companion window" Foreground="#808080" FontSize="12"/>
+                                </StackPanel>
+
+                                <CheckBox x:Name="ChkAvatarEnabled" Grid.Column="1"
+                                          Style="{StaticResource ToggleStyle}"
+                                          IsChecked="True"
+                                          Checked="ChkAvatarEnabled_Changed"
+                                          Unchecked="ChkAvatarEnabled_Changed"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Detach Companion Button -->
+                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock Text="Floating Companion" Foreground="White" FontSize="14" FontWeight="Bold"/>
+                                    <TextBlock x:Name="TxtDetachStatus" Text="Anchored to window" Foreground="#808080" FontSize="12"/>
+                                </StackPanel>
+
+                                <Button x:Name="BtnDetachCompanion" Grid.Column="1"
+                                        Content="🔗 Detach"
+                                        Background="#252542" Foreground="White"
+                                        BorderBrush="{StaticResource PinkBrush}" BorderThickness="1"
+                                        Padding="12,6" FontSize="12"
+                                        Cursor="Hand"
+                                        Click="BtnDetachCompanion_Click"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- AI Chat Toggle -->
+                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock Text="AI Chat" Foreground="White" FontSize="14" FontWeight="Bold"/>
+                                    <TextBlock Text="Double-click avatar to chat (requires OPENAI_API_KEY)" Foreground="#808080" FontSize="12"/>
+                                </StackPanel>
+
+                                <CheckBox x:Name="ChkAiChat" Grid.Column="1"
+                                          Style="{StaticResource ToggleStyle}"
+                                          IsChecked="True"
+                                          Checked="ChkAiChat_Changed"
+                                          Unchecked="ChkAiChat_Changed"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Idle Giggle Interval -->
+                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,10">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Idle Giggle Interval" Foreground="White" FontSize="14" FontWeight="Bold"/>
+                                        <TextBlock Text="How often the companion speaks when idle" Foreground="#808080" FontSize="12"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtIdleInterval" Grid.Column="1" Text="120s" Foreground="#FF69B4"
+                                               FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                                </Grid>
+                                <Slider x:Name="SliderIdleInterval"
+                                        Style="{StaticResource PinkSlider}"
+                                        Minimum="30" Maximum="600" Value="120"
+                                        Margin="0,10,0,0"
+                                        ValueChanged="SliderIdleInterval_ValueChanged"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Info Box -->
+                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,15,0,0"
+                                BorderBrush="#FF69B4" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Interaction Tips" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
+                                <TextBlock Text="- Click avatar for achievement progress" Foreground="#808080" FontSize="12" Margin="0,8,0,0"/>
+                                <TextBlock Text="- Double-click to open chat input" Foreground="#808080" FontSize="12" Margin="0,3,0,0"/>
+                                <TextBlock Text="- Avatar speaks during videos and games" Foreground="#808080" FontSize="12" Margin="0,3,0,0"/>
+                                <TextBlock Text="- Set OPENAI_API_KEY environment variable for AI chat" Foreground="#808080" FontSize="12" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- API Status -->
+                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0">
+                            <StackPanel>
+                                <TextBlock Text="AI Status" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtAiStatus" Text="Checking..." Foreground="#808080" FontSize="12" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
 
         <!-- Global Bottom Bar: Start / Save / Exit (Always visible) -->
         <Border Grid.Row="4" Background="{StaticResource PanelBgBrush}" Margin="10,5,10,10" CornerRadius="10" Padding="15,12">

@@ -10,11 +10,12 @@
         ResizeMode="NoResize"
         SizeToContent="WidthAndHeight">
 
+
     <!-- Viewbox scales content uniformly to fit any screen size -->
     <Viewbox x:Name="ContentViewbox" Stretch="Uniform">
         <!-- Design canvas at fixed reference size - will be scaled -->
         <Grid Width="780" Height="1020">
-            <!-- Tube frame FIRST (behind) -->
+            <!-- Tube frame FIRST (behind) - Z-Index 0 implicit -->
             <Image x:Name="ImgTubeFrame"
                    Source="pack://application:,,,/Resources/tube.png"
                    Stretch="Uniform"
@@ -22,13 +23,93 @@
                    VerticalAlignment="Center"
                    IsHitTestVisible="False"/>
 
-            <!-- Avatar/Sprite SECOND (on top) with floating animation -->
-            <Border HorizontalAlignment="Center"
+            <!-- Speech Bubble - Z-Index 2, size adjusted dynamically based on text -->
+            <Grid x:Name="SpeechBubble"
+                  Panel.ZIndex="2"
+                  Visibility="Collapsed"
+                  HorizontalAlignment="Right"
+                  VerticalAlignment="Top"
+                  Opacity="0.75"
+                  Margin="0,380,30,0"
+                  Width="310" Height="180">
+
+                <!-- Bubble background image -->
+                <Image x:Name="ImgSpeechBubble"
+                       Source="pack://application:,,,/Resources/speechbubble1.png"
+                       Stretch="Fill"
+                       IsHitTestVisible="False"/>
+
+                <!-- Speech text centered over bubble, with wider margins for shorter lines -->
+                <TextBlock x:Name="TxtSpeech"
+                           Text=""
+                           Foreground="#FF10F0"
+                           FontSize="22"
+                           FontWeight="Bold"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Margin="45,20,45,35">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="Black" BlurRadius="1" ShadowDepth="1.5" Direction="315" Opacity="1"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+            </Grid>
+
+            <!-- Text Input Panel (hidden by default) - Z-Index 3, positioned near avatar -->
+            <Border x:Name="InputPanel"
+                    Panel.ZIndex="3"
+                    Visibility="Collapsed"
+                    HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
-                    Margin="155,100,258,175"
+                    Margin="0,0,126,520"
+                    Background="#252542"
+                    CornerRadius="10"
+                    Padding="10"
+                    BorderBrush="#FF69B4"
+                    BorderThickness="2">
+                <StackPanel Orientation="Horizontal">
+                    <TextBox x:Name="TxtUserInput"
+                             Width="180"
+                             Height="30"
+                             FontSize="14"
+                             Background="#1A1A2E"
+                             Foreground="White"
+                             BorderBrush="#FF69B4"
+                             BorderThickness="1"
+                             Padding="5,3"
+                             VerticalContentAlignment="Center"
+                             KeyDown="TxtUserInput_KeyDown"/>
+                    <Button x:Name="BtnSendChat"
+                            Content="Send"
+                            Width="50"
+                            Height="30"
+                            Margin="5,0,0,0"
+                            Background="#FF69B4"
+                            Foreground="White"
+                            FontWeight="Bold"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            Click="BtnSendChat_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Avatar/Sprite - Z-Index 1 implicit, with floating animation -->
+            <Border x:Name="AvatarBorder"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="5,100,126,175"
                     Cursor="Hand"
                     MouseLeftButtonDown="ImgAvatar_MouseLeftButtonDown"
+                    MouseRightButtonDown="ImgAvatar_MouseRightButtonDown"
                     CornerRadius="20" ClipToBounds="True">
+                <Border.ContextMenu>
+                    <ContextMenu x:Name="AvatarContextMenu" Background="#252542" BorderBrush="#FF69B4" BorderThickness="2">
+                        <MenuItem x:Name="MenuItemDetach" Header="Detach" Click="MenuItemDetach_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemAttach" Header="Attach to Main Window" Click="MenuItemAttach_Click" Foreground="White" Visibility="Collapsed"/>
+                        <MenuItem x:Name="MenuItemDismiss" Header="Dismiss" Click="MenuItemDismiss_Click" Foreground="White" Visibility="Collapsed"/>
+                    </ContextMenu>
+                </Border.ContextMenu>
                 <Image x:Name="ImgAvatar"
                        Stretch="Uniform"
                        MaxHeight="340"

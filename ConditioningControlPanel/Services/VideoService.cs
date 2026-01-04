@@ -25,7 +25,8 @@ namespace ConditioningControlPanel.Services
 
         private DispatcherTimer? _scheduler;
         private DispatcherTimer? _attentionTimer;
-        
+        private DispatcherTimer? _safetyTimer;
+
         private bool _isRunning;
         private bool _videoPlaying;
         private bool _strictActive;
@@ -60,12 +61,13 @@ namespace ConditioningControlPanel.Services
             _isRunning = false;
             _scheduler?.Stop();
             _attentionTimer?.Stop();
-            
+            _safetyTimer?.Stop();
+
             // Force cleanup of any playing video
             _videoPlaying = false;
             _strictActive = false;
             Cleanup();
-            
+
             App.Logger?.Information("VideoService stopped");
         }
 
@@ -111,6 +113,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void ForceCleanup()
         {
+            _safetyTimer?.Stop();
             _videoPlaying = false;
             _strictActive = false;
             CloseAll();
@@ -214,7 +217,10 @@ namespace ConditioningControlPanel.Services
             mediaElement.MediaOpened += (s, e) =>
             {
                 if (mediaElement.NaturalDuration.HasTimeSpan)
+                {
                     _duration = mediaElement.NaturalDuration.TimeSpan.TotalSeconds;
+                    StartSafetyTimer(_duration);
+                }
             };
             
             mediaElement.MediaEnded += (s, e) => 
@@ -499,6 +505,36 @@ namespace ConditioningControlPanel.Services
 
         #endregion
 
+        #region Safety Timeout
+
+        /// <summary>
+        /// Starts a safety timer to force cleanup if MediaEnded never fires.
+        /// This prevents the video window from getting stuck on fullscreen.
+        /// </summary>
+        private void StartSafetyTimer(double videoDurationSeconds)
+        {
+            _safetyTimer?.Stop();
+
+            // Add 5 second buffer beyond video duration
+            var timeoutSeconds = videoDurationSeconds + 5;
+
+            _safetyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(timeoutSeconds) };
+            _safetyTimer.Tick += (s, e) =>
+            {
+                _safetyTimer?.Stop();
+                if (_videoPlaying)
+                {
+                    App.Logger?.Warning("VideoService: Safety timeout triggered - MediaEnded did not fire. Forcing cleanup.");
+                    Cleanup();
+                }
+            };
+            _safetyTimer.Start();
+
+            App.Logger?.Debug("VideoService: Safety timer started for {Duration}s", timeoutSeconds);
+        }
+
+        #endregion
+
         #region Cleanup
 
         private void CloseAll()
@@ -524,13 +560,14 @@ namespace ConditioningControlPanel.Services
 
         private void Cleanup()
         {
+            _safetyTimer?.Stop();
             _videoPlaying = false;
             CloseAll();
             App.Audio?.Unduck();
             App.Audio?.ResumeBackgroundMusic();
             _strictActive = false;
             _penalties = 0;
-            
+
             VideoEnded?.Invoke(this, EventArgs.Empty);
             
             if (_isRunning && App.Settings.Current.FlashEnabled) 

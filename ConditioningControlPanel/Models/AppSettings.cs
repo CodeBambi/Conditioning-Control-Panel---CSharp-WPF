@@ -917,6 +917,50 @@ namespace ConditioningControlPanel.Models
         }
         #endregion
 
+        #region Avatar Companion
+
+        private bool _avatarEnabled = true;
+        /// <summary>
+        /// Whether to show the avatar companion window
+        /// </summary>
+        public bool AvatarEnabled
+        {
+            get => _avatarEnabled;
+            set { _avatarEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _useAlternativeTube = false;
+        /// <summary>
+        /// When true, use tube2.png instead of tube.png
+        /// </summary>
+        public bool UseAlternativeTube
+        {
+            get => _useAlternativeTube;
+            set { _useAlternativeTube = value; OnPropertyChanged(); }
+        }
+
+        private bool _aiChatEnabled = true;
+        /// <summary>
+        /// Whether AI chat is enabled (requires OPENAI_API_KEY environment variable)
+        /// </summary>
+        public bool AiChatEnabled
+        {
+            get => _aiChatEnabled;
+            set { _aiChatEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _idleGiggleIntervalSeconds = 120; // 30-600 seconds
+        /// <summary>
+        /// How often the companion speaks when idle (in seconds)
+        /// </summary>
+        public int IdleGiggleIntervalSeconds
+        {
+            get => _idleGiggleIntervalSeconds;
+            set { _idleGiggleIntervalSeconds = Math.Clamp(value, 30, 600); OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Validation
 
         /// <summary>

@@ -61,11 +61,17 @@
     
     <!-- Embedded Browser -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2535.41" />
+
+    <!-- AI Service -->
+    <PackageReference Include="OpenAI-DotNet" Version="8.6.2" />
     
     <!-- SharpDX for Desktop Duplication API (DXGI) -->
     <PackageReference Include="SharpDX" Version="4.2.0" />
     <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
     <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
+
+    <!-- GIF Animation Support -->
+    <PackageReference Include="XamlAnimatedGif" Version="2.3.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -89,11 +95,14 @@
     <Resource Include="Resources\app.ico" />
     <Resource Include="Resources\logo.png" />
     <Resource Include="Resources\bubble.png" />
+    <Resource Include="Resources\speechbubble1.png" />
+    <Resource Include="Resources\speechbubble2.png" />
     <Resource Include="Resources\discord.png" />
     <Resource Include="Resources\spiral.gif" />
     
     <!-- Avatar Tube images - MUST be Resource for pack:// URIs to work -->
     <Resource Include="Resources\tube.png" />
+    <Resource Include="Resources\tube2.png" />
     
     <!-- Avatar Set 1: Default (Level 1-19) -->
     <Resource Include="Resources\avatar_pose1.png" />
