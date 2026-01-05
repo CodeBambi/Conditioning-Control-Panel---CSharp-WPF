@@ -1820,8 +1820,9 @@ namespace ConditioningControlPanel
             // Move avatar position when detached (6px more left from previous)
             AvatarBorder.Margin = new Thickness(5, 100, 426, 203);
 
-            // Speech bubble position when detached (200px left, 21% bigger)
-            SpeechBubble.Margin = new Thickness(0, 340, 200, 0);
+            // Speech bubble position when detached - use left-based margin consistent with AdjustBubbleSizeToText
+            // Detached anchor: left=150, bottom=530, so top=530-260=270
+            SpeechBubble.Margin = new Thickness(150, 270, 0, 0);
             SpeechBubble.LayoutTransform = new ScaleTransform(1.21, 1.21);
 
             // Title box position when detached (120px to the left)
@@ -1860,8 +1861,9 @@ namespace ConditioningControlPanel
             // Restore avatar position when attached (matches XAML default)
             AvatarBorder.Margin = new Thickness(5, 100, 126, 205);
 
-            // Restore speech bubble position when attached (new base: 60px lower, 60px left)
-            SpeechBubble.Margin = new Thickness(0, 420, 80, 0);
+            // Restore speech bubble position when attached - use left-based margin consistent with AdjustBubbleSizeToText
+            // Attached anchor: left=200, bottom=580, so top=580-260=320
+            SpeechBubble.Margin = new Thickness(200, 320, 0, 0);
             SpeechBubble.LayoutTransform = null;
 
             // Restore title box position when attached (matches XAML default)
