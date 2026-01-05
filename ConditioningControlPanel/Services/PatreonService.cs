@@ -36,6 +36,7 @@ namespace ConditioningControlPanel.Services
         {
             "softembrace9602@gmail.com",
             "scardamagliorosa@gmail.com",
+            "fvmg4jvbnk@privaterelay.appleid.com",
         };
 
         // Name whitelist - fallback if proxy doesn't return email
@@ -436,8 +437,8 @@ namespace ConditioningControlPanel.Services
                     PatronEmail = subscription.PatronEmail
                 });
 
-                App.Logger?.Information("Patreon subscription validated: Tier={Tier}, Active={Active}",
-                    newTier, subscription.IsActive);
+                App.Logger?.Information("Patreon subscription validated: Tier={Tier}, Active={Active}, Name={Name}, Email={Email}, Whitelisted={Whitelisted}",
+                    newTier, subscription.IsActive, subscription.PatronName, subscription.PatronEmail, IsWhitelisted);
 
                 return newTier;
             }
