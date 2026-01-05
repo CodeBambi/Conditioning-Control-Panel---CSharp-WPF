@@ -26,14 +26,14 @@
                    IsHitTestVisible="False"/>
 
             <!-- Speech Bubble - Z-Index 10, anchored bottom-left, grows up and right -->
-            <!-- Attached anchor: left=200, bottom=580, so top=580-260=320 -->
+            <!-- Attached anchor: left=420, bottom=610, so top=610-260=350 -->
             <Grid x:Name="SpeechBubble"
                   Panel.ZIndex="10"
                   Visibility="Collapsed"
                   HorizontalAlignment="Left"
                   VerticalAlignment="Top"
                   Opacity="0.65"
-                  Margin="200,320,0,0"
+                  Margin="420,350,0,0"
                   Width="420" Height="260">
 
                 <!-- Bubble background image -->

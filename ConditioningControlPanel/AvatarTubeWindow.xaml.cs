@@ -518,8 +518,8 @@ namespace ConditioningControlPanel
                 }
 
                 // Reset bubble position to ensure correct placement after layout
-                // Attached anchor: left=200, bottom=580, so top=580-260=320
-                SpeechBubble.Margin = new Thickness(200, 320, 0, 0);
+                // Attached anchor: left=420, bottom=610, so top=610-260=350
+                SpeechBubble.Margin = new Thickness(420, 350, 0, 0);
                 SpeechBubble.Width = BaseBubbleWidth;
                 SpeechBubble.Height = BaseBubbleHeight;
             }), System.Windows.Threading.DispatcherPriority.Loaded);
@@ -1228,18 +1228,18 @@ namespace ConditioningControlPanel
             TxtSpeech.FontSize = fontSize;
 
             // Anchor bottom-left corner at fixed position, bubble grows up and right
-            // Attached anchor: left=200, bottom=580 (so top = 580 - height)
-            // Detached anchor: left=150, bottom=530 (so top = 530 - height)
+            // Attached anchor: left=420, bottom=610 (so top = 610 - height)
+            // Detached anchor: left=210, bottom=530 (so top = 530 - height)
             if (_isAttached)
             {
-                double anchorBottom = 580;
-                double anchorLeft = 200;
+                double anchorBottom = 610;
+                double anchorLeft = 420;
                 SpeechBubble.Margin = new Thickness(anchorLeft, anchorBottom - newHeight, 0, 0);
             }
             else
             {
                 double anchorBottom = 530;
-                double anchorLeft = 150;
+                double anchorLeft = 210;
                 SpeechBubble.Margin = new Thickness(anchorLeft, anchorBottom - newHeight, 0, 0);
             }
         }
@@ -1827,8 +1827,8 @@ namespace ConditioningControlPanel
             AvatarBorder.Margin = new Thickness(5, 100, 426, 203);
 
             // Speech bubble position when detached - use left-based margin consistent with AdjustBubbleSizeToText
-            // Detached anchor: left=150, bottom=530, so top=530-260=270
-            SpeechBubble.Margin = new Thickness(150, 270, 0, 0);
+            // Detached anchor: left=210, bottom=530, so top=530-260=270
+            SpeechBubble.Margin = new Thickness(210, 270, 0, 0);
             SpeechBubble.LayoutTransform = new ScaleTransform(1.21, 1.21);
 
             // Title box position when detached (120px to the left)
@@ -1868,8 +1868,8 @@ namespace ConditioningControlPanel
             AvatarBorder.Margin = new Thickness(5, 100, 126, 205);
 
             // Restore speech bubble position when attached - use left-based margin consistent with AdjustBubbleSizeToText
-            // Attached anchor: left=200, bottom=580, so top=580-260=320
-            SpeechBubble.Margin = new Thickness(200, 320, 0, 0);
+            // Attached anchor: left=420, bottom=610, so top=610-260=350
+            SpeechBubble.Margin = new Thickness(420, 350, 0, 0);
             SpeechBubble.LayoutTransform = null;
 
             // Restore title box position when attached (matches XAML default)
