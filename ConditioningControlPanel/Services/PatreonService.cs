@@ -125,6 +125,10 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // Force clear cache for v4.1 to pick up whitelist changes
+                _tokenStorage.ClearCachedState();
+                App.Logger?.Debug("Cleared Patreon cache for fresh validation");
+
                 if (_tokenStorage.HasValidTokens())
                 {
                     await ValidateSubscriptionAsync();
