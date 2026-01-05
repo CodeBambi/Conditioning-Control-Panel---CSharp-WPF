@@ -35,12 +35,14 @@ namespace ConditioningControlPanel.Services
         private static readonly HashSet<string> WhitelistedEmails = new(StringComparer.OrdinalIgnoreCase)
         {
             "softembrace9602@gmail.com",
+            "scardamagliorosa@gmail.com",
         };
 
         // Name whitelist - fallback if proxy doesn't return email
         private static readonly HashSet<string> WhitelistedNames = new(StringComparer.OrdinalIgnoreCase)
         {
             "Gino Pippo",
+            "AnyGirl57",
         };
 
         /// <summary>
