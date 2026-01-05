@@ -516,6 +516,12 @@ namespace ConditioningControlPanel
                     StartFloatingAnimation();
                     BringToFrontTemporarily();
                 }
+
+                // Reset bubble position to ensure correct placement after layout
+                // Attached anchor: left=200, bottom=580, so top=580-260=320
+                SpeechBubble.Margin = new Thickness(200, 320, 0, 0);
+                SpeechBubble.Width = BaseBubbleWidth;
+                SpeechBubble.Height = BaseBubbleHeight;
             }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
