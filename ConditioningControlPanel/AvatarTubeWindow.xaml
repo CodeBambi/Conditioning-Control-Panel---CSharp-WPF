@@ -1,6 +1,7 @@
 <Window x:Class="ConditioningControlPanel.AvatarTubeWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gif="https://github.com/XamlAnimatedGif/XamlAnimatedGif"
         Title="Avatar Tube"
 
         WindowStyle="None"
@@ -11,10 +12,11 @@
         SizeToContent="WidthAndHeight">
 
 
-    <!-- Viewbox scales content uniformly to fit any screen size -->
-    <Viewbox x:Name="ContentViewbox" Stretch="Uniform">
-        <!-- Design canvas at fixed reference size - will be scaled -->
-        <Grid Width="780" Height="1020">
+    <Grid>
+        <!-- Viewbox scales content uniformly to fit any screen size -->
+        <Viewbox x:Name="ContentViewbox" Stretch="Uniform" ClipToBounds="False">
+            <!-- Design canvas at fixed reference size - will be scaled -->
+            <Grid Width="780" Height="1080" ClipToBounds="False">
             <!-- Tube frame FIRST (behind) - Z-Index 0 implicit -->
             <Image x:Name="ImgTubeFrame"
                    Source="pack://application:,,,/Resources/tube.png"
@@ -23,15 +25,15 @@
                    VerticalAlignment="Center"
                    IsHitTestVisible="False"/>
 
-            <!-- Speech Bubble - Z-Index 2, size adjusted dynamically based on text -->
+            <!-- Speech Bubble - Z-Index 10, anchored bottom-left, grows up and right -->
             <Grid x:Name="SpeechBubble"
-                  Panel.ZIndex="2"
+                  Panel.ZIndex="10"
                   Visibility="Collapsed"
-                  HorizontalAlignment="Right"
+                  HorizontalAlignment="Left"
                   VerticalAlignment="Top"
-                  Opacity="0.75"
-                  Margin="0,380,30,0"
-                  Width="310" Height="180">
+                  Opacity="0.65"
+                  Margin="200,355,0,0"
+                  Width="420" Height="260">
 
                 <!-- Bubble background image -->
                 <Image x:Name="ImgSpeechBubble"
@@ -39,17 +41,18 @@
                        Stretch="Fill"
                        IsHitTestVisible="False"/>
 
-                <!-- Speech text centered over bubble, with wider margins for shorter lines -->
+                <!-- Speech text centered over bubble, bubbly Comic Sans font -->
                 <TextBlock x:Name="TxtSpeech"
                            Text=""
                            Foreground="#FF10F0"
-                           FontSize="22"
+                           FontFamily="Comic Sans MS"
+                           FontSize="31"
                            FontWeight="Bold"
                            TextWrapping="Wrap"
                            TextAlignment="Center"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           Margin="45,20,45,35">
+                           Margin="95,24,95,42">
                     <TextBlock.Effect>
                         <DropShadowEffect Color="Black" BlurRadius="1" ShadowDepth="1.5" Direction="315" Opacity="1"/>
                     </TextBlock.Effect>
@@ -98,30 +101,124 @@
             <Border x:Name="AvatarBorder"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
-                    Margin="5,100,126,175"
+                    Margin="5,100,126,205"
                     Cursor="Hand"
                     MouseLeftButtonDown="ImgAvatar_MouseLeftButtonDown"
                     MouseRightButtonDown="ImgAvatar_MouseRightButtonDown"
                     CornerRadius="20" ClipToBounds="True">
                 <Border.ContextMenu>
-                    <ContextMenu x:Name="AvatarContextMenu" Background="#252542" BorderBrush="#FF69B4" BorderThickness="2">
+                    <ContextMenu x:Name="AvatarContextMenu" Background="#252542" BorderBrush="#FF69B4" BorderThickness="2" Opened="AvatarContextMenu_Opened">
                         <MenuItem x:Name="MenuItemDetach" Header="Detach" Click="MenuItemDetach_Click" Foreground="White"/>
                         <MenuItem x:Name="MenuItemAttach" Header="Attach to Main Window" Click="MenuItemAttach_Click" Foreground="White" Visibility="Collapsed"/>
+                        <MenuItem x:Name="MenuItemShrink" Header="－ Shrink" Click="MenuItemShrink_Click" Foreground="White" Visibility="Collapsed"/>
+                        <MenuItem x:Name="MenuItemGrow" Header="＋ Grow" Click="MenuItemGrow_Click" Foreground="White" Visibility="Collapsed"/>
                         <MenuItem x:Name="MenuItemDismiss" Header="Dismiss" Click="MenuItemDismiss_Click" Foreground="White" Visibility="Collapsed"/>
+                        <Separator Background="#FF69B4"/>
+                        <MenuItem x:Name="MenuItemEngine" Header="▶ Start Engine" Click="MenuItemEngine_Click" Foreground="#90EE90"/>
+                        <MenuItem x:Name="MenuItemTriggerMode" Header="☐ Trigger Mode" Click="MenuItemTriggerMode_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemSlutMode" Header="☐ Slut Mode" Click="MenuItemSlutMode_Click" Foreground="White"/>
                     </ContextMenu>
                 </Border.ContextMenu>
-                <Image x:Name="ImgAvatar"
-                       Stretch="Uniform"
-                       MaxHeight="340"
-                       RenderTransformOrigin="0.5,0.5">
-                    <Image.RenderTransform>
-                        <TranslateTransform x:Name="AvatarTranslate" Y="0"/>
-                    </Image.RenderTransform>
-                    <Image.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
-                    </Image.Effect>
-                </Image>
+                <Grid>
+                    <!-- Static PNG avatar (default) -->
+                    <Image x:Name="ImgAvatar"
+                           Stretch="Uniform"
+                           MaxHeight="340"
+                           RenderTransformOrigin="0.5,0.5">
+                        <Image.RenderTransform>
+                            <TranslateTransform x:Name="AvatarTranslate" Y="0"/>
+                        </Image.RenderTransform>
+                        <Image.Effect>
+                            <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                        </Image.Effect>
+                    </Image>
+                    <!-- Animated GIF avatar (for level 20+) -->
+                    <Image x:Name="ImgAvatarAnimated"
+                           Stretch="Uniform"
+                           MaxHeight="340"
+                           Visibility="Collapsed"
+                           RenderTransformOrigin="0.5,0.5">
+                        <Image.RenderTransform>
+                            <TranslateTransform x:Name="AvatarAnimatedTranslate" Y="0"/>
+                        </Image.RenderTransform>
+                        <Image.Effect>
+                            <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                        </Image.Effect>
+                    </Image>
+                </Grid>
             </Border>
+
+            <!-- Title/Level Box with Avatar Selection - Z-Index 4 to be above everything -->
+            <Border x:Name="TitleBox"
+                    Panel.ZIndex="4"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,121,180"
+                    Background="#CC1A1A2E"
+                    CornerRadius="12"
+                    BorderBrush="#FF69B4"
+                    BorderThickness="2"
+                    Padding="8,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left Arrow (Previous Avatar) - 50% bigger -->
+                    <Border x:Name="BtnPrevAvatar" Grid.Column="0"
+                            Background="Transparent" Cursor="Hand"
+                            MouseLeftButtonDown="BtnPrevAvatar_Click"
+                            Visibility="Collapsed"
+                            VerticalAlignment="Center" Margin="0,0,10,0">
+                        <TextBlock Text="◀" FontSize="27" Foreground="#9370DB" FontWeight="Bold">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="#9370DB" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </Border>
+
+                    <!-- Title and Level -->
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtAvatarTitle"
+                                   Text="BASIC BIMBO"
+                                   FontFamily="Comic Sans MS"
+                                   FontSize="16"
+                                   FontWeight="Bold"
+                                   Foreground="#FF69B4"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="Black" BlurRadius="2" ShadowDepth="1" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                        <TextBlock x:Name="TxtAvatarLevel"
+                                   Text="Lv. 1"
+                                   FontFamily="Comic Sans MS"
+                                   FontSize="13"
+                                   Foreground="#B0B0B0"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,-2,0,0"/>
+                    </StackPanel>
+
+                    <!-- Right Arrow (Next Avatar) - 50% bigger -->
+                    <Border x:Name="BtnNextAvatar" Grid.Column="2"
+                            Background="Transparent" Cursor="Hand"
+                            MouseLeftButtonDown="BtnNextAvatar_Click"
+                            Visibility="Collapsed"
+                            VerticalAlignment="Center" Margin="10,0,0,0">
+                        <TextBlock Text="▶" FontSize="27" Foreground="#9370DB" FontWeight="Bold">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="#9370DB" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </Border>
+                </Grid>
+            </Border>
+
         </Grid>
-    </Viewbox>
+        </Viewbox>
+    </Grid>
 </Window>

@@ -198,21 +198,6 @@ namespace ConditioningControlPanel.Services
             catch { }
         }
         
-        public void Test()
-        {
-            if (_audioFiles == null || _audioFiles.Length == 0)
-            {
-                System.Windows.MessageBox.Show(
-                    "No audio files found!\n\nPlace .mp3, .wav, or .ogg files in:\nResources/sounds/braindrain/", 
-                    "Brain Drain", 
-                    System.Windows.MessageBoxButton.OK, 
-                    System.Windows.MessageBoxImage.Warning);
-                return;
-            }
-            
-            PlayAudioNow();
-        }
-        
         public void Dispose()
         {
             Stop();

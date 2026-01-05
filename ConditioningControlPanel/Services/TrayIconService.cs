@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Forms;
 
@@ -9,16 +10,19 @@ namespace ConditioningControlPanel.Services;
 /// <summary>
 /// Manages the system tray icon for minimizing to tray
 /// </summary>
-public class TrayIconService : IDisposable
-{
-    private NotifyIcon? _notifyIcon;
-    private readonly Window _mainWindow;
-    private bool _isDisposed;
+    public class TrayIconService : IDisposable
+    {
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool SetForegroundWindow(IntPtr hWnd);
 
-    public event Action? OnShowRequested;
-    public event Action? OnExitRequested;
-    public event Action? OnWakeBambiRequested;
+        private NotifyIcon? _notifyIcon;
+        private readonly Window _mainWindow;
+        private bool _isDisposed;
 
+        public event Action? OnShowRequested;
+        public event Action? OnExitRequested;
+        public event Action? OnWakeBambiRequested;
     public TrayIconService(Window mainWindow)
     {
         _mainWindow = mainWindow;
@@ -136,7 +140,8 @@ public class TrayIconService : IDisposable
     {
         _mainWindow.Show();
         _mainWindow.WindowState = WindowState.Normal;
-        _mainWindow.Activate();
+        var windowHandle = new System.Windows.Interop.WindowInteropHelper(_mainWindow).Handle;
+        SetForegroundWindow(windowHandle);
         Hide();
         OnShowRequested?.Invoke();
     }

@@ -270,14 +270,14 @@ namespace ConditioningControlPanel
             // Bambi Sleep themed mercy phrases (no answer included!)
             var mercyPhrases = new[]
             {
-                "Bambi needs to focus",
-                "Good girls pay attention",
-                "Bambi will try harder",
-                "Empty and obedient",
-                "Bambi loves bubbles",
-                "Dumb dolls count slowly",
-                "Bambi is learning",
-                "Good girls don't think"
+                "BAMBI NEEDS TO FOCUS",
+                "GOOD GIRLS PAY ATTENTION",
+                "BAMBI WILL TRY HARDER",
+                "EMPTY AND OBEDIENT",
+                "BAMBI LOVES BUBBLES",
+                "DUMB DOLLS COUNT SLOWLY",
+                "BAMBI IS LEARNING",
+                "GOOD GIRLS DONT THINK"
             };
             
             var random = new Random();

@@ -87,11 +87,17 @@ namespace ConditioningControlPanel.Services
                 return;
             }
             
-            // Trigger Bambi Freeze subliminal+audio BEFORE video, but only if no minigame is active
-            if (App.BubbleCount == null || !App.BubbleCount.IsBusy)
+            // Trigger Bambi Freeze subliminal+audio BEFORE video, but only if:
+            // - No minigame is active
+            // - Attention checks are NOT enabled (user needs to be alert to click targets)
+            var skipFreeze = App.Settings.Current.AttentionChecksEnabled ||
+                            (App.BubbleCount != null && App.BubbleCount.IsBusy);
+
+            if (!skipFreeze)
             {
-                App.Subliminal?.TriggerBambiFreeze();
-                
+                // Defer the reset until video ends (pass deferReset: true)
+                App.Subliminal?.TriggerBambiFreeze(deferReset: true);
+
                 // Small delay to let the freeze effect register before video starts
                 Task.Delay(800).ContinueWith(_ =>
                 {
@@ -103,8 +109,48 @@ namespace ConditioningControlPanel.Services
             }
             else
             {
-                // Minigame is active, just play video without freeze
+                // Attention checks or minigame active - play video without freeze
                 PlayVideo(path, App.Settings.Current.StrictLockEnabled);
+            }
+        }
+
+        /// <summary>
+        /// Play a specific video file (used for startup video)
+        /// </summary>
+        public void PlaySpecificVideo(string videoPath, bool strictMode)
+        {
+            if (string.IsNullOrEmpty(videoPath) || !System.IO.File.Exists(videoPath))
+            {
+                App.Logger?.Warning("VideoService: Specific video not found: {Path}", videoPath);
+                return;
+            }
+
+            // Force close any stuck/existing video windows first
+            if (_videoPlaying || _windows.Count > 0)
+            {
+                App.Logger?.Warning("VideoService: Forcing cleanup of existing video before playing specific video");
+                ForceCleanup();
+            }
+
+            // Skip freeze if attention checks are enabled (user needs to click targets)
+            if (!App.Settings.Current.AttentionChecksEnabled)
+            {
+                // Trigger Bambi Freeze subliminal+audio BEFORE video
+                App.Subliminal?.TriggerBambiFreeze(deferReset: true);
+
+                // Small delay to let the freeze effect register before video starts
+                Task.Delay(800).ContinueWith(_ =>
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        PlayVideo(videoPath, strictMode);
+                    });
+                });
+            }
+            else
+            {
+                // Attention checks enabled - play immediately without freeze
+                PlayVideo(videoPath, strictMode);
             }
         }
 
@@ -381,29 +427,55 @@ namespace ConditioningControlPanel.Services
 
         private void SpawnTarget()
         {
-            var settings = App.Settings.Current;
-            var pool = settings.AttentionPool.Where(p => p.Value).Select(p => p.Key).ToList();
-            var text = pool.Count > 0 ? pool[_random.Next(pool.Count)] : "CLICK ME";
-
-            var screens = settings.DualMonitorEnabled ? Screen.AllScreens : new[] { Screen.PrimaryScreen! };
-            var screen = screens[_random.Next(screens.Length)];
-
-            var target = new FloatingText(text, screen, settings.AttentionSize, () =>
+            try
             {
-                _hits++;
-                App.Progression?.AddXP(10);
-                App.Logger.Debug("Target hit: {Hits}/{Total}", _hits, _total);
-            });
+                var settings = App.Settings.Current;
+                var pool = settings.AttentionPool.Where(p => p.Value).Select(p => p.Key).ToList();
+                var text = pool.Count > 0 ? pool[_random.Next(pool.Count)] : "CLICK ME";
 
-            _targets.Add(target);
+                var screens = settings.DualMonitorEnabled ? Screen.AllScreens : new[] { Screen.PrimaryScreen! };
+                var screen = screens[_random.Next(screens.Length)];
 
-            // Auto-expire
-            Task.Delay(settings.AttentionLifespan * 1000).ContinueWith(_ =>
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                App.Logger?.Debug("Spawning attention target: '{Text}' on screen {Screen}", text, screen.DeviceName);
+
+                var target = new FloatingText(text, screen, settings.AttentionSize, () =>
                 {
-                    _targets.Remove(target);
-                    target.Destroy();
-                }));
+                    _hits++;
+                    App.Progression?.AddXP(10);
+                    App.Logger?.Debug("Target hit: {Hits}/{Total}", _hits, _total);
+                });
+
+                lock (_targets)
+                {
+                    _targets.Add(target);
+                }
+
+                // Auto-expire with safety check
+                var lifespan = settings.AttentionLifespan * 1000;
+                Task.Delay(lifespan).ContinueWith(_ =>
+                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    {
+                        try
+                        {
+                            lock (_targets)
+                            {
+                                if (_targets.Contains(target))
+                                {
+                                    _targets.Remove(target);
+                                    target.Destroy();
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Warning("Error expiring target: {Error}", ex.Message);
+                        }
+                    }));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error("Failed to spawn attention target: {Error}", ex.Message);
+            }
         }
 
         #endregion
@@ -540,10 +612,13 @@ namespace ConditioningControlPanel.Services
         private void CloseAll()
         {
             _attentionTimer?.Stop();
-            
-            foreach (var t in _targets.ToList()) t.Destroy();
-            _targets.Clear();
-            
+
+            lock (_targets)
+            {
+                foreach (var t in _targets.ToList()) t.Destroy();
+                _targets.Clear();
+            }
+
             foreach (var w in _windows.ToList())
             {
                 try
@@ -568,11 +643,14 @@ namespace ConditioningControlPanel.Services
             _strictActive = false;
             _penalties = 0;
 
+            // Trigger deferred Bambi Reset now that video has ended
+            App.Subliminal?.TriggerDeferredBambiReset();
+
             VideoEnded?.Invoke(this, EventArgs.Empty);
-            
-            if (_isRunning && App.Settings.Current.FlashEnabled) 
+
+            if (_isRunning && App.Settings.Current.FlashEnabled)
                 App.Flash?.Start();
-            if (_isRunning) 
+            if (_isRunning)
                 ScheduleNext();
         }
 
@@ -621,7 +699,7 @@ namespace ConditioningControlPanel.Services
     }
 
     /// <summary>
-    /// Bouncing magenta text with black outline - like Python TransparentTextWindow
+    /// Bouncing bubbly text target - round, friendly, and highly visible
     /// </summary>
     internal class FloatingText
     {
@@ -633,101 +711,135 @@ namespace ConditioningControlPanel.Services
 
         public FloatingText(string text, Screen screen, int size, Action onHit)
         {
-            size = Math.Max(40, size);
-
-            // Use WorkingArea (excludes taskbar)
-            var area = screen.WorkingArea;
-            _minX = area.X + 50;
-            _minY = area.Y + 50;
-            _maxX = area.X + area.Width - 50;
-            _maxY = area.Y + area.Height - 50;
-
-            // Create outlined text
-            var grid = new Grid { Background = Brushes.Transparent };
-            
-            // Black outline (8 directions)
-            foreach (var (ox, oy) in new[] { (-3,0), (3,0), (0,-3), (0,3), (-3,-3), (3,-3), (-3,3), (3,3) })
+            try
             {
-                grid.Children.Add(new TextBlock
+                size = Math.Max(40, size);
+
+                // Use WorkingArea (excludes taskbar)
+                var area = screen.WorkingArea;
+                _minX = area.X + 50;
+                _minY = area.Y + 50;
+                _maxX = area.X + area.Width - 50;
+                _maxY = area.Y + area.Height - 50;
+
+                // Create bubbly container with rounded pink background
+                var border = new Border
+                {
+                    Background = new LinearGradientBrush(
+                        Color.FromRgb(255, 100, 200),  // Light pink
+                        Color.FromRgb(255, 50, 150),   // Darker pink
+                        90),
+                    CornerRadius = new CornerRadius(25),
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(255, 255, 255)),
+                    BorderThickness = new Thickness(4),
+                    Padding = new Thickness(20, 10, 20, 10),
+                    Effect = new System.Windows.Media.Effects.DropShadowEffect
+                    {
+                        Color = Colors.Black,
+                        BlurRadius = 15,
+                        ShadowDepth = 5,
+                        Opacity = 0.6
+                    },
+                    Cursor = System.Windows.Input.Cursors.Hand
+                };
+
+                // Bubbly text with white color and rounded font
+                var textBlock = new TextBlock
                 {
                     Text = text,
-                    FontFamily = new FontFamily("Impact"),
+                    FontFamily = new FontFamily("Comic Sans MS, Segoe UI, Arial Rounded MT Bold"),
                     FontSize = size,
                     FontWeight = FontWeights.Bold,
-                    Foreground = Brushes.Black,
+                    Foreground = Brushes.White,
                     HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
-                    RenderTransform = new TranslateTransform(ox, oy)
-                });
-            }
+                    Effect = new System.Windows.Media.Effects.DropShadowEffect
+                    {
+                        Color = Color.FromRgb(150, 0, 100),
+                        BlurRadius = 3,
+                        ShadowDepth = 2,
+                        Opacity = 0.8
+                    }
+                };
 
-            // Magenta text on top
-            grid.Children.Add(new TextBlock
-            {
-                Text = text,
-                FontFamily = new FontFamily("Impact"),
-                FontSize = size,
-                FontWeight = FontWeights.Bold,
-                Foreground = new SolidColorBrush(Color.FromRgb(255, 0, 255)),
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Cursor = System.Windows.Input.Cursors.Hand
-            });
+                border.Child = textBlock;
 
-            double w = size * text.Length * 0.6 + 50;
-            double h = size * 1.5 + 30;
+                // Measure the text to get proper sizing
+                textBlock.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+                double w = textBlock.DesiredSize.Width + 60;  // Add padding
+                double h = textBlock.DesiredSize.Height + 40;
 
-            _win = new Window
-            {
-                WindowStyle = WindowStyle.None,
-                AllowsTransparency = true,
-                Background = Brushes.Transparent,
-                Topmost = true,
-                ShowInTaskbar = false,
-                Width = w,
-                Height = h,
-                Content = grid
-            };
+                // Ensure minimum size
+                w = Math.Max(w, 150);
+                h = Math.Max(h, 60);
 
-            // Random position
-            var rnd = new Random();
-            _x = _minX + rnd.NextDouble() * Math.Max(1, _maxX - _minX - w);
-            _y = _minY + rnd.NextDouble() * Math.Max(1, _maxY - _minY - h);
-            _win.Left = _x;
-            _win.Top = _y;
+                _win = new Window
+                {
+                    WindowStyle = WindowStyle.None,
+                    AllowsTransparency = true,
+                    Background = Brushes.Transparent,
+                    Topmost = true,
+                    ShowInTaskbar = false,
+                    Width = w,
+                    Height = h,
+                    Content = border,
+                    ShowActivated = false  // Don't steal focus
+                };
 
-            // Random velocity
-            var angle = rnd.NextDouble() * Math.PI * 2;
-            _vx = Math.Cos(angle) * 2.5;
-            _vy = Math.Sin(angle) * 2.5;
-
-            // Click = hit
-            bool clicked = false;
-            _win.MouseLeftButtonDown += (s, e) =>
-            {
-                if (clicked) return;
-                clicked = true;
-                PlayPopSound();
-                onHit();
-                FadeOut();
-            };
-
-            // Movement
-            _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-            _timer.Tick += (s, e) =>
-            {
-                if (_dead) return;
-                _x += _vx; _y += _vy;
-                if (_x < _minX) { _x = _minX; _vx = Math.Abs(_vx); }
-                if (_x + w > _maxX) { _x = _maxX - w; _vx = -Math.Abs(_vx); }
-                if (_y < _minY) { _y = _minY; _vy = Math.Abs(_vy); }
-                if (_y + h > _maxY) { _y = _maxY - h; _vy = -Math.Abs(_vy); }
+                // Random position - ensure within bounds
+                var rnd = new Random();
+                var maxXPos = Math.Max(_minX, _maxX - w);
+                var maxYPos = Math.Max(_minY, _maxY - h);
+                _x = _minX + rnd.NextDouble() * Math.Max(1, maxXPos - _minX);
+                _y = _minY + rnd.NextDouble() * Math.Max(1, maxYPos - _minY);
                 _win.Left = _x;
                 _win.Top = _y;
-            };
 
-            _win.Loaded += (s, e) => _timer.Start();
-            _win.Show();
+                // Random velocity (slightly faster for better visibility)
+                var angle = rnd.NextDouble() * Math.PI * 2;
+                _vx = Math.Cos(angle) * 3.0;
+                _vy = Math.Sin(angle) * 3.0;
+
+                // Click = hit
+                bool clicked = false;
+                _win.MouseLeftButtonDown += (s, e) =>
+                {
+                    if (clicked) return;
+                    clicked = true;
+                    PlayPopSound();
+                    onHit();
+                    FadeOut();
+                };
+
+                // Movement
+                _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+                _timer.Tick += (s, e) =>
+                {
+                    if (_dead) return;
+                    _x += _vx; _y += _vy;
+                    if (_x < _minX) { _x = _minX; _vx = Math.Abs(_vx); }
+                    if (_x + w > _maxX) { _x = _maxX - w; _vx = -Math.Abs(_vx); }
+                    if (_y < _minY) { _y = _minY; _vy = Math.Abs(_vy); }
+                    if (_y + h > _maxY) { _y = _maxY - h; _vy = -Math.Abs(_vy); }
+                    _win.Left = _x;
+                    _win.Top = _y;
+                };
+
+                _win.Loaded += (s, e) =>
+                {
+                    _timer.Start();
+                    App.Logger?.Debug("Attention target window loaded and visible at ({X}, {Y})", _x, _y);
+                };
+
+                _win.Show();
+                App.Logger?.Debug("Attention target window created: '{Text}' size {W}x{H}", text, w, h);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error("Failed to create FloatingText window: {Error}", ex.Message);
+                _timer = new DispatcherTimer(); // Prevent null reference
+                _win = new Window { Visibility = Visibility.Collapsed }; // Dummy window
+            }
         }
 
         private void PlayPopSound()

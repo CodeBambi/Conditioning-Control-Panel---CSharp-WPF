@@ -117,7 +117,7 @@ namespace ConditioningControlPanel
             }
 
             // Initialize Avatar tab settings
-            InitializeAvatarTabSettings();
+            InitializePatreonTab();
             
             // Ensure all services are stopped on startup (cleanup any leftover state)
             App.BouncingText.Stop();
@@ -397,6 +397,13 @@ namespace ConditioningControlPanel
                 StartEngine();
             }
 
+            // Handle force video on launch (after a short delay to let things initialize)
+            if (App.Settings.Current.ForceVideoOnLaunch)
+            {
+                await Task.Delay(1500); // Let engine and services initialize
+                TriggerStartupVideo();
+            }
+
             // Auto-initialize browser on startup
             await InitializeBrowserAsync();
 
@@ -530,9 +537,9 @@ namespace ConditioningControlPanel
             ShowTab("achievements");
         }
 
-        private void BtnAvatar_Click(object sender, RoutedEventArgs e)
+        private void BtnPatreonExclusives_Click(object sender, RoutedEventArgs e)
         {
-            ShowTab("avatar");
+            ShowTab("patreon");
         }
 
         private void BtnDiscord_Click(object sender, RoutedEventArgs e)
@@ -559,33 +566,27 @@ namespace ConditioningControlPanel
             PresetsTab.Visibility = Visibility.Collapsed;
             ProgressionTab.Visibility = Visibility.Collapsed;
             AchievementsTab.Visibility = Visibility.Collapsed;
-            AvatarTab.Visibility = Visibility.Collapsed;
+            PatreonTab.Visibility = Visibility.Collapsed;
 
-            // Reset button styles
-            var pinkBrush = FindResource("PinkBrush") as SolidColorBrush;
-            BtnSettings.Background = Brushes.Transparent;
-            BtnSettings.Foreground = pinkBrush;
-            BtnPresets.Background = Brushes.Transparent;
-            BtnPresets.Foreground = pinkBrush;
-            BtnProgression.Background = Brushes.Transparent;
-            BtnProgression.Foreground = pinkBrush;
-            BtnAchievements.Background = Brushes.Transparent;
-            BtnAchievements.Foreground = pinkBrush;
-            BtnAvatar.Background = Brushes.Transparent;
-            BtnAvatar.Foreground = pinkBrush;
+            // Reset all button styles to inactive (expandable outline)
+            var inactiveStyle = FindResource("ExpandableIconButton") as Style;
+            var activeStyle = FindResource("ExpandableIconButtonActive") as Style;
+            BtnSettings.Style = inactiveStyle;
+            BtnPresets.Style = inactiveStyle;
+            BtnProgression.Style = inactiveStyle;
+            BtnAchievements.Style = inactiveStyle;
+            BtnPatreonExclusives.Style = inactiveStyle;
 
             switch (tab)
             {
                 case "settings":
                     SettingsTab.Visibility = Visibility.Visible;
-                    BtnSettings.Background = pinkBrush;
-                    BtnSettings.Foreground = Brushes.White;
+                    BtnSettings.Style = activeStyle;
                     break;
 
                 case "presets":
                     PresetsTab.Visibility = Visibility.Visible;
-                    BtnPresets.Background = pinkBrush;
-                    BtnPresets.Foreground = Brushes.White;
+                    BtnPresets.Style = activeStyle;
                     break;
 
                 case "progression":
@@ -598,25 +599,22 @@ namespace ConditioningControlPanel
                     catch (Exception ex)
                     {
                         App.Logger?.Error("ShowTab: Error making ProgressionTab visible: {Error}", ex.Message);
-                        // Optionally re-throw or show a message box, but for now, just log
-                        throw; 
+                        throw;
                     }
-                    BtnProgression.Background = pinkBrush;
-                    BtnProgression.Foreground = Brushes.White;
+                    BtnProgression.Style = activeStyle;
                     break;
 
                 case "achievements":
                     AchievementsTab.Visibility = Visibility.Visible;
-                    BtnAchievements.Background = pinkBrush;
-                    BtnAchievements.Foreground = Brushes.White;
+                    BtnAchievements.Style = activeStyle;
+                    RefreshAllAchievementTiles();
                     UpdateAchievementCount();
                     break;
 
-                case "avatar":
-                    AvatarTab.Visibility = Visibility.Visible;
-                    BtnAvatar.Background = pinkBrush;
-                    BtnAvatar.Foreground = Brushes.White;
-                    UpdateAvatarTabStatus();
+                case "patreon":
+                    PatreonTab.Visibility = Visibility.Visible;
+                    BtnPatreonExclusives.Style = activeStyle;
+                    UpdatePatreonUI();
                     break;
             }
         }
@@ -631,37 +629,181 @@ namespace ConditioningControlPanel
             }
         }
 
-        #region Avatar Tab
+        #region Patreon Exclusives Tab
 
-        private void UpdateAvatarTabStatus()
+        private void UpdatePatreonUI()
         {
-            if (TxtAiStatus == null) return;
+            var tier = App.Patreon?.CurrentTier ?? PatreonTier.None;
+            var isAuthenticated = App.Patreon?.IsAuthenticated ?? false;
+            var isActivePatron = App.Patreon?.IsActivePatron ?? false;
 
-            if (App.Ai == null)
+            // Update login status
+            if (isAuthenticated)
             {
-                TxtAiStatus.Text = "AI Service not initialized";
-            }
-            else if (!App.Ai.IsAvailable)
-            {
-                TxtAiStatus.Text = "OPENAI_API_KEY not found - AI chat disabled";
+                var patronName = App.Patreon?.PatronName;
+                var patronEmail = App.Patreon?.PatronEmail;
+                var isWhitelisted = App.Patreon?.IsWhitelisted == true;
+
+                // Debug: Log what we're getting from Patreon
+                App.Logger?.Debug("Patreon UI Update: Name={Name}, Email={Email}, Tier={Tier}, Whitelisted={Whitelisted}",
+                    patronName, patronEmail, tier, isWhitelisted);
+
+                TxtPatreonStatus.Text = string.IsNullOrEmpty(patronName) ? "Connected to Patreon" : $"Welcome, {patronName}!";
+                TxtPatreonTier.Text = tier switch
+                {
+                    PatreonTier.Level2 => "Level 2 Patron - All features unlocked!",
+                    PatreonTier.Level1 => "Level 1 Patron - All features unlocked!",
+                    _ when isWhitelisted => "Whitelisted - All features unlocked!",
+                    _ => isActivePatron ? "Patron - Thank you for your support!" : "Connected - Subscribe to unlock features"
+                };
+                BtnPatreonLogin.Content = "Logout";
             }
             else
             {
-                TxtAiStatus.Text = $"AI Ready - {App.Ai.DailyRequestsRemaining} requests remaining today";
+                TxtPatreonStatus.Text = "Not Connected";
+                TxtPatreonTier.Text = "Login to unlock exclusive features";
+                BtnPatreonLogin.Content = "Login with Patreon";
+            }
+
+            // Update feature lockboxes
+            // All features are now Tier 1 (or whitelisted)
+            var hasPremiumAccess = App.Patreon?.HasPremiumAccess == true;
+            var level1Unlocked = hasPremiumAccess;
+            var level2Unlocked = hasPremiumAccess; // Same as Level 1 now - all features at Tier 1
+
+            AiChatLocked.Visibility = level1Unlocked ? Visibility.Collapsed : Visibility.Visible;
+            AiChatUnlocked.Visibility = level1Unlocked ? Visibility.Visible : Visibility.Collapsed;
+
+            AwarenessLocked.Visibility = level2Unlocked ? Visibility.Collapsed : Visibility.Visible;
+            AwarenessUnlocked.Visibility = level2Unlocked ? Visibility.Visible : Visibility.Collapsed;
+
+            // Update connection status
+            if (TxtAiStatus != null)
+            {
+                if (!isAuthenticated)
+                {
+                    TxtAiStatus.Text = "Login with Patreon to access AI features";
+                }
+                else if (hasPremiumAccess && App.Ai?.IsAvailable == true)
+                {
+                    TxtAiStatus.Text = $"AI Ready - {App.Ai.DailyRequestsRemaining} requests remaining today";
+                }
+                else if (hasPremiumAccess)
+                {
+                    TxtAiStatus.Text = "Patreon verified - AI service ready";
+                }
+                else
+                {
+                    TxtAiStatus.Text = "Subscribe to Level 1 ($5/mo) to unlock AI Chat";
+                }
             }
         }
 
-        private void InitializeAvatarTabSettings()
+        private async void BtnPatreonLogin_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Patreon == null) return;
+
+            if (App.Patreon.IsAuthenticated)
+            {
+                // Logout
+                App.Patreon.Logout();
+                UpdatePatreonUI();
+            }
+            else
+            {
+                // Start OAuth flow
+                BtnPatreonLogin.IsEnabled = false;
+                BtnPatreonLogin.Content = "Connecting...";
+
+                try
+                {
+                    await App.Patreon.StartOAuthFlowAsync();
+                }
+                catch (OperationCanceledException)
+                {
+                    // User cancelled - ignore
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Patreon login failed");
+                    MessageBox.Show(
+                        $"Failed to connect to Patreon.\n\n{ex.Message}",
+                        "Connection Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+                finally
+                {
+                    BtnPatreonLogin.IsEnabled = true;
+                    UpdatePatreonUI();
+                }
+            }
+        }
+
+        private void BtnVisitPatreon_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "https://www.patreon.com/CodeBambi",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open Patreon page");
+            }
+        }
+
+        private void OnPatreonTierChanged(object? sender, PatreonTier tier)
+        {
+            Dispatcher.Invoke(() => UpdatePatreonUI());
+        }
+
+        private void InitializePatreonTab()
         {
             if (_isLoading) return;
 
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
+            // Subscribe to Patreon tier changes
+            if (App.Patreon != null)
+            {
+                App.Patreon.TierChanged += OnPatreonTierChanged;
+            }
+
+            // Initialize companion settings
             ChkAvatarEnabled.IsChecked = settings.AvatarEnabled;
             ChkAiChat.IsChecked = settings.AiChatEnabled;
             SliderIdleInterval.Value = settings.IdleGiggleIntervalSeconds;
             TxtIdleInterval.Text = $"{settings.IdleGiggleIntervalSeconds}s";
+
+            // Awareness Mode settings (now Tier 1 / whitelisted)
+            var awarenessAvailable = App.Patreon?.HasPremiumAccess == true;
+            ChkAwarenessMode.IsChecked = awarenessAvailable && settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
+            SliderAwarenessCooldown.Value = settings.AwarenessReactionCooldownSeconds;
+            TxtAwarenessCooldown.Text = $"{settings.AwarenessReactionCooldownSeconds}s";
+            ChkAwarenessGaming.IsChecked = settings.AwarenessReactToGaming;
+            ChkAwarenessBrowsing.IsChecked = settings.AwarenessReactToBrowsing;
+            ChkAwarenessShopping.IsChecked = settings.AwarenessReactToShopping;
+            ChkAwarenessSocial.IsChecked = settings.AwarenessReactToSocial;
+
+            // Show/hide awareness settings panel based on enabled state
+            var awarenessEnabled = awarenessAvailable && settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
+            AwarenessSettingsPanel.Visibility = awarenessEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+            // Trigger Mode settings (free for all)
+            ChkTriggerMode.IsChecked = settings.TriggerModeEnabled;
+            SliderTriggerInterval.Value = settings.TriggerIntervalSeconds;
+            TxtTriggerInterval.Text = $"{settings.TriggerIntervalSeconds}s";
+            TriggerSettingsPanel.Visibility = settings.TriggerModeEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+            // Slut Mode settings (Patreon only)
+            var slutModeAvailable = App.Patreon?.HasPremiumAccess == true;
+            ChkSlutMode.IsChecked = slutModeAvailable && settings.SlutModeEnabled;
+            SlutModeLocked.Visibility = slutModeAvailable ? Visibility.Collapsed : Visibility.Visible;
 
             // Hide avatar if disabled
             if (!settings.AvatarEnabled)
@@ -669,7 +811,7 @@ namespace ConditioningControlPanel
                 HideAvatarTube();
             }
 
-            UpdateAvatarTabStatus();
+            UpdatePatreonUI();
         }
 
         private void ChkAvatarEnabled_Changed(object sender, RoutedEventArgs e)
@@ -725,6 +867,177 @@ namespace ConditioningControlPanel
             var value = (int)SliderIdleInterval.Value;
             TxtIdleInterval.Text = $"{value}s";
             App.Settings.Current.IdleGiggleIntervalSeconds = value;
+        }
+
+        // ============================================================
+        // TRIGGER MODE (Free for all)
+        // ============================================================
+
+        private void ChkTriggerMode_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkTriggerMode.IsChecked == true;
+            TriggerSettingsPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+            App.Settings.Current.TriggerModeEnabled = isEnabled;
+            App.Settings.Save();
+
+            // Restart trigger timer on avatar window
+            _avatarTubeWindow?.RestartTriggerTimer();
+
+            App.Logger?.Information("Trigger Mode {State}", isEnabled ? "enabled" : "disabled");
+        }
+
+        private void SliderTriggerInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtTriggerInterval == null) return;
+
+            var value = (int)SliderTriggerInterval.Value;
+            TxtTriggerInterval.Text = $"{value}s";
+            App.Settings.Current.TriggerIntervalSeconds = value;
+
+            // Restart trigger timer with new interval
+            _avatarTubeWindow?.RestartTriggerTimer();
+        }
+
+        private void BtnEditTriggers_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Convert List<string> to Dictionary<string, bool> for the editor
+                // Use Distinct() to handle any duplicate triggers that could crash ToDictionary
+                var triggers = App.Settings.Current.CustomTriggers ?? new List<string>();
+                var triggerDict = triggers
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(t => t, _ => true);
+
+                // If empty, add official Bambi triggers as defaults
+                if (triggerDict.Count == 0)
+                {
+                    var defaultTriggers = new[]
+                    {
+                        "GOOD GIRL", "BAMBI SLEEP", "BIMBO DOLL", "BAMBI FREEZE",
+                        "BAMBI RESET", "DROP FOR COCK", "GIGGLETIME", "BLONDE MOMENT",
+                        "ZAP COCK DRAIN OBEY", "SNAP AND FORGET", "PRIMPED AND PAMPERED",
+                        "SAFE AND SECURE", "COCK ZOMBIE NOW", "BAMBI UNIFORM LOCK",
+                        "AIRHEAD BARBIE", "BRAINDEAD BOBBLEHEAD", "COCKBLANK LOVEDOLL",
+                        "BAMBI CUM AND COLLAPSE"
+                    };
+                    foreach (var t in defaultTriggers)
+                        triggerDict[t] = true;
+                }
+
+                var dialog = new TextEditorDialog("Trigger Phrases", triggerDict);
+                dialog.Owner = this;
+
+                if (dialog.ShowDialog() == true && dialog.ResultData != null)
+                {
+                    // Get only enabled triggers
+                    var newTriggers = dialog.ResultData
+                        .Where(kvp => kvp.Value)
+                        .Select(kvp => kvp.Key)
+                        .ToList();
+
+                    App.Settings.Current.CustomTriggers = newTriggers;
+                    App.Settings.Save();
+                    App.Logger?.Information("Updated {Count} custom triggers", newTriggers.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open trigger editor");
+                MessageBox.Show($"Error opening trigger editor: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // ============================================================
+        // SLUT MODE (Patreon only)
+        // ============================================================
+
+        private void ChkSlutMode_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkSlutMode.IsChecked == true;
+
+            // Check Patreon access
+            if (isEnabled && App.Patreon?.HasPremiumAccess != true)
+            {
+                ChkSlutMode.IsChecked = false;
+                MessageBox.Show(
+                    "Slut Mode requires Patreon Level 1+ subscription.",
+                    "Feature Locked",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            App.Settings.Current.SlutModeEnabled = isEnabled;
+            App.Settings.Save();
+
+            App.Logger?.Information("Slut Mode {State}", isEnabled ? "enabled" : "disabled");
+        }
+
+        private void ChkAwarenessMode_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkAwarenessMode.IsChecked == true;
+
+            // Check Patreon access (Tier 1+ or whitelisted)
+            if (isEnabled && App.Patreon?.HasPremiumAccess != true)
+            {
+                ChkAwarenessMode.IsChecked = false;
+                MessageBox.Show(
+                    "Window Awareness requires Patreon Level 1+ subscription.",
+                    "Feature Locked",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            // Show/hide awareness settings panel
+            AwarenessSettingsPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+            // Update settings
+            App.Settings.Current.AwarenessModeEnabled = isEnabled;
+            App.Settings.Current.AwarenessConsentGiven = isEnabled; // Auto-consent when enabling via UI
+            App.Settings.Save();
+
+            // Start or stop the awareness service
+            if (isEnabled)
+            {
+                App.WindowAwareness?.Start();
+                App.Logger?.Information("Awareness Mode enabled via UI");
+            }
+            else
+            {
+                App.WindowAwareness?.Stop();
+                App.Logger?.Information("Awareness Mode disabled via UI");
+            }
+        }
+
+        private void SliderAwarenessCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtAwarenessCooldown == null) return;
+
+            var value = (int)SliderAwarenessCooldown.Value;
+            TxtAwarenessCooldown.Text = $"{value}s";
+            App.Settings.Current.AwarenessReactionCooldownSeconds = value;
+        }
+
+        private void ChkAwarenessCategory_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            App.Settings.Current.AwarenessReactToGaming = ChkAwarenessGaming.IsChecked == true;
+            App.Settings.Current.AwarenessReactToBrowsing = ChkAwarenessBrowsing.IsChecked == true;
+            App.Settings.Current.AwarenessReactToShopping = ChkAwarenessShopping.IsChecked == true;
+            App.Settings.Current.AwarenessReactToSocial = ChkAwarenessSocial.IsChecked == true;
+            App.Settings.Save();
         }
 
         #endregion
@@ -836,7 +1149,17 @@ namespace ConditioningControlPanel
 
             UpdateAchievementCount();
         }
-        
+
+        private void RefreshAllAchievementTiles()
+        {
+            // Refresh all achievement tiles to reflect current unlock state
+            foreach (var achievementId in _achievementImages.Keys.ToList())
+            {
+                RefreshAchievementTile(achievementId);
+            }
+            App.Logger?.Debug("All achievement tiles refreshed");
+        }
+
         private void OnAchievementUnlockedInMainWindow(object? sender, Models.Achievement achievement)
         {
             Dispatcher.Invoke(() =>
@@ -867,27 +1190,27 @@ namespace ConditioningControlPanel
         {
             _isLoading = true;
             CmbPresets.Items.Clear();
-            
-            // Add all presets - use black text for dropdown (white background)
+
+            // Add all presets - use light text for dark dropdown background
             foreach (var preset in _allPresets)
             {
-                CmbPresets.Items.Add(new ComboBoxItem 
-                { 
-                    Content = preset.Name, 
+                CmbPresets.Items.Add(new ComboBoxItem
+                {
+                    Content = preset.Name,
                     Tag = preset.Id,
-                    Foreground = Brushes.Black
+                    Foreground = new SolidColorBrush(Color.FromRgb(224, 224, 224)) // Light gray #E0E0E0
                 });
             }
-            
+
             // Add separator and "Save New" option
             CmbPresets.Items.Add(new Separator());
-            CmbPresets.Items.Add(new ComboBoxItem 
-            { 
-                Content = "➕ Save as New Preset...", 
+            CmbPresets.Items.Add(new ComboBoxItem
+            {
+                Content = "➕ Save as New Preset...",
                 Tag = "new",
-                Foreground = new SolidColorBrush(Color.FromRgb(200, 50, 150)) // Dark pink for visibility
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 180)) // Bright pink for visibility
             });
-            
+
             // Select current preset
             var currentName = App.Settings.Current.CurrentPresetName;
             for (int i = 0; i < CmbPresets.Items.Count; i++)
@@ -898,7 +1221,7 @@ namespace ConditioningControlPanel
                     break;
                 }
             }
-            
+
             _isLoading = false;
         }
 
@@ -2584,7 +2907,7 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void StartEngine()
+        public void StartEngine()
         {
             SaveSettings();
             
@@ -2638,6 +2961,12 @@ namespace ConditioningControlPanel
             if (settings.PlayerLevel >= 75 && settings.MindWipeEnabled)
             {
                 App.MindWipe.Start(settings.MindWipeFrequency, settings.MindWipeVolume / 100.0);
+
+                // Start loop mode if enabled in settings
+                if (settings.MindWipeLoop)
+                {
+                    App.MindWipe.StartLoop(settings.MindWipeVolume / 100.0);
+                }
             }
 
             // Start brain drain service (requires level 70)
@@ -2661,7 +2990,7 @@ namespace ConditioningControlPanel
                 App.Overlay.IsRunning, App.Bubbles.IsRunning, App.LockCard.IsRunning, App.BubbleCount.IsRunning, App.MindWipe.IsRunning, App.BrainDrain.IsRunning);
         }
 
-        private void StopEngine()
+        public void StopEngine()
         {
             App.Flash.Stop();
             App.Video.Stop();
@@ -3163,6 +3492,16 @@ namespace ConditioningControlPanel
             ChkStartHidden.IsChecked = s.StartMinimized;
             ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
 
+            // Startup video display
+            if (!string.IsNullOrEmpty(s.StartupVideoPath) && System.IO.File.Exists(s.StartupVideoPath))
+            {
+                TxtStartupVideo.Text = System.IO.Path.GetFileName(s.StartupVideoPath);
+            }
+            else
+            {
+                TxtStartupVideo.Text = "(Random)";
+            }
+
             // Audio
             SliderMaster.Value = s.MasterVolume;
             ChkAudioDuck.IsChecked = s.AudioDuckingEnabled;
@@ -3370,8 +3709,73 @@ namespace ConditioningControlPanel
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
+            // First, apply current settings to the settings object
             SaveSettings();
-            MessageBox.Show("Settings saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            // Find current preset
+            var currentPresetName = App.Settings.Current.CurrentPresetName;
+            var currentPreset = _allPresets.FirstOrDefault(p => p.Name == currentPresetName);
+
+            // Determine if we should create new or overwrite
+            if (currentPreset == null || currentPreset.IsDefault || string.IsNullOrEmpty(currentPresetName))
+            {
+                // No preset, default preset, or unknown - ask to create new
+                var result = MessageBox.Show(
+                    "Would you like to save your current settings as a new preset?\n\n" +
+                    "This will create a custom preset that you can load later.",
+                    "Save as Preset",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    PromptSaveNewPreset();
+                }
+                else
+                {
+                    MessageBox.Show("Settings saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            else
+            {
+                // Custom user preset - ask to overwrite
+                var result = MessageBox.Show(
+                    $"Do you want to overwrite preset '{currentPreset.Name}' with your current settings?\n\n" +
+                    "Click 'Yes' to overwrite, 'No' to save as new preset, or 'Cancel' to just save settings.",
+                    "Overwrite Preset?",
+                    MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    // Overwrite existing preset
+                    var updated = Models.Preset.FromSettings(App.Settings.Current, currentPreset.Name, currentPreset.Description);
+                    updated.Id = currentPreset.Id;
+                    updated.CreatedAt = currentPreset.CreatedAt;
+
+                    var index = App.Settings.Current.UserPresets.FindIndex(p => p.Id == currentPreset.Id);
+                    if (index >= 0)
+                    {
+                        App.Settings.Current.UserPresets[index] = updated;
+                        App.Settings.Save();
+                        RefreshPresetsList();
+
+                        App.Logger?.Information("Overwritten preset: {Name}", updated.Name);
+                        MessageBox.Show($"Preset '{updated.Name}' updated!", "Preset Saved",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
+                else if (result == MessageBoxResult.No)
+                {
+                    // Save as new preset
+                    PromptSaveNewPreset();
+                }
+                else
+                {
+                    // Cancel - just show settings saved message
+                    MessageBox.Show("Settings saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
         }
 
         private void BtnExit_Click(object sender, RoutedEventArgs e)
@@ -4167,11 +4571,6 @@ namespace ConditioningControlPanel
             App.Settings.Save();
         }
 
-        private void BtnTestBrainDrain_Click(object sender, RoutedEventArgs e)
-        {
-            App.BrainDrain.Test();
-        }
-
         #endregion
 
         private void SliderRampDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -4256,6 +4655,50 @@ namespace ConditioningControlPanel
         private void BtnTestVideo_Click(object sender, RoutedEventArgs e)
         {
             App.Video.TriggerVideo();
+        }
+
+        private void TriggerStartupVideo()
+        {
+            var startupPath = App.Settings.Current.StartupVideoPath;
+
+            // If a specific video is configured, play that one
+            if (!string.IsNullOrEmpty(startupPath) && System.IO.File.Exists(startupPath))
+            {
+                App.Logger?.Information("Playing startup video: {Path}", startupPath);
+                App.Video.PlaySpecificVideo(startupPath, App.Settings.Current.StrictLockEnabled);
+            }
+            else
+            {
+                // Play a random video
+                App.Logger?.Information("Playing random startup video");
+                App.Video.TriggerVideo();
+            }
+        }
+
+        private void BtnSelectStartupVideo_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Select Startup Video",
+                Filter = "Video Files|*.mp4;*.mov;*.avi;*.wmv;*.mkv;*.webm|All Files|*.*",
+                InitialDirectory = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "startle_videos")
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                App.Settings.Current.StartupVideoPath = dialog.FileName;
+                TxtStartupVideo.Text = System.IO.Path.GetFileName(dialog.FileName);
+                App.Settings.Save();
+                App.Logger?.Information("Startup video set to: {Path}", dialog.FileName);
+            }
+        }
+
+        private void BtnClearStartupVideo_Click(object sender, RoutedEventArgs e)
+        {
+            App.Settings.Current.StartupVideoPath = null;
+            TxtStartupVideo.Text = "(Random)";
+            App.Settings.Save();
+            App.Logger?.Information("Startup video cleared - will use random");
         }
 
         private void BtnManageAttention_Click(object sender, RoutedEventArgs e)
@@ -4448,7 +4891,7 @@ namespace ConditioningControlPanel
         private void ChkNoPanic_Checked(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            
+
             // Show double warning
             var confirmed = WarningDialog.ShowDoubleWarning(this,
                 "Disable Panic Key",
@@ -4457,7 +4900,7 @@ namespace ConditioningControlPanel
                 "• Combined with Strict Lock, this is VERY restrictive\n" +
                 "• The app will minimize to system tray\n" +
                 "• Make sure you know what you're doing!");
-            
+
             if (confirmed)
             {
                 // Minimize to tray immediately
@@ -4467,6 +4910,32 @@ namespace ConditioningControlPanel
             {
                 ChkNoPanic.IsChecked = false;
             }
+        }
+
+        private void ChkDualMon_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkDualMon.IsChecked ?? true;
+            App.Settings.Current.DualMonitorEnabled = isEnabled;
+
+            // Refresh all services if engine is running
+            if (_isRunning)
+            {
+                // Refresh overlays (pink filter, spiral, brain drain) - restart to add/remove monitor windows
+                App.Overlay.RefreshForDualMonitorChange();
+
+                // Bouncing text needs restart
+                App.BouncingText.Stop();
+                if (App.Settings.Current.BouncingTextEnabled && App.Settings.Current.PlayerLevel >= 60)
+                {
+                    App.BouncingText.Start();
+                }
+
+                App.Logger?.Information("Dual monitor toggled: {Enabled} - services refreshed", isEnabled);
+            }
+
+            App.Settings.Save();
         }
 
         private void ChkWinStart_Click(object sender, RoutedEventArgs e)

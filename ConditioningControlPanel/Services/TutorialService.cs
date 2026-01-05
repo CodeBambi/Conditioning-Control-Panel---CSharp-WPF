@@ -87,6 +87,17 @@ namespace ConditioningControlPanel.Services
                 },
                 new TutorialStep
                 {
+                    Id = "avatar_companion",
+                    Icon = "<3",
+                    Title = "Bambi Companion",
+                    Description = "Your avatar companion lives in the tube! Click her to chat, right-click for quick options " +
+                                  "(Start Engine, Trigger Mode, Slut Mode). Detach to drag her anywhere - use Ctrl+Scroll " +
+                                  "or Up/Down arrows to resize. She evolves as you level up!",
+                    TargetElementName = null,
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
                     Id = "settings_tab",
                     Icon = ">",
                     Title = "Settings Tab",

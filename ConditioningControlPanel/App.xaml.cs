@@ -32,6 +32,8 @@ namespace ConditioningControlPanel
         public static AchievementService Achievements { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
         public static AiService Ai { get; private set; } = null!;
+        public static WindowAwarenessService WindowAwareness { get; private set; } = null!;
+        public static PatreonService Patreon { get; private set; } = null!;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -96,6 +98,11 @@ namespace ConditioningControlPanel
             Achievements = new AchievementService();
             Tutorial = new TutorialService();
             Ai = new AiService();
+            WindowAwareness = new WindowAwarenessService();
+            Patreon = new PatreonService();
+
+            // Initialize Patreon (validate subscription in background)
+            _ = Patreon.InitializeAsync();
 
             // Wire up achievement popup BEFORE checking any achievements
             Achievements.AchievementUnlocked += OnAchievementUnlocked;
@@ -187,7 +194,9 @@ namespace ConditioningControlPanel
             MindWipe?.Dispose();
             BrainDrain?.Dispose();
             Achievements?.Dispose();
+            WindowAwareness?.Dispose();
             Ai?.Dispose();
+            Patreon?.Dispose();
             Audio?.Dispose();
             Settings?.Save();
 

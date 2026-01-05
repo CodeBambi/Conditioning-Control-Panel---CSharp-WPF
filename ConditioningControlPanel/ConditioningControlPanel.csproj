@@ -127,7 +127,14 @@
     <Resource Include="Resources\avatar4_pose2.png" />
     <Resource Include="Resources\avatar4_pose3.png" />
     <Resource Include="Resources\avatar4_pose4.png" />
-    
+
+    <!-- Animated Avatars - uncomment when GIF files are added to Resources
+    <Resource Include="Resources\animated1_1.gif" />
+    <Resource Include="Resources\animated2_1.gif" />
+    <Resource Include="Resources\animated3_1.gif" />
+    <Resource Include="Resources\animated4_1.gif" />
+    -->
+
     <!-- Achievement images -->
     <Resource Include="Resources\achievements\*.png" />
   </ItemGroup>

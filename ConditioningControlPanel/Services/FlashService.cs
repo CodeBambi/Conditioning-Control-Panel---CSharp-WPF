@@ -60,8 +60,18 @@ namespace ConditioningControlPanel.Services
 
         #region Events
 
+        public event EventHandler? FlashAboutToDisplay;
         public event EventHandler? FlashDisplayed;
         public event EventHandler? FlashClicked;
+
+        #endregion
+
+        #region Properties
+
+        /// <summary>
+        /// Whether the flash service is currently running
+        /// </summary>
+        public bool IsRunning => _isRunning;
 
         #endregion
 
@@ -190,12 +200,15 @@ namespace ConditioningControlPanel.Services
             {
                 var settings = App.Settings.Current;
                 var images = GetNextImages(settings.SimultaneousImages);
-                
+
                 if (images.Count == 0)
                 {
                     _isBusy = false;
                     return;
                 }
+
+                // Fire pre-event so avatar can announce the flash
+                FlashAboutToDisplay?.Invoke(this, EventArgs.Empty);
 
                 // Get sound ONCE for this flash event
                 var soundPath = GetNextSound();

@@ -184,11 +184,11 @@ public class OverlayService : IDisposable
     public void RefreshOverlays()
     {
         if (!_isRunning) return;
-        
+
         Application.Current.Dispatcher.Invoke(() =>
         {
             var settings = App.Settings.Current;
-            
+
             if (settings.PinkFilterEnabled && settings.PlayerLevel >= 10)
             {
                 if (_pinkFilterWindows.Count == 0)
@@ -200,7 +200,7 @@ public class OverlayService : IDisposable
             {
                 StopPinkFilter();
             }
-            
+
             var spiralPath = GetSpiralPath();
             if (settings.SpiralEnabled && settings.PlayerLevel >= 10 && !string.IsNullOrEmpty(spiralPath))
             {
@@ -218,9 +218,49 @@ public class OverlayService : IDisposable
             // Handle Brain Drain via its dedicated refresh state method
             RefreshBrainDrainState();
         });
-        
-        App.Logger?.Debug("Overlays refreshed - Pink: {Pink}, Spiral: {Spiral}, BrainDrain: {BrainDrain}", 
+
+        App.Logger?.Debug("Overlays refreshed - Pink: {Pink}, Spiral: {Spiral}, BrainDrain: {BrainDrain}",
             _pinkFilterWindows.Count > 0, _spiralWindows.Count > 0, _brainDrainBlurWindows.Count > 0);
+    }
+
+    /// <summary>
+    /// Restart all overlays when dual monitor setting changes.
+    /// Windows need to be recreated to match the new monitor setup.
+    /// </summary>
+    public void RefreshForDualMonitorChange()
+    {
+        if (!_isRunning) return;
+
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            var settings = App.Settings.Current;
+
+            // Stop and restart pink filter if enabled
+            if (settings.PinkFilterEnabled && settings.PlayerLevel >= 10)
+            {
+                StopPinkFilter();
+                StartPinkFilter();
+            }
+
+            // Stop and restart spiral if enabled
+            var spiralPath = GetSpiralPath();
+            if (settings.SpiralEnabled && settings.PlayerLevel >= 10 && !string.IsNullOrEmpty(spiralPath))
+            {
+                StopSpiral();
+                _spiralPath = spiralPath;
+                StartSpiral();
+            }
+
+            // Stop and restart brain drain if enabled
+            if (settings.BrainDrainEnabled && settings.PlayerLevel >= 70)
+            {
+                StopBrainDrainBlur();
+                StartBrainDrainBlur((int)settings.BrainDrainIntensity);
+            }
+        });
+
+        App.Logger?.Information("Overlays refreshed for dual monitor change - DualMonitor: {Enabled}",
+            App.Settings.Current.DualMonitorEnabled);
     }
 
     private void UpdateOverlays(object? sender, EventArgs e)
@@ -716,8 +756,10 @@ public class OverlayService : IDisposable
             }
             catch (SharpDXException ex) when (ex.ResultCode.Code == SharpDX.DXGI.ResultCode.AccessLost.Result.Code)
             {
-                // Desktop duplication lost (e.g., resolution change, secure desktop)
-                App.Logger?.Warning("Desktop duplication access lost, will reinitialize");
+                // Desktop duplication lost (e.g., resolution change, secure desktop, or click elsewhere)
+                // Mark as disposed so it will be reinitialized on next capture attempt
+                App.Logger?.Warning("Desktop duplication access lost, marking for reinitialization");
+                _disposed = true;
                 return null;
             }
             catch (Exception ex)
@@ -915,6 +957,9 @@ public class OverlayService : IDisposable
             }
         });
     }
+    private DateTime _lastDuplicatorReinitAttempt = DateTime.MinValue;
+    private static readonly TimeSpan DuplicatorReinitCooldown = TimeSpan.FromSeconds(2);
+
     private void BrainDrainCaptureTick(object? sender, EventArgs e)
     {
         if (_brainDrainImages.Count == 0)
@@ -927,6 +972,15 @@ public class OverlayService : IDisposable
         var screens = settings.DualMonitorEnabled
             ? System.Windows.Forms.Screen.AllScreens
             : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+        // Check if any duplicators need reinitialization (with cooldown to avoid spam)
+        bool anyInvalid = _desktopDuplicators.Any(kvp => !kvp.Value.IsValid);
+        if (anyInvalid && DateTime.Now - _lastDuplicatorReinitAttempt > DuplicatorReinitCooldown)
+        {
+            _lastDuplicatorReinitAttempt = DateTime.Now;
+            App.Logger?.Debug("Brain Drain: Reinitializing invalid desktop duplicators");
+            ReinitializeInvalidDuplicators(screens);
+        }
 
         // Capture and update each screen
         int screenIdx = 0;
@@ -958,6 +1012,55 @@ public class OverlayService : IDisposable
             }
 
             screenIdx++;
+        }
+    }
+
+    private void ReinitializeInvalidDuplicators(System.Windows.Forms.Screen[] screens)
+    {
+        try
+        {
+            using var factory = new Factory1();
+
+            for (int adapterIdx = 0; adapterIdx < factory.GetAdapterCount1(); adapterIdx++)
+            {
+                using var adapter = factory.GetAdapter1(adapterIdx);
+
+                for (int outputIdx = 0; outputIdx < adapter.GetOutputCount(); outputIdx++)
+                {
+                    using var output = adapter.GetOutput(outputIdx);
+                    var bounds = output.Description.DesktopBounds;
+
+                    for (int screenIdx = 0; screenIdx < screens.Length; screenIdx++)
+                    {
+                        var screen = screens[screenIdx];
+                        if (screen.Bounds.X == bounds.Left &&
+                            screen.Bounds.Y == bounds.Top &&
+                            screen.Bounds.Width == bounds.Right - bounds.Left &&
+                            screen.Bounds.Height == bounds.Bottom - bounds.Top)
+                        {
+                            // Only reinitialize if the current duplicator is invalid
+                            if (_desktopDuplicators.TryGetValue(screenIdx, out var existing) && !existing.IsValid)
+                            {
+                                try
+                                {
+                                    existing.Dispose();
+                                    _desktopDuplicators[screenIdx] = new DesktopDuplicator(adapterIdx, outputIdx);
+                                    App.Logger?.Debug("Reinitialized duplicator for screen {ScreenIdx}", screenIdx);
+                                }
+                                catch (Exception ex)
+                                {
+                                    App.Logger?.Warning("Failed to reinitialize duplicator for screen {Idx}: {Error}", screenIdx, ex.Message);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning("Failed to reinitialize desktop duplicators: {Error}", ex.Message);
         }
     }
 
@@ -1288,7 +1391,16 @@ public class OverlayService : IDisposable
     private void RefreshBrainDrainState()
     {
         var settings = App.Settings.Current;
-        if (settings.BrainDrainEnabled && settings.PlayerLevel >= 90) // Assuming level requirement for Brain Drain
+
+        // Only start/update brain drain if the overlay service is running (engine is active)
+        if (!_isRunning)
+        {
+            // Don't start brain drain if engine isn't running
+            StopBrainDrainBlur();
+            return;
+        }
+
+        if (settings.BrainDrainEnabled && settings.PlayerLevel >= 70) // Level 70 requirement for Brain Drain
         {
             // If not running or duplicators not initialized (e.g., first time enabling)
             if (_brainDrainBlurWindows.Count == 0 || !_desktopDuplicators.Any(kvp => kvp.Value.IsValid))

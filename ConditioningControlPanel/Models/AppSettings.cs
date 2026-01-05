@@ -52,6 +52,16 @@ namespace ConditioningControlPanel.Models
             set { _playerXP = value; OnPropertyChanged(); }
         }
 
+        private int _selectedAvatarSet = 0; // 0 = auto (use max unlocked)
+        /// <summary>
+        /// User's selected avatar set (1-4). 0 means auto-select highest unlocked.
+        /// </summary>
+        public int SelectedAvatarSet
+        {
+            get => _selectedAvatarSet;
+            set { _selectedAvatarSet = Math.Clamp(value, 0, 4); OnPropertyChanged(); }
+        }
+
         private bool _welcomed = false;
         public bool Welcomed
         {
@@ -174,6 +184,13 @@ namespace ConditioningControlPanel.Models
         {
             get => _forceVideoOnLaunch;
             set { _forceVideoOnLaunch = value; OnPropertyChanged(); }
+        }
+
+        private string? _startupVideoPath = null; // Specific video to play on startup (null = random)
+        public string? StartupVideoPath
+        {
+            get => _startupVideoPath;
+            set { _startupVideoPath = value; OnPropertyChanged(); }
         }
 
         private bool _attentionChecksEnabled = false;
@@ -687,11 +704,11 @@ namespace ConditioningControlPanel.Models
         
         private Dictionary<string, bool> _lockCardPhrases = new()
         {
-            { "Good girls obey", true },
-            { "I love being programmed", true },
-            { "Bambi sleep", true },
-            { "Drop for me", true },
-            { "Empty and obedient", true }
+            { "GOOD GIRLS OBEY", true },
+            { "I LOVE BEING PROGRAMMED", true },
+            { "BAMBI SLEEP", true },
+            { "DROP FOR ME", true },
+            { "EMPTY AND OBEDIENT", true }
         };
         public Dictionary<string, bool> LockCardPhrases
         {
@@ -958,6 +975,192 @@ namespace ConditioningControlPanel.Models
             get => _idleGiggleIntervalSeconds;
             set { _idleGiggleIntervalSeconds = Math.Clamp(value, 30, 600); OnPropertyChanged(); }
         }
+
+        // ============================================================
+        // AWARENESS MODE (Window Tracking) - Opt-in feature
+        // ============================================================
+
+        private bool _awarenessModeEnabled = false;
+        /// <summary>
+        /// Whether the companion monitors active windows to react to user activity.
+        /// Requires explicit consent. Privacy-focused: only categorizes, never logs titles.
+        /// </summary>
+        public bool AwarenessModeEnabled
+        {
+            get => _awarenessModeEnabled;
+            set { _awarenessModeEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessConsentGiven = false;
+        /// <summary>
+        /// Whether the user has given consent for window monitoring.
+        /// Must be true for awareness mode to function.
+        /// </summary>
+        public bool AwarenessConsentGiven
+        {
+            get => _awarenessConsentGiven;
+            set { _awarenessConsentGiven = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessReactToGaming = true;
+        /// <summary>
+        /// React when user is playing games
+        /// </summary>
+        public bool AwarenessReactToGaming
+        {
+            get => _awarenessReactToGaming;
+            set { _awarenessReactToGaming = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessReactToBrowsing = true;
+        /// <summary>
+        /// React when user is browsing the web
+        /// </summary>
+        public bool AwarenessReactToBrowsing
+        {
+            get => _awarenessReactToBrowsing;
+            set { _awarenessReactToBrowsing = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessReactToShopping = true;
+        /// <summary>
+        /// React when user is shopping online
+        /// </summary>
+        public bool AwarenessReactToShopping
+        {
+            get => _awarenessReactToShopping;
+            set { _awarenessReactToShopping = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessReactToSocial = true;
+        /// <summary>
+        /// React when user is on social media
+        /// </summary>
+        public bool AwarenessReactToSocial
+        {
+            get => _awarenessReactToSocial;
+            set { _awarenessReactToSocial = value; OnPropertyChanged(); }
+        }
+
+        private int _awarenessReactionCooldownSeconds = 90;
+        /// <summary>
+        /// Minimum seconds between awareness reactions (10-600)
+        /// </summary>
+        public int AwarenessReactionCooldownSeconds
+        {
+            get => _awarenessReactionCooldownSeconds;
+            set { _awarenessReactionCooldownSeconds = Math.Clamp(value, 10, 600); OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region AI Configuration
+
+        private string _openRouterApiKey = "";
+        /// <summary>
+        /// OpenRouter API key for AI chat features
+        /// </summary>
+        public string OpenRouterApiKey
+        {
+            get => _openRouterApiKey;
+            set { _openRouterApiKey = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _slutModeEnabled = false;
+        /// <summary>
+        /// Enable less tame AI responses (Patreon only)
+        /// </summary>
+        public bool SlutModeEnabled
+        {
+            get => _slutModeEnabled;
+            set { _slutModeEnabled = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region Trigger Mode (Free)
+
+        private bool _triggerModeEnabled = false;
+        /// <summary>
+        /// Enable random trigger phrases (no AI, free for all)
+        /// </summary>
+        public bool TriggerModeEnabled
+        {
+            get => _triggerModeEnabled;
+            set { _triggerModeEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _triggerIntervalSeconds = 60;
+        /// <summary>
+        /// Seconds between random triggers (10-600)
+        /// </summary>
+        public int TriggerIntervalSeconds
+        {
+            get => _triggerIntervalSeconds;
+            set { _triggerIntervalSeconds = Math.Clamp(value, 10, 600); OnPropertyChanged(); }
+        }
+
+        private List<string> _customTriggers = new()
+        {
+            "GOOD GIRL",
+            "BAMBI SLEEP",
+            "BIMBO DOLL",
+            "BAMBI FREEZE",
+            "BAMBI RESET",
+            "DROP FOR COCK",
+            "GIGGLETIME",
+            "BLONDE MOMENT",
+            "ZAP COCK DRAIN OBEY",
+            "SNAP AND FORGET",
+            "PRIMPED AND PAMPERED",
+            "SAFE AND SECURE",
+            "COCK ZOMBIE NOW",
+            "BAMBI UNIFORM LOCK",
+            "AIRHEAD BARBIE",
+            "BRAINDEAD BOBBLEHEAD",
+            "COCKBLANK LOVEDOLL",
+            "BAMBI CUM AND COLLAPSE"
+        };
+        /// <summary>
+        /// Custom trigger phrases for Trigger Mode
+        /// </summary>
+        public List<string> CustomTriggers
+        {
+            get => _customTriggers;
+            set { _customTriggers = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region Patreon Integration
+
+        private int _patreonTier = 0;
+        /// <summary>
+        /// Cached Patreon subscription tier (0=None, 1=Level1, 2=Level2)
+        /// Used for UI display only - actual validation done by PatreonService
+        /// </summary>
+        public int PatreonTier
+        {
+            get => _patreonTier;
+            set { _patreonTier = Math.Clamp(value, 0, 2); OnPropertyChanged(); }
+        }
+
+        private DateTime _lastPatreonVerification = DateTime.MinValue;
+        /// <summary>
+        /// Last time Patreon subscription was verified with the server
+        /// </summary>
+        public DateTime LastPatreonVerification
+        {
+            get => _lastPatreonVerification;
+            set { _lastPatreonVerification = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Whether the cached Patreon tier is still valid (within 24 hours)
+        /// </summary>
+        [JsonIgnore]
+        public bool PatreonCacheValid =>
+            (DateTime.UtcNow - LastPatreonVerification).TotalHours < 24;
 
         #endregion
 

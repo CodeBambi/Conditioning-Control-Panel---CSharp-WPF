@@ -23,12 +23,18 @@ namespace ConditioningControlPanel.Services
         private readonly Random _random = new();
         private readonly List<Window> _activeWindows = new();
         private readonly string _audioPath;
-        
+
         private WaveOutEvent? _audioPlayer;
         private AudioFileReader? _audioFile;
-        
+
         private bool _isRunning;
         private bool _disposed;
+        private int _subliminalCount;
+
+        /// <summary>
+        /// Fired when a subliminal is displayed
+        /// </summary>
+        public event EventHandler? SubliminalDisplayed;
 
         public SubliminalService()
         {
@@ -145,36 +151,49 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        // Track if a deferred reset is pending (for when video ends)
+        private bool _deferredResetPending;
+
         /// <summary>
         /// Trigger a Bambi Freeze subliminal with audio - used before videos and bubble count games
         /// </summary>
-        public void TriggerBambiFreeze()
+        /// <param name="deferReset">If true, don't schedule reset immediately (call TriggerDeferredBambiReset later)</param>
+        public void TriggerBambiFreeze(bool deferReset = false)
         {
             if (!_isRunning && !App.Settings.Current.SubliminalEnabled)
             {
                 // Still allow Bambi Freeze even if subliminals are disabled - it's a special trigger
                 App.Logger?.Debug("Triggering Bambi Freeze (subliminals disabled but special trigger allowed)");
             }
-            
+
             var text = "Bambi Freeze";
             string? audioPath = FindLinkedAudio(text);
-            
+
             if (audioPath != null)
             {
                 // Duck other audio, play whisper, then show visual
                 App.Audio?.Duck(App.Settings.Current.DuckingLevel);
                 PlayWhisperAudio(audioPath);
-                
+
                 // Slight delay before showing visual
-                Task.Delay(300).ContinueWith(_ => 
+                Task.Delay(300).ContinueWith(_ =>
                 {
                     Application.Current.Dispatcher.Invoke(() => ShowSubliminalVisuals(text));
                 });
-                
-                // Schedule Bambi Reset after freeze
-                ScheduleBambiReset();
-                
-                App.Logger?.Information("Bambi Freeze triggered with audio");
+
+                // Handle reset scheduling
+                if (deferReset)
+                {
+                    // Mark that we should trigger reset when video ends
+                    _deferredResetPending = true;
+                    App.Logger?.Information("Bambi Freeze triggered with audio (reset deferred until video ends)");
+                }
+                else
+                {
+                    // Schedule Bambi Reset after freeze with delay
+                    ScheduleBambiReset();
+                    App.Logger?.Information("Bambi Freeze triggered with audio");
+                }
             }
             else
             {
@@ -185,36 +204,75 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Trigger the deferred Bambi Reset (called when video ends)
+        /// </summary>
+        public void TriggerDeferredBambiReset()
+        {
+            if (!_deferredResetPending)
+            {
+                return;
+            }
+
+            _deferredResetPending = false;
+
+            // 90% chance to trigger reset
+            if (_random.NextDouble() > 0.90)
+            {
+                App.Logger?.Debug("Bambi Reset skipped (10% chance roll)");
+                return;
+            }
+
+            // Trigger reset after a short delay (1-2 seconds after video ends)
+            var delay = _random.Next(1000, 2000);
+            Task.Delay(delay).ContinueWith(_ =>
+            {
+                Application.Current.Dispatcher.Invoke(() => PlayBambiReset());
+            });
+        }
+
+        /// <summary>
         /// Schedule Bambi Reset to follow Bambi Freeze after a delay
         /// </summary>
         private void ScheduleBambiReset()
         {
-            // Wait 2-4 seconds then show Bambi Reset
-            var delay = _random.Next(2000, 4000);
+            // 90% chance to trigger reset
+            if (_random.NextDouble() > 0.90)
+            {
+                App.Logger?.Debug("Bambi Reset skipped (10% chance roll)");
+                return;
+            }
+
+            // Wait 4-8 seconds then show Bambi Reset (longer delay than before)
+            var delay = _random.Next(4000, 8000);
             Task.Delay(delay).ContinueWith(_ =>
             {
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    var resetText = "Bambi Reset";
-                    string? resetAudio = FindLinkedAudio(resetText);
-                    
-                    if (resetAudio != null && App.Settings.Current.SubAudioEnabled)
-                    {
-                        App.Audio.Duck(App.Settings.Current.DuckingLevel);
-                        PlayWhisperAudio(resetAudio);
-                        Task.Delay(300).ContinueWith(_ =>
-                        {
-                            Application.Current.Dispatcher.Invoke(() => ShowSubliminalVisuals(resetText));
-                        });
-                    }
-                    else
-                    {
-                        ShowSubliminalVisuals(resetText);
-                    }
-                    
-                    App.Logger?.Debug("Bambi Reset triggered after Bambi Freeze");
-                });
+                Application.Current.Dispatcher.Invoke(() => PlayBambiReset());
             });
+        }
+
+        /// <summary>
+        /// Play the Bambi Reset audio and visual
+        /// </summary>
+        private void PlayBambiReset()
+        {
+            var resetText = "Bambi Reset";
+            string? resetAudio = FindLinkedAudio(resetText);
+
+            if (resetAudio != null && App.Settings.Current.SubAudioEnabled)
+            {
+                App.Audio?.Duck(App.Settings.Current.DuckingLevel);
+                PlayWhisperAudio(resetAudio);
+                Task.Delay(300).ContinueWith(_ =>
+                {
+                    Application.Current.Dispatcher.Invoke(() => ShowSubliminalVisuals(resetText));
+                });
+            }
+            else
+            {
+                ShowSubliminalVisuals(resetText);
+            }
+
+            App.Logger?.Debug("Bambi Reset triggered after Bambi Freeze");
         }
 
         private string? FindLinkedAudio(string text)
@@ -281,6 +339,10 @@ namespace ConditioningControlPanel.Services
 
         private void ShowSubliminalVisuals(string text)
         {
+            // Increment counter and fire event
+            _subliminalCount++;
+            SubliminalDisplayed?.Invoke(this, EventArgs.Empty);
+
             // Duration in frames * ~16.6ms per frame, minimum 100ms
             var durationMs = Math.Max(100, App.Settings.Current.SubliminalDuration * 17);
             var targetOpacity = App.Settings.Current.SubliminalOpacity / 100.0;

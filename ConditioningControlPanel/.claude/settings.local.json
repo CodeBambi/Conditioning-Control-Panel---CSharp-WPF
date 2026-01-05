@@ -15,7 +15,14 @@
       "Bash(powershell -Command:*)",
       "Bash(dotnet clean:*)",
       "Bash(rm:*)",
-      "Bash(dotnet restore:*)"
+      "Bash(dotnet restore:*)",
+      "Bash(findstr:*)",
+      "Bash(dir /b \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\ConditioningControlPanel\\\\Resources\")",
+      "Bash(vercel --prod:*)",
+      "WebSearch",
+      "WebFetch(domain:bambicloud.com)",
+      "Bash(dir /s /b \"C:\\\\Users\")",
+      "WebFetch(domain:codebambi-proxy.vercel.app)"
     ]
   }
 }

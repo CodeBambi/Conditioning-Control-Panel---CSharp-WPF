@@ -66,3 +66,6 @@ obj/
 .vs/
 *.user
 crash_log.txt
+
+# Patreon proxy server (deploy separately, contains sensitive config)
+patreon-proxy-server/

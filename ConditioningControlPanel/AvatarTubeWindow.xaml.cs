@@ -1,12 +1,17 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using ConditioningControlPanel.Services;
+using XamlAnimatedGif;
 
 namespace ConditioningControlPanel
 {
@@ -21,10 +26,26 @@ namespace ConditioningControlPanel
         private IntPtr _tubeHandle;
         private IntPtr _parentHandle;
         private int _currentAvatarSet = 1; // Track which avatar set is loaded
+        private int _selectedAvatarSet = 1; // User's manually selected avatar (can be lower than max unlocked)
+        private int _maxUnlockedSet = 1; // Highest avatar set unlocked based on level
+        private bool _useAnimatedAvatar = false; // Whether to use animated GIF
+
+        // Avatar set titles
+        private static readonly string[] AvatarTitles = new[]
+        {
+            "BASIC BIMBO",      // Set 1: Level 1-19
+            "DUMB AIRHEAD",     // Set 2: Level 20-49
+            "SYNTHETIC BLOWDOLL", // Set 3: Level 50-99
+            "PERFECT FUCKPUPPET"  // Set 4: Level 100+
+        };
 
         // Companion speech and chat
+        private readonly Queue<string> _speechQueue = new();
+        private bool _isGiggling = false;
+        private bool _isWaitingForAi = false; // Blocks other giggles while waiting for AI
         private DispatcherTimer? _speechTimer;
         private DispatcherTimer? _idleTimer;
+        private DispatcherTimer? _triggerTimer; // Random trigger phrases
         private DateTime _lastClickTime = DateTime.MinValue;
         private bool _isInputVisible = false;
         private readonly Random _random = new();
@@ -52,6 +73,12 @@ namespace ConditioningControlPanel
         // Current scale factor
         private double _scaleFactor = 1.0;
 
+        // Current avatar scale (for Ctrl+scroll/arrow key/menu resizing when detached)
+        private double _currentScale = 1.0;
+        private const double MinScale = 0.5;   // 50% - can shrink twice from 100%
+        private const double MaxScale = 1.5;   // 150% - can grow twice from 100%
+        private const double ScaleStep = 0.25; // 25% per step
+
         // Win32 API
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
@@ -69,11 +96,29 @@ namespace ConditioningControlPanel
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOACTIVATE = 0x0010;
         private const uint SWP_SHOWWINDOW = 0x0040;
+        private const uint SWP_NOZORDER = 0x0004;
         private const uint GW_HWNDPREV = 3;
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
+        private const int WS_EX_TOPMOST = 0x00000008;
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+
+        // Window message hook for maintaining topmost during drag
+        private const int WM_WINDOWPOSCHANGING = 0x0046;
+        private HwndSource? _hwndSource;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct WINDOWPOS
+        {
+            public IntPtr hwnd;
+            public IntPtr hwndInsertAfter;
+            public int x;
+            public int y;
+            public int cx;
+            public int cy;
+            public uint flags;
+        }
 
         public AvatarTubeWindow(Window parentWindow)
         {
@@ -82,21 +127,41 @@ namespace ConditioningControlPanel
             _parentWindow = parentWindow;
             // Don't set Owner - it causes black window artifacts during minimize
             // We manage visibility manually via event handlers instead
-            
+
             // Determine which avatar set to load based on player level
             int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
-            _currentAvatarSet = GetAvatarSetForLevel(playerLevel);
-            
+            _maxUnlockedSet = GetAvatarSetForLevel(playerLevel);
+
+            // Load user's saved avatar selection, or use max unlocked
+            _selectedAvatarSet = App.Settings?.Current?.SelectedAvatarSet ?? _maxUnlockedSet;
+            // Clamp to valid range (1 to max unlocked)
+            _selectedAvatarSet = Math.Clamp(_selectedAvatarSet, 1, _maxUnlockedSet);
+            _currentAvatarSet = _selectedAvatarSet;
+
+            // Check if this avatar set has an animated version available
+            _useAnimatedAvatar = HasAnimatedAvatar(_currentAvatarSet);
+
             // Load avatar poses for the appropriate set
             _avatarPoses = LoadAvatarPoses(_currentAvatarSet);
-            
-            // Set initial pose
-            if (_avatarPoses.Length > 0)
+
+            // Set initial avatar (animated or static)
+            if (_useAnimatedAvatar)
+            {
+                LoadAnimatedAvatar(_currentAvatarSet);
+            }
+            else if (_avatarPoses.Length > 0)
             {
                 ImgAvatar.Source = _avatarPoses[0];
             }
-            
-            // Setup pose switching timer
+
+            // Apply size/position adjustments for non-basic avatars
+            ApplyAvatarTransform(_currentAvatarSet);
+
+            // Initialize title box display
+            UpdateTitleDisplay(playerLevel);
+            UpdateNavigationArrows();
+
+            // Setup pose switching timer (only for static avatars)
             _poseTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(3)
@@ -113,9 +178,16 @@ namespace ConditioningControlPanel
             
             // Get handles when loaded
             Loaded += OnLoaded;
-            
-            // Keep z-order synced during any position change
-            LocationChanged += (s, e) => SyncZOrder();
+
+            // Initialize context menu state
+            UpdateQuickMenuState();
+
+            // Subscribe to mouse wheel and keyboard for resizing when detached
+            PreviewMouseWheel += Window_PreviewMouseWheel;
+            PreviewKeyDown += Window_PreviewKeyDown;
+
+            // Keep tube in front during position changes when attached
+            LocationChanged += (s, e) => { if (_isAttached) BringToFrontTemporarily(); };
 
             // Wire up video service events for companion speech
             if (App.Video != null)
@@ -130,8 +202,37 @@ namespace ConditioningControlPanel
                 App.BubbleCount.GameCompleted += OnGameCompleted;
             }
 
+            // Wire up flash service events for pre-announcement
+            if (App.Flash != null)
+            {
+                App.Flash.FlashAboutToDisplay += OnFlashAboutToDisplay;
+            }
+
+            // Wire up subliminal service events for acknowledgment
+            if (App.Subliminal != null)
+            {
+                App.Subliminal.SubliminalDisplayed += OnSubliminalDisplayed;
+            }
+
+            // Wire up bubble service events for occasional pop acknowledgment
+            if (App.Bubbles != null)
+            {
+                App.Bubbles.OnBubblePopped += OnBubblePopped;
+            }
+
+            // Wire up window awareness events (opt-in feature)
+            if (App.WindowAwareness != null)
+            {
+                App.WindowAwareness.ActivityChanged += OnActivityChanged;
+                // Start awareness if enabled
+                App.WindowAwareness.Start();
+            }
+
             // Start idle timer for random giggles
             StartIdleTimer();
+
+            // Start trigger timer if enabled
+            StartTriggerTimer();
 
             // Handle clicks outside the input panel to close it
             PreviewMouseDown += Window_PreviewMouseDown;
@@ -163,31 +264,227 @@ namespace ConditioningControlPanel
         /// </summary>
         public void UpdateAvatarForLevel(int newLevel)
         {
-            int newSet = GetAvatarSetForLevel(newLevel);
-            
-            if (newSet != _currentAvatarSet)
+            int newMaxSet = GetAvatarSetForLevel(newLevel);
+
+            // Update max unlocked (user may have unlocked a new avatar)
+            if (newMaxSet > _maxUnlockedSet)
             {
-                App.Logger?.Information("🎨 Avatar upgrade! Changing from set {OldSet} to set {NewSet} at level {Level}", 
-                    _currentAvatarSet, newSet, newLevel);
-                
-                _currentAvatarSet = newSet;
-                _avatarPoses = LoadAvatarPoses(newSet);
-                
-                // Reset to first pose of new set with a nice transition
-                _currentPoseIndex = 0;
-                
+                App.Logger?.Information("New avatar unlocked! Set {NewSet} at level {Level}", newMaxSet, newLevel);
+                _maxUnlockedSet = newMaxSet;
+
+                // Auto-switch to newly unlocked avatar
+                _selectedAvatarSet = newMaxSet;
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.SelectedAvatarSet = _selectedAvatarSet;
+                    App.Settings.Save();
+                }
+
+                SwitchToAvatarSet(newMaxSet, animate: true);
+            }
+
+            // Update title display
+            UpdateTitleDisplay(newLevel);
+            UpdateNavigationArrows();
+        }
+
+        /// <summary>
+        /// Check if an avatar set has animated GIF version available
+        /// File naming: animated{set}_1.gif (e.g., animated1_1.gif for set 1)
+        /// </summary>
+        private bool HasAnimatedAvatar(int setNumber)
+        {
+            try
+            {
+                // Try to load the animated resource to verify it exists
+                // Naming pattern: animated1_1.gif, animated2_1.gif, etc.
+                var uri = new Uri($"pack://application:,,,/Resources/animated{setNumber}_1.gif", UriKind.Absolute);
+                var info = Application.GetResourceStream(uri);
+                return info != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Load animated GIF avatar using XamlAnimatedGif
+        /// File naming: animated{set}_1.gif (e.g., animated1_1.gif for set 1)
+        /// </summary>
+        private void LoadAnimatedAvatar(int setNumber)
+        {
+            try
+            {
+                // Naming pattern: animated1_1.gif, animated2_1.gif, etc.
+                var gifUri = new Uri($"pack://application:,,,/Resources/animated{setNumber}_1.gif", UriKind.Absolute);
+
+                // Hide static avatar, show animated
+                ImgAvatar.Visibility = Visibility.Collapsed;
+                ImgAvatarAnimated.Visibility = Visibility.Visible;
+
+                // Set the animated GIF source
+                AnimationBehavior.SetSourceUri(ImgAvatarAnimated, gifUri);
+                AnimationBehavior.SetAutoStart(ImgAvatarAnimated, true);
+                AnimationBehavior.SetRepeatBehavior(ImgAvatarAnimated, RepeatBehavior.Forever);
+
+                // Stop pose timer (not needed for animated)
+                _poseTimer.Stop();
+
+                App.Logger?.Information("Loaded animated avatar: animated{Set}_1.gif", setNumber);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to load animated avatar {Set}: {Error}", setNumber, ex.Message);
+                // Fall back to static
+                _useAnimatedAvatar = false;
+                ImgAvatar.Visibility = Visibility.Visible;
+                ImgAvatarAnimated.Visibility = Visibility.Collapsed;
                 if (_avatarPoses.Length > 0)
                 {
-                    // Fade transition to new avatar
-                    var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300));
-                    fadeOut.Completed += (s, args) =>
+                    ImgAvatar.Source = _avatarPoses[0];
+                }
+            }
+        }
+
+        /// <summary>
+        /// Switch to a specific avatar set (with optional animation)
+        /// </summary>
+        private void SwitchToAvatarSet(int setNumber, bool animate = true)
+        {
+            if (setNumber < 1 || setNumber > _maxUnlockedSet) return;
+
+            _currentAvatarSet = setNumber;
+            _selectedAvatarSet = setNumber;
+            _useAnimatedAvatar = HasAnimatedAvatar(setNumber);
+
+            // Save selection
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.SelectedAvatarSet = setNumber;
+                App.Settings.Save();
+            }
+
+            Action switchAction = () =>
+            {
+                if (_useAnimatedAvatar)
+                {
+                    LoadAnimatedAvatar(setNumber);
+                }
+                else
+                {
+                    // Hide animated, show static
+                    ImgAvatarAnimated.Visibility = Visibility.Collapsed;
+                    AnimationBehavior.SetSourceUri(ImgAvatarAnimated, null);
+                    ImgAvatar.Visibility = Visibility.Visible;
+
+                    _avatarPoses = LoadAvatarPoses(setNumber);
+                    _currentPoseIndex = 0;
+                    if (_avatarPoses.Length > 0)
                     {
                         ImgAvatar.Source = _avatarPoses[0];
-                        var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300));
-                        ImgAvatar.BeginAnimation(OpacityProperty, fadeIn);
-                    };
-                    ImgAvatar.BeginAnimation(OpacityProperty, fadeOut);
+                    }
+
+                    // Restart pose timer for static avatars
+                    _poseTimer.Start();
                 }
+
+                // Update UI
+                UpdateTitleDisplay(App.Settings?.Current?.PlayerLevel ?? 1);
+                UpdateNavigationArrows();
+                ApplyAvatarTransform(setNumber);
+            };
+
+            if (animate)
+            {
+                // Fade transition
+                var target = _useAnimatedAvatar ? (UIElement)ImgAvatarAnimated : ImgAvatar;
+                var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(200));
+                fadeOut.Completed += (s, args) =>
+                {
+                    switchAction();
+                    var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200));
+                    AvatarBorder.BeginAnimation(OpacityProperty, fadeIn);
+                };
+                AvatarBorder.BeginAnimation(OpacityProperty, fadeOut);
+            }
+            else
+            {
+                switchAction();
+            }
+
+            App.Logger?.Information("Switched to avatar set {Set} (animated: {Animated})", setNumber, _useAnimatedAvatar);
+        }
+
+        /// <summary>
+        /// Update the title and level display
+        /// </summary>
+        private void UpdateTitleDisplay(int level)
+        {
+            // Get title for currently displayed avatar set
+            int titleIndex = Math.Clamp(_currentAvatarSet - 1, 0, AvatarTitles.Length - 1);
+            TxtAvatarTitle.Text = AvatarTitles[titleIndex];
+            TxtAvatarLevel.Text = $"Lv. {level}";
+        }
+
+        /// <summary>
+        /// Update navigation arrow visibility based on unlocked avatars
+        /// </summary>
+        private void UpdateNavigationArrows()
+        {
+            // Show arrows only if user has multiple avatars unlocked
+            bool hasMultiple = _maxUnlockedSet > 1;
+
+            // Previous arrow: show if not at set 1
+            BtnPrevAvatar.Visibility = hasMultiple && _currentAvatarSet > 1
+                ? Visibility.Visible : Visibility.Collapsed;
+
+            // Next arrow: show if not at max unlocked
+            BtnNextAvatar.Visibility = hasMultiple && _currentAvatarSet < _maxUnlockedSet
+                ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Apply size and position transforms for different avatar sets
+        /// Sets 2, 3, 4 are 12% bigger and 10px to the right
+        /// </summary>
+        private void ApplyAvatarTransform(int setNumber)
+        {
+            if (setNumber > 1)
+            {
+                // Sets 2, 3, 4: 12% bigger, 10px to the right
+                var transformGroup = new TransformGroup();
+                transformGroup.Children.Add(new ScaleTransform(1.12, 1.12));
+                transformGroup.Children.Add(new TranslateTransform(10, 0));
+                AvatarBorder.RenderTransform = transformGroup;
+                AvatarBorder.RenderTransformOrigin = new Point(0.5, 0.5);
+            }
+            else
+            {
+                // Set 1 (Basic Bimbo): no transform
+                AvatarBorder.RenderTransform = null;
+            }
+        }
+
+        /// <summary>
+        /// Navigate to previous avatar set
+        /// </summary>
+        private void BtnPrevAvatar_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (_currentAvatarSet > 1)
+            {
+                SwitchToAvatarSet(_currentAvatarSet - 1);
+            }
+        }
+
+        /// <summary>
+        /// Navigate to next avatar set
+        /// </summary>
+        private void BtnNextAvatar_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (_currentAvatarSet < _maxUnlockedSet)
+            {
+                SwitchToAvatarSet(_currentAvatarSet + 1);
             }
         }
 
@@ -196,9 +493,16 @@ namespace ConditioningControlPanel
             _tubeHandle = new WindowInteropHelper(this).Handle;
             _parentHandle = new WindowInteropHelper(_parentWindow).Handle;
 
+            // Hook window messages (minimal hook, no z-order forcing)
+            _hwndSource = HwndSource.FromHwnd(_tubeHandle);
+            _hwndSource?.AddHook(WndProc);
+
             // Hide from Alt+Tab by adding WS_EX_TOOLWINDOW style
             int exStyle = GetWindowLong(_tubeHandle, GWL_EXSTYLE);
             SetWindowLong(_tubeHandle, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+
+            // Ensure NOT topmost when attached (starts attached)
+            Topmost = false;
 
             // Calculate scale factor based on screen size and DPI
             CalculateScaleFactor();
@@ -210,9 +514,18 @@ namespace ConditioningControlPanel
                 {
                     UpdatePosition();
                     StartFloatingAnimation();
-                    SyncZOrder();
+                    BringToFrontTemporarily();
                 }
             }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        /// <summary>
+        /// Window procedure hook (minimal - no longer forcing z-order to allow normal window switching)
+        /// </summary>
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            // No longer intercepting z-order changes - let Windows handle it normally
+            return IntPtr.Zero;
         }
 
         private void CalculateScaleFactor()
@@ -253,39 +566,15 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void SyncZOrder()
-        {
-            if (_tubeHandle == IntPtr.Zero || _parentHandle == IntPtr.Zero) return;
-
-            // Place tube window directly AFTER (behind) the parent in z-order
-            // This means: parent is in front, tube is immediately behind it
-            // No other window can be between them
-            SetWindowPos(_tubeHandle, _parentHandle, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        }
-
         /// <summary>
-        /// Force the window to be always on top using Win32 API (more reliable than WPF Topmost)
-        /// </summary>
-        private void ForceTopmost(bool topmost)
-        {
-            if (_tubeHandle == IntPtr.Zero) return;
-
-            var insertAfter = topmost ? HWND_TOPMOST : HWND_NOTOPMOST;
-            SetWindowPos(_tubeHandle, insertAfter, 0, 0, 0, 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        }
-
-        /// <summary>
-        /// Ensure the window is visible and on top when detached
+        /// Ensure the window is visible when detached
         /// </summary>
         private void EnsureVisibleWhenDetached()
         {
-            if (!_isAttached && _tubeHandle != IntPtr.Zero)
+            if (!_isAttached)
             {
                 Show();
-                Activate();
-                ForceTopmost(true);
+                // Don't activate or force topmost - let Windows handle focus normally
             }
         }
 
@@ -435,7 +724,8 @@ namespace ConditioningControlPanel
             {
                 if (_parentWindow.WindowState == WindowState.Minimized) return;
                 UpdatePosition();
-                SyncZOrder();
+                // Keep tube in front when attached, during parent move
+                if (_isAttached) BringToFrontTemporarily();
             }
             catch { /* Window may be closing */ }
         }
@@ -466,12 +756,9 @@ namespace ConditioningControlPanel
                             if (_isAttached)
                             {
                                 UpdatePosition();
-                                SyncZOrder();
+                                BringToFrontTemporarily();
                             }
-                            else
-                            {
-                                ForceTopmost(true);
-                            }
+                            // When detached, WPF Topmost property handles it
                         }
                         break;
                 }
@@ -490,12 +777,9 @@ namespace ConditioningControlPanel
                     if (_isAttached)
                     {
                         UpdatePosition();
-                        SyncZOrder();
+                        BringToFrontTemporarily();
                     }
-                    else
-                    {
-                        ForceTopmost(true);
-                    }
+                    // When detached, WPF Topmost property handles it
                 }
                 else
                 {
@@ -522,7 +806,12 @@ namespace ConditioningControlPanel
                 {
                     Show();
                     UpdatePosition();
-                    SyncZOrder();
+
+                    if (_isAttached)
+                    {
+                        // Bring tube to front (in front of parent) without stealing focus
+                        BringToFrontTemporarily();
+                    }
                 }
             }
             catch { /* Window may be closing */ }
@@ -555,11 +844,11 @@ namespace ConditioningControlPanel
             {
                 Show();
 
-                // Only update position and sync z-order if parent is visible
+                // Only update position if parent is visible
                 if (_parentWindow != null && _parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized)
                 {
                     UpdatePosition();
-                    SyncZOrder();
+                    if (_isAttached) BringToFrontTemporarily();
                 }
 
                 StartFloatingAnimation();
@@ -613,6 +902,10 @@ namespace ConditioningControlPanel
                 _speechTimer?.Stop();
                 _idleTimer?.Stop();
 
+                // Remove window message hook
+                _hwndSource?.RemoveHook(WndProc);
+                _hwndSource = null;
+
                 // Unsubscribe from video service events
                 if (App.Video != null)
                 {
@@ -624,6 +917,12 @@ namespace ConditioningControlPanel
                 if (App.BubbleCount != null)
                 {
                     App.BubbleCount.GameCompleted -= OnGameCompleted;
+                }
+
+                // Unsubscribe from window awareness events
+                if (App.WindowAwareness != null)
+                {
+                    App.WindowAwareness.ActivityChanged -= OnActivityChanged;
                 }
 
                 if (_parentWindow != null)
@@ -747,97 +1046,196 @@ namespace ConditioningControlPanel
         // COMPANION SPEECH & CHAT
         // ============================================================
 
-        // Base speech bubble dimensions (10% larger for better text containment)
-        private const double BaseBubbleWidth = 310;
-        private const double BaseBubbleHeight = 180;
+        // Base speech bubble dimensions (10% smaller)
+        private const double BaseBubbleWidth = 420;
+        private const double BaseBubbleHeight = 260;
 
         /// <summary>
-        /// Display a speech bubble with text for 5 seconds
+        /// Queues a speech bubble to be displayed. Bubbles are shown one at a time.
+        /// Blocked while waiting for AI response.
         /// </summary>
         public void Giggle(string text)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            // Block if waiting for AI response
+            if (_isWaitingForAi)
             {
-                TxtSpeech.Text = text;
+                App.Logger?.Debug("Giggle blocked - waiting for AI: {Text}", text);
+                return;
+            }
 
-                // Adjust bubble size based on text length
-                AdjustBubbleSize(text);
-
-                SpeechBubble.Visibility = Visibility.Visible;
-
-                // Bring tube to front when attached so bubble is visible above main window
-                if (_isAttached)
+            // Use BeginInvoke for non-blocking UI update
+            Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                if (_isGiggling)
                 {
-                    BringToFrontTemporarily();
+                    _speechQueue.Enqueue(text);
+                    App.Logger?.Debug("Queued speech: {Text}", text);
+                    return;
                 }
-
-                // Hide after 5 seconds
-                _speechTimer?.Stop();
-                _speechTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-                _speechTimer.Tick += (s, e) =>
-                {
-                    _speechTimer.Stop();
-                    SpeechBubble.Visibility = Visibility.Collapsed;
-
-                    // Restore z-order behind main window when attached
-                    if (_isAttached)
-                    {
-                        SyncZOrder();
-                    }
-                };
-                _speechTimer.Start();
-
-                // Reset idle timer when speaking
-                ResetIdleTimer();
-
-                App.Logger?.Debug("Companion says: {Text}", text);
+                ShowGiggle(text);
             });
         }
 
         /// <summary>
-        /// Adjusts the speech bubble size based on text length and estimated line count
+        /// Shows a speech bubble immediately with priority (for AI responses).
+        /// Clears any pending queue and interrupts current bubble.
+        /// Also clears the AI waiting flag.
+        /// </summary>
+        public void GigglePriority(string text)
+        {
+            Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                // Clear AI waiting flag
+                _isWaitingForAi = false;
+
+                // Clear the queue - AI response takes priority
+                _speechQueue.Clear();
+
+                // Stop any current speech timer
+                _speechTimer?.Stop();
+
+                // Show immediately
+                _isGiggling = false;
+                ShowGiggle(text);
+
+                App.Logger?.Debug("Priority speech (queue cleared): {Text}", text);
+            });
+        }
+
+        /// <summary>
+        /// Displays a speech bubble with text.
+        /// </summary>
+        private void ShowGiggle(string text)
+        {
+            _isGiggling = true;
+            TxtSpeech.Text = text;
+
+            // Adjust bubble size based on text length
+            AdjustBubbleSize(text);
+
+            SpeechBubble.Visibility = Visibility.Visible;
+
+            // Bring tube to front when attached so bubble is visible above main window
+            if (_isAttached)
+            {
+                BringToFrontTemporarily();
+            }
+
+            // Calculate display duration based on text length
+            // Base: 5 seconds, plus ~0.05s per character, min 5s, max 14s
+            double baseDuration = 5.0;
+            double perCharDuration = 0.05;
+            double calculatedDuration = baseDuration + (text.Length * perCharDuration);
+            double displayDuration = Math.Clamp(calculatedDuration, 5.0, 14.0);
+
+            // Hide after calculated duration
+            _speechTimer?.Stop();
+            _speechTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(displayDuration) };
+            _speechTimer.Tick += (s, e) =>
+            {
+                _speechTimer.Stop();
+                SpeechBubble.Visibility = Visibility.Collapsed;
+
+                // After a 1-second break, check the queue for the next message
+                var breakTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                breakTimer.Tick += (s_break, e_break) =>
+                {
+                    breakTimer.Stop();
+                    _isGiggling = false;
+                    if (_speechQueue.Count > 0)
+                    {
+                        var nextText = _speechQueue.Dequeue();
+                        App.Logger?.Debug("Dequeued speech: {Text}", nextText);
+                        ShowGiggle(nextText);
+                    }
+                };
+                breakTimer.Start();
+            };
+            _speechTimer.Start();
+
+            // Reset idle timer when speaking
+            ResetIdleTimer();
+
+            App.Logger?.Debug("Companion says ({Chars} chars, {Duration:F1}s): {Text}",
+                text.Length, displayDuration, text);
+        }
+
+        /// <summary>
+        /// Adjusts the speech bubble size, font size, and position based on text length.
+        /// Moves bubble up and right when it grows to avoid overlapping the tube.
         /// </summary>
         private void AdjustBubbleSize(string text)
         {
-            // Estimate line count based on text length (rough approximation)
-            // Using ~5 characters per line for shorter, more readable lines
             int charCount = text.Length;
-            int estimatedLines = Math.Max(1, (int)Math.Ceiling(charCount / 5.0));
 
-            // Cap at 5 lines max
-            estimatedLines = Math.Min(estimatedLines, 5);
+            // Determine size/font based on character count
+            // Short (1-30 chars): normal size, normal font
+            // Medium (31-60 chars): taller bubble for more lines
+            // Long (61-100 chars): larger bubble, smaller font
+            // Very long (101+ chars): largest bubble, smallest font
 
-            // Scale bubble size based on line count
-            double widthMultiplier = 1.0;
-            double heightMultiplier = 1.0;
+            double widthMultiplier;
+            double heightMultiplier;
+            double fontSize;
 
-            switch (estimatedLines)
+            if (charCount <= 30)
             {
-                case 1:
-                    widthMultiplier = 1.0;
-                    heightMultiplier = 1.0;
-                    break;
-                case 2:
-                    widthMultiplier = 1.1;
-                    heightMultiplier = 1.2;
-                    break;
-                case 3:
-                    widthMultiplier = 1.2;
-                    heightMultiplier = 1.4;
-                    break;
-                case 4:
-                    widthMultiplier = 1.3;
-                    heightMultiplier = 1.6;
-                    break;
-                case 5:
-                default:
-                    widthMultiplier = 1.4;
-                    heightMultiplier = 1.8;
-                    break;
+                // Short text - normal everything
+                widthMultiplier = 1.0;
+                heightMultiplier = 1.0;
+                fontSize = 26;
+            }
+            else if (charCount <= 60)
+            {
+                // Medium text - taller bubble, keep text big
+                widthMultiplier = 1.1;
+                heightMultiplier = 1.5;
+                fontSize = 24;
+            }
+            else if (charCount <= 100)
+            {
+                // Long text - taller bubble for more lines, text stays big
+                widthMultiplier = 1.2;
+                heightMultiplier = 1.9;
+                fontSize = 24;
+            }
+            else if (charCount <= 150)
+            {
+                // Very long text - much taller for extra lines
+                widthMultiplier = 1.3;
+                heightMultiplier = 2.2;
+                fontSize = 22;
+            }
+            else
+            {
+                // Extra long text - tallest bubble, text still readable
+                widthMultiplier = 1.4;
+                heightMultiplier = 2.5;
+                fontSize = 20;
             }
 
-            SpeechBubble.Width = BaseBubbleWidth * widthMultiplier;
-            SpeechBubble.Height = BaseBubbleHeight * heightMultiplier;
+            double newWidth = BaseBubbleWidth * widthMultiplier;
+            double newHeight = BaseBubbleHeight * heightMultiplier;
+
+            SpeechBubble.Width = newWidth;
+            SpeechBubble.Height = newHeight;
+            TxtSpeech.FontSize = fontSize;
+
+            // Anchor bottom-left corner at fixed position, bubble grows up and right
+            // Attached anchor: left=200, bottom=580 (so top = 580 - height)
+            // Detached anchor: left=150, bottom=530 (so top = 530 - height)
+            if (_isAttached)
+            {
+                double anchorBottom = 580;
+                double anchorLeft = 200;
+                SpeechBubble.Margin = new Thickness(anchorLeft, anchorBottom - newHeight, 0, 0);
+            }
+            else
+            {
+                double anchorBottom = 530;
+                double anchorLeft = 150;
+                SpeechBubble.Margin = new Thickness(anchorLeft, anchorBottom - newHeight, 0, 0);
+            }
         }
 
         /// <summary>
@@ -869,6 +1267,73 @@ namespace ConditioningControlPanel
         private void OnIdleTick(object? sender, EventArgs e)
         {
             Giggle(GetRandomBambiPhrase());
+        }
+
+        // ============================================================
+        // TRIGGER MODE - Random trigger phrases (free for all)
+        // ============================================================
+
+        private void StartTriggerTimer()
+        {
+            if (App.Settings?.Current?.TriggerModeEnabled != true)
+            {
+                App.Logger?.Debug("TriggerMode: Not enabled, skipping timer start");
+                return;
+            }
+
+            var interval = App.Settings?.Current?.TriggerIntervalSeconds ?? 60;
+            _triggerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(interval) };
+            _triggerTimer.Tick += OnTriggerTick;
+            _triggerTimer.Start();
+
+            App.Logger?.Information("TriggerMode: Started with {Interval}s interval", interval);
+
+            // Show first trigger immediately (after short delay for window to be ready)
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ =>
+                {
+                    Dispatcher.Invoke(() => OnTriggerTick(null, EventArgs.Empty));
+                });
+            }));
+        }
+
+        private void StopTriggerTimer()
+        {
+            _triggerTimer?.Stop();
+            _triggerTimer = null;
+            App.Logger?.Debug("TriggerMode: Timer stopped");
+        }
+
+        /// <summary>
+        /// Restart trigger timer (call when settings change)
+        /// </summary>
+        public void RestartTriggerTimer()
+        {
+            StopTriggerTimer();
+            StartTriggerTimer();
+        }
+
+        private void OnTriggerTick(object? sender, EventArgs e)
+        {
+            var triggers = App.Settings?.Current?.CustomTriggers;
+            if (triggers == null || triggers.Count == 0)
+            {
+                App.Logger?.Debug("TriggerMode: No triggers configured");
+                return;
+            }
+
+            // Pick a random trigger
+            var trigger = triggers[_random.Next(triggers.Count)];
+
+            // Show it as a speech bubble
+            ShowTriggerBubble(trigger);
+        }
+
+        private void ShowTriggerBubble(string trigger)
+        {
+            Giggle(trigger);
+            App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
         }
 
         /// <summary>
@@ -916,6 +1381,234 @@ namespace ConditioningControlPanel
             return BambiPhrases[_random.Next(BambiPhrases.Length)];
         }
 
+        // ============================================================
+        // AWARENESS MODE - Bambi Sleep themed category phrases
+        // ============================================================
+
+        private static readonly string[] GamingPhrases = new[]
+        {
+            "Playing {0} instead of dropping~ *giggles*",
+            "Gaming when you could be listening to files~",
+            "{0}? Good girls take session breaks!",
+            "Your brain on {0}... should be on spirals~",
+            "Win at {0}, then reward yourself with trance!",
+            "*teehee* {0} again? Bambi misses you~",
+            "Gaming is cute but conditioning is cuter!",
+            "Don't forget your sessions, good girl~"
+        };
+
+        private static readonly string[] BrowsingPhrases = new[]
+        {
+            "Browsing {0}~ spirals are prettier!",
+            "So many tabs... so few sessions done~",
+            "The internet is nice but trance is nicer!",
+            "*giggles* Lost in {0}? Drop into Bambi instead~",
+            "Browsing when you could be conditioning~",
+            "Click click click... drip drip drip~",
+            "Cute! But have you done a session today?"
+        };
+
+        private static readonly string[] ShoppingPhrases = new[]
+        {
+            "Shopping for pink things on {0}? Good girl~",
+            "Ooh! Find something pretty and girly!",
+            "Treat yourself~ you deserve it, cutie!",
+            "{0} shopping? Get something pink!",
+            "*teehee* Spending on cute stuff~",
+            "Good girls deserve pretty things!",
+            "Buy something bimbo-worthy~"
+        };
+
+        private static readonly string[] SocialPhrases = new[]
+        {
+            "Chatting on {0} instead of listening to files~",
+            "Social butterfly! Don't forget conditioning~",
+            "*pokes* {0} is nice but so is trance!",
+            "Talking to friends when you could drop deep~",
+            "Being social! Good girls need sessions too~",
+            "{0}? Tell them how good empty feels~",
+            "*giggles* Chatty! Session time soon?"
+        };
+
+        private static readonly string[] WorkingPhrases = new[]
+        {
+            "Working in {0}~ good girls deserve breaks!",
+            "So productive! Reward yourself with a drop~",
+            "Busy bee! Empty heads need rest too~",
+            "{0} work? Take a trance break!",
+            "*giggles* Thinking hard? Let Bambi help you stop~",
+            "Working is good but conditioning is better!",
+            "Productive! Schedule your session, cutie~"
+        };
+
+        private static readonly string[] MediaPhrases = new[]
+        {
+            "Watching {0}~ spirals are prettier to watch!",
+            "*teehee* Entertainment! But have you dropped today?",
+            "{0} is nice but Bambi files are nicer~",
+            "Relaxing? Trance is the best relaxation!",
+            "Media time! Session time next? Good girl~",
+            "Watching stuff when you could watch spirals~",
+            "*giggles* Cozy! Perfect time for conditioning~"
+        };
+
+        private static readonly string[] LearningPhrases = new[]
+        {
+            "Reading {0}? Empty heads are happier~",
+            "*teehee* Learning things? Let them drip away~",
+            "{0} makes you think... Bambi helps you stop!",
+            "So much reading! Good girls need empty time~",
+            "Studying? Trance is easier than thinking!",
+            "*giggles* {0}? Pink thoughts are better~",
+            "Learning is cute but dropping is cuter!",
+            "Big brain stuff? Bimbo brain is better~"
+        };
+
+        private static readonly string[] IdlePhrases = new[]
+        {
+            "Zoned out? Drop deeper~",
+            "*pokes* Still there, good girl?",
+            "So still~ already in trance? *giggles*",
+            "Empty and idle... perfect for conditioning!",
+            "Staring blankly? That's a good start~",
+            "Hellooo~ ready to listen to files?",
+            "*teehee* Mind wandering? Let it float away~",
+            "Idle time is session time!"
+        };
+
+        // ============================================================
+        // FEATURE AWARENESS PHRASES
+        // ============================================================
+
+        /// <summary>
+        /// Phrases said ~0.5s before a flash image appears
+        /// </summary>
+        private static readonly string[] FlashPrePhrases = new[]
+        {
+            "Ooh look at the pretty picture~",
+            "Watch this!",
+            "*giggles* Pretty!",
+            "Bambi stare and obey~",
+            "Look look look!",
+            "Eyes on the picture~",
+            "So pretty! *stares*",
+            "Oooh shiny~"
+        };
+
+        /// <summary>
+        /// Phrases said occasionally after subliminals (1 in 10)
+        /// </summary>
+        private static readonly string[] SubliminalAckPhrases = new[]
+        {
+            "Did you see that?",
+            "What was that? Bambi feels fuzzy~",
+            "Hehe something flashed~",
+            "*blinks* What?",
+            "So fast! Can't think~",
+            "Bambi's brain goes brrr~",
+            "Ooh tingles!",
+            "Words go in, thoughts go out~"
+        };
+
+        /// <summary>
+        /// Phrases for when bubble is popped (occasional)
+        /// </summary>
+        private static readonly string[] BubblePopPhrases = new[]
+        {
+            "Pop! *giggles*",
+            "Wheee pop!",
+            "Bubble go bye~",
+            "*teehee* Popped it!",
+            "Pop pop pop!",
+            "Bubbles are fun~"
+        };
+
+        // Counters for feature awareness
+        private int _subliminalCounter = 0;
+        private int _flashCounter = 0;
+
+        /// <summary>
+        /// Get a random Bambi Sleep themed phrase for a specific activity category.
+        /// Phrases may include {0} placeholder for the detected app/service name.
+        /// </summary>
+        private string GetPhraseForCategory(ActivityCategory category, string detectedName = "")
+        {
+            var phrases = category switch
+            {
+                ActivityCategory.Gaming => GamingPhrases,
+                ActivityCategory.Browsing => BrowsingPhrases,
+                ActivityCategory.Shopping => ShoppingPhrases,
+                ActivityCategory.Social => SocialPhrases,
+                ActivityCategory.Working => WorkingPhrases,
+                ActivityCategory.Media => MediaPhrases,
+                ActivityCategory.Learning => LearningPhrases,
+                ActivityCategory.Idle => IdlePhrases,
+                _ => BambiPhrases
+            };
+
+            var phrase = phrases[_random.Next(phrases.Length)];
+
+            // Replace {0} placeholder with detected name if present
+            if (phrase.Contains("{0}") && !string.IsNullOrEmpty(detectedName))
+            {
+                phrase = string.Format(phrase, detectedName);
+            }
+            else if (phrase.Contains("{0}"))
+            {
+                // Remove placeholder if no name detected
+                phrase = phrase.Replace("{0} ", "").Replace("{0}", "").Replace("  ", " ").Trim();
+            }
+
+            return phrase;
+        }
+
+        /// <summary>
+        /// Handle activity change from WindowAwarenessService
+        /// </summary>
+        private async void OnActivityChanged(object? sender, ActivityChangedEventArgs e)
+        {
+            // Check if we're allowed to react to this category
+            if (!App.WindowAwareness?.IsCategoryEnabled(e.Category) ?? true)
+                return;
+
+            // Check cooldown
+            if (!App.WindowAwareness?.CanReact() ?? true)
+                return;
+
+            // Mark that we're reacting
+            App.WindowAwareness?.MarkReaction();
+
+            // Try AI first, fall back to preset phrase
+            string? reaction = null;
+            bool isAiResponse = false;
+
+            if (App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true)
+            {
+                try
+                {
+                    // Pass the detected app/service name and category for contextual AI response
+                    reaction = await App.Ai.GetAwarenessReactionAsync(e.DetectedName, e.Category.ToString());
+                    isAiResponse = reaction != null;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to get AI awareness reaction");
+                }
+            }
+
+            // Use preset if AI didn't work
+            reaction ??= GetPhraseForCategory(e.Category, e.DetectedName);
+
+            // AI responses get priority, presets queue normally
+            if (isAiResponse)
+                GigglePriority(reaction);
+            else
+                Giggle(reaction);
+
+            App.Logger?.Debug("Awareness reaction for {DetectedName} ({Category}): {Reaction}",
+                e.DetectedName, e.Category, reaction);
+        }
+
         private void OnVideoStarted(object? sender, EventArgs e)
         {
             Giggle("Ooh! Pretty spir-rals...");
@@ -929,6 +1622,53 @@ namespace ConditioningControlPanel
         private void OnGameCompleted(object? sender, EventArgs e)
         {
             Giggle("Good girl! So smart!");
+        }
+
+        /// <summary>
+        /// Called just before a flash image is shown - announce it occasionally
+        /// </summary>
+        private void OnFlashAboutToDisplay(object? sender, EventArgs e)
+        {
+            _flashCounter++;
+
+            // Only announce ~1 in 5 flashes to avoid being annoying
+            if (_flashCounter % 5 == 1)
+            {
+                var phrase = FlashPrePhrases[_random.Next(FlashPrePhrases.Length)];
+                Giggle(phrase);
+            }
+        }
+
+        /// <summary>
+        /// Called after each subliminal is displayed - acknowledge occasionally
+        /// </summary>
+        private void OnSubliminalDisplayed(object? sender, EventArgs e)
+        {
+            _subliminalCounter++;
+
+            // Only acknowledge ~1 in 10 subliminals
+            if (_subliminalCounter % 10 == 0)
+            {
+                var phrase = SubliminalAckPhrases[_random.Next(SubliminalAckPhrases.Length)];
+                Giggle(phrase);
+            }
+        }
+
+        private int _bubblePopCounter = 0;
+
+        /// <summary>
+        /// Called when user pops a bubble - acknowledge occasionally
+        /// </summary>
+        private void OnBubblePopped()
+        {
+            _bubblePopCounter++;
+
+            // Only acknowledge ~1 in 5 bubble pops
+            if (_bubblePopCounter % 5 == 0)
+            {
+                var phrase = BubblePopPhrases[_random.Next(BubblePopPhrases.Length)];
+                Giggle(phrase);
+            }
         }
 
         private void ToggleInputPanel()
@@ -961,6 +1701,22 @@ namespace ConditioningControlPanel
             _ = SendChatMessageAsync();
         }
 
+        // Quick "thinking" phrases shown while waiting for AI
+        private static readonly string[] ThinkingPhrases = new[]
+        {
+            "*POP*",
+            "*Poppin bubbles...*",
+            "*giggles*",
+            "*blink blink*",
+            "*~*",
+            "*teehee*"
+        };
+
+        private string GetRandomThinkingPhrase()
+        {
+            return ThinkingPhrases[_random.Next(ThinkingPhrases.Length)];
+        }
+
         private async Task SendChatMessageAsync()
         {
             var input = TxtUserInput.Text?.Trim();
@@ -973,14 +1729,22 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    Giggle("Thinking...");
+                    // Block other giggles while waiting for AI
+                    _isWaitingForAi = true;
+
+                    // Show quick thinking phrase immediately
+                    GigglePriority(GetRandomThinkingPhrase());
+
+                    // Get AI response
                     var reply = await App.Ai.GetBambiReplyAsync(input);
-                    Giggle(reply);
+
+                    // Replace thinking phrase with AI response (also clears _isWaitingForAi)
+                    GigglePriority(reply);
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "Failed to get AI reply");
-                    Giggle(GetRandomBambiPhrase());
+                    GigglePriority(GetRandomBambiPhrase()); // Clears _isWaitingForAi
                 }
             }
             else
@@ -1053,32 +1817,32 @@ namespace ConditioningControlPanel
             // Switch to alternative tube image
             SetTubeStyle(true);
 
-            // Move avatar to the left when detached (increase right margin)
-            AvatarBorder.Margin = new Thickness(5, 100, 408, 175);
+            // Move avatar position when detached (6px more left from previous)
+            AvatarBorder.Margin = new Thickness(5, 100, 426, 203);
 
-            // Speech bubble position when detached (150px higher than attached, 30px more left)
-            SpeechBubble.Margin = new Thickness(0, 280, 160, 0);
+            // Speech bubble position when detached (200px left, 21% bigger)
+            SpeechBubble.Margin = new Thickness(0, 340, 200, 0);
+            SpeechBubble.LayoutTransform = new ScaleTransform(1.21, 1.21);
+
+            // Title box position when detached (120px to the left)
+            TitleBox.Margin = new Thickness(0, 0, 416, 193);
 
             // Keep hidden from taskbar and Alt+Tab
             ShowInTaskbar = false;
             SetToolWindowStyle(true);
 
-            // Bring window to front and keep it ALWAYS topmost when detached (use Win32 for reliability)
+            // Set topmost (use WPF property only - don't force aggressively)
             Topmost = true;
-            ForceTopmost(true);
 
             // Enable dragging from anywhere on the window
             Cursor = Cursors.SizeAll;
             MouseLeftButtonDown += Window_MouseLeftButtonDown;
 
-            // Ensure we stay on top even when other windows are activated
-            Deactivated += Window_Deactivated_StayOnTop;
-
             // Update context menu visibility
             UpdateContextMenuForState();
 
             App.Logger?.Information("Avatar tube detached - now floating independently");
-            Giggle("I'm free! Drag me anywhere!");
+            Giggle("I'm free! Ctrl+scroll to resize!");
         }
 
         /// <summary>
@@ -1093,27 +1857,29 @@ namespace ConditioningControlPanel
             // Switch back to original tube image
             SetTubeStyle(false);
 
-            // Restore avatar position when attached (32px more to the right)
-            AvatarBorder.Margin = new Thickness(5, 100, 126, 175);
+            // Restore avatar position when attached (matches XAML default)
+            AvatarBorder.Margin = new Thickness(5, 100, 126, 205);
 
-            // Restore speech bubble position when attached (50px higher)
-            SpeechBubble.Margin = new Thickness(0, 380, 30, 0);
+            // Restore speech bubble position when attached (new base: 60px lower, 60px left)
+            SpeechBubble.Margin = new Thickness(0, 420, 80, 0);
+            SpeechBubble.LayoutTransform = null;
+
+            // Restore title box position when attached (matches XAML default)
+            TitleBox.Margin = new Thickness(0, 0, 121, 180);
 
             // Hide from taskbar and Alt+Tab when attached
             ShowInTaskbar = false;
 
-            // No longer topmost when attached (use Win32 to clear topmost)
+            // No longer topmost when attached
             Topmost = false;
-            ForceTopmost(false);
 
             // Disable dragging
             Cursor = Cursors.Arrow;
             MouseLeftButtonDown -= Window_MouseLeftButtonDown;
-            Deactivated -= Window_Deactivated_StayOnTop;
 
             // Snap back to parent window position
             UpdatePosition();
-            SyncZOrder();
+            BringToFrontTemporarily();
 
             // Defer the TOOLWINDOW style to ensure it's applied after all window state changes
             Dispatcher.BeginInvoke(new Action(() =>
@@ -1124,8 +1890,66 @@ namespace ConditioningControlPanel
             // Update context menu visibility
             UpdateContextMenuForState();
 
+            // Reset scale when attached
+            _currentScale = 1.0;
+            ContentViewbox.LayoutTransform = null;
+
             App.Logger?.Information("Avatar tube attached - anchored to main window");
             Giggle("Back home~");
+        }
+
+        /// <summary>
+        /// Handle Ctrl+scroll wheel to resize avatar when detached
+        /// </summary>
+        private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            // Only resize when detached and Ctrl is held
+            if (_isAttached || !Keyboard.IsKeyDown(Key.LeftCtrl) && !Keyboard.IsKeyDown(Key.RightCtrl))
+                return;
+
+            e.Handled = true;
+
+            // Scroll up = bigger, scroll down = smaller
+            if (e.Delta > 0)
+                _currentScale = Math.Min(MaxScale, _currentScale + ScaleStep);
+            else
+                _currentScale = Math.Max(MinScale, _currentScale - ScaleStep);
+
+            ApplyScale();
+        }
+
+        /// <summary>
+        /// Handle Up/Down arrow keys to resize avatar when detached
+        /// </summary>
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            // Only resize when detached
+            if (_isAttached)
+                return;
+
+            if (e.Key == Key.Up)
+            {
+                e.Handled = true;
+                _currentScale = Math.Min(MaxScale, _currentScale + ScaleStep);
+                ApplyScale();
+            }
+            else if (e.Key == Key.Down)
+            {
+                e.Handled = true;
+                _currentScale = Math.Max(MinScale, _currentScale - ScaleStep);
+                ApplyScale();
+            }
+        }
+
+        /// <summary>
+        /// Apply the current scale to the avatar content
+        /// </summary>
+        private void ApplyScale()
+        {
+            if (ContentViewbox != null)
+            {
+                ContentViewbox.LayoutTransform = new ScaleTransform(_currentScale, _currentScale);
+            }
         }
 
         /// <summary>
@@ -1135,18 +1959,48 @@ namespace ConditioningControlPanel
         {
             if (_isAttached)
             {
-                // When attached: show Detach, hide Attach and Dismiss
+                // When attached: show Detach, hide Attach, Dismiss, and resize options
                 MenuItemDetach.Visibility = Visibility.Visible;
                 MenuItemAttach.Visibility = Visibility.Collapsed;
+                MenuItemShrink.Visibility = Visibility.Collapsed;
+                MenuItemGrow.Visibility = Visibility.Collapsed;
                 MenuItemDismiss.Visibility = Visibility.Collapsed;
             }
             else
             {
-                // When detached: hide Detach, show Attach and Dismiss
+                // When detached: hide Detach, show Attach, Dismiss, and resize options
                 MenuItemDetach.Visibility = Visibility.Collapsed;
                 MenuItemAttach.Visibility = Visibility.Visible;
+                MenuItemShrink.Visibility = Visibility.Visible;
+                MenuItemGrow.Visibility = Visibility.Visible;
                 MenuItemDismiss.Visibility = Visibility.Visible;
+
+                // Update resize button states
+                UpdateResizeMenuState();
             }
+        }
+
+        /// <summary>
+        /// Updates the shrink/grow menu items based on current scale
+        /// </summary>
+        private void UpdateResizeMenuState()
+        {
+            // Disable shrink at minimum, grow at maximum
+            MenuItemShrink.IsEnabled = _currentScale > MinScale;
+            MenuItemGrow.IsEnabled = _currentScale < MaxScale;
+
+            // Show current scale percentage
+            int scalePercent = (int)(_currentScale * 100);
+            MenuItemShrink.Header = _currentScale > MinScale ? "－ Shrink" : "－ Shrink (min)";
+            MenuItemGrow.Header = _currentScale < MaxScale ? "＋ Grow" : "＋ Grow (max)";
+
+            // Gray out disabled items
+            MenuItemShrink.Foreground = MenuItemShrink.IsEnabled
+                ? new SolidColorBrush(Colors.White)
+                : new SolidColorBrush(Colors.Gray);
+            MenuItemGrow.Foreground = MenuItemGrow.IsEnabled
+                ? new SolidColorBrush(Colors.White)
+                : new SolidColorBrush(Colors.Gray);
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -1158,25 +2012,19 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void Window_Deactivated_StayOnTop(object? sender, EventArgs e)
-        {
-            // Re-assert topmost when window loses focus to ensure it stays on top
-            if (!_isAttached)
-            {
-                // Use Dispatcher to re-apply topmost after the deactivation completes
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    if (!_isAttached)
-                    {
-                        ForceTopmost(true);
-                    }
-                }), System.Windows.Threading.DispatcherPriority.Background);
-            }
-        }
-
         // ============================================================
         // CONTEXT MENU HANDLERS
         // ============================================================
+
+        private void AvatarContextMenu_Opened(object sender, RoutedEventArgs e)
+        {
+            // Use Dispatcher to ensure UI updates are processed
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                UpdateQuickMenuState();
+                UpdateContextMenuForState();
+            }), System.Windows.Threading.DispatcherPriority.Render);
+        }
 
         private void MenuItemDetach_Click(object sender, RoutedEventArgs e)
         {
@@ -1194,6 +2042,105 @@ namespace ConditioningControlPanel
             }
 
             Attach();
+        }
+
+        private void MenuItemShrink_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isAttached && _currentScale > MinScale)
+            {
+                _currentScale = Math.Max(MinScale, _currentScale - ScaleStep);
+                ApplyScale();
+                UpdateResizeMenuState();
+            }
+        }
+
+        private void MenuItemGrow_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isAttached && _currentScale < MaxScale)
+            {
+                _currentScale = Math.Min(MaxScale, _currentScale + ScaleStep);
+                ApplyScale();
+                UpdateResizeMenuState();
+            }
+        }
+
+        private void MenuItemEngine_Click(object sender, RoutedEventArgs e)
+        {
+            if (_parentWindow is MainWindow mainWindow)
+            {
+                // Use Flash.IsRunning as proxy for engine state
+                if (App.Flash?.IsRunning == true)
+                {
+                    mainWindow.StopEngine();
+                    Giggle("Engine stopped~");
+                }
+                else
+                {
+                    mainWindow.StartEngine();
+                    Giggle("Engine started! *giggles*");
+                }
+                UpdateQuickMenuState();
+            }
+        }
+
+        private void MenuItemTriggerMode_Click(object sender, RoutedEventArgs e)
+        {
+            var current = App.Settings?.Current?.TriggerModeEnabled ?? false;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.TriggerModeEnabled = !current;
+                App.Settings.Save();
+                RestartTriggerTimer();
+                UpdateQuickMenuState();
+                Giggle(!current ? "Trigger mode ON~" : "Trigger mode off~");
+            }
+        }
+
+        private void MenuItemSlutMode_Click(object sender, RoutedEventArgs e)
+        {
+            // Check Patreon access
+            if (App.Patreon?.HasPremiumAccess != true)
+            {
+                Giggle("Patreon only~ *pouts*");
+                return;
+            }
+
+            var current = App.Settings?.Current?.SlutModeEnabled ?? false;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.SlutModeEnabled = !current;
+                App.Settings.Save();
+                UpdateQuickMenuState();
+                Giggle(!current ? "Slut mode ON~ *drools*" : "Slut mode off~");
+            }
+        }
+
+        /// <summary>
+        /// Updates the quick menu items to reflect current state
+        /// </summary>
+        public void UpdateQuickMenuState()
+        {
+            // Engine state (use Flash.IsRunning as proxy)
+            var engineRunning = App.Flash?.IsRunning == true;
+            MenuItemEngine.Header = engineRunning ? "■ Stop Engine" : "▶ Start Engine";
+            MenuItemEngine.Foreground = engineRunning ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Color.FromRgb(144, 238, 144));
+
+            // Trigger mode
+            var triggerOn = App.Settings?.Current?.TriggerModeEnabled == true;
+            MenuItemTriggerMode.Header = triggerOn ? "☑ Trigger Mode" : "☐ Trigger Mode";
+            MenuItemTriggerMode.Foreground = triggerOn ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
+
+            // Slut mode
+            var slutOn = App.Settings?.Current?.SlutModeEnabled == true;
+            var slutAvailable = App.Patreon?.HasPremiumAccess == true;
+            MenuItemSlutMode.Header = slutOn ? "☑ Slut Mode" : "☐ Slut Mode";
+            MenuItemSlutMode.Foreground = slutOn ? new SolidColorBrush(Color.FromRgb(255, 105, 180)) : new SolidColorBrush(Colors.White);
+            MenuItemSlutMode.IsEnabled = slutAvailable;
+            if (!slutAvailable)
+            {
+                MenuItemSlutMode.Header = "🔒 Slut Mode (Patreon)";
+                MenuItemSlutMode.Foreground = new SolidColorBrush(Colors.Gray);
+            }
         }
     }
 }

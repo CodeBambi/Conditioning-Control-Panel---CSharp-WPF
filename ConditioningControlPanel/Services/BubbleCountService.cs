@@ -29,6 +29,7 @@ public class BubbleCountService : IDisposable
     
     public event EventHandler? GameCompleted;
     public event EventHandler? GameFailed;
+    public event EventHandler? BubblePopped;
 
     public void Start()
     {
