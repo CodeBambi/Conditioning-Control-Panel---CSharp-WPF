@@ -1004,18 +1004,13 @@ namespace ConditioningControlPanel
             HideInputPanel();
         }
 
-        // Interaction counter for 1-in-4 logic
-        private int _interactionCount = 0;
-
         /// <summary>
         /// Trigger a comment based on current activity or random thought (Double-click action)
         /// </summary>
         private async Task TriggerActivityCommentAsync()
         {
-            _interactionCount++;
-
-            // 3 out of 4 times, try to show a custom trigger (if available)
-            if (_interactionCount % 4 != 0)
+            // 1. Trigger Mode Enabled: Always prioritize Custom Triggers
+            if (App.Settings?.Current?.TriggerModeEnabled == true)
             {
                 var triggers = App.Settings?.Current?.CustomTriggers;
                 if (triggers != null && triggers.Count > 0)
@@ -1024,8 +1019,22 @@ namespace ConditioningControlPanel
                     GigglePriority(trigger);
                     return;
                 }
-                // If no triggers are defined, fall back to normal AI/Context logic
             }
+
+            // 2. Trigger Mode Disabled: Use 1-in-4 logic
+            // 3/4 times -> Default Preset Phrase
+            // 1/4 times -> Try AI/Context
+            
+            _interactionCount++;
+
+            if (_interactionCount % 4 != 0)
+            {
+                // Show standard random Bambi phrase
+                GigglePriority(GetRandomBambiPhrase());
+                return;
+            }
+
+            // --- AI / Awareness Logic (1 in 4 chance) ---
 
             // Fallback defaults
             string reaction = GetRandomBambiPhrase();
