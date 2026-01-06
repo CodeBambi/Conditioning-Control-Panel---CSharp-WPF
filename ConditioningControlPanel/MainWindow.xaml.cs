@@ -5006,21 +5006,15 @@ namespace ConditioningControlPanel
         private void ChkLockCardStrict_Checked(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            
-            // Show warning and minimize to tray
+
+            // Show warning
             var confirmed = WarningDialog.ShowDoubleWarning(this,
                 "Strict Lock Card",
                 "• You will NOT be able to escape lock cards with ESC\n" +
                 "• You MUST type the phrase the required number of times\n" +
-                "• The app will minimize to tray when this is enabled\n" +
                 "• This can be very restrictive!");
-            
-            if (confirmed)
-            {
-                // Minimize to tray immediately
-                _trayIcon?.MinimizeToTray();
-            }
-            else
+
+            if (!confirmed)
             {
                 ChkLockCardStrict.IsChecked = false;
             }
@@ -5103,22 +5097,16 @@ namespace ConditioningControlPanel
         private void ChkStrictLock_Checked(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            
+
             // Show double warning
-            var confirmed = WarningDialog.ShowDoubleWarning(this, 
+            var confirmed = WarningDialog.ShowDoubleWarning(this,
                 "Strict Lock",
                 "• You will NOT be able to skip or close videos\n" +
                 "• Videos MUST be watched to completion\n" +
                 "• The only way out is the panic key (if enabled)\n" +
-                "• The app will minimize to system tray\n" +
                 "• This can be very intense and restrictive");
-            
-            if (confirmed)
-            {
-                // Minimize to tray immediately
-                _trayIcon?.MinimizeToTray();
-            }
-            else
+
+            if (!confirmed)
             {
                 ChkStrictLock.IsChecked = false;
             }
@@ -5134,15 +5122,9 @@ namespace ConditioningControlPanel
                 "• You will have NO emergency escape option\n" +
                 "• The ONLY way to exit will be the Exit button\n" +
                 "• Combined with Strict Lock, this is VERY restrictive\n" +
-                "• The app will minimize to system tray\n" +
                 "• Make sure you know what you're doing!");
 
-            if (confirmed)
-            {
-                // Minimize to tray immediately
-                _trayIcon?.MinimizeToTray();
-            }
-            else
+            if (!confirmed)
             {
                 ChkNoPanic.IsChecked = false;
             }
