@@ -1811,6 +1811,19 @@ namespace ConditioningControlPanel
                 _randomBubbleTimer.Interval = TimeSpan.FromSeconds(nextInterval);
             }
 
+            // Skip if avatar is not in focus (another app is in foreground)
+            IntPtr foregroundWindow = GetForegroundWindow();
+            if (foregroundWindow != _tubeHandle && foregroundWindow != _parentHandle)
+            {
+                GetWindowThreadProcessId(foregroundWindow, out uint foregroundPid);
+                uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                if (foregroundPid != ourPid)
+                {
+                    App.Logger?.Debug("RandomBubble: Skipped - app not in focus");
+                    return;
+                }
+            }
+
             // Show phrase and spawn bubble
             SpawnRandomBubble();
         }
