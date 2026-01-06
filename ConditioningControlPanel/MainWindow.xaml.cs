@@ -1093,6 +1093,20 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnPrivacySpoiler_Click(object sender, RoutedEventArgs e)
+        {
+            if (TxtPrivacyDetails.Visibility == Visibility.Collapsed)
+            {
+                TxtPrivacyDetails.Visibility = Visibility.Visible;
+                BtnPrivacySpoiler.Content = "▼ Hide";
+            }
+            else
+            {
+                TxtPrivacyDetails.Visibility = Visibility.Collapsed;
+                BtnPrivacySpoiler.Content = "▶ Click to reveal";
+            }
+        }
+
         private void SliderAwarenessCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading || TxtAwarenessCooldown == null) return;

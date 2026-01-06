@@ -20,9 +20,11 @@ This comprehensive guide covers every feature of the Conditioning Control Panel 
 12. [Achievements](#achievements)
 13. [Scheduler](#scheduler)
 14. [Intensity Ramp](#intensity-ramp)
-15. [Dangerous Features](#dangerous-features)
-16. [Presets](#presets)
-17. [Tips & Best Practices](#tips--best-practices)
+15. [Companion Avatar](#companion-avatar)
+16. [Patreon Features](#patreon-features)
+17. [Dangerous Features](#dangerous-features)
+18. [Presets](#presets)
+19. [Tips & Best Practices](#tips--best-practices)
 
 ---
 
@@ -40,6 +42,7 @@ When you first launch the application:
 
 2. Default settings are loaded
 3. You start at **Level 1** with 0 XP
+4. The Companion Avatar appears attached to the main window
 
 ### Adding Your Content
 
@@ -75,6 +78,7 @@ The interface is divided into several areas:
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  💗 Conditioning Dashboard    [Settings] [Progression]  │
+│                               [Companion] [Patreon]     │
 │  ═══════════════════════════════════════════════════   │
 │  ⭐ Beginner Bimbo                           [Lvl 1]   │
 ├─────────────────────────────────────────────────────────┤
@@ -95,6 +99,8 @@ The interface is divided into several areas:
 ### Tab Navigation
 - **Settings Tab**: Main configuration (default view)
 - **Progression Tab**: Unlockables, Scheduler, and Intensity Ramp
+- **Companion Tab**: Avatar settings, Trigger Mode, Quick Controls
+- **Patreon Tab**: Patreon login and exclusive features
 
 ---
 
@@ -198,6 +204,8 @@ Brief text messages that flash on screen. Can be combined with audio whispers.
 |---------|-------|-------------|
 | **Enable** | On/Off | Play whispered audio |
 | **Volume** | 0-100% | Whisper volume |
+
+Audio whisper files should be placed in `Resources/sub_audio/` and named to match the trigger phrase (e.g., `GOOD GIRL.mp3` for the "GOOD GIRL" trigger).
 
 ### Managing Messages
 Click **📝 Messages** to edit your message pool. Each message can be individually enabled/disabled.
@@ -446,7 +454,7 @@ Automatically start and stop sessions based on time of day.
 
 ### How It Works
 
-1. **App starts within scheduled time**: 
+1. **App starts within scheduled time**:
    - Automatically minimizes to tray
    - Engine starts immediately
    - Shows notification
@@ -504,6 +512,144 @@ Select which settings scale with the ramp:
 - Duration: 60 min
 
 Result: Opacity goes from 50% → 100% over 60 minutes
+
+---
+
+## Companion Avatar
+
+### Overview
+The Companion Avatar is an animated character that appears alongside the main window. It provides interactive feedback, displays speech bubbles, and can react to your activities.
+
+### Avatar Features
+
+#### Detachable Sprite
+The avatar can be detached from the main window to float freely on your screen:
+- **Right-click** the avatar to access the context menu
+- Select **Detach** to make it float freely
+- **Drag** the detached avatar to any position
+- Select **Attach** to reattach it to the main window
+
+#### Speech Bubbles
+The avatar displays speech bubbles in response to various events:
+- Idle chatter when you've been away
+- Reactions to your activities (with Window Awareness enabled)
+- Trigger phrases in Trigger Mode
+- Click on a speech bubble to dismiss it
+
+#### Context Menu Options
+Right-click the avatar for quick access to:
+
+| Option | Description |
+|--------|-------------|
+| **Detach/Attach** | Toggle floating mode |
+| **Trigger Mode** | Enable random trigger phrases |
+| **Random Bubble** | Enable random floating bubbles |
+| **Slut Mode** | Enable explicit AI responses (Patreon) |
+| **Mute Avatar** | Silence speech and sounds |
+| **Mute Whispers** | Mute subliminal audio |
+| **Pause Browser** | Pause browser audio/video |
+| **Chat with Bambi** | Open AI chat (Patreon) |
+| **Dismiss Avatar** | Hide the avatar |
+
+### Companion Tab Settings
+
+Access the **Companion** tab for these settings:
+
+#### Companion Settings
+| Setting | Description |
+|---------|-------------|
+| **Show Companion** | Toggle avatar visibility |
+| **Detach** | Float avatar freely on screen |
+| **Idle Giggle Interval** | Seconds between idle messages (60-600s) |
+
+#### Trigger Mode
+| Setting | Description |
+|---------|-------------|
+| **Enable Trigger Mode** | Show random trigger phrases |
+| **Trigger Interval** | Seconds between triggers (10-600s) |
+| **Edit Triggers** | Customize trigger phrases |
+
+When Trigger Mode is active:
+- The avatar displays random trigger phrases from your list
+- If Audio Whispers is enabled, matching audio clips play
+- Audio files should be in `Resources/sub_audio/` named to match triggers
+
+#### Quick Controls
+| Control | Description |
+|---------|-------------|
+| **Mute Avatar** | Silence avatar speech and sounds |
+| **Mute Whispers** | Toggle subliminal audio on/off |
+| **Pause Browser** | Pause all browser audio/video |
+
+### Avatar Interactions
+
+| Action | Result |
+|--------|--------|
+| **Single Click** | Dismiss speech bubble |
+| **Double Click** | Open AI Chat (if enabled, Patreon) |
+| **Right Click** | Open context menu |
+| **Drag** (detached) | Reposition avatar |
+| **20 Rapid Clicks** | Unlock "Neon Obsession" achievement |
+
+---
+
+## Patreon Features
+
+### Overview
+Supporting the project on Patreon unlocks exclusive features that enhance your experience. All Patreon features are available at any tier level.
+
+### How to Connect
+1. Go to the **Patreon** tab
+2. Click **Login with Patreon**
+3. Authorize the app in your browser
+4. Your patron status will be verified automatically
+
+### Exclusive Features
+
+#### 🤖 AI Chat
+Chat directly with Bambi through the avatar:
+- **Double-click** the avatar to open the chat input
+- Type your message and press Enter
+- Receive personalized AI responses
+- Responses appear in speech bubbles
+
+**Features:**
+- Context-aware responses based on your activities
+- Daily request limit (resets at midnight)
+- Personality adapts to your interactions
+
+#### 👁️ Window Awareness
+The avatar reacts to what you're doing on your computer:
+- Detects the active window and browser tabs
+- Provides contextual reactions and comments
+- Encourages or teases based on your activities
+
+**⚠️ Privacy Notice:**
+This feature reads the name of the active window and browser tab, tracks how long you've been on that window, and uses this information to generate AI responses. Data is sent to our secure proxy server for processing. No data is stored permanently.
+
+**Settings:**
+| Setting | Description |
+|---------|-------------|
+| **Enable Awareness** | Toggle activity detection |
+| **Reaction Cooldown** | Minimum seconds between reactions (30-600s) |
+
+**What It Detects:**
+- Browser tabs and websites
+- Application names
+- Time spent on activities
+- Shopping, gaming, social media, and more
+
+#### 🔥 Slut Mode
+Enable explicit AI responses for a more intense experience:
+- Toggle from the avatar context menu or Patreon tab
+- AI responses become more explicit and suggestive
+- Requires Patreon subscription
+
+### Patreon Status
+View your connection status in the Patreon tab:
+- **Connected**: Shows your patron name
+- **Tier**: Shows your support level
+- **AI Status**: Shows remaining daily requests
 
 ---
 
@@ -570,12 +716,14 @@ Presets allow you to save and quickly load different setting configurations.
 2. Keep Clickable enabled
 3. Leave panic key active
 4. Use the scheduler for structured sessions
+5. Try the Companion Avatar with Trigger Mode first
 
 ### For Intensity
 1. Enable Corruption mode for overwhelming presence
 2. Use intensity ramp to build gradually
 3. Combine multiple features (flash + subliminal + video)
 4. Use Strict Lock for commitment
+5. Enable Window Awareness for contextual reactions
 
 ### Performance Tips
 1. Limit GIF file sizes (under 5MB each)
@@ -588,6 +736,7 @@ Presets allow you to save and quickly load different setting configurations.
 2. Videos play on primary monitor
 3. Flash images appear on all monitors
 4. Overlays (spiral, pink) cover all monitors
+5. Detached avatar can be placed on any monitor
 
 ### Troubleshooting Sessions
 - **Too intense**: Press panic key once to stop
@@ -618,6 +767,11 @@ Presets allow you to save and quickly load different setting configurations.
 ### Browser Data
 `browser_data/` folder - WebView2 cache and cookies
 
+### Audio Files
+- `Resources/sub_audio/` - Subliminal whisper audio files
+- `Resources/sounds/` - Avatar giggle sounds
+- Audio files should match trigger names (e.g., `GOOD GIRL.mp3`)
+
 ### Resetting Everything
 1. Close the application
 2. Delete `settings.json` (resets to defaults)
@@ -632,7 +786,7 @@ Presets allow you to save and quickly load different setting configurations.
 A: Ensure GIFs are under 5MB. Very large GIFs may not animate smoothly.
 
 **Q: Can I use this on multiple monitors?**
-A: Yes! Enable "Dual Mon" in System settings.
+A: Yes! Enable "Dual Mon" in System settings. The detached avatar can be placed on any monitor.
 
 **Q: How do I completely exit the app?**
 A: Double-tap the panic key, or right-click tray icon → Exit, or use the Exit button.
@@ -641,10 +795,16 @@ A: Double-tap the panic key, or right-click tray icon → Exit, or use the Exit 
 A: In the `assets/` subfolders: `images/`, `sounds/`, `startle_videos/`
 
 **Q: Is my data sent anywhere?**
-A: No. Everything stays local. No telemetry, no analytics, no network.
+A: The app is mostly local. Patreon features (AI Chat, Window Awareness) send data to our secure proxy server for processing, but no data is stored permanently.
 
 **Q: Can I use this while gaming?**
-A: Yes, but overlays may interfere with fullscreen games. Use borderless/windowed mode for best results.
+A: Yes, but overlays may interfere with fullscreen games. Use borderless/windowed mode for best results. The "Gamer Girl" session is designed for this.
+
+**Q: How do I add trigger audio?**
+A: Place audio files in `Resources/sub_audio/` with names matching your triggers (e.g., `GOOD GIRL.mp3` for the "GOOD GIRL" trigger). Files are matched case-insensitively.
+
+**Q: What does Window Awareness track?**
+A: It reads the active window name and browser tab title to provide contextual AI responses. See the Privacy Notice in the Patreon tab for details.
 
 ---
 

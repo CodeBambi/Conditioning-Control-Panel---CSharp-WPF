@@ -2825,6 +2825,25 @@ Bimbo" Foreground="#FF69B4"
                                                       IsChecked="False"
                                                       Checked="ChkAwarenessMode_Changed" Unchecked="ChkAwarenessMode_Changed"/>
                                         </Grid>
+
+                                        <!-- Privacy Warning -->
+                                        <Border Background="#2A1A1A" CornerRadius="6" Padding="8" Margin="0,10,0,0" BorderBrush="#FF6B6B" BorderThickness="1">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="⚠️" FontSize="12" VerticalAlignment="Center"/>
+                                                        <TextBlock Text=" Privacy Notice" Foreground="#FF6B6B" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                    <Button x:Name="BtnPrivacySpoiler" Content="▶ Click to reveal"
+                                                            Background="Transparent" Foreground="#808080" BorderThickness="0"
+                                                            HorizontalAlignment="Right" FontSize="10" Cursor="Hand"
+                                                            Click="BtnPrivacySpoiler_Click"/>
+                                                </Grid>
+                                                <TextBlock x:Name="TxtPrivacyDetails" Visibility="Collapsed"
+                                                           TextWrapping="Wrap" Foreground="#CCCCCC" FontSize="10" Margin="0,8,0,0"
+                                                           Text="This feature reads the name of the active window and browser tab, tracks how long you've been on that window, and uses this information to generate AI responses. Data is sent to our secure proxy server for processing. No data is stored permanently."/>
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
