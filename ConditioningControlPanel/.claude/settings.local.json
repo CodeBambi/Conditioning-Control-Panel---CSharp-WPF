@@ -22,7 +22,9 @@
       "WebSearch",
       "WebFetch(domain:bambicloud.com)",
       "Bash(dir /s /b \"C:\\\\Users\")",
-      "WebFetch(domain:codebambi-proxy.vercel.app)"
+      "WebFetch(domain:codebambi-proxy.vercel.app)",
+      "Bash(dir /s /b \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\ConditioningControlPanel\\\\Resources\\\\sounds\")",
+      "Bash(dir /b \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\ConditioningControlPanel\\\\Resources\\\\sounds\")"
     ]
   }
 }
