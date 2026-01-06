@@ -53,7 +53,7 @@
                            TextAlignment="Center"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           Margin="95,24,95,42">
+                           Margin="70,24,120,42">
                     <TextBlock.Effect>
                         <DropShadowEffect Color="Black" BlurRadius="1" ShadowDepth="1.5" Direction="315" Opacity="1"/>
                     </TextBlock.Effect>
