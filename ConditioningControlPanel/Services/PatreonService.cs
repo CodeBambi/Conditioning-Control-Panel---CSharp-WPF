@@ -428,26 +428,38 @@ namespace ConditioningControlPanel.Services
                     return CurrentTier;
                 }
 
+                // Check if user is whitelisted by name or email BEFORE updating tier
+                var isWhitelistedByEmail = !string.IsNullOrEmpty(subscription.PatronEmail) &&
+                    WhitelistedEmails.Contains(subscription.PatronEmail);
+                var isWhitelistedByName = !string.IsNullOrEmpty(subscription.PatronName) &&
+                    WhitelistedNames.Contains(subscription.PatronName);
+                var userIsWhitelisted = isWhitelistedByEmail || isWhitelistedByName;
+
+                App.Logger?.Debug("Whitelist check: Email={Email}, EmailMatch={EmailMatch}, Name={Name}, NameMatch={NameMatch}, Whitelisted={Whitelisted}",
+                    subscription.PatronEmail, isWhitelistedByEmail, subscription.PatronName, isWhitelistedByName, userIsWhitelisted);
+
                 // Update state and cache
                 // If active but tier is 0, default to Level1 (proxy may not return tier correctly)
-                var newTier = subscription.IsActive
+                // Also treat whitelisted users as active with Level1
+                var effectivelyActive = subscription.IsActive || userIsWhitelisted;
+                var newTier = effectivelyActive
                     ? (subscription.Tier > PatreonTier.None ? subscription.Tier : PatreonTier.Level1)
                     : PatreonTier.None;
-                UpdateTier(newTier, subscription.IsActive, subscription.PatronName, subscription.PatronEmail);
+                UpdateTier(newTier, effectivelyActive, subscription.PatronName, subscription.PatronEmail);
 
-                // Cache result for 24 hours
+                // Cache result for 24 hours (use effective values for whitelisted users)
                 _tokenStorage.StoreCachedState(new PatreonCachedState
                 {
                     Tier = newTier,
-                    IsActive = subscription.IsActive,
+                    IsActive = effectivelyActive,
                     LastVerified = DateTime.UtcNow,
                     CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours),
                     PatronName = subscription.PatronName,
                     PatronEmail = subscription.PatronEmail
                 });
 
-                App.Logger?.Information("Patreon subscription validated: Tier={Tier}, Active={Active}, Name={Name}, Email={Email}, Whitelisted={Whitelisted}",
-                    newTier, subscription.IsActive, subscription.PatronName, subscription.PatronEmail, IsWhitelisted);
+                App.Logger?.Information("Patreon subscription validated: Tier={Tier}, ProxyActive={ProxyActive}, EffectiveActive={EffectiveActive}, Name={Name}, Email={Email}, Whitelisted={Whitelisted}",
+                    newTier, subscription.IsActive, effectivelyActive, subscription.PatronName, subscription.PatronEmail, userIsWhitelisted);
 
                 return newTier;
             }
