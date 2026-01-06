@@ -117,10 +117,10 @@ Examples:
 
 STRICT: Max 12 words. Naughty tease, not servant.";
 
-        // Circuit breaker tracking (client-side backup)
+        // Circuit breaker tracking (client-side)
         private int _dailyRequestCount;
         private DateTime _lastResetDate;
-        private const int DailyLimit = 500;
+        private const int DailyLimit = 2000;
 
         // Fallback response when API unavailable or limit reached
         private const string FallbackResponse = "Bambi's head is so empty right now~ *giggles*";
@@ -297,14 +297,18 @@ STRICT: Max 12 words. Naughty tease, not servant.";
                     return null;
                 }
 
-                // Update remaining count if provided by server
-                if (result.RequestsRemaining.HasValue)
+                // Update remaining count if provided by server (server is authoritative)
+                if (result.RequestsRemaining.HasValue && result.RequestsRemaining.Value >= 0)
                 {
-                    _dailyRequestCount = DailyLimit - result.RequestsRemaining.Value;
+                    // Server tells us how many requests remain - calculate our count from that
+                    var serverLimit = Math.Max(DailyLimit, _dailyRequestCount + result.RequestsRemaining.Value);
+                    _dailyRequestCount = serverLimit - result.RequestsRemaining.Value;
+                    App.Logger?.Debug("AiService: Server says {Remaining} remaining, calculated count={Count}",
+                        result.RequestsRemaining.Value, _dailyRequestCount);
                 }
 
-                App.Logger?.Debug("AiService: Got reply ({RequestCount}/{Limit} today)",
-                    _dailyRequestCount, DailyLimit);
+                App.Logger?.Information("AiService: Got reply ({RequestCount}/{Limit} today, {Remaining} remaining)",
+                    _dailyRequestCount, DailyLimit, DailyRequestsRemaining);
 
                 return result.Content;
             }
