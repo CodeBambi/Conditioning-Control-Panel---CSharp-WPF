@@ -948,6 +948,10 @@ namespace ConditioningControlPanel
             base.OnClosed(e);
         }
         
+        // Interaction counter for 1-in-4 logic
+        private int _interactionCount = 0;
+        private DateTime _lastInteractionTime = DateTime.MinValue;
+
         private void ImgAvatar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             // Track for Neon Obsession achievement (20 rapid clicks)
@@ -961,8 +965,17 @@ namespace ConditioningControlPanel
             var now = DateTime.Now;
             if ((now - _lastClickTime).TotalMilliseconds < 300)
             {
-                // Trigger context-aware comment or random AI thought
-                _ = TriggerActivityCommentAsync();
+                // Check cooldown (1.5 seconds)
+                if ((now - _lastInteractionTime).TotalSeconds >= 1.5)
+                {
+                    _lastInteractionTime = now;
+                    // Trigger context-aware comment or random AI thought
+                    _ = TriggerActivityCommentAsync();
+                }
+                else
+                {
+                    App.Logger?.Debug("Interaction cooldown active (1.5s)");
+                }
             }
             _lastClickTime = now;
 
