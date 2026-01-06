@@ -35,7 +35,7 @@ namespace ConditioningControlPanel.Services
         private double _duration;
         
         private List<double> _spawnTimes = new();
-        private int _hits, _total, _penalties;
+        private int _hits, _total, _spawned, _penalties;
 
         private readonly string _videosPath;
 
@@ -414,7 +414,8 @@ namespace ConditioningControlPanel.Services
             Task.Delay(2000).ContinueWith(_ => Application.Current.Dispatcher.BeginInvoke(() =>
             {
                 if (!_videoPlaying) return;
-                
+
+                _spawned = 0; // Reset spawned counter
                 var dur = _duration > 0 ? _duration : 60;
                 _total = Math.Max(1, (int)(dur / 30 * App.Settings.Current.AttentionDensity));
                 
@@ -452,13 +453,14 @@ namespace ConditioningControlPanel.Services
                 var screens = settings.DualMonitorEnabled ? Screen.AllScreens : new[] { Screen.PrimaryScreen! };
                 var screen = screens[_random.Next(screens.Length)];
 
-                App.Logger?.Debug("Spawning attention target: '{Text}' on screen {Screen}", text, screen.DeviceName);
+                _spawned++; // Track actually spawned targets
+                App.Logger?.Debug("Spawning attention target: '{Text}' on screen {Screen} ({Spawned}/{Total})", text, screen.DeviceName, _spawned, _total);
 
                 var target = new FloatingText(text, screen, settings.AttentionSize, () =>
                 {
                     _hits++;
                     App.Progression?.AddXP(10);
-                    App.Logger?.Debug("Target hit: {Hits}/{Total}", _hits, _total);
+                    App.Logger?.Debug("Target hit: {Hits}/{Spawned}", _hits, _spawned);
                 });
 
                 lock (_targets)
@@ -505,10 +507,10 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings.Current;
             bool loop = false, troll = false;
 
-            if (settings.AttentionChecksEnabled && _total > 0)
+            if (settings.AttentionChecksEnabled && _spawned > 0)
             {
-                bool passed = _hits >= _total;
-                App.Logger.Information("Attention result: {Hits}/{Total} = {Result}", _hits, _total, passed ? "PASS" : "FAIL");
+                bool passed = _hits >= _spawned;
+                App.Logger.Information("Attention result: {Hits}/{Spawned} (of {Total} scheduled) = {Result}", _hits, _spawned, _total, passed ? "PASS" : "FAIL");
 
                 if (passed)
                 {
