@@ -56,7 +56,7 @@ namespace ConditioningControlPanel
         // ============================================================
 
         // Design reference size (what the XAML is designed for)
-        private const double DesignWidth = 980;
+        private const double DesignWidth = 780;
         private const double DesignHeight = 1020;
 
         // Gap between tube window and main window (negative = overlap)
@@ -518,8 +518,8 @@ namespace ConditioningControlPanel
                 }
 
                             // Reset bubble position to ensure correct placement after layout
-                            // Attached anchor: right=970, so left = 970 - width
-                            SpeechBubble.Margin = new Thickness(350, 350, 0, 0); // 350 = 970 - 620 (BaseBubbleWidth)
+                            // Attached anchor: right=770, so left = 770 - width
+                            SpeechBubble.Margin = new Thickness(350, 350, 0, 0); // 350 = 770 - 420 (BaseBubbleWidth)
                             SpeechBubble.Width = BaseBubbleWidth;
                             SpeechBubble.Height = BaseBubbleHeight;            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
@@ -1143,7 +1143,7 @@ namespace ConditioningControlPanel
         // ============================================================
 
         // Base speech bubble dimensions (10% smaller)
-        private const double BaseBubbleWidth = 620;
+        private const double BaseBubbleWidth = 420;
         private const double BaseBubbleHeight = 260;
 
         /// <summary>
@@ -1318,12 +1318,12 @@ namespace ConditioningControlPanel
             TxtSpeech.FontSize = fontSize;
 
             // Anchor bottom-left corner at fixed position, bubble grows up and right
-            // Attached anchor: left=350, bottom=610 (so top = 610 - height)
+            // Attached anchor: left=420, bottom=610 (so top = 610 - height)
             // Detached anchor: left=210, bottom=530 (so top = 530 - height)
             if (_isAttached)
             {
                 double anchorBottom = 610;
-                double anchorRight = 970; // Anchored to the right edge (980) with a 10px margin
+                double anchorRight = 770; // Anchored to the right edge (780) with a 10px margin
                 double newLeft = anchorRight - newWidth;
                 SpeechBubble.Margin = new Thickness(newLeft, anchorBottom - newHeight, 0, 0);
             }
@@ -1955,16 +1955,16 @@ namespace ConditioningControlPanel
             // Switch back to original tube image
             SetTubeStyle(false);
 
-            // Restore avatar position when attached (adjusted for 980 design width to stay centered relative to parent)
-            AvatarBorder.Margin = new Thickness(105, 100, 26, 205);
+            // Restore avatar position when attached (matches XAML default)
+            AvatarBorder.Margin = new Thickness(5, 100, 126, 205);
 
             // Restore speech bubble position when attached
-            // Attached anchor: right=970, so left = 970 - width
-            SpeechBubble.Margin = new Thickness(350, 350, 0, 0); // 350 = 970 - 620 (BaseBubbleWidth)
+            // Attached anchor: right=770, so left = 770 - width
+            SpeechBubble.Margin = new Thickness(350, 350, 0, 0); // 350 = 770 - 420 (BaseBubbleWidth)
             SpeechBubble.LayoutTransform = null;
 
-            // Restore title box position when attached (adjusted for 980 design width)
-            TitleBox.Margin = new Thickness(100, 0, 21, 180);
+            // Restore title box position when attached (matches XAML default)
+            TitleBox.Margin = new Thickness(0, 0, 121, 180);
 
             // Hide from taskbar and Alt+Tab when attached
             ShowInTaskbar = false;
