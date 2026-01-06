@@ -336,10 +336,10 @@ namespace ConditioningControlPanel
         private void UpdateProgress()
         {
             TxtProgress.Text = $"{_completedRepeats} / {_requiredRepeats}";
-            
-            // Update progress bar width
+
+            // Update progress bar width based on actual container width
             var progressPercent = (double)_completedRepeats / _requiredRepeats;
-            var maxWidth = 200;
+            var maxWidth = ProgressBarContainer.ActualWidth > 0 ? ProgressBarContainer.ActualWidth : 200;
             ProgressBar.Width = maxWidth * progressPercent;
         }
 

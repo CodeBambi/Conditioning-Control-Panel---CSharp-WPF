@@ -99,7 +99,7 @@
                         </TextBlock.Foreground>
                     </TextBlock>
 
-                    <Border Grid.Column="1" Background="#404060" CornerRadius="4" Height="8">
+                    <Border x:Name="ProgressBarContainer" Grid.Column="1" Background="#404060" CornerRadius="4" Height="8" MinWidth="200">
                         <Border x:Name="ProgressBar" Background="#FF69B4" CornerRadius="4"
                                 HorizontalAlignment="Left" Width="0"/>
                     </Border>

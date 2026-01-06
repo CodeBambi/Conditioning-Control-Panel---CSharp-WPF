@@ -86,6 +86,11 @@ namespace ConditioningControlPanel
         private const double MaxScale = 1.5;   // 150% - can grow twice from 100%
         private const double ScaleStep = 0.25; // 25% per step
 
+        // Fullscreen detection
+        private DispatcherTimer? _fullscreenCheckTimer;
+        private bool _hiddenForFullscreen = false;
+        private bool _wasAttachedBeforeFullscreen = false;
+
         // Win32 API
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
@@ -98,6 +103,24 @@ namespace ConditioningControlPanel
 
         [DllImport("user32.dll")]
         private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
 
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOSIZE = 0x0001;
@@ -578,6 +601,101 @@ namespace ConditioningControlPanel
                             SpeechBubble.Margin = new Thickness(350, 350, 0, 0); // 350 = 770 - 420 (BaseBubbleWidth)
                             SpeechBubble.Width = BaseBubbleWidth;
                             SpeechBubble.Height = BaseBubbleHeight;            }), System.Windows.Threading.DispatcherPriority.Loaded);
+
+            // Start fullscreen detection timer
+            StartFullscreenDetection();
+        }
+
+        /// <summary>
+        /// Start monitoring for fullscreen applications
+        /// </summary>
+        private void StartFullscreenDetection()
+        {
+            _fullscreenCheckTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(500) // Check every 500ms
+            };
+            _fullscreenCheckTimer.Tick += FullscreenCheckTimer_Tick;
+            _fullscreenCheckTimer.Start();
+        }
+
+        private void FullscreenCheckTimer_Tick(object? sender, EventArgs e)
+        {
+            try
+            {
+                bool isOtherAppFullscreen = IsOtherAppFullscreen();
+
+                if (isOtherAppFullscreen && !_hiddenForFullscreen)
+                {
+                    // Another app went fullscreen - hide the avatar
+                    _hiddenForFullscreen = true;
+                    _wasAttachedBeforeFullscreen = _isAttached;
+                    Hide();
+                    App.Logger?.Debug("Avatar hidden - fullscreen app detected");
+                }
+                else if (!isOtherAppFullscreen && _hiddenForFullscreen)
+                {
+                    // Fullscreen app closed - restore the avatar
+                    _hiddenForFullscreen = false;
+                    if (_parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized)
+                    {
+                        Show();
+                        if (_wasAttachedBeforeFullscreen && _isAttached)
+                        {
+                            UpdatePosition();
+                        }
+                        App.Logger?.Debug("Avatar restored - fullscreen app closed");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Error checking fullscreen state");
+            }
+        }
+
+        /// <summary>
+        /// Check if another application (not our app) is running fullscreen
+        /// </summary>
+        private bool IsOtherAppFullscreen()
+        {
+            try
+            {
+                IntPtr foregroundWindow = GetForegroundWindow();
+                if (foregroundWindow == IntPtr.Zero) return false;
+
+                // Check if it's our own window
+                if (foregroundWindow == _tubeHandle || foregroundWindow == _parentHandle)
+                    return false;
+
+                // Get the process ID of the foreground window
+                GetWindowThreadProcessId(foregroundWindow, out uint foregroundPid);
+                uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                if (foregroundPid == ourPid)
+                    return false;
+
+                // Get the window rect
+                if (!GetWindowRect(foregroundWindow, out RECT windowRect))
+                    return false;
+
+                // Get screen bounds
+                var screen = System.Windows.Forms.Screen.FromHandle(foregroundWindow);
+                var screenBounds = screen.Bounds;
+
+                // Check if window covers the entire screen (with small tolerance for taskbar etc)
+                int tolerance = 10;
+                bool coversScreen =
+                    windowRect.Left <= screenBounds.Left + tolerance &&
+                    windowRect.Top <= screenBounds.Top + tolerance &&
+                    windowRect.Right >= screenBounds.Right - tolerance &&
+                    windowRect.Bottom >= screenBounds.Bottom - tolerance;
+
+                return coversScreen;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -957,6 +1075,7 @@ namespace ConditioningControlPanel
             try
             {
                 _poseTimer?.Stop();
+                _fullscreenCheckTimer?.Stop();
                 StopFloatingAnimation();
 
                 // Stop companion timers

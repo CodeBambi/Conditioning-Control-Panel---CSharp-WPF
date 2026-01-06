@@ -145,6 +145,31 @@ namespace ConditioningControlPanel
             catch { }
         }
 
+        /// <summary>
+        /// Force close all bubble count windows (used by panic button)
+        /// </summary>
+        public static void ForceCloseAll()
+        {
+            var windowsToClose = new List<BubbleCountWindow>(_allWindows);
+            _allWindows.Clear();
+
+            foreach (var window in windowsToClose)
+            {
+                try
+                {
+                    window._isDisposed = true;
+                    window.MediaPlayer?.Stop();
+                    window.Close();
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// Check if any bubble count window is currently open
+        /// </summary>
+        public static bool IsAnyOpen() => _allWindows.Count > 0;
+
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             try

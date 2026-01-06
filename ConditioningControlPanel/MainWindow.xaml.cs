@@ -3218,6 +3218,7 @@ namespace ConditioningControlPanel
 
             // Force close any open lock card windows (panic button should close them immediately)
             LockCardWindow.ForceCloseAll();
+            BubbleCountWindow.ForceCloseAll();
 
             // Stop ramp timer and reset sliders
             StopRampTimer();

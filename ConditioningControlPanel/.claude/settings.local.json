@@ -24,7 +24,11 @@
       "Bash(dir /s /b \"C:\\\\Users\")",
       "WebFetch(domain:codebambi-proxy.vercel.app)",
       "Bash(dir /s /b \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\ConditioningControlPanel\\\\Resources\\\\sounds\")",
-      "Bash(dir /b \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\ConditioningControlPanel\\\\Resources\\\\sounds\")"
+      "Bash(dir /b \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\ConditioningControlPanel\\\\Resources\\\\sounds\")",
+      "Bash(vercel logs:*)",
+      "Bash(dir \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\Conditioning Control Panel v4.1.zip\")",
+      "Bash(du -sh:*)",
+      "Bash(curl:*)"
     ]
   }
 }
