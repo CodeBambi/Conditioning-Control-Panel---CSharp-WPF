@@ -1673,6 +1673,8 @@ namespace ConditioningControlPanel
                 _sessionEngine.SessionCompleted += OnSessionCompleted;
                 _sessionEngine.ProgressUpdated += OnSessionProgressUpdated;
                 _sessionEngine.PhaseChanged += OnSessionPhaseChanged;
+                _sessionEngine.SessionStarted += OnSessionStarted;
+                _sessionEngine.SessionStopped += OnSessionStopped;
             }
             
             try
@@ -1686,12 +1688,6 @@ namespace ConditioningControlPanel
                 // Start the session
                 await _sessionEngine.StartSessionAsync(session);
                 
-                // Update UI to show session is running
-                if (TxtPresetsStatus != null)
-                {
-                    TxtPresetsStatus.Visibility = Visibility.Visible;
-                    TxtPresetsStatus.Text = $"🎯 {session.Name} running... {session.DurationMinutes}:00 remaining";
-                }
                 
                 App.Logger?.Information("Started session: {Name} ({Difficulty}, +{XP} XP)", 
                     session.Name, session.Difficulty, session.BonusXP);
@@ -1715,12 +1711,6 @@ namespace ConditioningControlPanel
                 completeWindow.Owner = this;
                 completeWindow.ShowDialog();
                 
-                // Update status
-                if (TxtPresetsStatus != null)
-                {
-                    TxtPresetsStatus.Visibility = Visibility.Collapsed;
-                    TxtPresetsStatus.Text = "";
-                }
                 
                 App.Logger?.Information("Session {Name} completed, awarded {XP} XP", e.Session.Name, e.XPEarned);
             });
@@ -1730,12 +1720,10 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
-                if (_sessionEngine?.CurrentSession != null && TxtPresetsStatus != null)
+                if (_sessionEngine?.CurrentSession != null)
                 {
                     var remaining = e.Remaining;
-                    TxtPresetsStatus.Visibility = Visibility.Visible;
-                    TxtPresetsStatus.Text = $"🎯 {_sessionEngine.CurrentSession.Name} running... " +
-                        $"{remaining.Minutes:D2}:{remaining.Seconds:D2} remaining ({e.ProgressPercent:F0}%)";
+                    BtnStartSession.Content = $"STOP SESSION ({remaining.Minutes:D2}:{remaining.Seconds:D2})";
                 }
             });
         }
@@ -1746,6 +1734,31 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Information("Session phase: {Phase} - {Description}", e.Phase.Name, e.Phase.Description);
             });
+        }
+
+        private void OnSessionStarted(object? sender, EventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                BtnStartSession.Content = "STOP SESSION";
+                BtnStartSession.Click -= BtnStartSession_Click;
+                BtnStartSession.Click += BtnStopSession_Click;
+            });
+        }
+
+        private void OnSessionStopped(object? sender, EventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                BtnStartSession.Content = "▶ Start Session";
+                BtnStartSession.Click -= BtnStopSession_Click;
+                BtnStartSession.Click += BtnStartSession_Click;
+            });
+        }
+
+        private void BtnStopSession_Click(object sender, RoutedEventArgs e)
+        {
+            _sessionEngine?.StopSession();
         }
         
         // Methods called by SessionEngine to control features

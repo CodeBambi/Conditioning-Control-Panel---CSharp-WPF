@@ -517,12 +517,11 @@ namespace ConditioningControlPanel
                     BringToFrontTemporarily();
                 }
 
-                // Reset bubble position to ensure correct placement after layout
-                // Attached anchor: left=420, bottom=610, so top=610-260=350
-                SpeechBubble.Margin = new Thickness(420, 350, 0, 0);
-                SpeechBubble.Width = BaseBubbleWidth;
-                SpeechBubble.Height = BaseBubbleHeight;
-            }), System.Windows.Threading.DispatcherPriority.Loaded);
+                            // Reset bubble position to ensure correct placement after layout
+                            // Attached anchor: right=770, so left = 770 - width
+                            SpeechBubble.Margin = new Thickness(350, 350, 0, 0); // 350 = 770 - 420 (BaseBubbleWidth)
+                            SpeechBubble.Width = BaseBubbleWidth;
+                            SpeechBubble.Height = BaseBubbleHeight;            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         /// <summary>
@@ -958,20 +957,12 @@ namespace ConditioningControlPanel
             var clickCount = App.Achievements?.Progress.AvatarClickCount ?? 0;
             App.Logger?.Debug("Avatar clicked! Count: {Count}/20", clickCount);
 
-            // Double-click detection for chat toggle (only when AI chat is enabled)
+            // Double-click detection for activity comment / random thought
             var now = DateTime.Now;
             if ((now - _lastClickTime).TotalMilliseconds < 300)
             {
-                // Only allow chat input if AI is enabled
-                if (App.Settings?.Current?.AiChatEnabled == true)
-                {
-                    ToggleInputPanel();
-                }
-                else
-                {
-                    // Show a random phrase instead when AI is disabled
-                    Giggle(GetRandomBambiPhrase());
-                }
+                // Trigger context-aware comment or random AI thought
+                _ = TriggerActivityCommentAsync();
             }
             _lastClickTime = now;
 
@@ -998,6 +989,87 @@ namespace ConditioningControlPanel
         {
             // Close input panel on right-click
             HideInputPanel();
+        }
+
+        /// <summary>
+        /// Trigger a comment based on current activity or random thought (Double-click action)
+        /// </summary>
+        private async Task TriggerActivityCommentAsync()
+        {
+            // Fallback defaults
+            string reaction = GetRandomBambiPhrase();
+            bool isAiAvailable = App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true;
+
+            // Get current awareness context
+            var awareness = App.WindowAwareness;
+            var category = awareness?.CurrentActivity ?? ActivityCategory.Unknown;
+            var detectedName = awareness?.CurrentDetectedName ?? "";
+
+            // Decision: Comment on activity OR random thought?
+            // If Unknown/Idle, do random thought.
+            // If recognized, do activity comment.
+            
+            bool isRecognizedActivity = category != ActivityCategory.Unknown && category != ActivityCategory.Idle;
+
+            if (isRecognizedActivity)
+            {
+                // Try AI Activity Comment
+                if (isAiAvailable && App.Ai != null)
+                {
+                    try
+                    {
+                        // Show quick thinking indicator
+                        if (!_isGiggling) Giggle("Hmm...");
+                        
+                        var aiReaction = await App.Ai.GetAwarenessReactionAsync(detectedName, category.ToString());
+                        if (!string.IsNullOrEmpty(aiReaction))
+                        {
+                            reaction = aiReaction;
+                        }
+                        else
+                        {
+                            // Fallback to preset if AI returns empty
+                            reaction = GetPhraseForCategory(category, detectedName);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to get AI awareness reaction on double-click");
+                        reaction = GetPhraseForCategory(category, detectedName);
+                    }
+                }
+                else
+                {
+                    // No AI, use preset
+                    reaction = GetPhraseForCategory(category, detectedName);
+                }
+            }
+            else
+            {
+                // Unrecognized/Idle/Desktop -> Random Thought
+                if (isAiAvailable && App.Ai != null)
+                {
+                    try
+                    {
+                        // Show quick thinking indicator
+                        if (!_isGiggling) Giggle("Hmm...");
+
+                        // Ask AI for a random thought/bambi-ism
+                        var aiReaction = await App.Ai.GetBambiReplyAsync("Say something random and ditzy about what we're doing (or not doing) right now.");
+                        if (!string.IsNullOrEmpty(aiReaction))
+                        {
+                            reaction = aiReaction;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to get AI random thought on double-click");
+                    }
+                }
+            }
+
+            // Display the result with priority
+            GigglePriority(reaction);
         }
 
         private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
@@ -1233,8 +1305,9 @@ namespace ConditioningControlPanel
             if (_isAttached)
             {
                 double anchorBottom = 610;
-                double anchorLeft = 420;
-                SpeechBubble.Margin = new Thickness(anchorLeft, anchorBottom - newHeight, 0, 0);
+                double anchorRight = 770; // Anchored to the right edge (780) with a 10px margin
+                double newLeft = anchorRight - newWidth;
+                SpeechBubble.Margin = new Thickness(newLeft, anchorBottom - newHeight, 0, 0);
             }
             else
             {
@@ -1867,9 +1940,9 @@ namespace ConditioningControlPanel
             // Restore avatar position when attached (matches XAML default)
             AvatarBorder.Margin = new Thickness(5, 100, 126, 205);
 
-            // Restore speech bubble position when attached - use left-based margin consistent with AdjustBubbleSizeToText
-            // Attached anchor: left=420, bottom=610, so top=610-260=350
-            SpeechBubble.Margin = new Thickness(420, 350, 0, 0);
+            // Restore speech bubble position when attached
+            // Attached anchor: right=770, so left = 770 - width
+            SpeechBubble.Margin = new Thickness(350, 350, 0, 0); // 350 = 770 - 420 (BaseBubbleWidth)
             SpeechBubble.LayoutTransform = null;
 
             // Restore title box position when attached (matches XAML default)
