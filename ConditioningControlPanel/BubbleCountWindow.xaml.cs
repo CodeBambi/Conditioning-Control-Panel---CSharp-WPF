@@ -338,12 +338,12 @@ namespace ConditioningControlPanel
             if (!_isPrimary) return;
 
             var intervalMs = (_videoDurationSeconds * 1000) / Math.Max(1, _targetBubbleCount);
-            
+
             _bubbleSpawnTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromMilliseconds(intervalMs * 0.7)
             };
-            
+
             _bubbleSpawnTimer.Tick += (s, e) =>
             {
                 if (_sharedBubbleCount < _targetBubbleCount && !_videoEnded)
@@ -354,13 +354,21 @@ namespace ConditioningControlPanel
                     }
                 }
             };
-            
-            _bubbleSpawnTimer.Start();
-            
-            // Spawn first bubble after delay
-            Task.Delay(1000).ContinueWith(_ => Dispatcher.Invoke(() =>
+
+            // Delay bubble spawning until layout is complete (use 1.5s to ensure canvas is sized)
+            Task.Delay(1500).ContinueWith(_ => Dispatcher.Invoke(() =>
             {
-                if (!_videoEnded) SpawnBubbleOnAllWindows();
+                if (_videoEnded) return;
+
+                // Log canvas size for debugging
+                App.Logger?.Information("BubbleCount: Canvas size is {Width}x{Height}, Window size is {WinW}x{WinH}",
+                    BubbleCanvas.ActualWidth, BubbleCanvas.ActualHeight, ActualWidth, ActualHeight);
+
+                // Start the spawning timer
+                _bubbleSpawnTimer.Start();
+
+                // Spawn first bubble
+                SpawnBubbleOnAllWindows();
             }));
         }
 
