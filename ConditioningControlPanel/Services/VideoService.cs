@@ -301,6 +301,9 @@ namespace ConditioningControlPanel.Services
 
             SetupStrictHandlers(win, strict);
 
+            // When video is clicked, bring targets back to front
+            win.PreviewMouseDown += (s, e) => BringTargetsToFront();
+
             win.Show();
             win.WindowState = WindowState.Maximized;
             win.Activate();
@@ -354,6 +357,9 @@ namespace ConditioningControlPanel.Services
             win.Content = grid;
 
             SetupStrictHandlers(win, strict);
+
+            // When video is clicked, bring targets back to front
+            win.PreviewMouseDown += (s, e) => BringTargetsToFront();
 
             win.Show();
             win.WindowState = WindowState.Maximized;
@@ -502,6 +508,20 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Error("Failed to spawn attention target: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Brings all attention targets back to front when video is clicked
+        /// </summary>
+        private void BringTargetsToFront()
+        {
+            lock (_targets)
+            {
+                foreach (var t in _targets)
+                {
+                    t.BringToFront();
+                }
             }
         }
 
@@ -942,6 +962,18 @@ namespace ConditioningControlPanel.Services
             _dead = true;
             _timer.Stop();
             try { _win.Close(); } catch { }
+        }
+
+        public void BringToFront()
+        {
+            if (_dead) return;
+            try
+            {
+                _win.Topmost = false;
+                _win.Topmost = true;
+                _win.Activate();
+            }
+            catch { }
         }
     }
 }
