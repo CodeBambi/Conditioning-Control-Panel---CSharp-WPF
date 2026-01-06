@@ -193,6 +193,8 @@ namespace ConditioningControlPanel.Services
             { "ulta", "Ulta Beauty" },
             { "shopping cart", "online shopping" },
             { "checkout", "online shopping" },
+            { "throne", "Throne" },
+            { "wishtender", "Wishtender" },
         };
 
         private static readonly Dictionary<string, string> MediaSites = new(StringComparer.OrdinalIgnoreCase)
