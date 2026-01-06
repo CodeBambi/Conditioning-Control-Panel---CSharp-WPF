@@ -157,12 +157,19 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    window._isDisposed = true;
-                    window.MediaPlayer?.Stop();
-                    window.Close();
+                    window.ForceClose();
                 }
                 catch { }
             }
+        }
+
+        /// <summary>
+        /// Force close this window instance
+        /// </summary>
+        private void ForceClose()
+        {
+            try { VideoPlayer?.Stop(); } catch { }
+            try { Close(); } catch { }
         }
 
         /// <summary>
