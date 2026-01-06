@@ -32,7 +32,7 @@
                   Visibility="Collapsed"
                   HorizontalAlignment="Left"
                   VerticalAlignment="Top"
-                  Opacity="0.65"
+                  Opacity="0.75"
                   Margin="420,350,0,0"
                   Width="420" Height="260">
 
@@ -47,7 +47,7 @@
                            Text=""
                            Foreground="#FF10F0"
                            FontFamily="Comic Sans MS"
-                           FontSize="31"
+                           FontSize="33"
                            FontWeight="Bold"
                            TextWrapping="Wrap"
                            TextAlignment="Center"
@@ -109,6 +109,8 @@
                     CornerRadius="20" ClipToBounds="True">
                 <Border.ContextMenu>
                     <ContextMenu x:Name="AvatarContextMenu" Background="#252542" BorderBrush="#FF69B4" BorderThickness="2" Opened="AvatarContextMenu_Opened">
+                        <MenuItem x:Name="MenuItemTalkToBambi" Header="💬 Talk to Bambi" Click="MenuItemTalkToBambi_Click" Foreground="#FF69B4" FontWeight="Bold"/>
+                        <Separator Background="#FF69B4"/>
                         <MenuItem x:Name="MenuItemDetach" Header="Detach" Click="MenuItemDetach_Click" Foreground="White"/>
                         <MenuItem x:Name="MenuItemAttach" Header="Attach to Main Window" Click="MenuItemAttach_Click" Foreground="White" Visibility="Collapsed"/>
                         <MenuItem x:Name="MenuItemShrink" Header="－ Shrink" Click="MenuItemShrink_Click" Foreground="White" Visibility="Collapsed"/>
@@ -117,7 +119,12 @@
                         <Separator Background="#FF69B4"/>
                         <MenuItem x:Name="MenuItemEngine" Header="▶ Start Engine" Click="MenuItemEngine_Click" Foreground="#90EE90"/>
                         <MenuItem x:Name="MenuItemTriggerMode" Header="☐ Trigger Mode" Click="MenuItemTriggerMode_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemRandomBubble" Header="☐ Random Bubble" Click="MenuItemRandomBubble_Click" Foreground="White"/>
                         <MenuItem x:Name="MenuItemSlutMode" Header="☐ Slut Mode" Click="MenuItemSlutMode_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemMute" Header="☐ Mute Avatar" Click="MenuItemMute_Click" Foreground="White"/>
+                        <Separator Background="#FF69B4"/>
+                        <MenuItem x:Name="MenuItemMuteWhispers" Header="☐ Mute Whispers" Click="MenuItemMuteWhispers_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemPauseBrowser" Header="⏸ Pause Browser" Click="MenuItemPauseBrowser_Click" Foreground="White"/>
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Grid>

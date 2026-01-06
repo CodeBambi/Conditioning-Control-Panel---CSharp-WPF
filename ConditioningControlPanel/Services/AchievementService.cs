@@ -33,7 +33,14 @@ public class AchievementService : IDisposable
             "achievements.json");
         
         _progress = LoadProgress();
-        
+
+        // Reset continuous/session-based counters on startup (these shouldn't persist)
+        _progress.ContinuousSpiralMinutes = 0;
+        _progress.ContinuousMindWipeSeconds = 0;
+        _progress.AltTabPressedThisSession = false;
+        _progress.AvatarClickCount = 0;
+        _progress.AvatarClickStartTime = null;
+
         // Check daily streak on startup
         _progress.UpdateDailyStreak();
         _isDirty = true;

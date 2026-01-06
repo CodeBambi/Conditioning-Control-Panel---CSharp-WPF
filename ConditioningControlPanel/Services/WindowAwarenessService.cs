@@ -33,12 +33,20 @@ namespace ConditioningControlPanel.Services
         public ActivityCategory Category { get; }
         public ActivityCategory PreviousCategory { get; }
         public string DetectedName { get; } // e.g., "League of Legends", "Wikipedia", "Discord"
+        public string ServiceName { get; } // e.g., "Throne", "YouTube", "VS Code" - the actual service/app
+        public string PageTitle { get; } // e.g., "CodeBambi's wishlist", "How to code" - the specific page/content
+        public bool IsNewService { get; } // True when switching to a different service/app (not just a different page)
+        public string PreviousServiceName { get; } // For context on what they switched from
 
-        public ActivityChangedEventArgs(ActivityCategory category, ActivityCategory previousCategory, string detectedName)
+        public ActivityChangedEventArgs(ActivityCategory category, ActivityCategory previousCategory, string detectedName, string serviceName = "", string pageTitle = "", bool isNewService = false, string previousServiceName = "")
         {
             Category = category;
             PreviousCategory = previousCategory;
             DetectedName = detectedName;
+            ServiceName = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
+            PageTitle = pageTitle;
+            IsNewService = isNewService;
+            PreviousServiceName = previousServiceName;
         }
     }
 
@@ -57,14 +65,19 @@ namespace ConditioningControlPanel.Services
 
         // Events
         public event EventHandler<ActivityChangedEventArgs>? ActivityChanged;
+        public event EventHandler<ActivityChangedEventArgs>? StillOnActivity;
 
         // State
         private DispatcherTimer? _pollTimer;
+        private DispatcherTimer? _stillOnTimer;
         private ActivityCategory _currentCategory = ActivityCategory.Unknown;
         private string _currentDetectedName = "";
+        private string _currentServiceName = "";
+        private string _currentPageTitle = "";
         private string _lastWindowTitle = "";
         private DateTime _lastActivityChange = DateTime.Now;
         private DateTime _lastReactionTime = DateTime.MinValue;
+        private DateTime _lastStillOnTime = DateTime.MinValue;
         private bool _isRunning;
         private bool _isDisposed;
 
@@ -216,6 +229,8 @@ namespace ConditioningControlPanel.Services
             { "pornhub", "adult content" },
             { "xvideos", "adult content" },
             { "xhamster", "adult content" },
+            { "bambicloud", "BambiCloud" },
+            { "hypnotube", "Hypnotube" },
         };
 
         private static readonly Dictionary<string, string> LearningSites = new(StringComparer.OrdinalIgnoreCase)
@@ -290,6 +305,21 @@ namespace ConditioningControlPanel.Services
         public string CurrentDetectedName => _currentDetectedName;
 
         /// <summary>
+        /// Current detected service/platform name (e.g., "Throne", "YouTube", "VS Code")
+        /// </summary>
+        public string CurrentServiceName => _currentServiceName;
+
+        /// <summary>
+        /// Current page/content title (e.g., "CodeBambi's wishlist", "How to code tutorial")
+        /// </summary>
+        public string CurrentPageTitle => _currentPageTitle;
+
+        /// <summary>
+        /// How long the user has been on the current activity
+        /// </summary>
+        public TimeSpan CurrentActivityDuration => DateTime.Now - _lastActivityChange;
+
+        /// <summary>
         /// Whether the service is actively monitoring
         /// </summary>
         public bool IsRunning => _isRunning;
@@ -318,7 +348,7 @@ namespace ConditioningControlPanel.Services
 
             _pollTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(3)
+                Interval = TimeSpan.FromSeconds(1.5) // Fast polling for quick tab/app detection
             };
             _pollTimer.Tick += OnPollTick;
             _pollTimer.Start();
@@ -336,6 +366,8 @@ namespace ConditioningControlPanel.Services
 
             _pollTimer?.Stop();
             _pollTimer = null;
+            _stillOnTimer?.Stop();
+            _stillOnTimer = null;
             _isRunning = false;
             _currentCategory = ActivityCategory.Unknown;
             _currentDetectedName = "";
@@ -353,11 +385,98 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Check if enough time has passed since last "still on" comment
+        /// </summary>
+        public bool CanStillOnReact()
+        {
+            var cooldownSeconds = App.Settings?.Current?.AwarenessReactionCooldownSeconds ?? 90;
+            return (DateTime.Now - _lastStillOnTime).TotalSeconds >= cooldownSeconds;
+        }
+
+        /// <summary>
         /// Mark that a reaction was just shown (reset cooldown)
         /// </summary>
         public void MarkReaction()
         {
             _lastReactionTime = DateTime.Now;
+        }
+
+        /// <summary>
+        /// Mark that a "still on" comment was just shown
+        /// </summary>
+        public void MarkStillOnReaction()
+        {
+            _lastStillOnTime = DateTime.Now;
+        }
+
+        // Still-on milestone tracking: 1 min, 5 min, 10 min
+        private static readonly int[] StillOnMilestonesMinutes = { 1, 5, 10 };
+        private int _currentMilestoneIndex = 0;
+
+        /// <summary>
+        /// Start or restart the "still on" timer for milestone-based comments (1min, 5min, 10min)
+        /// </summary>
+        private void RestartStillOnTimer()
+        {
+            _stillOnTimer?.Stop();
+            _currentMilestoneIndex = 0; // Reset milestones when activity changes
+
+            // Only start if we have a recognized activity (not Unknown or Idle)
+            if (_currentCategory == ActivityCategory.Unknown || _currentCategory == ActivityCategory.Idle)
+                return;
+
+            // Start timer for first milestone (1 minute)
+            StartNextMilestoneTimer();
+        }
+
+        private void StartNextMilestoneTimer()
+        {
+            if (_currentMilestoneIndex >= StillOnMilestonesMinutes.Length)
+                return; // No more milestones
+
+            var minutesUntilMilestone = StillOnMilestonesMinutes[_currentMilestoneIndex];
+            var elapsedMinutes = (DateTime.Now - _lastActivityChange).TotalMinutes;
+            var waitMinutes = minutesUntilMilestone - elapsedMinutes;
+
+            if (waitMinutes <= 0)
+            {
+                // Already past this milestone, move to next
+                _currentMilestoneIndex++;
+                StartNextMilestoneTimer();
+                return;
+            }
+
+            _stillOnTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMinutes(waitMinutes)
+            };
+            _stillOnTimer.Tick += OnStillOnMilestoneTick;
+            _stillOnTimer.Start();
+
+            App.Logger?.Debug("WindowAwareness: Still-on timer set for {Minutes}min milestone", minutesUntilMilestone);
+        }
+
+        private void OnStillOnMilestoneTick(object? sender, EventArgs e)
+        {
+            _stillOnTimer?.Stop();
+
+            // Fire the StillOnActivity event if we're still on the same activity
+            if (_currentCategory != ActivityCategory.Unknown && _currentCategory != ActivityCategory.Idle)
+            {
+                if (IsCategoryEnabled(_currentCategory))
+                {
+                    var milestone = _currentMilestoneIndex < StillOnMilestonesMinutes.Length
+                        ? StillOnMilestonesMinutes[_currentMilestoneIndex]
+                        : 10;
+                    App.Logger?.Debug("WindowAwareness: Still on {Name} for {Minutes} minutes", _currentDetectedName, milestone);
+                    StillOnActivity?.Invoke(this, new ActivityChangedEventArgs(
+                        _currentCategory, _currentCategory, _currentDetectedName, _currentServiceName, _currentPageTitle));
+                }
+            }
+
+            // Move to next milestone
+            _currentMilestoneIndex++;
+            StartNextMilestoneTimer();
         }
 
         private void OnPollTick(object? sender, EventArgs e)
@@ -378,7 +497,7 @@ namespace ConditioningControlPanel.Services
                     var idleMinutes = (DateTime.Now - _lastActivityChange).TotalMinutes;
                     if (idleMinutes >= IdleThresholdMinutes && _currentCategory != ActivityCategory.Idle)
                     {
-                        SetActivity(ActivityCategory.Idle, "being idle");
+                        SetActivity(ActivityCategory.Idle, "being idle", "", "");
                     }
                     return;
                 }
@@ -388,7 +507,7 @@ namespace ConditioningControlPanel.Services
                 _lastActivityChange = DateTime.Now;
 
                 // First try to categorize by window title
-                var (category, detectedName) = CategorizeWindow(windowTitle);
+                var (category, detectedName, serviceName, pageTitle) = CategorizeWindow(windowTitle);
 
                 // If unknown, check running processes for games
                 if (category == ActivityCategory.Unknown)
@@ -398,13 +517,15 @@ namespace ConditioningControlPanel.Services
                     {
                         category = processResult.Value.Item1;
                         detectedName = processResult.Value.Item2;
+                        serviceName = processResult.Value.Item2; // For games, service = detected name
+                        pageTitle = "";
                         App.Logger?.Debug("WindowAwareness: Detected via process: {Name}", detectedName);
                     }
                 }
 
                 if (category != _currentCategory || detectedName != _currentDetectedName)
                 {
-                    SetActivity(category, detectedName);
+                    SetActivity(category, detectedName, serviceName, pageTitle);
                 }
             }
             catch (Exception ex)
@@ -413,16 +534,31 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void SetActivity(ActivityCategory newCategory, string detectedName)
+        private void SetActivity(ActivityCategory newCategory, string detectedName, string serviceName, string pageTitle)
         {
-            var previous = _currentCategory;
+            var previousCategory = _currentCategory;
+            var previousServiceName = _currentServiceName;
+
+            // Determine if this is a new service/app (not just a different page)
+            var isNewService = !string.Equals(serviceName, previousServiceName, StringComparison.OrdinalIgnoreCase)
+                               && !string.IsNullOrEmpty(serviceName)
+                               && !string.IsNullOrEmpty(previousServiceName);
+
             _currentCategory = newCategory;
             _currentDetectedName = detectedName;
+            _currentServiceName = serviceName;
+            _currentPageTitle = pageTitle;
+            _lastActivityChange = DateTime.Now; // Track when this activity started
 
             // Fire event (don't log the window title for privacy, only the detected name)
-            App.Logger?.Debug("WindowAwareness: Detected {Name} ({Category})", detectedName, newCategory);
+            App.Logger?.Debug("WindowAwareness: Detected {Name} ({Category}) - Service: {Service}, IsNew: {IsNew}",
+                detectedName, newCategory, serviceName, isNewService);
 
-            ActivityChanged?.Invoke(this, new ActivityChangedEventArgs(newCategory, previous, detectedName));
+            ActivityChanged?.Invoke(this, new ActivityChangedEventArgs(
+                newCategory, previousCategory, detectedName, serviceName, pageTitle, isNewService, previousServiceName));
+
+            // Restart the still-on timer for periodic comments
+            RestartStillOnTimer();
         }
 
         private string GetActiveWindowTitle()
@@ -482,12 +618,12 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Categorize a window based on its title and detect specific app/service.
-        /// Returns the actual page/tab name for more specific reactions.
+        /// Returns: (Category, DetectedName for display, ServiceName, PageTitle)
         /// </summary>
-        private (ActivityCategory, string) CategorizeWindow(string title)
+        private (ActivityCategory Category, string DetectedName, string ServiceName, string PageTitle) CategorizeWindow(string title)
         {
             if (string.IsNullOrWhiteSpace(title))
-                return (ActivityCategory.Unknown, "something");
+                return (ActivityCategory.Unknown, "something", "", "");
 
             var lowerTitle = title.ToLowerInvariant();
 
@@ -497,7 +633,7 @@ namespace ConditioningControlPanel.Services
             foreach (var kvp in GamingApps)
             {
                 if (lowerTitle.Contains(kvp.Key))
-                    return (ActivityCategory.Gaming, kvp.Value);
+                    return (ActivityCategory.Gaming, kvp.Value, kvp.Value, "");
             }
 
             // Learning (before general browsing)
@@ -505,8 +641,8 @@ namespace ConditioningControlPanel.Services
             {
                 if (lowerTitle.Contains(kvp.Key))
                 {
-                    var pageName = ExtractPageName(title, kvp.Value);
-                    return (ActivityCategory.Learning, pageName);
+                    var (displayName, pageTitle) = ExtractPageNameWithService(title, kvp.Value);
+                    return (ActivityCategory.Learning, displayName, kvp.Value, pageTitle);
                 }
             }
 
@@ -515,8 +651,8 @@ namespace ConditioningControlPanel.Services
             {
                 if (lowerTitle.Contains(kvp.Key))
                 {
-                    var pageName = ExtractPageName(title, kvp.Value);
-                    return (ActivityCategory.Shopping, pageName);
+                    var (displayName, pageTitle) = ExtractPageNameWithService(title, kvp.Value);
+                    return (ActivityCategory.Shopping, displayName, kvp.Value, pageTitle);
                 }
             }
 
@@ -525,8 +661,8 @@ namespace ConditioningControlPanel.Services
             {
                 if (lowerTitle.Contains(kvp.Key))
                 {
-                    var pageName = ExtractPageName(title, kvp.Value);
-                    return (ActivityCategory.Social, pageName);
+                    var (displayName, pageTitle) = ExtractPageNameWithService(title, kvp.Value);
+                    return (ActivityCategory.Social, displayName, kvp.Value, pageTitle);
                 }
             }
 
@@ -535,8 +671,8 @@ namespace ConditioningControlPanel.Services
             {
                 if (lowerTitle.Contains(kvp.Key))
                 {
-                    var pageName = ExtractPageName(title, kvp.Value);
-                    return (ActivityCategory.Media, pageName);
+                    var (displayName, pageTitle) = ExtractPageNameWithService(title, kvp.Value);
+                    return (ActivityCategory.Media, displayName, kvp.Value, pageTitle);
                 }
             }
 
@@ -545,8 +681,8 @@ namespace ConditioningControlPanel.Services
             {
                 if (lowerTitle.Contains(kvp.Key))
                 {
-                    var pageName = ExtractPageName(title, kvp.Value);
-                    return (ActivityCategory.Working, pageName);
+                    var (displayName, pageTitle) = ExtractPageNameWithService(title, kvp.Value);
+                    return (ActivityCategory.Working, displayName, kvp.Value, pageTitle);
                 }
             }
 
@@ -556,10 +692,10 @@ namespace ConditioningControlPanel.Services
                 lowerTitle.Contains("opera") || lowerTitle.Contains("brave"))
             {
                 var tabName = ExtractBrowserTabName(title);
-                return (ActivityCategory.Browsing, tabName);
+                return (ActivityCategory.Browsing, tabName, "browser", tabName);
             }
 
-            return (ActivityCategory.Unknown, "something");
+            return (ActivityCategory.Unknown, "something", "", "");
         }
 
         /// <summary>
@@ -608,6 +744,16 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private string ExtractPageName(string windowTitle, string fallbackName)
         {
+            var (displayName, _) = ExtractPageNameWithService(windowTitle, fallbackName);
+            return displayName;
+        }
+
+        /// <summary>
+        /// Extract both the display name and the raw page title from a window title.
+        /// Returns: (DisplayName like "CodeBambi on Throne", PageTitle like "CodeBambi")
+        /// </summary>
+        private (string DisplayName, string PageTitle) ExtractPageNameWithService(string windowTitle, string serviceName)
+        {
             // For apps like VS Code: "filename.cs - ProjectName - Visual Studio Code"
             // For browsers: "Page Title - Site Name - Browser"
 
@@ -619,14 +765,18 @@ namespace ConditioningControlPanel.Services
                 var firstPart = parts[0].Trim();
                 if (!string.IsNullOrEmpty(firstPart) && firstPart.Length > 2)
                 {
-                    // Combine with the site/app name for context
+                    // Store raw page title
+                    var pageTitle = firstPart;
+
+                    // Truncate for display if needed
                     if (firstPart.Length > 40)
                         firstPart = firstPart.Substring(0, 37) + "...";
-                    return $"{firstPart} on {fallbackName}";
+
+                    return ($"{firstPart} on {serviceName}", pageTitle);
                 }
             }
 
-            return fallbackName;
+            return (serviceName, "");
         }
 
         /// <summary>
@@ -634,21 +784,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool IsCategoryEnabled(ActivityCategory category)
         {
-            var settings = App.Settings?.Current;
-            if (settings == null) return false;
-
-            return category switch
-            {
-                ActivityCategory.Gaming => settings.AwarenessReactToGaming,
-                ActivityCategory.Browsing => settings.AwarenessReactToBrowsing,
-                ActivityCategory.Shopping => settings.AwarenessReactToShopping,
-                ActivityCategory.Social => settings.AwarenessReactToSocial,
-                ActivityCategory.Working => true,
-                ActivityCategory.Media => true,
-                ActivityCategory.Learning => settings.AwarenessReactToBrowsing, // Use browsing toggle
-                ActivityCategory.Idle => true,
-                _ => false
-            };
+            // All categories enabled - AI handles context appropriately
+            return true;
         }
 
         public void Dispose()

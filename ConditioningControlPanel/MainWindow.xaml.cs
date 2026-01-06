@@ -28,7 +28,17 @@ namespace ConditioningControlPanel
         private bool _isCapturingPanicKey = false;
         private bool _exitRequested = false;
         private int _panicPressCount = 0;
+
+        /// <summary>
+        /// Fires when the engine is stopped (for avatar reactions)
+        /// </summary>
+        public event EventHandler? EngineStopped;
         private DateTime _lastPanicTime = DateTime.MinValue;
+
+        /// <summary>
+        /// Gets the browser WebView2 control for external access (e.g., avatar audio controls)
+        /// </summary>
+        public Microsoft.Web.WebView2.Wpf.WebView2? GetBrowserWebView() => _browser?.WebView;
         
         // Session Engine
         private SessionEngine? _sessionEngine;
@@ -537,6 +547,11 @@ namespace ConditioningControlPanel
             ShowTab("achievements");
         }
 
+        private void BtnCompanion_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("companion");
+        }
+
         private void BtnPatreonExclusives_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("patreon");
@@ -566,16 +581,19 @@ namespace ConditioningControlPanel
             PresetsTab.Visibility = Visibility.Collapsed;
             ProgressionTab.Visibility = Visibility.Collapsed;
             AchievementsTab.Visibility = Visibility.Collapsed;
+            CompanionTab.Visibility = Visibility.Collapsed;
             PatreonTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive (expandable outline)
             var inactiveStyle = FindResource("ExpandableIconButton") as Style;
             var activeStyle = FindResource("ExpandableIconButtonActive") as Style;
+            var patreonStyle = FindResource("ExpandableIconButtonPatreon") as Style;
             BtnSettings.Style = inactiveStyle;
             BtnPresets.Style = inactiveStyle;
             BtnProgression.Style = inactiveStyle;
             BtnAchievements.Style = inactiveStyle;
-            BtnPatreonExclusives.Style = inactiveStyle;
+            BtnCompanion.Style = inactiveStyle;
+            BtnPatreonExclusives.Style = patreonStyle; // Keep purple style for Patreon
 
             switch (tab)
             {
@@ -611,6 +629,12 @@ namespace ConditioningControlPanel
                     UpdateAchievementCount();
                     break;
 
+                case "companion":
+                    CompanionTab.Visibility = Visibility.Visible;
+                    BtnCompanion.Style = activeStyle;
+                    SyncCompanionTabUI();
+                    break;
+
                 case "patreon":
                     PatreonTab.Visibility = Visibility.Visible;
                     BtnPatreonExclusives.Style = activeStyle;
@@ -626,6 +650,42 @@ namespace ConditioningControlPanel
                 var unlocked = App.Achievements.GetUnlockedCount();
                 var total = App.Achievements.GetTotalCount();
                 TxtAchievementCount.Text = $"{unlocked} / {total} Achievements Unlocked";
+            }
+        }
+
+        /// <summary>
+        /// Sync Companion tab UI controls with current state
+        /// </summary>
+        private void SyncCompanionTabUI()
+        {
+            _isLoading = true;
+            try
+            {
+                // Sync avatar enabled
+                ChkAvatarEnabledCompanion.IsChecked = _avatarTubeWindow?.IsVisible == true;
+
+                // Sync trigger mode
+                ChkTriggerModeCompanion.IsChecked = App.Settings?.Current?.TriggerModeEnabled == true;
+                TriggerSettingsPanelCompanion.Visibility = ChkTriggerModeCompanion.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+
+                // Sync trigger interval
+                var interval = App.Settings?.Current?.TriggerIntervalSeconds ?? 60;
+                SliderTriggerIntervalCompanion.Value = interval;
+                TxtTriggerIntervalCompanion.Text = $"{interval}s";
+
+                // Sync idle interval
+                var idleInterval = App.Settings?.Current?.IdleGiggleIntervalSeconds ?? 120;
+                SliderIdleIntervalCompanion.Value = idleInterval;
+                TxtIdleIntervalCompanion.Text = $"{idleInterval}s";
+
+                // Sync detach status
+                var isDetached = _avatarTubeWindow?.IsDetached == true;
+                TxtDetachStatusCompanion.Text = isDetached ? "Floating freely" : "Anchored to window";
+                BtnDetachCompanionTab.Content = isDetached ? "Attach" : "Detach";
+            }
+            finally
+            {
+                _isLoading = false;
             }
         }
 
@@ -775,30 +835,26 @@ namespace ConditioningControlPanel
             }
 
             // Initialize companion settings
-            ChkAvatarEnabled.IsChecked = settings.AvatarEnabled;
+            ChkAvatarEnabledCompanion.IsChecked = settings.AvatarEnabled;
             ChkAiChat.IsChecked = settings.AiChatEnabled;
-            SliderIdleInterval.Value = settings.IdleGiggleIntervalSeconds;
-            TxtIdleInterval.Text = $"{settings.IdleGiggleIntervalSeconds}s";
+            SliderIdleIntervalCompanion.Value = settings.IdleGiggleIntervalSeconds;
+            TxtIdleIntervalCompanion.Text = $"{settings.IdleGiggleIntervalSeconds}s";
 
             // Awareness Mode settings (now Tier 1 / whitelisted)
             var awarenessAvailable = App.Patreon?.HasPremiumAccess == true;
             ChkAwarenessMode.IsChecked = awarenessAvailable && settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
             SliderAwarenessCooldown.Value = settings.AwarenessReactionCooldownSeconds;
             TxtAwarenessCooldown.Text = $"{settings.AwarenessReactionCooldownSeconds}s";
-            ChkAwarenessGaming.IsChecked = settings.AwarenessReactToGaming;
-            ChkAwarenessBrowsing.IsChecked = settings.AwarenessReactToBrowsing;
-            ChkAwarenessShopping.IsChecked = settings.AwarenessReactToShopping;
-            ChkAwarenessSocial.IsChecked = settings.AwarenessReactToSocial;
 
             // Show/hide awareness settings panel based on enabled state
             var awarenessEnabled = awarenessAvailable && settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
             AwarenessSettingsPanel.Visibility = awarenessEnabled ? Visibility.Visible : Visibility.Collapsed;
 
             // Trigger Mode settings (free for all)
-            ChkTriggerMode.IsChecked = settings.TriggerModeEnabled;
-            SliderTriggerInterval.Value = settings.TriggerIntervalSeconds;
-            TxtTriggerInterval.Text = $"{settings.TriggerIntervalSeconds}s";
-            TriggerSettingsPanel.Visibility = settings.TriggerModeEnabled ? Visibility.Visible : Visibility.Collapsed;
+            ChkTriggerModeCompanion.IsChecked = settings.TriggerModeEnabled;
+            SliderTriggerIntervalCompanion.Value = settings.TriggerIntervalSeconds;
+            TxtTriggerIntervalCompanion.Text = $"{settings.TriggerIntervalSeconds}s";
+            TriggerSettingsPanelCompanion.Visibility = settings.TriggerModeEnabled ? Visibility.Visible : Visibility.Collapsed;
 
             // Slut Mode settings (Patreon only)
             var slutModeAvailable = App.Patreon?.HasPremiumAccess == true;
@@ -818,7 +874,8 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
 
-            var isEnabled = ChkAvatarEnabled.IsChecked == true;
+            var checkbox = sender as CheckBox;
+            var isEnabled = checkbox?.IsChecked == true;
             App.Settings.Current.AvatarEnabled = isEnabled;
 
             if (isEnabled)
@@ -842,13 +899,13 @@ namespace ConditioningControlPanel
             // Update button and status text
             if (_avatarTubeWindow.IsDetached)
             {
-                BtnDetachCompanion.Content = "🔗 Attach";
-                TxtDetachStatus.Text = "Floating freely - drag to reposition";
+                BtnDetachCompanionTab.Content = "Attach";
+                TxtDetachStatusCompanion.Text = "Floating freely - drag to reposition";
             }
             else
             {
-                BtnDetachCompanion.Content = "🔗 Detach";
-                TxtDetachStatus.Text = "Anchored to window";
+                BtnDetachCompanionTab.Content = "Detach";
+                TxtDetachStatusCompanion.Text = "Anchored to window";
             }
         }
 
@@ -862,10 +919,11 @@ namespace ConditioningControlPanel
 
         private void SliderIdleInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading || TxtIdleInterval == null) return;
+            if (_isLoading || TxtIdleIntervalCompanion == null) return;
 
-            var value = (int)SliderIdleInterval.Value;
-            TxtIdleInterval.Text = $"{value}s";
+            var slider = sender as Slider;
+            var value = (int)(slider?.Value ?? 120);
+            TxtIdleIntervalCompanion.Text = $"{value}s";
             App.Settings.Current.IdleGiggleIntervalSeconds = value;
         }
 
@@ -877,8 +935,9 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
 
-            var isEnabled = ChkTriggerMode.IsChecked == true;
-            TriggerSettingsPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
+            var checkbox = sender as CheckBox;
+            var isEnabled = checkbox?.IsChecked == true;
+            TriggerSettingsPanelCompanion.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
 
             App.Settings.Current.TriggerModeEnabled = isEnabled;
             App.Settings.Save();
@@ -889,12 +948,22 @@ namespace ConditioningControlPanel
             App.Logger?.Information("Trigger Mode {State}", isEnabled ? "enabled" : "disabled");
         }
 
+        /// <summary>
+        /// Sync the Trigger Mode UI when changed from avatar context menu
+        /// </summary>
+        public void SyncTriggerModeUI(bool isEnabled)
+        {
+            ChkTriggerModeCompanion.IsChecked = isEnabled;
+            TriggerSettingsPanelCompanion.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         private void SliderTriggerInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isLoading || TxtTriggerInterval == null) return;
+            if (_isLoading || TxtTriggerIntervalCompanion == null) return;
 
-            var value = (int)SliderTriggerInterval.Value;
-            TxtTriggerInterval.Text = $"{value}s";
+            var slider = sender as Slider;
+            var value = (int)(slider?.Value ?? 60);
+            TxtTriggerIntervalCompanion.Text = $"{value}s";
             App.Settings.Current.TriggerIntervalSeconds = value;
 
             // Restart trigger timer with new interval
@@ -968,8 +1037,8 @@ namespace ConditioningControlPanel
             {
                 ChkSlutMode.IsChecked = false;
                 MessageBox.Show(
-                    "Slut Mode requires Patreon Level 1+ subscription.",
-                    "Feature Locked",
+                    "Slut Mode requires Patreon subscription.",
+                    "Patreon Only",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return;
@@ -992,8 +1061,8 @@ namespace ConditioningControlPanel
             {
                 ChkAwarenessMode.IsChecked = false;
                 MessageBox.Show(
-                    "Window Awareness requires Patreon Level 1+ subscription.",
-                    "Feature Locked",
+                    "Window Awareness requires Patreon subscription.",
+                    "Patreon Only",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return;
@@ -1029,15 +1098,127 @@ namespace ConditioningControlPanel
             App.Settings.Current.AwarenessReactionCooldownSeconds = value;
         }
 
-        private void ChkAwarenessCategory_Changed(object sender, RoutedEventArgs e)
+        private void ChkMuteAvatar_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
+            var checkbox = sender as CheckBox;
+            var isEnabled = checkbox?.IsChecked == true;
+            _avatarTubeWindow?.SetMuteAvatar(isEnabled);
+        }
 
-            App.Settings.Current.AwarenessReactToGaming = ChkAwarenessGaming.IsChecked == true;
-            App.Settings.Current.AwarenessReactToBrowsing = ChkAwarenessBrowsing.IsChecked == true;
-            App.Settings.Current.AwarenessReactToShopping = ChkAwarenessShopping.IsChecked == true;
-            App.Settings.Current.AwarenessReactToSocial = ChkAwarenessSocial.IsChecked == true;
-            App.Settings.Save();
+        private void ChkMuteWhispers_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var checkbox = sender as CheckBox;
+            var isMuted = checkbox?.IsChecked == true;
+
+            // Toggle SubAudioEnabled (muted = disabled)
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.SubAudioEnabled = !isMuted;
+                App.Settings.Save();
+            }
+
+            // Sync Settings tab checkbox (inverted - it's "enabled" not "muted")
+            _isLoading = true;
+            ChkAudioWhispers.IsChecked = !isMuted;
+            _isLoading = false;
+
+            // Sync avatar menu
+            _avatarTubeWindow?.UpdateQuickMenuState();
+        }
+
+        private async void ChkPauseBrowser_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var checkbox = sender as CheckBox;
+            var isPaused = checkbox?.IsChecked == true;
+            await SetBrowserPaused(isPaused);
+            _avatarTubeWindow?.SetBrowserPaused(isPaused);
+        }
+
+        private async Task SetBrowserPaused(bool isPaused)
+        {
+            try
+            {
+                var webView = GetBrowserWebView();
+                if (webView?.CoreWebView2 != null)
+                {
+                    if (isPaused)
+                    {
+                        webView.CoreWebView2.IsMuted = true;
+                        await webView.CoreWebView2.ExecuteScriptAsync(@"
+                            document.querySelectorAll('audio, video').forEach(el => el.pause());
+                        ");
+                    }
+                    else
+                    {
+                        webView.CoreWebView2.IsMuted = false;
+                        await webView.CoreWebView2.ExecuteScriptAsync(@"
+                            document.querySelectorAll('audio, video').forEach(el => el.play());
+                        ");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to toggle browser audio: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Sync Quick Controls UI from avatar context menu
+        /// </summary>
+        public void SyncQuickControlsUI(bool? muteAvatar = null, bool? muteWhispers = null, bool? pauseBrowser = null)
+        {
+            _isLoading = true;
+            try
+            {
+                // Update Companion tab controls
+                if (muteAvatar.HasValue) ChkMuteAvatarCompanion.IsChecked = muteAvatar.Value;
+                if (muteWhispers.HasValue) ChkMuteWhispersCompanion.IsChecked = muteWhispers.Value;
+                if (pauseBrowser.HasValue) ChkPauseBrowserCompanion.IsChecked = pauseBrowser.Value;
+            }
+            finally
+            {
+                _isLoading = false;
+            }
+        }
+
+        /// <summary>
+        /// Sync whispers enabled state across all UI controls (Settings tab + Companion tab)
+        /// </summary>
+        public void SyncWhispersUI(bool enabled)
+        {
+            _isLoading = true;
+            try
+            {
+                // Settings tab - ChkAudioWhispers represents "whispers enabled"
+                ChkAudioWhispers.IsChecked = enabled;
+
+                // Companion tab - ChkMuteWhispersCompanion represents "whispers muted" (inverted)
+                ChkMuteWhispersCompanion.IsChecked = !enabled;
+            }
+            finally
+            {
+                _isLoading = false;
+            }
+        }
+
+        /// <summary>
+        /// Sync slut mode state across all UI controls
+        /// </summary>
+        public void SyncSlutModeUI(bool enabled)
+        {
+            _isLoading = true;
+            try
+            {
+                ChkSlutMode.IsChecked = enabled;
+            }
+            finally
+            {
+                _isLoading = false;
+            }
         }
 
         #endregion
@@ -3025,6 +3206,9 @@ namespace ConditioningControlPanel
 
             _isRunning = false;
             UpdateStartButton();
+
+            // Fire event for avatar reaction
+            EngineStopped?.Invoke(this, EventArgs.Empty);
 
             App.Logger?.Information("Engine stopped");
         }

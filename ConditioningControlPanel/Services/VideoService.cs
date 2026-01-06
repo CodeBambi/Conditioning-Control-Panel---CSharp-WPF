@@ -39,6 +39,7 @@ namespace ConditioningControlPanel.Services
 
         private readonly string _videosPath;
 
+        public event EventHandler? VideoAboutToStart; // Fires 1.3s before video
         public event EventHandler? VideoStarted;
         public event EventHandler? VideoEnded;
 
@@ -191,14 +192,29 @@ namespace ConditioningControlPanel.Services
             _hits = _total = 0;
             _spawnTimes.Clear();
 
+            // Fire pre-announcement event 1.3s before video starts
+            VideoAboutToStart?.Invoke(this, EventArgs.Empty);
+
             // Stop flashes during video
             App.Flash?.Stop();
-            
+
             // Duck other apps AND pause our background music
-            if (App.Settings.Current.AudioDuckingEnabled) 
+            if (App.Settings.Current.AudioDuckingEnabled)
                 App.Audio?.Duck(App.Settings.Current.DuckingLevel);
             App.Audio?.PauseBackgroundMusic();
-            
+
+            // Delay video start by 1.3 seconds to allow avatar to announce
+            var delayTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.3) };
+            delayTimer.Tick += (s, e) =>
+            {
+                delayTimer.Stop();
+                StartVideoPlayback(path, strict);
+            };
+            delayTimer.Start();
+        }
+
+        private void StartVideoPlayback(string path, bool strict)
+        {
             Application.Current.Dispatcher.Invoke(() =>
             {
                 var allScreens = Screen.AllScreens.ToList();

@@ -210,6 +210,9 @@ namespace ConditioningControlPanel.Services
                 // Fire pre-event so avatar can announce the flash
                 FlashAboutToDisplay?.Invoke(this, EventArgs.Empty);
 
+                // Wait 1 second so speech bubble appears before flash
+                await Task.Delay(1000);
+
                 // Get sound ONCE for this flash event
                 var soundPath = GetNextSound();
                 var monitors = GetMonitors(settings.DualMonitorEnabled);

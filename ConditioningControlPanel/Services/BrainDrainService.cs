@@ -23,6 +23,11 @@ namespace ConditioningControlPanel.Services
         
         public bool IsRunning => _isRunning;
         public int AudioFileCount => _audioFiles?.Length ?? 0;
+
+        /// <summary>
+        /// Fires when a brain drain audio effect is triggered
+        /// </summary>
+        public event EventHandler? BrainDrainTriggered;
         
         public double Intensity
         {
@@ -143,11 +148,14 @@ namespace ConditioningControlPanel.Services
         private void PlayAudioNow()
         {
             if (_audioFiles == null || _audioFiles.Length == 0) return;
-            
+
             try
             {
                 var audioFile = _audioFiles[_random.Next(_audioFiles.Length)];
                 PlayAudio(audioFile);
+
+                // Fire event for avatar/UI notification
+                BrainDrainTriggered?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex)
             {

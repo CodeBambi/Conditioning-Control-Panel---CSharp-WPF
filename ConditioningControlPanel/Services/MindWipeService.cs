@@ -49,9 +49,14 @@ namespace ConditioningControlPanel.Services
         private TimeSpan _loopDuration;
         
         public bool IsRunning => _isRunning;
-        public bool IsLooping => _loopMode && (_loopWaveOutA?.PlaybackState == PlaybackState.Playing || 
+        public bool IsLooping => _loopMode && (_loopWaveOutA?.PlaybackState == PlaybackState.Playing ||
                                                 _loopWaveOutB?.PlaybackState == PlaybackState.Playing);
         public int AudioFileCount => _audioFiles?.Length ?? 0;
+
+        /// <summary>
+        /// Fires when a mind wipe audio effect is triggered
+        /// </summary>
+        public event EventHandler? MindWipeTriggered;
         
         public double FrequencyPerHour
         {
@@ -465,13 +470,16 @@ namespace ConditioningControlPanel.Services
         private void PlayAudioNow()
         {
             if (_audioFiles == null || _audioFiles.Length == 0) return;
-            
+
             try
             {
                 var audioFile = _audioFiles[_random.Next(_audioFiles.Length)];
                 PlayAudio(audioFile);
-                App.Logger?.Debug("MindWipe: Playing {File} at volume {Vol}%", 
+                App.Logger?.Debug("MindWipe: Playing {File} at volume {Vol}%",
                     Path.GetFileName(audioFile), _volume * 100);
+
+                // Fire event for avatar/UI notification
+                MindWipeTriggered?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex)
             {

@@ -1002,46 +1002,6 @@ namespace ConditioningControlPanel.Models
             set { _awarenessConsentGiven = value; OnPropertyChanged(); }
         }
 
-        private bool _awarenessReactToGaming = true;
-        /// <summary>
-        /// React when user is playing games
-        /// </summary>
-        public bool AwarenessReactToGaming
-        {
-            get => _awarenessReactToGaming;
-            set { _awarenessReactToGaming = value; OnPropertyChanged(); }
-        }
-
-        private bool _awarenessReactToBrowsing = true;
-        /// <summary>
-        /// React when user is browsing the web
-        /// </summary>
-        public bool AwarenessReactToBrowsing
-        {
-            get => _awarenessReactToBrowsing;
-            set { _awarenessReactToBrowsing = value; OnPropertyChanged(); }
-        }
-
-        private bool _awarenessReactToShopping = true;
-        /// <summary>
-        /// React when user is shopping online
-        /// </summary>
-        public bool AwarenessReactToShopping
-        {
-            get => _awarenessReactToShopping;
-            set { _awarenessReactToShopping = value; OnPropertyChanged(); }
-        }
-
-        private bool _awarenessReactToSocial = true;
-        /// <summary>
-        /// React when user is on social media
-        /// </summary>
-        public bool AwarenessReactToSocial
-        {
-            get => _awarenessReactToSocial;
-            set { _awarenessReactToSocial = value; OnPropertyChanged(); }
-        }
-
         private int _awarenessReactionCooldownSeconds = 90;
         /// <summary>
         /// Minimum seconds between awareness reactions (10-600)
@@ -1098,6 +1058,16 @@ namespace ConditioningControlPanel.Models
         {
             get => _triggerIntervalSeconds;
             set { _triggerIntervalSeconds = Math.Clamp(value, 10, 600); OnPropertyChanged(); }
+        }
+
+        private bool _randomBubbleEnabled = false;
+        /// <summary>
+        /// Enable random bubble spawning from avatar (3-5 min intervals)
+        /// </summary>
+        public bool RandomBubbleEnabled
+        {
+            get => _randomBubbleEnabled;
+            set { _randomBubbleEnabled = value; OnPropertyChanged(); }
         }
 
         private List<string> _customTriggers = new()

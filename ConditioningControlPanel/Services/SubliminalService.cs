@@ -275,20 +275,76 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Debug("Bambi Reset triggered after Bambi Freeze");
         }
 
+        /// <summary>
+        /// Play the audio clip for a trigger phrase (if whispers enabled and audio exists)
+        /// Used by Trigger Mode to play matching audio when showing trigger bubbles
+        /// </summary>
+        public void PlayTriggerAudio(string trigger)
+        {
+            // Check if whispers are enabled
+            if (App.Settings?.Current?.SubAudioEnabled != true)
+            {
+                return;
+            }
+
+            var audioPath = FindLinkedAudio(trigger);
+            if (audioPath != null)
+            {
+                // Duck other audio briefly
+                App.Audio?.Duck(App.Settings?.Current?.DuckingLevel ?? 80);
+                PlayWhisperAudio(audioPath);
+                App.Logger?.Debug("TriggerMode: Playing audio for '{Trigger}'", trigger);
+            }
+        }
+
         private string? FindLinkedAudio(string text)
         {
             var cleanText = text.Trim();
-            var extensions = new[] { ".mp3", ".wav", ".ogg" };
-            
-            foreach (var ext in extensions)
+            var extensions = new[] { ".mp3", ".wav", ".ogg", ".MP3", ".WAV", ".OGG" };
+
+            // Try various case combinations
+            var textVariants = new[]
             {
-                var path = Path.Combine(_audioPath, cleanText + ext);
-                if (File.Exists(path)) return path;
-                
-                var pathLower = Path.Combine(_audioPath, cleanText.ToLower() + ext);
-                if (File.Exists(pathLower)) return pathLower;
+                cleanText,                          // As-is
+                cleanText.ToUpper(),                // UPPERCASE
+                cleanText.ToLower(),                // lowercase
+                cleanText.Replace("'", "'"),        // Normalize curly apostrophe to straight
+                cleanText.Replace("'", "'"),        // Normalize straight apostrophe to curly
+                cleanText.ToUpper().Replace("'", "'"),
+            };
+
+            foreach (var textVar in textVariants)
+            {
+                foreach (var ext in extensions)
+                {
+                    var path = Path.Combine(_audioPath, textVar + ext);
+                    if (File.Exists(path)) return path;
+                }
             }
-            
+
+            // Fallback: case-insensitive directory search
+            try
+            {
+                if (Directory.Exists(_audioPath))
+                {
+                    var files = Directory.GetFiles(_audioPath);
+                    var normalizedText = cleanText.ToUpperInvariant().Replace("'", "'");
+
+                    foreach (var file in files)
+                    {
+                        var fileName = Path.GetFileNameWithoutExtension(file).ToUpperInvariant().Replace("'", "'");
+                        if (fileName == normalizedText)
+                        {
+                            return file;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Error searching audio directory: {Error}", ex.Message);
+            }
+
             return null;
         }
 

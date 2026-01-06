@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using XamlAnimatedGif;
 
@@ -46,10 +47,16 @@ namespace ConditioningControlPanel
         private DispatcherTimer? _speechTimer;
         private DispatcherTimer? _idleTimer;
         private DispatcherTimer? _triggerTimer; // Random trigger phrases
+        private DispatcherTimer? _randomBubbleTimer; // Random bubble spawning
         private DateTime _lastClickTime = DateTime.MinValue;
         private bool _isInputVisible = false;
         private readonly Random _random = new();
         private bool _mainWindowClosed = false;
+        private int _presetGiggleCounter = 0; // Counter for 1-in-5 giggle sound on presets
+        private readonly List<DateTime> _rapidClickTimestamps = new(); // Track clicks for 50-in-1-minute trigger
+        private bool _isMuted = false; // Mute avatar speech and sounds
+        // Note: Whispers mute state is now read from App.Settings.Current.SubAudioEnabled
+        private bool _isBrowserPaused = false; // Browser audio paused state
 
         // ============================================================
         // POSITIONING & SCALING - ADJUST THESE VALUES AS NEEDED
@@ -189,10 +196,10 @@ namespace ConditioningControlPanel
             // Keep tube in front during position changes when attached
             LocationChanged += (s, e) => { if (_isAttached) BringToFrontTemporarily(); };
 
-            // Wire up video service events for companion speech
+            // Wire up video service events for companion speech (1.3s before video)
             if (App.Video != null)
             {
-                App.Video.VideoStarted += OnVideoStarted;
+                App.Video.VideoAboutToStart += OnVideoAboutToStart;
                 App.Video.VideoEnded += OnVideoEnded;
             }
 
@@ -200,12 +207,14 @@ namespace ConditioningControlPanel
             if (App.BubbleCount != null)
             {
                 App.BubbleCount.GameCompleted += OnGameCompleted;
+                App.BubbleCount.GameFailed += OnGameFailed;
             }
 
             // Wire up flash service events for pre-announcement
             if (App.Flash != null)
             {
                 App.Flash.FlashAboutToDisplay += OnFlashAboutToDisplay;
+                App.Flash.FlashClicked += OnFlashClicked;
             }
 
             // Wire up subliminal service events for acknowledgment
@@ -218,21 +227,68 @@ namespace ConditioningControlPanel
             if (App.Bubbles != null)
             {
                 App.Bubbles.OnBubblePopped += OnBubblePopped;
+                App.Bubbles.OnBubbleMissed += OnBubbleMissed;
+            }
+
+            // Wire up achievement events
+            if (App.Achievements != null)
+            {
+                App.Achievements.AchievementUnlocked += OnAchievementUnlocked;
+            }
+
+            // Wire up progression events
+            if (App.Progression != null)
+            {
+                App.Progression.LevelUp += OnLevelUp;
             }
 
             // Wire up window awareness events (opt-in feature)
             if (App.WindowAwareness != null)
             {
                 App.WindowAwareness.ActivityChanged += OnActivityChanged;
+                App.WindowAwareness.StillOnActivity += OnStillOnActivity;
                 // Start awareness if enabled
                 App.WindowAwareness.Start();
             }
+
+            // Wire up MindWipe events (occasional reactions)
+            if (App.MindWipe != null)
+            {
+                App.MindWipe.MindWipeTriggered += OnMindWipeTriggered;
+            }
+
+            // Wire up BrainDrain events (occasional reactions)
+            if (App.BrainDrain != null)
+            {
+                App.BrainDrain.BrainDrainTriggered += OnBrainDrainTriggered;
+            }
+
+            // Wire up engine stop event from MainWindow
+            if (_parentWindow is MainWindow mainWindow)
+            {
+                mainWindow.EngineStopped += OnEngineStopped;
+            }
+
+            // Show greeting after a short delay (2 seconds after window loads)
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var greetingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                greetingTimer.Tick += (s, e) =>
+                {
+                    greetingTimer.Stop();
+                    ShowGreeting();
+                };
+                greetingTimer.Start();
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
 
             // Start idle timer for random giggles
             StartIdleTimer();
 
             // Start trigger timer if enabled
             StartTriggerTimer();
+
+            // Start random bubble timer if enabled
+            StartRandomBubbleTimer();
 
             // Handle clicks outside the input panel to close it
             PreviewMouseDown += Window_PreviewMouseDown;
@@ -906,6 +962,8 @@ namespace ConditioningControlPanel
                 // Stop companion timers
                 _speechTimer?.Stop();
                 _idleTimer?.Stop();
+                _triggerTimer?.Stop();
+                _randomBubbleTimer?.Stop();
 
                 // Remove window message hook
                 _hwndSource?.RemoveHook(WndProc);
@@ -914,7 +972,7 @@ namespace ConditioningControlPanel
                 // Unsubscribe from video service events
                 if (App.Video != null)
                 {
-                    App.Video.VideoStarted -= OnVideoStarted;
+                    App.Video.VideoAboutToStart -= OnVideoAboutToStart;
                     App.Video.VideoEnded -= OnVideoEnded;
                 }
 
@@ -922,12 +980,58 @@ namespace ConditioningControlPanel
                 if (App.BubbleCount != null)
                 {
                     App.BubbleCount.GameCompleted -= OnGameCompleted;
+                    App.BubbleCount.GameFailed -= OnGameFailed;
+                }
+
+                // Unsubscribe from flash events
+                if (App.Flash != null)
+                {
+                    App.Flash.FlashAboutToDisplay -= OnFlashAboutToDisplay;
+                    App.Flash.FlashClicked -= OnFlashClicked;
+                }
+
+                // Unsubscribe from bubble events
+                if (App.Bubbles != null)
+                {
+                    App.Bubbles.OnBubblePopped -= OnBubblePopped;
+                    App.Bubbles.OnBubbleMissed -= OnBubbleMissed;
+                }
+
+                // Unsubscribe from achievement events
+                if (App.Achievements != null)
+                {
+                    App.Achievements.AchievementUnlocked -= OnAchievementUnlocked;
+                }
+
+                // Unsubscribe from progression events
+                if (App.Progression != null)
+                {
+                    App.Progression.LevelUp -= OnLevelUp;
                 }
 
                 // Unsubscribe from window awareness events
                 if (App.WindowAwareness != null)
                 {
                     App.WindowAwareness.ActivityChanged -= OnActivityChanged;
+                    App.WindowAwareness.StillOnActivity -= OnStillOnActivity;
+                }
+
+                // Unsubscribe from MindWipe events
+                if (App.MindWipe != null)
+                {
+                    App.MindWipe.MindWipeTriggered -= OnMindWipeTriggered;
+                }
+
+                // Unsubscribe from BrainDrain events
+                if (App.BrainDrain != null)
+                {
+                    App.BrainDrain.BrainDrainTriggered -= OnBrainDrainTriggered;
+                }
+
+                // Unsubscribe from engine stop event
+                if (_parentWindow is MainWindow mainWindow)
+                {
+                    mainWindow.EngineStopped -= OnEngineStopped;
                 }
 
                 if (_parentWindow != null)
@@ -954,19 +1058,43 @@ namespace ConditioningControlPanel
 
         private void ImgAvatar_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
+            var now = DateTime.Now;
+
+            // Track rapid clicks for 50-in-1-minute "Bambi Cum and Collapse" trigger
+            _rapidClickTimestamps.Add(now);
+            // Remove clicks older than 1 minute
+            _rapidClickTimestamps.RemoveAll(t => (now - t).TotalSeconds > 60);
+
+            // Check if 50+ clicks in the last minute
+            if (_rapidClickTimestamps.Count >= 50)
+            {
+                _rapidClickTimestamps.Clear(); // Reset to prevent repeat triggers
+                TriggerBambiCumAndCollapse();
+            }
+
             // Track for Neon Obsession achievement (20 rapid clicks)
             App.Achievements?.TrackAvatarClick();
 
+            // 1 in 25 chance to play a pop sound
+            if (_random.Next(25) == 0)
+            {
+                PlayAvatarPopSound();
+            }
+
             // Log click count for debugging
             var clickCount = App.Achievements?.Progress.AvatarClickCount ?? 0;
-            App.Logger?.Debug("Avatar clicked! Count: {Count}/20", clickCount);
+            App.Logger?.Debug("Avatar clicked! Count: {Count}/20, RapidClicks: {RapidCount}/50", clickCount, _rapidClickTimestamps.Count);
 
             // Double-click detection for activity comment / random thought
-            var now = DateTime.Now;
             if ((now - _lastClickTime).TotalMilliseconds < 300)
             {
+                // Don't trigger if a message is currently showing or we're waiting for AI
+                if (_isGiggling || _isWaitingForAi)
+                {
+                    App.Logger?.Debug("Skipping double-click - message still showing");
+                }
                 // Check cooldown (1.5 seconds)
-                if ((now - _lastInteractionTime).TotalSeconds >= 1.5)
+                else if ((now - _lastInteractionTime).TotalSeconds >= 1.5)
                 {
                     _lastInteractionTime = now;
                     // Trigger context-aware comment or random AI thought
@@ -1039,11 +1167,14 @@ namespace ConditioningControlPanel
             // Fallback defaults
             string reaction = GetRandomBambiPhrase();
             bool isAiAvailable = App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true;
+            bool gotAiResponse = false;
 
             // Get current awareness context
             var awareness = App.WindowAwareness;
             var category = awareness?.CurrentActivity ?? ActivityCategory.Unknown;
             var detectedName = awareness?.CurrentDetectedName ?? "";
+            var serviceName = awareness?.CurrentServiceName ?? "";
+            var pageTitle = awareness?.CurrentPageTitle ?? "";
 
             // Decision: Comment on activity OR random thought?
             // If Unknown/Idle, do random thought.
@@ -1060,11 +1191,12 @@ namespace ConditioningControlPanel
                     {
                         // Show quick thinking indicator
                         if (!_isGiggling) Giggle("Hmm...");
-                        
-                        var aiReaction = await App.Ai.GetAwarenessReactionAsync(detectedName, category.ToString());
+
+                        var aiReaction = await App.Ai.GetAwarenessReactionAsync(detectedName, category.ToString(), serviceName, pageTitle);
                         if (!string.IsNullOrEmpty(aiReaction))
                         {
                             reaction = aiReaction;
+                            gotAiResponse = true;
                         }
                         else
                         {
@@ -1099,6 +1231,7 @@ namespace ConditioningControlPanel
                         if (!string.IsNullOrEmpty(aiReaction))
                         {
                             reaction = aiReaction;
+                            gotAiResponse = true;
                         }
                     }
                     catch (Exception ex)
@@ -1106,6 +1239,12 @@ namespace ConditioningControlPanel
                         App.Logger?.Warning(ex, "Failed to get AI random thought on double-click");
                     }
                 }
+            }
+
+            // Double bounce for AI responses to attract attention
+            if (gotAiResponse)
+            {
+                PlayDoubleBounce();
             }
 
             // Display the result with priority
@@ -1171,6 +1310,7 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Queues a speech bubble to be displayed. Bubbles are shown one at a time.
         /// Blocked while waiting for AI response.
+        /// Plays giggle sound 1 in 5 times for preset phrases.
         /// </summary>
         public void Giggle(string text)
         {
@@ -1181,6 +1321,10 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // Determine if we should play giggle sound (1 in 5 for presets)
+            _presetGiggleCounter++;
+            bool playSound = _presetGiggleCounter % 5 == 0;
+
             // Use BeginInvoke for non-blocking UI update
             Application.Current.Dispatcher.BeginInvoke(() =>
             {
@@ -1190,7 +1334,7 @@ namespace ConditioningControlPanel
                     App.Logger?.Debug("Queued speech: {Text}", text);
                     return;
                 }
-                ShowGiggle(text);
+                ShowGiggle(text, playSound);
             });
         }
 
@@ -1198,6 +1342,7 @@ namespace ConditioningControlPanel
         /// Shows a speech bubble immediately with priority (for AI responses).
         /// Clears any pending queue and interrupts current bubble.
         /// Also clears the AI waiting flag.
+        /// Always plays giggle sound for AI responses.
         /// </summary>
         public void GigglePriority(string text)
         {
@@ -1212,9 +1357,9 @@ namespace ConditioningControlPanel
                 // Stop any current speech timer
                 _speechTimer?.Stop();
 
-                // Show immediately
+                // Show immediately with giggle sound (always for AI/priority)
                 _isGiggling = false;
-                ShowGiggle(text);
+                ShowGiggle(text, playSound: true);
 
                 App.Logger?.Debug("Priority speech (queue cleared): {Text}", text);
             });
@@ -1223,13 +1368,31 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Displays a speech bubble with text.
         /// </summary>
-        private void ShowGiggle(string text)
+        /// <param name="text">The text to display</param>
+        /// <param name="playSound">Whether to play a giggle sound</param>
+        private void ShowGiggle(string text, bool playSound = false)
         {
+            // Skip if muted
+            if (_isMuted)
+            {
+                _isGiggling = false;
+                return;
+            }
+
             _isGiggling = true;
-            TxtSpeech.Text = text;
+
+            // Play giggle sound if requested
+            if (playSound)
+            {
+                PlayGiggleSound();
+            }
+
+            // Format text for bubble shape (shorter first/last lines for 6+ line messages)
+            var formattedText = FormatTextForBubble(text);
+            TxtSpeech.Text = formattedText;
 
             // Adjust bubble size based on text length
-            AdjustBubbleSize(text);
+            AdjustBubbleSize(formattedText);
 
             SpeechBubble.Visibility = Visibility.Visible;
 
@@ -1264,7 +1427,11 @@ namespace ConditioningControlPanel
                     {
                         var nextText = _speechQueue.Dequeue();
                         App.Logger?.Debug("Dequeued speech: {Text}", nextText);
-                        ShowGiggle(nextText);
+
+                        // Queued messages are presets - 1 in 5 chance for sound
+                        _presetGiggleCounter++;
+                        bool playSoundForQueued = _presetGiggleCounter % 5 == 0;
+                        ShowGiggle(nextText, playSoundForQueued);
                     }
                 };
                 breakTimer.Start();
@@ -1358,6 +1525,39 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Formats text to fit the speech bubble.
+        /// Simply returns text as-is - the TextBlock handles wrapping.
+        /// </summary>
+        private string FormatTextForBubble(string text)
+        {
+            // Just return text as-is - TextBlock handles wrapping naturally
+            return text ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Plays a quick double bounce animation to attract attention.
+        /// Used when AI or awareness responses are shown.
+        /// </summary>
+        private void PlayDoubleBounce()
+        {
+            // Create a double bounce animation: up-down-up-down
+            var bounceAnimation = new DoubleAnimationUsingKeyFrames();
+
+            // First bounce (larger)
+            bounceAnimation.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            bounceAnimation.KeyFrames.Add(new LinearDoubleKeyFrame(-15, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(80))));
+            bounceAnimation.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(160))));
+
+            // Second bounce (smaller)
+            bounceAnimation.KeyFrames.Add(new LinearDoubleKeyFrame(-8, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(220))));
+            bounceAnimation.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(280))));
+
+            // Apply to both avatar images (static and animated)
+            AvatarTranslate.BeginAnimation(TranslateTransform.YProperty, bounceAnimation);
+            AvatarAnimatedTranslate.BeginAnimation(TranslateTransform.YProperty, bounceAnimation);
+        }
+
+        /// <summary>
         /// Temporarily brings the tube window to front (above main window)
         /// </summary>
         private void BringToFrontTemporarily()
@@ -1433,6 +1633,138 @@ namespace ConditioningControlPanel
             StartTriggerTimer();
         }
 
+        // ============================================================
+        // RANDOM BUBBLE TIMER - Spawns clickable bubbles near avatar
+        // ============================================================
+
+        private void StartRandomBubbleTimer()
+        {
+            if (App.Settings?.Current?.RandomBubbleEnabled != true)
+            {
+                App.Logger?.Debug("RandomBubble: Not enabled, skipping timer start");
+                return;
+            }
+
+            // Random interval between 3-5 minutes (180-300 seconds)
+            var interval = _random.Next(180, 301);
+            _randomBubbleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(interval) };
+            _randomBubbleTimer.Tick += OnRandomBubbleTick;
+            _randomBubbleTimer.Start();
+
+            App.Logger?.Information("RandomBubble: Started with {Interval}s interval", interval);
+        }
+
+        private void StopRandomBubbleTimer()
+        {
+            _randomBubbleTimer?.Stop();
+            _randomBubbleTimer = null;
+            App.Logger?.Debug("RandomBubble: Timer stopped");
+        }
+
+        /// <summary>
+        /// Restart random bubble timer (call when settings change)
+        /// </summary>
+        public void RestartRandomBubbleTimer()
+        {
+            StopRandomBubbleTimer();
+            StartRandomBubbleTimer();
+        }
+
+        private void OnRandomBubbleTick(object? sender, EventArgs e)
+        {
+            // Re-randomize interval for next tick (3-5 minutes)
+            if (_randomBubbleTimer != null)
+            {
+                var nextInterval = _random.Next(180, 301);
+                _randomBubbleTimer.Interval = TimeSpan.FromSeconds(nextInterval);
+            }
+
+            // Show phrase and spawn bubble
+            SpawnRandomBubble();
+        }
+
+        private void SpawnRandomBubble()
+        {
+            // Pick a random phrase
+            var phrase = RandomBubblePhrases[_random.Next(RandomBubblePhrases.Length)];
+
+            // Show the phrase in speech bubble
+            Giggle(phrase);
+
+            // Spawn a bubble near the avatar after 1 second (speech bubble appears first)
+            Task.Delay(1000).ContinueWith(_ =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    try
+                    {
+                        // Get avatar position in screen coordinates
+                        var avatarPos = AvatarBorder.PointToScreen(new Point(
+                            AvatarBorder.ActualWidth / 2,
+                            AvatarBorder.ActualHeight / 2));
+
+                        // Create and show the bubble
+                        var bubble = new AvatarRandomBubble(avatarPos, _random, OnRandomBubblePopped);
+                        App.Logger?.Debug("RandomBubble: Spawned at ({X}, {Y})", avatarPos.X, avatarPos.Y);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("RandomBubble: Failed to spawn - {Error}", ex.Message);
+                    }
+                });
+            });
+        }
+
+        private void OnRandomBubblePopped()
+        {
+            // Play pop sound (use same sound as bubble service)
+            PlayBubblePopSound();
+
+            // Award XP
+            App.Progression?.AddXP(5);
+
+            // Show reaction
+            Giggle("Good girl! *giggles*");
+        }
+
+        private void PlayBubblePopSound()
+        {
+            try
+            {
+                var soundsPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
+                var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
+                var chosenPop = popFiles[_random.Next(popFiles.Length)];
+                var popPath = System.IO.Path.Combine(soundsPath, chosenPop);
+
+                if (System.IO.File.Exists(popPath))
+                {
+                    var volume = App.Settings?.Current?.BubblesVolume ?? 50;
+                    var normalizedVolume = Math.Max(0.05f, (float)Math.Pow(volume / 100f, 1.5));
+
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            using var audioFile = new NAudio.Wave.AudioFileReader(popPath);
+                            audioFile.Volume = normalizedVolume;
+                            using var outputDevice = new NAudio.Wave.WaveOutEvent();
+                            outputDevice.Init(audioFile);
+                            outputDevice.Play();
+                            while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
+                            {
+                                System.Threading.Thread.Sleep(50);
+                            }
+                        }
+                        catch { }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("RandomBubble: Failed to play pop sound - {Error}", ex.Message);
+            }
+        }
+
         private void OnTriggerTick(object? sender, EventArgs e)
         {
             var triggers = App.Settings?.Current?.CustomTriggers;
@@ -1451,9 +1783,112 @@ namespace ConditioningControlPanel
 
         private void ShowTriggerBubble(string trigger)
         {
-            Giggle(trigger);
-            App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
+            // Use direct dispatcher invoke to ensure audio plays exactly when bubble shows
+            Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                if (_isMuted) return;
+
+                // Show the speech bubble
+                _isGiggling = true;
+                var formattedText = FormatTextForBubble(trigger);
+                TxtSpeech.Text = formattedText;
+                AdjustBubbleSize(formattedText);
+                SpeechBubble.Visibility = Visibility.Visible;
+
+                if (_isAttached)
+                {
+                    BringToFrontTemporarily();
+                }
+
+                // Play matching audio clip RIGHT when bubble appears
+                App.Subliminal?.PlayTriggerAudio(trigger);
+
+                App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
+
+                // Calculate display duration based on text length
+                double baseDuration = 5.0;
+                double perCharDuration = 0.05;
+                double calculatedDuration = baseDuration + (trigger.Length * perCharDuration);
+                double displayDuration = Math.Clamp(calculatedDuration, 5.0, 14.0);
+
+                // Hide after calculated duration
+                _speechTimer?.Stop();
+                _speechTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(displayDuration) };
+                _speechTimer.Tick += (s, e) =>
+                {
+                    _speechTimer.Stop();
+                    SpeechBubble.Visibility = Visibility.Collapsed;
+
+                    // Process queue after 1 second break (same as ShowGiggle)
+                    var breakTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                    breakTimer.Tick += (s_break, e_break) =>
+                    {
+                        ((DispatcherTimer)s_break!).Stop();
+                        _isGiggling = false;
+                        if (_speechQueue.Count > 0)
+                        {
+                            var nextText = _speechQueue.Dequeue();
+                            App.Logger?.Debug("Dequeued speech: {Text}", nextText);
+                            _presetGiggleCounter++;
+                            bool playSoundForQueued = _presetGiggleCounter % 5 == 0;
+                            ShowGiggle(nextText, playSoundForQueued);
+                        }
+                    };
+                    breakTimer.Start();
+                };
+                _speechTimer.Start();
+
+                // Reset idle timer when speaking
+                ResetIdleTimer();
+            });
         }
+
+        /// <summary>
+        /// Greeting phrases when the app starts
+        /// </summary>
+        private static readonly string[] GreetingPhrases = new[]
+        {
+            "Hi Bambi! Ready to get conditioned?~",
+            "*bounces* Yay! You're back!",
+            "Welcome back, bestie!~",
+            "Ooh! Time for some fun~",
+            "Hi cutie! Let's get ditzy!",
+            "*giggles* There you are!~",
+            "Ready to drop, good girl?",
+            "Pink thoughts incoming!~"
+        };
+
+        /// <summary>
+        /// Phrases when the engine stops
+        /// </summary>
+        private static readonly string[] EngineStopPhrases = new[]
+        {
+            "I feel dizzy...",
+            "Aw... Bambi was having fun...",
+            "*blinks* W-what happened?",
+            "Mmmm that was nice~",
+            "Already? But we were vibing!",
+            "My head feels so fuzzy...",
+            "*wobbles* Whoa...",
+            "Can we do that again soon?~",
+            "So floaty right now...",
+            "*dreamy sigh* That was good~"
+        };
+
+        /// <summary>
+        /// Phrases when spawning a random bubble
+        /// </summary>
+        private static readonly string[] RandomBubblePhrases = new[]
+        {
+            "Be a good girl and burst that bubble!",
+            "Oh... here's a bubble for you~",
+            "*Pop* Catch it, Bambi!",
+            "Bubble time! Pop it~",
+            "Look! A pretty bubble!",
+            "*giggles* Pop it quick!",
+            "Ooh, get the bubble!",
+            "Pop it for me, good girl~"
+        };
 
         /// <summary>
         /// Bambi Sleep themed phrases for when AI is disabled
@@ -1547,6 +1982,46 @@ namespace ConditioningControlPanel
             "Being social! Good girls need sessions too~",
             "{0}? Tell them how good empty feels~",
             "*giggles* Chatty! Session time soon?"
+        };
+
+        // Special phrases for Discord
+        private static readonly string[] DiscordPhrases = new[]
+        {
+            "Here to share your Bambi progress?~",
+            "Here to find other Good Girls?~",
+            "*giggles* Discord! Find your bambi sisters~",
+            "Chatting with other bimbos? So fun!",
+            "Share your conditioning progress, bestie!~",
+            "Finding Good Girls to drop with?~"
+        };
+
+        // Special phrases for BambiCloud
+        private static readonly string[] BambiCloudPhrases = new[]
+        {
+            "Good Girl! BambiCloud is perfect for training~",
+            "*bounces* Yes! This is so good for you!",
+            "Such a Good Girl visiting BambiCloud!~",
+            "Perfect choice, babe! Keep conditioning~",
+            "BambiCloud! You're doing so well, Good Girl!",
+            "*giggles* Smart bambi! This is the right place~",
+            "Good Girl! Your training awaits~"
+        };
+
+        /// <summary>
+        /// Phrases when "bambi" is detected in the tab name - congratulate for bimbofication progress
+        /// </summary>
+        private static readonly string[] BambiContentPhrases = new[]
+        {
+            "Good Girl! You're exploring Bambi content~",
+            "*bounces excitedly* Yes! Bambi stuff! So proud of you!",
+            "Such a Good Girl! Keep up the bimbofication~",
+            "Yay! More Bambi! You're doing amazing, bestie!",
+            "Good Girl! Your transformation is going so well~",
+            "*giggles* Bambi content! You're such a dedicated girl!",
+            "Perfect! Every bit of Bambi helps you drop deeper~",
+            "So proud of you! Good Girl for embracing Bambi~",
+            "Yes babe! More Bambi = more bimbo! Good Girl!",
+            "*happy bounces* You're becoming such a good Bambi!"
         };
 
         private static readonly string[] WorkingPhrases = new[]
@@ -1652,6 +2127,33 @@ namespace ConditioningControlPanel
         /// </summary>
         private string GetPhraseForCategory(ActivityCategory category, string detectedName = "")
         {
+            // Check for special services first
+            var lowerName = detectedName?.ToLowerInvariant() ?? "";
+
+            // Discord - special phrases
+            if (lowerName.Contains("discord"))
+            {
+                return DiscordPhrases[_random.Next(DiscordPhrases.Length)];
+            }
+
+            // BambiCloud - positive reinforcement
+            if (lowerName.Contains("bambicloud"))
+            {
+                return BambiCloudPhrases[_random.Next(BambiCloudPhrases.Length)];
+            }
+
+            // Hypnotube - also positive (similar to BambiCloud)
+            if (lowerName.Contains("hypnotube"))
+            {
+                return BambiCloudPhrases[_random.Next(BambiCloudPhrases.Length)];
+            }
+
+            // "Bambi" in tab name (but not bambicloud which is already handled) - congratulate for bimbofication
+            if (lowerName.Contains("bambi") && !lowerName.Contains("bambicloud"))
+            {
+                return BambiContentPhrases[_random.Next(BambiContentPhrases.Length)];
+            }
+
             var phrases = category switch
             {
                 ActivityCategory.Gaming => GamingPhrases,
@@ -1686,16 +2188,39 @@ namespace ConditioningControlPanel
         /// </summary>
         private async void OnActivityChanged(object? sender, ActivityChangedEventArgs e)
         {
+            // Don't trigger if speech bubble is still showing - wait for user to clear it
+            if (SpeechBubble.Visibility == Visibility.Visible)
+                return;
+
             // Check if we're allowed to react to this category
             if (!App.WindowAwareness?.IsCategoryEnabled(e.Category) ?? true)
                 return;
 
-            // Check cooldown
-            if (!App.WindowAwareness?.CanReact() ?? true)
+            // Bypass cooldown for new app/service detection (user opened something new)
+            // Only check cooldown for same-service page changes
+            if (!e.IsNewService && (!App.WindowAwareness?.CanReact() ?? true))
                 return;
 
             // Mark that we're reacting
             App.WindowAwareness?.MarkReaction();
+
+            // 50/50 chance to use just service name vs including page title
+            bool useServiceNameOnly = _random.Next(2) == 0;
+            string displayName;
+            string pageTitle;
+
+            if (useServiceNameOnly || string.IsNullOrEmpty(e.PageTitle))
+            {
+                // Just use service name (e.g., "YouTube", "Reddit")
+                displayName = string.IsNullOrEmpty(e.ServiceName) ? e.DetectedName : e.ServiceName;
+                pageTitle = "";
+            }
+            else
+            {
+                // Use page title with service context (e.g., "Funny Cat Video" on YouTube)
+                displayName = e.DetectedName;
+                pageTitle = e.PageTitle;
+            }
 
             // Try AI first, fall back to preset phrase
             string? reaction = null;
@@ -1705,8 +2230,8 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Pass the detected app/service name and category for contextual AI response
-                    reaction = await App.Ai.GetAwarenessReactionAsync(e.DetectedName, e.Category.ToString());
+                    // Pass the selected name based on 50/50 choice
+                    reaction = await App.Ai.GetAwarenessReactionAsync(displayName, e.Category.ToString(), e.ServiceName, pageTitle);
                     isAiResponse = reaction != null;
                 }
                 catch (Exception ex)
@@ -1715,20 +2240,217 @@ namespace ConditioningControlPanel
                 }
             }
 
-            // Use preset if AI didn't work
-            reaction ??= GetPhraseForCategory(e.Category, e.DetectedName);
+            // Use preset if AI didn't work - use the display name based on 50/50 choice
+            reaction ??= GetPhraseForCategory(e.Category, displayName);
 
-            // AI responses get priority, presets queue normally
+            // AI responses get priority and double bounce, presets queue normally
+            if (isAiResponse)
+            {
+                PlayDoubleBounce();
+                GigglePriority(reaction);
+            }
+            else
+            {
+                Giggle(reaction);
+            }
+
+            App.Logger?.Debug("Awareness reaction for {DisplayName} ({Category}, useServiceOnly={UseService}): {Reaction}",
+                displayName, e.Category, useServiceNameOnly, reaction);
+        }
+
+        /// <summary>
+        /// Handle "still on" activity event - user has been on the same activity for a while
+        /// </summary>
+        private async void OnStillOnActivity(object? sender, ActivityChangedEventArgs e)
+        {
+            // Don't trigger if speech bubble is still showing - wait for user to clear it
+            if (SpeechBubble.Visibility == Visibility.Visible)
+                return;
+
+            // Check if we're allowed to react to this category
+            if (!App.WindowAwareness?.IsCategoryEnabled(e.Category) ?? true)
+                return;
+
+            // Mark that we're reacting
+            App.WindowAwareness?.MarkStillOnReaction();
+
+            // Get duration from the awareness service
+            var duration = App.WindowAwareness?.CurrentActivityDuration ?? TimeSpan.Zero;
+
+            // 50/50 chance to use just service name vs page title
+            bool useServiceNameOnly = _random.Next(2) == 0;
+            string displayName = useServiceNameOnly || string.IsNullOrEmpty(e.PageTitle)
+                ? e.ServiceName
+                : e.PageTitle;
+
+            // Try AI first, fall back to preset phrase
+            string? reaction = null;
+            bool isAiResponse = false;
+
+            if (App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true)
+            {
+                try
+                {
+                    // Use the selected display name based on 50/50 choice
+                    reaction = await App.Ai.GetStillOnReactionAsync(displayName, e.Category.ToString(), duration);
+                    isAiResponse = reaction != null;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to get AI still-on reaction");
+                }
+            }
+
+            // Use preset if AI didn't work - include time in the fallback
+            if (reaction == null)
+            {
+                var minutes = (int)duration.TotalMinutes;
+                var timeText = minutes < 1 ? "a bit" : $"{minutes} min";
+                reaction = $"Still on {displayName}? {timeText} already~ Do your nails instead!";
+            }
+
+            // AI responses get priority
             if (isAiResponse)
                 GigglePriority(reaction);
             else
                 Giggle(reaction);
 
-            App.Logger?.Debug("Awareness reaction for {DetectedName} ({Category}): {Reaction}",
-                e.DetectedName, e.Category, reaction);
+            App.Logger?.Debug("Still-on reaction for {DisplayName} ({Duration}, useServiceOnly={UseService}): {Reaction}",
+                displayName, duration, useServiceNameOnly, reaction);
         }
 
-        private void OnVideoStarted(object? sender, EventArgs e)
+        /// <summary>
+        /// Play a random pop sound when clicking the avatar
+        /// </summary>
+        /// <summary>
+        /// Plays a random giggle sound (giggle1-4.mp3) for AI responses or preset phrases
+        /// </summary>
+        private void PlayGiggleSound()
+        {
+            try
+            {
+                var soundsPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds");
+                var giggleFiles = new[] { "giggle1.MP3", "giggle2.MP3", "giggle3.MP3", "giggle4.MP3" };
+                var chosenGiggle = giggleFiles[_random.Next(giggleFiles.Length)];
+                var gigglePath = System.IO.Path.Combine(soundsPath, chosenGiggle);
+
+                if (System.IO.File.Exists(gigglePath))
+                {
+                    var volume = (App.Settings?.Current?.MasterVolume ?? 50) / 100f;
+                    volume = Math.Min(0.7f, Math.Max(0.1f, volume)); // Cap at 70% to not be too loud
+
+                    // Use NAudio for async playback
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            using var audioFile = new NAudio.Wave.AudioFileReader(gigglePath);
+                            audioFile.Volume = volume;
+                            using var outputDevice = new NAudio.Wave.WaveOutEvent();
+                            outputDevice.Init(audioFile);
+                            outputDevice.Play();
+                            while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
+                            {
+                                System.Threading.Thread.Sleep(50);
+                            }
+                        }
+                        catch { /* Ignore audio errors */ }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to play giggle sound: {Error}", ex.Message);
+            }
+        }
+
+        private void PlayAvatarPopSound()
+        {
+            try
+            {
+                var soundsPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
+                var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
+                var chosenPop = popFiles[_random.Next(popFiles.Length)];
+                var popPath = System.IO.Path.Combine(soundsPath, chosenPop);
+
+                if (System.IO.File.Exists(popPath))
+                {
+                    var volume = (App.Settings?.Current?.MasterVolume ?? 50) / 100f;
+                    volume = Math.Max(0.1f, volume);
+
+                    // Use NAudio for async playback
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            using var audioFile = new NAudio.Wave.AudioFileReader(popPath);
+                            audioFile.Volume = volume;
+                            using var outputDevice = new NAudio.Wave.WaveOutEvent();
+                            outputDevice.Init(audioFile);
+                            outputDevice.Play();
+                            while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
+                            {
+                                System.Threading.Thread.Sleep(50);
+                            }
+                        }
+                        catch { /* Ignore audio errors */ }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to play avatar pop sound: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Triggered when user clicks avatar 50 times within 1 minute - plays audio and shows trigger
+        /// </summary>
+        private void TriggerBambiCumAndCollapse()
+        {
+            App.Logger?.Information("Bambi Cum and Collapse triggered! (50 clicks in 1 minute)");
+
+            // Play the "cum and collapse" audio
+            try
+            {
+                var soundsPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "flashes_audio");
+                var collapseFiles = new[] { "come and coll.mp3", "come and coll (1).mp3", "come and coll (2).mp3" };
+                var chosenFile = collapseFiles[_random.Next(collapseFiles.Length)];
+                var audioPath = System.IO.Path.Combine(soundsPath, chosenFile);
+
+                if (System.IO.File.Exists(audioPath))
+                {
+                    var volume = (App.Settings?.Current?.MasterVolume ?? 50) / 100f;
+                    volume = Math.Max(0.3f, volume); // Ensure audible
+
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            using var audioFile = new NAudio.Wave.AudioFileReader(audioPath);
+                            audioFile.Volume = volume;
+                            using var outputDevice = new NAudio.Wave.WaveOutEvent();
+                            outputDevice.Init(audioFile);
+                            outputDevice.Play();
+                            while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
+                            {
+                                System.Threading.Thread.Sleep(50);
+                            }
+                        }
+                        catch { /* Ignore audio errors */ }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to play Bambi Cum and Collapse audio: {Error}", ex.Message);
+            }
+
+            // Show the trigger message with priority
+            GigglePriority("BAMBI CUM AND COLLAPSE");
+        }
+
+        private void OnVideoAboutToStart(object? sender, EventArgs e)
         {
             Giggle("Ooh! Pretty spir-rals...");
         }
@@ -1750,8 +2472,8 @@ namespace ConditioningControlPanel
         {
             _flashCounter++;
 
-            // Only announce ~1 in 5 flashes to avoid being annoying
-            if (_flashCounter % 5 == 1)
+            // Only announce ~1 in 4 flashes to avoid being annoying
+            if (_flashCounter % 4 == 1)
             {
                 var phrase = FlashPrePhrases[_random.Next(FlashPrePhrases.Length)];
                 Giggle(phrase);
@@ -1790,6 +2512,153 @@ namespace ConditioningControlPanel
             }
         }
 
+        // Phrases for various program feature reactions
+        private static readonly string[] GameFailedPhrases = new[]
+        {
+            "Aww, you missed it~ Try again!",
+            "*giggles* Bimbos don't need to count~",
+            "Oopsie! Numbers are hard~",
+            "That's okay, pretty girls try again~",
+            "Don't think, just pop bubbles~"
+        };
+
+        private static readonly string[] BubbleMissedPhrases = new[]
+        {
+            "Oops! Missed one~",
+            "Pop faster, silly!",
+            "*pouts* Catch the bubbles~",
+            "Focus on the pretty bubbles~"
+        };
+
+        private static readonly string[] FlashClickedPhrases = new[]
+        {
+            "*giggles* You clicked it~",
+            "Good girl, looking at pretties~",
+            "So shiny, had to touch~",
+            "Pretty pictures deserve clicks~",
+            "Can't resist, can you?~"
+        };
+
+        private static readonly string[] LevelUpPhrases = new[]
+        {
+            "LEVEL UP! Good girl!~",
+            "*bounces* You leveled up!",
+            "Yay! Getting so conditioned~",
+            "More levels = more bimbo~",
+            "So proud of you, bestie!~"
+        };
+
+        private static readonly string[] MindWipePhrases = new[]
+        {
+            "Mmmm mind wipe~",
+            "*drools* Thoughts draining...",
+            "Wiping away those pesky thoughts~",
+            "Empty empty empty~",
+            "Bye bye brain cells!",
+            "*giggles* Mind go blank~"
+        };
+
+        private static readonly string[] BrainDrainPhrases = new[]
+        {
+            "Brain drain feels so good~",
+            "*blinks* What was I thinking?",
+            "Drip drip drip goes Bambi's brain~",
+            "Drain it all away!",
+            "So empty and happy~",
+            "*giggles* Brain melting~"
+        };
+
+        // Counters for MindWipe/BrainDrain (not too often)
+        private int _mindWipeCounter = 0;
+        private int _brainDrainCounter = 0;
+
+        private void OnGameFailed(object? sender, EventArgs e)
+        {
+            var phrase = GameFailedPhrases[_random.Next(GameFailedPhrases.Length)];
+            Giggle(phrase);
+        }
+
+        private void OnBubbleMissed()
+        {
+            // Only react occasionally to avoid spam
+            if (_random.Next(3) == 0)
+            {
+                var phrase = BubbleMissedPhrases[_random.Next(BubbleMissedPhrases.Length)];
+                Giggle(phrase);
+            }
+        }
+
+        private void OnFlashClicked(object? sender, EventArgs e)
+        {
+            // React to 1 in 3 flash clicks
+            if (_random.Next(3) == 0)
+            {
+                var phrase = FlashClickedPhrases[_random.Next(FlashClickedPhrases.Length)];
+                Giggle(phrase);
+            }
+        }
+
+        private void OnAchievementUnlocked(object? sender, Achievement achievement)
+        {
+            GigglePriority($"Achievement unlocked: {achievement.Name}! *giggles*");
+        }
+
+        private void OnLevelUp(object? sender, int newLevel)
+        {
+            var phrase = LevelUpPhrases[_random.Next(LevelUpPhrases.Length)];
+            GigglePriority(phrase);
+        }
+
+        /// <summary>
+        /// React to MindWipe audio - not too often (1 in 6)
+        /// </summary>
+        private void OnMindWipeTriggered(object? sender, EventArgs e)
+        {
+            _mindWipeCounter++;
+
+            // Only react ~1 in 6 times to avoid being annoying
+            if (_mindWipeCounter % 6 == 0)
+            {
+                var phrase = MindWipePhrases[_random.Next(MindWipePhrases.Length)];
+                Giggle(phrase);
+            }
+        }
+
+        /// <summary>
+        /// React to BrainDrain audio - not too often (1 in 6)
+        /// </summary>
+        private void OnBrainDrainTriggered(object? sender, EventArgs e)
+        {
+            _brainDrainCounter++;
+
+            // Only react ~1 in 6 times to avoid being annoying
+            if (_brainDrainCounter % 6 == 0)
+            {
+                var phrase = BrainDrainPhrases[_random.Next(BrainDrainPhrases.Length)];
+                Giggle(phrase);
+            }
+        }
+
+        /// <summary>
+        /// Show a greeting when the app starts
+        /// </summary>
+        private void ShowGreeting()
+        {
+            var phrase = GreetingPhrases[_random.Next(GreetingPhrases.Length)];
+            Giggle(phrase);
+            App.Logger?.Information("Avatar greeting: {Phrase}", phrase);
+        }
+
+        /// <summary>
+        /// React when the engine stops
+        /// </summary>
+        private void OnEngineStopped(object? sender, EventArgs e)
+        {
+            var phrase = EngineStopPhrases[_random.Next(EngineStopPhrases.Length)];
+            GigglePriority(phrase);
+            App.Logger?.Debug("Avatar engine stop reaction: {Phrase}", phrase);
+        }
+
         private void ToggleInputPanel()
         {
             _isInputVisible = !_isInputVisible;
@@ -1799,6 +2668,13 @@ namespace ConditioningControlPanel
             {
                 TxtUserInput.Focus();
             }
+        }
+
+        private void ShowInputPanel()
+        {
+            _isInputVisible = true;
+            InputPanel.Visibility = Visibility.Visible;
+            TxtUserInput.Focus();
         }
 
         private void TxtUserInput_KeyDown(object sender, KeyEventArgs e)
@@ -1857,7 +2733,8 @@ namespace ConditioningControlPanel
                     // Get AI response
                     var reply = await App.Ai.GetBambiReplyAsync(input);
 
-                    // Replace thinking phrase with AI response (also clears _isWaitingForAi)
+                    // Double bounce to attract attention, then show AI response
+                    PlayDoubleBounce();
                     GigglePriority(reply);
                 }
                 catch (Exception ex)
@@ -1941,8 +2818,17 @@ namespace ConditioningControlPanel
 
             // Speech bubble position when detached - use left-based margin consistent with AdjustBubbleSizeToText
             // Detached anchor: left=210, bottom=530, so top=530-260=270
-            SpeechBubble.Margin = new Thickness(210, 270, 0, 0);
             SpeechBubble.LayoutTransform = new ScaleTransform(1.21, 1.21);
+
+            // If a bubble is currently visible, recalculate its position for detached mode
+            if (SpeechBubble.Visibility == Visibility.Visible && !string.IsNullOrEmpty(TxtSpeech.Text))
+            {
+                AdjustBubbleSize(TxtSpeech.Text);
+            }
+            else
+            {
+                SpeechBubble.Margin = new Thickness(210, 270, 0, 0);
+            }
 
             // Title box position when detached (120px to the left)
             TitleBox.Margin = new Thickness(0, 0, 416, 193);
@@ -1982,8 +2868,17 @@ namespace ConditioningControlPanel
 
             // Restore speech bubble position when attached
             // Attached anchor: right=770, so left = 770 - width
-            SpeechBubble.Margin = new Thickness(350, 350, 0, 0); // 350 = 770 - 420 (BaseBubbleWidth)
             SpeechBubble.LayoutTransform = null;
+
+            // If a bubble is currently visible, recalculate its position for attached mode
+            if (SpeechBubble.Visibility == Visibility.Visible && !string.IsNullOrEmpty(TxtSpeech.Text))
+            {
+                AdjustBubbleSize(TxtSpeech.Text);
+            }
+            else
+            {
+                SpeechBubble.Margin = new Thickness(350, 350, 0, 0); // 350 = 770 - 420 (BaseBubbleWidth)
+            }
 
             // Restore title box position when attached (matches XAML default)
             TitleBox.Margin = new Thickness(0, 0, 121, 180);
@@ -2213,8 +3108,42 @@ namespace ConditioningControlPanel
                 App.Settings.Save();
                 RestartTriggerTimer();
                 UpdateQuickMenuState();
+
+                // Sync MainWindow UI
+                if (_parentWindow is MainWindow mainWindow)
+                {
+                    mainWindow.SyncTriggerModeUI(!current);
+                }
+
                 Giggle(!current ? "Trigger mode ON~" : "Trigger mode off~");
             }
+        }
+
+        private void MenuItemRandomBubble_Click(object sender, RoutedEventArgs e)
+        {
+            var current = App.Settings?.Current?.RandomBubbleEnabled ?? false;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.RandomBubbleEnabled = !current;
+                App.Settings.Save();
+                RestartRandomBubbleTimer();
+                UpdateQuickMenuState();
+
+                Giggle(!current ? "Random bubbles ON~" : "Random bubbles off~");
+            }
+        }
+
+        private void MenuItemTalkToBambi_Click(object sender, RoutedEventArgs e)
+        {
+            // Check Patreon access (AI chat requires Level 1+)
+            if (App.Patreon?.HasAiAccess != true)
+            {
+                Giggle("Patreon only~ *pouts*");
+                return;
+            }
+
+            // Show input panel for user to type to Bambi
+            ShowInputPanel();
         }
 
         private void MenuItemSlutMode_Click(object sender, RoutedEventArgs e)
@@ -2233,7 +3162,93 @@ namespace ConditioningControlPanel
                 App.Settings.Save();
                 UpdateQuickMenuState();
                 Giggle(!current ? "Slut mode ON~ *drools*" : "Slut mode off~");
+
+                // Sync to MainWindow UI
+                if (_parentWindow is MainWindow mainWindow)
+                {
+                    mainWindow.SyncSlutModeUI(!current);
+                }
             }
+        }
+
+        private void MenuItemMute_Click(object sender, RoutedEventArgs e)
+        {
+            _isMuted = !_isMuted;
+            UpdateQuickMenuState();
+
+            // Hide speech bubble immediately when muting
+            if (_isMuted)
+            {
+                SpeechBubble.Visibility = Visibility.Collapsed;
+            }
+
+            // Sync to MainWindow UI
+            if (_parentWindow is MainWindow mainWindow)
+            {
+                mainWindow.SyncQuickControlsUI(muteAvatar: _isMuted);
+            }
+        }
+
+        private void MenuItemMuteWhispers_Click(object sender, RoutedEventArgs e)
+        {
+            // Toggle SubAudioEnabled setting (mute = disabled)
+            var currentEnabled = App.Settings?.Current?.SubAudioEnabled ?? false;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.SubAudioEnabled = !currentEnabled;
+                App.Settings.Save();
+            }
+
+            UpdateQuickMenuState();
+
+            // Sync to MainWindow UI (Settings tab and Companion tab)
+            if (_parentWindow is MainWindow mainWindow)
+            {
+                mainWindow.SyncWhispersUI(!currentEnabled);
+            }
+        }
+
+        private async void MenuItemPauseBrowser_Click(object sender, RoutedEventArgs e)
+        {
+            _isBrowserPaused = !_isBrowserPaused;
+
+            try
+            {
+                // Access the browser through MainWindow
+                if (_parentWindow is MainWindow mainWindow)
+                {
+                    var webView = mainWindow.GetBrowserWebView();
+                    if (webView?.CoreWebView2 != null)
+                    {
+                        if (_isBrowserPaused)
+                        {
+                            // Mute browser audio using WebView2's IsMuted property
+                            webView.CoreWebView2.IsMuted = true;
+                            // Also try to pause any playing audio/video elements
+                            await webView.CoreWebView2.ExecuteScriptAsync(@"
+                                document.querySelectorAll('audio, video').forEach(el => el.pause());
+                            ");
+                        }
+                        else
+                        {
+                            // Unmute browser and resume
+                            webView.CoreWebView2.IsMuted = false;
+                            await webView.CoreWebView2.ExecuteScriptAsync(@"
+                                document.querySelectorAll('audio, video').forEach(el => el.play());
+                            ");
+                        }
+                    }
+
+                    // Sync to MainWindow UI
+                    mainWindow.SyncQuickControlsUI(pauseBrowser: _isBrowserPaused);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to toggle browser audio: {Error}", ex.Message);
+            }
+
+            UpdateQuickMenuState();
         }
 
         /// <summary>
@@ -2241,6 +3256,20 @@ namespace ConditioningControlPanel
         /// </summary>
         public void UpdateQuickMenuState()
         {
+            // Talk to Bambi (Patreon only)
+            var chatAvailable = App.Patreon?.HasAiAccess == true;
+            MenuItemTalkToBambi.IsEnabled = chatAvailable;
+            if (chatAvailable)
+            {
+                MenuItemTalkToBambi.Header = "💬 Talk to Bambi";
+                MenuItemTalkToBambi.Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)); // Pink
+            }
+            else
+            {
+                MenuItemTalkToBambi.Header = "🔒 Talk to Bambi";
+                MenuItemTalkToBambi.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
+            }
+
             // Engine state (use Flash.IsRunning as proxy)
             var engineRunning = App.Flash?.IsRunning == true;
             MenuItemEngine.Header = engineRunning ? "■ Stop Engine" : "▶ Start Engine";
@@ -2251,7 +3280,12 @@ namespace ConditioningControlPanel
             MenuItemTriggerMode.Header = triggerOn ? "☑ Trigger Mode" : "☐ Trigger Mode";
             MenuItemTriggerMode.Foreground = triggerOn ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
 
-            // Slut mode
+            // Random bubble
+            var randomBubbleOn = App.Settings?.Current?.RandomBubbleEnabled == true;
+            MenuItemRandomBubble.Header = randomBubbleOn ? "☑ Random Bubble" : "☐ Random Bubble";
+            MenuItemRandomBubble.Foreground = randomBubbleOn ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
+
+            // Slut mode (Patreon only)
             var slutOn = App.Settings?.Current?.SlutModeEnabled == true;
             var slutAvailable = App.Patreon?.HasPremiumAccess == true;
             MenuItemSlutMode.Header = slutOn ? "☑ Slut Mode" : "☐ Slut Mode";
@@ -2259,9 +3293,71 @@ namespace ConditioningControlPanel
             MenuItemSlutMode.IsEnabled = slutAvailable;
             if (!slutAvailable)
             {
-                MenuItemSlutMode.Header = "🔒 Slut Mode (Patreon)";
-                MenuItemSlutMode.Foreground = new SolidColorBrush(Colors.Gray);
+                MenuItemSlutMode.Header = "🔒 Slut Mode";
+                MenuItemSlutMode.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
             }
+
+            // Mute avatar
+            MenuItemMute.Header = _isMuted ? "☑ Mute Avatar" : "☐ Mute Avatar";
+            MenuItemMute.Foreground = _isMuted ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Colors.White);
+
+            // Mute whispers (inverted - muted when SubAudioEnabled is false)
+            var whispersMuted = App.Settings?.Current?.SubAudioEnabled != true;
+            MenuItemMuteWhispers.Header = whispersMuted ? "☑ Mute Whispers" : "☐ Mute Whispers";
+            MenuItemMuteWhispers.Foreground = whispersMuted ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Colors.White);
+
+            // Pause browser
+            MenuItemPauseBrowser.Header = _isBrowserPaused ? "▶ Resume Browser" : "⏸ Pause Browser";
+            MenuItemPauseBrowser.Foreground = _isBrowserPaused ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
+        }
+
+        /// <summary>
+        /// Set mute avatar state from MainWindow
+        /// </summary>
+        public void SetMuteAvatar(bool isMuted)
+        {
+            _isMuted = isMuted;
+            if (_isMuted)
+            {
+                SpeechBubble.Visibility = Visibility.Collapsed;
+            }
+            UpdateQuickMenuState();
+        }
+
+        /// <summary>
+        /// Set mute whispers state from MainWindow (toggles SubAudioEnabled)
+        /// </summary>
+        public void SetMuteWhispers(bool isMuted)
+        {
+            // isMuted = true means disable whispers (SubAudioEnabled = false)
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.SubAudioEnabled = !isMuted;
+                App.Settings.Save();
+            }
+            UpdateQuickMenuState();
+        }
+
+        /// <summary>
+        /// Sync slut mode state from MainWindow
+        /// </summary>
+        public void SetSlutMode(bool enabled)
+        {
+            if (App.Settings?.Current != null && App.Patreon?.HasPremiumAccess == true)
+            {
+                App.Settings.Current.SlutModeEnabled = enabled;
+                App.Settings.Save();
+            }
+            UpdateQuickMenuState();
+        }
+
+        /// <summary>
+        /// Set browser paused state from MainWindow (just updates UI, MainWindow handles actual browser control)
+        /// </summary>
+        public void SetBrowserPaused(bool isPaused)
+        {
+            _isBrowserPaused = isPaused;
+            UpdateQuickMenuState();
         }
     }
 }
