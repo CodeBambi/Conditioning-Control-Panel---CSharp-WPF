@@ -129,8 +129,11 @@ namespace ConditioningControlPanel
         private const uint SWP_NOZORDER = 0x0004;
         private const uint GW_HWNDPREV = 3;
         private const int GWL_EXSTYLE = -20;
+        private const int GWL_STYLE = -16;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
         private const int WS_EX_TOPMOST = 0x00000008;
+        private const uint WS_POPUP = 0x80000000;
+        private const uint WS_CAPTION = 0x00C00000;
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
 
@@ -674,23 +677,33 @@ namespace ConditioningControlPanel
                 if (foregroundPid == ourPid)
                     return false;
 
+                // Get the window style - only consider true fullscreen apps (no caption/border)
+                int style = GetWindowLong(foregroundWindow, GWL_STYLE);
+                bool hasCaption = (style & WS_CAPTION) == WS_CAPTION;
+
+                // If the window has a caption (title bar), it's not exclusive fullscreen
+                // This excludes maximized windows and borderless windowed games
+                if (hasCaption)
+                    return false;
+
                 // Get the window rect
                 if (!GetWindowRect(foregroundWindow, out RECT windowRect))
                     return false;
 
-                // Get screen bounds
+                // Get FULL screen bounds (not working area - must cover taskbar too)
                 var screen = System.Windows.Forms.Screen.FromHandle(foregroundWindow);
                 var screenBounds = screen.Bounds;
 
-                // Check if window covers the entire screen (with small tolerance for taskbar etc)
-                int tolerance = 10;
-                bool coversScreen =
+                // For true fullscreen, window must cover the ENTIRE screen including taskbar
+                // Use tight tolerance - exclusive fullscreen should match exactly
+                int tolerance = 5;
+                bool coversFullScreen =
                     windowRect.Left <= screenBounds.Left + tolerance &&
                     windowRect.Top <= screenBounds.Top + tolerance &&
                     windowRect.Right >= screenBounds.Right - tolerance &&
                     windowRect.Bottom >= screenBounds.Bottom - tolerance;
 
-                return coversScreen;
+                return coversFullScreen;
             }
             catch
             {
