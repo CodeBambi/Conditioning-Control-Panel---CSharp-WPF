@@ -737,6 +737,10 @@ namespace ConditioningControlPanel
             AwarenessLocked.Visibility = level2Unlocked ? Visibility.Collapsed : Visibility.Visible;
             AwarenessUnlocked.Visibility = level2Unlocked ? Visibility.Visible : Visibility.Collapsed;
 
+            // Slut Mode lock overlay
+            SlutModeLocked.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
+            ChkSlutMode.IsEnabled = hasPremiumAccess;
+
             // Update connection status
             if (TxtAiStatus != null)
             {

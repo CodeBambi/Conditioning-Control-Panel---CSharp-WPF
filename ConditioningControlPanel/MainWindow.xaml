@@ -2794,16 +2794,16 @@ Bimbo" Foreground="#FF69B4"
                                 </StackPanel>
                             </Border>
 
-                            <!-- LEVEL 2: Window Awareness Feature Box -->
+                            <!-- Window Awareness Feature Box (Patreon) -->
                             <Border Grid.Column="2" Background="#1E1E3A" CornerRadius="8" Padding="15">
                                 <StackPanel>
                                     <!-- Locked State -->
                                     <StackPanel x:Name="AwarenessLocked" Visibility="Collapsed">
                                         <Grid>
                                             <TextBlock Text="Window Awareness" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                            <TextBlock Text="Level 2" Foreground="#666666" HorizontalAlignment="Right" FontSize="12"/>
+                                            <TextBlock Text="🔒 Patreon" Foreground="#9B59B6" HorizontalAlignment="Right" FontSize="12"/>
                                         </Grid>
-                                        <TextBlock Text="Support at Level 2 to unlock smart activity detection"
+                                        <TextBlock Text="Support on Patreon to unlock smart activity detection"
                                                    Foreground="{StaticResource PinkBrush}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                     </StackPanel>
 
