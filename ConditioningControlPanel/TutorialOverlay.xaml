@@ -17,8 +17,8 @@
     </Window.Resources>
 
     <Grid x:Name="RootGrid" MouseLeftButtonDown="RootGrid_MouseLeftButtonDown">
-        <!-- Click blocker - prevents interaction with elements below -->
-        <Rectangle Fill="Transparent" IsHitTestVisible="True"/>
+        <!-- Click blocker - nearly transparent to block clicks through AllowsTransparency window -->
+        <Rectangle Fill="#01000000" IsHitTestVisible="True"/>
         <Canvas x:Name="SpotlightCanvas" Background="Transparent" IsHitTestVisible="False"/>
 
         <Border x:Name="TextPanel"

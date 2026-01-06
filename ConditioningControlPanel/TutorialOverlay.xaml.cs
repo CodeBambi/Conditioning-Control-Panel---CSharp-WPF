@@ -72,7 +72,9 @@ namespace ConditioningControlPanel
             // Show support button on the support step
             BtnSupport.Visibility = step.Id == "support" ? Visibility.Visible : Visibility.Collapsed;
 
-            UpdateSpotlight(step);
+            // Delay spotlight update to allow tab switches to complete rendering
+            Dispatcher.BeginInvoke(new Action(() => UpdateSpotlight(step)),
+                System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         private void UpdateSpotlight(TutorialStep step)
@@ -90,8 +92,37 @@ namespace ConditioningControlPanel
                 if (targetElement != null)
                 {
                     var bounds = GetElementBounds(targetElement);
-                    DrawSpotlightOverlay(bounds);
-                    PositionTextPanel(bounds, step.TextPosition);
+
+                    // If bounds are at origin (0,0), element might not be laid out yet - retry after delay
+                    if (bounds.X == 0 && bounds.Y == 0 && bounds.Width <= 100)
+                    {
+                        var currentStep = step;
+                        var delayTimer = new System.Windows.Threading.DispatcherTimer
+                        {
+                            Interval = TimeSpan.FromMilliseconds(100)
+                        };
+                        delayTimer.Tick += (s, e) =>
+                        {
+                            delayTimer.Stop();
+                            if (_tutorialService.CurrentStep == currentStep)
+                            {
+                                var retryBounds = GetElementBounds(targetElement);
+                                SpotlightCanvas.Children.Clear();
+                                DrawSpotlightOverlay(retryBounds);
+                                PositionTextPanel(retryBounds, currentStep.TextPosition);
+                            }
+                        };
+                        delayTimer.Start();
+
+                        // Draw initial overlay while waiting
+                        DrawFullOverlay();
+                        CenterTextPanel();
+                    }
+                    else
+                    {
+                        DrawSpotlightOverlay(bounds);
+                        PositionTextPanel(bounds, step.TextPosition);
+                    }
                 }
                 else
                 {
