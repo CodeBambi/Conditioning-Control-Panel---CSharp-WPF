@@ -16,7 +16,7 @@
         <!-- Viewbox scales content uniformly to fit any screen size -->
         <Viewbox x:Name="ContentViewbox" Stretch="Uniform" ClipToBounds="False">
             <!-- Design canvas at fixed reference size - will be scaled -->
-            <Grid Width="780" Height="1080" ClipToBounds="False">
+            <Grid Width="980" Height="1080" ClipToBounds="False">
             <!-- Tube frame FIRST (behind) - Z-Index 0 implicit -->
             <Image x:Name="ImgTubeFrame"
                    Source="pack://application:,,,/Resources/tube.png"
@@ -26,15 +26,15 @@
                    IsHitTestVisible="False"/>
 
             <!-- Speech Bubble - Z-Index 10, anchored bottom-left, grows up and right -->
-            <!-- Attached anchor: left=420, bottom=610, so top=610-260=350 -->
+            <!-- Attached anchor: left=350, bottom=610, so top=610-260=350 -->
             <Grid x:Name="SpeechBubble"
                   Panel.ZIndex="10"
                   Visibility="Collapsed"
                   HorizontalAlignment="Left"
                   VerticalAlignment="Top"
                   Opacity="0.65"
-                  Margin="420,350,0,0"
-                  Width="420" Height="260">
+                  Margin="350,350,0,0"
+                  Width="620" Height="260">
 
                 <!-- Bubble background image -->
                 <Image x:Name="ImgSpeechBubble"
@@ -102,7 +102,7 @@
             <Border x:Name="AvatarBorder"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
-                    Margin="5,100,126,205"
+                    Margin="105,100,26,205"
                     Cursor="Hand"
                     MouseLeftButtonDown="ImgAvatar_MouseLeftButtonDown"
                     MouseRightButtonDown="ImgAvatar_MouseRightButtonDown"
@@ -154,7 +154,7 @@
                     Panel.ZIndex="4"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
-                    Margin="0,0,121,180"
+                    Margin="100,0,21,180"
                     Background="#CC1A1A2E"
                     CornerRadius="12"
                     BorderBrush="#FF69B4"
