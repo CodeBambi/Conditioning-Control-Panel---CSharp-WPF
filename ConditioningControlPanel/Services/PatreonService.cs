@@ -427,7 +427,10 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Update state and cache
-                var newTier = subscription.IsActive ? subscription.Tier : PatreonTier.None;
+                // If active but tier is 0, default to Level1 (proxy may not return tier correctly)
+                var newTier = subscription.IsActive
+                    ? (subscription.Tier > PatreonTier.None ? subscription.Tier : PatreonTier.Level1)
+                    : PatreonTier.None;
                 UpdateTier(newTier, subscription.IsActive, subscription.PatronName, subscription.PatronEmail);
 
                 // Cache result for 24 hours
@@ -523,7 +526,10 @@ namespace ConditioningControlPanel.Services
                 var cachedState = _tokenStorage.RetrieveCachedState();
                 if (cachedState != null && !cachedState.IsExpired && _tokenStorage.HasValidTokens())
                 {
-                    CurrentTier = cachedState.Tier;
+                    // If active but tier is 0, default to Level1 (proxy may not return tier correctly)
+                    CurrentTier = cachedState.IsActive && cachedState.Tier == PatreonTier.None
+                        ? PatreonTier.Level1
+                        : cachedState.Tier;
                     IsActivePatron = cachedState.IsActive;
                     PatronName = cachedState.PatronName;
                     PatronEmail = cachedState.PatronEmail;
