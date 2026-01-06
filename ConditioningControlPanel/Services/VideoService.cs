@@ -395,9 +395,10 @@ namespace ConditioningControlPanel.Services
                         (e.Key == Key.F4 && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)))
                         e.Handled = true;
                 };
+                // Don't reactivate if attention targets are active - they need focus for clicks
                 win.Deactivated += (s, e) =>
                 {
-                    if (_videoPlaying && _strictActive)
+                    if (_videoPlaying && _strictActive && !App.Settings.Current.AttentionChecksEnabled)
                     {
                         win.Activate();
                         win.Focus();
