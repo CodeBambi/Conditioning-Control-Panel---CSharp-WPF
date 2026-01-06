@@ -2256,6 +2256,21 @@ Bimbo" Foreground="#FF69B4"
                                         <Slider x:Name="SliderBrainDrainIntensity" Style="{StaticResource PinkSlider}"
                                                 Minimum="0" Maximum="25" Value="10"
                                                 Margin="0,1" ValueChanged="SliderBrainDrainIntensity_Changed"/>
+
+                                        <!-- High Refresh Mode -->
+                                        <Grid Margin="0,10,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Style="{StaticResource SettingLabel}" Text="High Refresh Mode"
+                                                           ToolTip="Increases effect frequency for smoother experience"/>
+                                                <TextBlock Text="⚠ May increase CPU usage" Foreground="#FFA500" FontSize="9" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                            <CheckBox x:Name="ChkBrainDrainHighRefresh" Grid.Column="1" Style="{StaticResource ToggleStyle}"
+                                                      Checked="ChkBrainDrainHighRefresh_Changed" Unchecked="ChkBrainDrainHighRefresh_Changed"/>
+                                        </Grid>
                                     </StackPanel>
                                 </StackPanel>
                             </Grid>

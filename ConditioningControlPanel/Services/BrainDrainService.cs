@@ -37,13 +37,21 @@ namespace ConditioningControlPanel.Services
         
         public BrainDrainService()
         {
-            _timer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(5) 
-            };
+            _timer = new DispatcherTimer();
             _timer.Tick += Timer_Tick;
-            
+
             LoadAudioFiles();
+        }
+
+        private void UpdateTimerInterval()
+        {
+            // High refresh mode: 500ms interval for smoother effect
+            // Normal mode: 5s interval for lower CPU usage
+            var interval = App.Settings.Current.BrainDrainHighRefresh
+                ? TimeSpan.FromMilliseconds(500)
+                : TimeSpan.FromSeconds(5);
+
+            _timer.Interval = interval;
         }
         
         private void LoadAudioFiles()
@@ -104,14 +112,16 @@ namespace ConditioningControlPanel.Services
             }
 
             if (_isRunning) return;
-            
+
             UpdateSettings();
+            UpdateTimerInterval();
             _isRunning = true;
             _cts = new CancellationTokenSource();
-            
+
             _timer.Start();
-            
-            App.Logger?.Information("BrainDrain started at intensity {Intensity}%", _intensity);
+
+            var mode = App.Settings.Current.BrainDrainHighRefresh ? "High Refresh (500ms)" : "Normal (5s)";
+            App.Logger?.Information("BrainDrain started at intensity {Intensity}%, mode: {Mode}", _intensity, mode);
         }
         
         public void Stop()

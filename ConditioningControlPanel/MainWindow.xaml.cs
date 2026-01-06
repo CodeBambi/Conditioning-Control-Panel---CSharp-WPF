@@ -3744,7 +3744,8 @@ namespace ConditioningControlPanel
             // Brain Drain
             ChkBrainDrainEnabled.IsChecked = s.BrainDrainEnabled;
             SliderBrainDrainIntensity.Value = s.BrainDrainIntensity;
-            
+            ChkBrainDrainHighRefresh.IsChecked = s.BrainDrainHighRefresh;
+
             // Bouncing Text Size (add if not already loaded above)
             SliderBouncingTextSize.Value = s.BouncingTextSize;
 
@@ -3886,6 +3887,7 @@ namespace ConditioningControlPanel
             // Brain Drain
             s.BrainDrainEnabled = ChkBrainDrainEnabled.IsChecked ?? false;
             s.BrainDrainIntensity = (int)SliderBrainDrainIntensity.Value;
+            s.BrainDrainHighRefresh = ChkBrainDrainHighRefresh.IsChecked ?? false;
 
             // Scheduler - track if settings changed
             var schedulerWasEnabled = s.SchedulerEnabled;
@@ -4784,6 +4786,24 @@ namespace ConditioningControlPanel
             {
                 App.BrainDrain.UpdateSettings();
             }
+            App.Settings.Save();
+        }
+
+        private void ChkBrainDrainHighRefresh_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isHighRefresh = ChkBrainDrainHighRefresh.IsChecked ?? false;
+            App.Settings.Current.BrainDrainHighRefresh = isHighRefresh;
+
+            // If brain drain is running, restart it to apply new interval
+            if (_isRunning && App.BrainDrain.IsRunning)
+            {
+                App.BrainDrain.Stop();
+                App.BrainDrain.Start();
+            }
+
+            App.Logger?.Information("Brain Drain High Refresh toggled: {Enabled}", isHighRefresh);
             App.Settings.Save();
         }
 

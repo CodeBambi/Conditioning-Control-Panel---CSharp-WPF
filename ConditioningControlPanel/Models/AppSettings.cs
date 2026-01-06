@@ -932,6 +932,17 @@ namespace ConditioningControlPanel.Models
             get => _brainDrainIntensity;
             set { _brainDrainIntensity = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
         }
+
+        private bool _brainDrainHighRefresh = false;
+        /// <summary>
+        /// High refresh rate mode - reduces timer interval from 5s to 500ms for smoother effect.
+        /// May increase CPU usage on some systems.
+        /// </summary>
+        public bool BrainDrainHighRefresh
+        {
+            get => _brainDrainHighRefresh;
+            set { _brainDrainHighRefresh = value; OnPropertyChanged(); }
+        }
         #endregion
 
         #region Avatar Companion
