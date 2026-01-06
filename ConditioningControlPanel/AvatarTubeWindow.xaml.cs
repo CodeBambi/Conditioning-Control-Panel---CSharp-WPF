@@ -2232,7 +2232,11 @@ namespace ConditioningControlPanel
                 {
                     // Pass the selected name based on 50/50 choice
                     reaction = await App.Ai.GetAwarenessReactionAsync(displayName, e.Category.ToString(), e.ServiceName, pageTitle);
-                    isAiResponse = reaction != null;
+                    if (reaction != null)
+                    {
+                        reaction = TruncateToWords(reaction, 30);
+                        isAiResponse = true;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -2293,7 +2297,11 @@ namespace ConditioningControlPanel
                 {
                     // Use the selected display name based on 50/50 choice
                     reaction = await App.Ai.GetStillOnReactionAsync(displayName, e.Category.ToString(), duration);
-                    isAiResponse = reaction != null;
+                    if (reaction != null)
+                    {
+                        reaction = TruncateToWords(reaction, 30);
+                        isAiResponse = true;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -2712,6 +2720,19 @@ namespace ConditioningControlPanel
             return ThinkingPhrases[_random.Next(ThinkingPhrases.Length)];
         }
 
+        /// <summary>
+        /// Truncates text to a maximum number of words, adding "..." if truncated
+        /// </summary>
+        private static string TruncateToWords(string text, int maxWords)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+
+            var words = text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length <= maxWords) return text;
+
+            return string.Join(" ", words.Take(maxWords)) + "...";
+        }
+
         private async Task SendChatMessageAsync()
         {
             var input = TxtUserInput.Text?.Trim();
@@ -2730,8 +2751,9 @@ namespace ConditioningControlPanel
                     // Show quick thinking phrase immediately
                     GigglePriority(GetRandomThinkingPhrase());
 
-                    // Get AI response
+                    // Get AI response and truncate to 30 words max
                     var reply = await App.Ai.GetBambiReplyAsync(input);
+                    reply = TruncateToWords(reply, 30);
 
                     // Double bounce to attract attention, then show AI response
                     PlayDoubleBounce();
