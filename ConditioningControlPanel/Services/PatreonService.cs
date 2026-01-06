@@ -53,6 +53,7 @@ namespace ConditioningControlPanel.Services
             "leuda",
             "pyet",
             "Twinkle The Young Llamacorn",
+            "rdyPreContact",
         };
 
         /// <summary>
