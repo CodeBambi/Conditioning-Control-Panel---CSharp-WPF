@@ -37,6 +37,7 @@ namespace ConditioningControlPanel.Services
             "softembrace9602@gmail.com",
             "scardamagliorosa@gmail.com",
             "fvmg4jvbnk@privaterelay.appleid.com",
+            "Koalegy@proton.me",
         };
 
         // Name whitelist - fallback if proxy doesn't return email
@@ -44,6 +45,7 @@ namespace ConditioningControlPanel.Services
         {
             "Gino Pippo",
             "AnyGirl57",
+            "Koalegy",
         };
 
         /// <summary>
