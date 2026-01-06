@@ -224,7 +224,8 @@ STRICT: Max 12 words. Naughty tease, not servant.";
             // Check Patreon access (tier 1+ or whitelisted)
             if (App.Patreon?.HasAiAccess != true)
             {
-                App.Logger?.Debug("AiService: Patreon Level 1 or whitelist required for AI chat");
+                App.Logger?.Warning("AiService: No AI access - Tier={Tier}, HasAiAccess={HasAi}, HasPremium={HasPremium}",
+                    App.Patreon?.CurrentTier, App.Patreon?.HasAiAccess, App.Patreon?.HasPremiumAccess);
                 return null;
             }
 
@@ -247,7 +248,8 @@ STRICT: Max 12 words. Naughty tease, not servant.";
             var accessToken = App.Patreon?.GetAccessToken();
             if (string.IsNullOrEmpty(accessToken))
             {
-                App.Logger?.Debug("AiService: No Patreon access token available");
+                App.Logger?.Warning("AiService: No Patreon access token available - IsAuthenticated={IsAuth}",
+                    App.Patreon?.IsAuthenticated);
                 return null;
             }
 
