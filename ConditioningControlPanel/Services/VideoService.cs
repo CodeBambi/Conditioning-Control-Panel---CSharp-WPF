@@ -456,11 +456,18 @@ namespace ConditioningControlPanel.Services
                 _spawned++; // Track actually spawned targets
                 App.Logger?.Debug("Spawning attention target: '{Text}' on screen {Screen} ({Spawned}/{Total})", text, screen.DeviceName, _spawned, _total);
 
-                var target = new FloatingText(text, screen, settings.AttentionSize, () =>
+                FloatingText? target = null;
+                target = new FloatingText(text, screen, settings.AttentionSize, () =>
                 {
                     _hits++;
                     App.Progression?.AddXP(10);
                     App.Logger?.Debug("Target hit: {Hits}/{Spawned}", _hits, _spawned);
+
+                    // Remove from targets list immediately on click
+                    lock (_targets)
+                    {
+                        if (target != null) _targets.Remove(target);
+                    }
                 });
 
                 lock (_targets)
@@ -633,20 +640,28 @@ namespace ConditioningControlPanel.Services
 
             lock (_targets)
             {
+                App.Logger?.Debug("CloseAll: Destroying {Count} targets", _targets.Count);
                 foreach (var t in _targets.ToList()) t.Destroy();
                 _targets.Clear();
             }
 
+            App.Logger?.Debug("CloseAll: Closing {Count} windows", _windows.Count);
             foreach (var w in _windows.ToList())
             {
                 try
                 {
                     // Stop any MediaElement
                     if (w.Content is Grid g && g.Children.Count > 0 && g.Children[0] is MediaElement me)
+                    {
                         me.Stop();
+                        me.Source = null; // Release media resources
+                    }
                     w.Close();
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning("CloseAll: Failed to close window - {Error}", ex.Message);
+                }
             }
             _windows.Clear();
         }
@@ -733,12 +748,12 @@ namespace ConditioningControlPanel.Services
             {
                 size = Math.Max(40, size);
 
-                // Use WorkingArea (excludes taskbar)
+                // Use WorkingArea (excludes taskbar) with larger margins to prevent edge spawning
                 var area = screen.WorkingArea;
-                _minX = area.X + 50;
-                _minY = area.Y + 50;
-                _maxX = area.X + area.Width - 50;
-                _maxY = area.Y + area.Height - 50;
+                _minX = area.X + 150;  // Larger margin from edges
+                _minY = area.Y + 150;
+                _maxX = area.X + area.Width - 200;  // Account for target size + margin
+                _maxY = area.Y + area.Height - 150;
 
                 // Create bubbly container with rounded pink background
                 var border = new Border
