@@ -36,6 +36,7 @@ namespace ConditioningControlPanel.Services
         
         private List<double> _spawnTimes = new();
         private int _hits, _total, _spawned, _penalties;
+        private List<Window> _messageWindows = new();  // Track message windows for cleanup
 
         private readonly string _videosPath;
 
@@ -417,7 +418,8 @@ namespace ConditioningControlPanel.Services
 
                 _spawned = 0; // Reset spawned counter
                 var dur = _duration > 0 ? _duration : 60;
-                _total = Math.Max(1, (int)(dur / 30 * App.Settings.Current.AttentionDensity));
+                // Use setting directly as total count (not density)
+                _total = Math.Max(1, App.Settings.Current.AttentionDensity);
                 
                 for (int i = 0; i < _total; i++)
                     _spawnTimes.Add(3 + _random.NextDouble() * Math.Max(1, dur - 6));
@@ -559,9 +561,8 @@ namespace ConditioningControlPanel.Services
         private void ShowMessage(string text, int ms, Action then)
         {
             CloseAll();
-            
+
             var screens = App.Settings.Current.DualMonitorEnabled ? Screen.AllScreens : new[] { Screen.PrimaryScreen! };
-            var msgWindows = new List<Window>();
 
             foreach (var screen in screens)
             {
@@ -590,14 +591,23 @@ namespace ConditioningControlPanel.Services
                 };
                 win.Show();
                 win.WindowState = WindowState.Maximized;
-                msgWindows.Add(win);
+                _messageWindows.Add(win);  // Track for cleanup
             }
 
             Task.Delay(ms).ContinueWith(_ => Application.Current.Dispatcher.BeginInvoke(() =>
             {
-                foreach (var w in msgWindows) try { w.Close(); } catch { }
+                CloseMessageWindows();
                 then();
             }));
+        }
+
+        private void CloseMessageWindows()
+        {
+            foreach (var w in _messageWindows.ToList())
+            {
+                try { w.Close(); } catch { }
+            }
+            _messageWindows.Clear();
         }
 
         #endregion
@@ -645,7 +655,10 @@ namespace ConditioningControlPanel.Services
                 _targets.Clear();
             }
 
-            App.Logger?.Debug("CloseAll: Closing {Count} windows", _windows.Count);
+            App.Logger?.Debug("CloseAll: Closing {Count} video windows, {MsgCount} message windows",
+                _windows.Count, _messageWindows.Count);
+
+            // Close video windows
             foreach (var w in _windows.ToList())
             {
                 try
@@ -660,10 +673,13 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning("CloseAll: Failed to close window - {Error}", ex.Message);
+                    App.Logger?.Warning("CloseAll: Failed to close video window - {Error}", ex.Message);
                 }
             }
             _windows.Clear();
+
+            // Also close any lingering message windows
+            CloseMessageWindows();
         }
 
         private void Cleanup()
@@ -922,6 +938,7 @@ namespace ConditioningControlPanel.Services
 
         public void Destroy()
         {
+            if (_dead) return;  // Already destroyed
             _dead = true;
             _timer.Stop();
             try { _win.Close(); } catch { }
