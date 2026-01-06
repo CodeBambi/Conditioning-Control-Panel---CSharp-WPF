@@ -38,6 +38,9 @@ namespace ConditioningControlPanel.Services
             "scardamagliorosa@gmail.com",
             "fvmg4jvbnk@privaterelay.appleid.com",
             "Koalegy@proton.me",
+            "whimmywhimwhamwhozzle@gmail.com",
+            "medcalfw@gmail.com",
+            "twinkletheyoungllamacorn@gmail.com",
         };
 
         // Name whitelist - fallback if proxy doesn't return email
@@ -46,6 +49,10 @@ namespace ConditioningControlPanel.Services
             "Gino Pippo",
             "AnyGirl57",
             "Koalegy",
+            "hose",
+            "leuda",
+            "pyet",
+            "Twinkle The Young Llamacorn",
         };
 
         /// <summary>
