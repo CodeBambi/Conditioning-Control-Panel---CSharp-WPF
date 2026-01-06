@@ -991,11 +991,29 @@ namespace ConditioningControlPanel
             HideInputPanel();
         }
 
+        // Interaction counter for 1-in-4 logic
+        private int _interactionCount = 0;
+
         /// <summary>
         /// Trigger a comment based on current activity or random thought (Double-click action)
         /// </summary>
         private async Task TriggerActivityCommentAsync()
         {
+            _interactionCount++;
+
+            // 3 out of 4 times, try to show a custom trigger (if available)
+            if (_interactionCount % 4 != 0)
+            {
+                var triggers = App.Settings?.Current?.CustomTriggers;
+                if (triggers != null && triggers.Count > 0)
+                {
+                    var trigger = triggers[_random.Next(triggers.Count)];
+                    GigglePriority(trigger);
+                    return;
+                }
+                // If no triggers are defined, fall back to normal AI/Context logic
+            }
+
             // Fallback defaults
             string reaction = GetRandomBambiPhrase();
             bool isAiAvailable = App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true;
