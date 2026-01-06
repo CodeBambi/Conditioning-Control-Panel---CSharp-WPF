@@ -1306,29 +1306,29 @@ namespace ConditioningControlPanel
             else if (charCount <= 60)
             {
                 // Medium text - taller bubble, keep text big
-                widthMultiplier = 1.1;
+                widthMultiplier = 1.05;
                 heightMultiplier = 1.5;
                 fontSize = 24;
             }
             else if (charCount <= 100)
             {
                 // Long text - taller bubble for more lines, text stays big
-                widthMultiplier = 1.2;
-                heightMultiplier = 1.9;
+                widthMultiplier = 1.1;
+                heightMultiplier = 2.0;
                 fontSize = 24;
             }
             else if (charCount <= 150)
             {
                 // Very long text - much taller for extra lines
-                widthMultiplier = 1.3;
-                heightMultiplier = 2.2;
+                widthMultiplier = 1.15;
+                heightMultiplier = 2.4;
                 fontSize = 22;
             }
             else
             {
                 // Extra long text - tallest bubble, text still readable
-                widthMultiplier = 1.4;
-                heightMultiplier = 2.5;
+                widthMultiplier = 1.15;
+                heightMultiplier = 2.8;
                 fontSize = 20;
             }
 
