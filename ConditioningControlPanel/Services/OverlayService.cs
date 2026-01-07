@@ -1074,17 +1074,15 @@ public class OverlayService : IDisposable
     {
         try
         {
-            double monitorDpi = GetMonitorDpi(screen);
             double primaryDpi = GetPrimaryMonitorDpi();
             double primaryScale = primaryDpi / 96.0;
-            double monitorScale = monitorDpi / 96.0;
 
-            // Position uses primary DPI (WPF virtual coordinates)
-            // Size uses the target monitor's DPI for correct scaling
+            // All WPF coordinates use primary DPI as the reference
+            // This ensures correct sizing on monitors with different DPI
             double left = screen.Bounds.X / primaryScale;
             double top = screen.Bounds.Y / primaryScale;
-            double width = screen.Bounds.Width / monitorScale;
-            double height = screen.Bounds.Height / monitorScale;
+            double width = screen.Bounds.Width / primaryScale;
+            double height = screen.Bounds.Height / primaryScale;
 
             // Scale intensity to blur radius - keep it subtle for performance
             // intensity 0-25 maps to blur radius 0-12.5 (0.5x multiplier)
