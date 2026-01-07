@@ -2032,6 +2032,9 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                // Stop the engine when session stops
+                StopEngine();
+
                 BtnStartSession.Content = "▶ Start Session";
                 BtnStartSession.Click -= BtnStopSession_Click;
                 BtnStartSession.Click += BtnStartSession_Click;
