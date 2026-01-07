@@ -15,6 +15,7 @@ namespace ConditioningControlPanel
         private string _textColor;
         private string _borderColor;
         private bool _showBorder;
+        private bool _floatingText;
         private string _font;
 
         public AttentionTargetEditorDialog()
@@ -28,12 +29,14 @@ namespace ConditioningControlPanel
             _textColor = settings.AttentionTextColor;
             _borderColor = settings.AttentionBorderColor;
             _showBorder = settings.AttentionShowBorder;
+            _floatingText = settings.AttentionFloatingText;
             _font = settings.AttentionFont;
 
             // Initialize UI
             UpdateColorButtons();
+            ChkFloatingText.IsChecked = _floatingText;
             ChkShowBorder.IsChecked = _showBorder;
-            BorderColorRow.Visibility = _showBorder ? Visibility.Visible : Visibility.Collapsed;
+            UpdateRowVisibility();
             SelectFontInCombo(_font);
             UpdatePreview();
         }
@@ -70,6 +73,13 @@ namespace ConditioningControlPanel
             catch { }
         }
 
+        private void UpdateRowVisibility()
+        {
+            // When floating text is enabled, hide background/border options
+            BorderToggleRow.Visibility = _floatingText ? Visibility.Collapsed : Visibility.Visible;
+            BorderColorRow.Visibility = (_showBorder && !_floatingText) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         private void UpdatePreview()
         {
             try
@@ -79,30 +89,41 @@ namespace ConditioningControlPanel
                 var textColor = (Color)ColorConverter.ConvertFromString(_textColor);
                 var borderColor = (Color)ColorConverter.ConvertFromString(_borderColor);
 
-                // Gradient background
-                PreviewBorder.Background = new LinearGradientBrush(color1, color2, 90);
-
-                // Border
-                if (_showBorder)
+                // Background - transparent for floating text mode
+                if (_floatingText)
                 {
-                    PreviewBorder.BorderBrush = new SolidColorBrush(borderColor);
-                    PreviewBorder.BorderThickness = new Thickness(3);
+                    PreviewBorder.Background = Brushes.Transparent;
+                    PreviewBorder.BorderBrush = Brushes.Transparent;
+                    PreviewBorder.BorderThickness = new Thickness(0);
                 }
                 else
                 {
-                    PreviewBorder.BorderBrush = Brushes.Transparent;
-                    PreviewBorder.BorderThickness = new Thickness(0);
+                    // Gradient background
+                    PreviewBorder.Background = new LinearGradientBrush(color1, color2, 90);
+
+                    // Border
+                    if (_showBorder)
+                    {
+                        PreviewBorder.BorderBrush = new SolidColorBrush(borderColor);
+                        PreviewBorder.BorderThickness = new Thickness(3);
+                    }
+                    else
+                    {
+                        PreviewBorder.BorderBrush = Brushes.Transparent;
+                        PreviewBorder.BorderThickness = new Thickness(0);
+                    }
                 }
 
                 // Text
                 PreviewText.Foreground = new SolidColorBrush(textColor);
                 PreviewText.FontFamily = new FontFamily(_font);
 
-                // Text shadow - darker version of primary color
+                // Text shadow - darker version of text color for floating, or primary color otherwise
+                var shadowBase = _floatingText ? textColor : color1;
                 var shadowColor = Color.FromRgb(
-                    (byte)(color1.R * 0.4),
-                    (byte)(color1.G * 0.4),
-                    (byte)(color1.B * 0.4));
+                    (byte)(shadowBase.R * 0.4),
+                    (byte)(shadowBase.G * 0.4),
+                    (byte)(shadowBase.B * 0.4));
                 PreviewTextShadow.Color = shadowColor;
             }
             catch { }
@@ -173,10 +194,17 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void ChkFloatingText_Changed(object sender, RoutedEventArgs e)
+        {
+            _floatingText = ChkFloatingText.IsChecked == true;
+            UpdateRowVisibility();
+            UpdatePreview();
+        }
+
         private void ChkShowBorder_Changed(object sender, RoutedEventArgs e)
         {
             _showBorder = ChkShowBorder.IsChecked == true;
-            BorderColorRow.Visibility = _showBorder ? Visibility.Visible : Visibility.Collapsed;
+            UpdateRowVisibility();
             UpdatePreview();
         }
 
@@ -197,6 +225,7 @@ namespace ConditioningControlPanel
             _color2 = "#8E44AD";
             _textColor = "#FFFFFF";
             _showBorder = false;
+            _floatingText = false;
             _font = "Segoe UI";
             ApplyPreset();
         }
@@ -207,6 +236,7 @@ namespace ConditioningControlPanel
             _color2 = "#FF3296";
             _textColor = "#FFFFFF";
             _showBorder = true;
+            _floatingText = false;
             _borderColor = "#FFFFFF";
             _font = "Comic Sans MS";
             ApplyPreset();
@@ -218,6 +248,7 @@ namespace ConditioningControlPanel
             _color2 = "#27AE60";
             _textColor = "#FFFFFF";
             _showBorder = false;
+            _floatingText = false;
             _font = "Impact";
             ApplyPreset();
         }
@@ -228,14 +259,16 @@ namespace ConditioningControlPanel
             _color2 = "#2980B9";
             _textColor = "#FFFFFF";
             _showBorder = false;
+            _floatingText = false;
             _font = "Arial Black";
             ApplyPreset();
         }
 
         private void ApplyPreset()
         {
+            ChkFloatingText.IsChecked = _floatingText;
             ChkShowBorder.IsChecked = _showBorder;
-            BorderColorRow.Visibility = _showBorder ? Visibility.Visible : Visibility.Collapsed;
+            UpdateRowVisibility();
             SelectFontInCombo(_font);
             UpdateColorButtons();
             UpdatePreview();
@@ -252,6 +285,7 @@ namespace ConditioningControlPanel
             var oldText = settings.AttentionTextColor;
             var oldBorder = settings.AttentionBorderColor;
             var oldShowBorder = settings.AttentionShowBorder;
+            var oldFloating = settings.AttentionFloatingText;
             var oldFont = settings.AttentionFont;
 
             try
@@ -262,11 +296,12 @@ namespace ConditioningControlPanel
                 settings.AttentionTextColor = _textColor;
                 settings.AttentionBorderColor = _borderColor;
                 settings.AttentionShowBorder = _showBorder;
+                settings.AttentionFloatingText = _floatingText;
                 settings.AttentionFont = _font;
 
                 // Get a random text from the attention pool
                 var pool = settings.AttentionPool;
-                string text = "CLICK ME";
+                string text = "BAMBI";
                 foreach (var kvp in pool)
                 {
                     if (kvp.Value)
@@ -295,6 +330,7 @@ namespace ConditioningControlPanel
                 settings.AttentionTextColor = oldText;
                 settings.AttentionBorderColor = oldBorder;
                 settings.AttentionShowBorder = oldShowBorder;
+                settings.AttentionFloatingText = oldFloating;
                 settings.AttentionFont = oldFont;
             }
         }
@@ -314,6 +350,7 @@ namespace ConditioningControlPanel
             settings.AttentionTextColor = _textColor;
             settings.AttentionBorderColor = _borderColor;
             settings.AttentionShowBorder = _showBorder;
+            settings.AttentionFloatingText = _floatingText;
             settings.AttentionFont = _font;
 
             DialogResult = true;

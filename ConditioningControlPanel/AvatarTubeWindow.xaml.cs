@@ -331,9 +331,7 @@ namespace ConditioningControlPanel
         /// <returns>Avatar set number (1-5)</returns>
         public static int GetAvatarSetForLevel(int level)
         {
-            // Avatar Set 5: Level 100+
-            if (level >= 100) return 5;
-            // Avatar Set 4: Level 50-99
+            // Avatar Set 4: Level 50+
             if (level >= 50) return 4;
             // Avatar Set 3: Level 35-49
             if (level >= 35) return 3;

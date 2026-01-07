@@ -4440,8 +4440,8 @@ namespace ConditioningControlPanel
             
             var flashFreq = (int)SliderPerMin.Value;
             
-            // If flashes > 30, force audio OFF and disable checkbox
-            if (flashFreq > 30)
+            // If flashes > 60, force audio OFF and disable checkbox
+            if (flashFreq > 60)
             {
                 ChkFlashAudio.IsChecked = false;
                 ChkFlashAudio.IsEnabled = false;
@@ -4449,12 +4449,12 @@ namespace ConditioningControlPanel
                 SliderFlashDuration.IsEnabled = true;
                 SliderFlashDuration.Opacity = 1.0;
                 TxtAudioWarning.Visibility = Visibility.Visible;
-                TxtAudioWarning.Text = "⚠ Audio off >30/h";
+                TxtAudioWarning.Text = "⚠ Audio off >60/h";
             }
             else
             {
                 ChkFlashAudio.IsEnabled = true;
-                TxtAudioWarning.Text = "⚠ Max 30/h";
+                TxtAudioWarning.Text = "⚠ Max 60/h";
                 TxtAudioWarning.Visibility = (ChkFlashAudio.IsChecked ?? true) ? Visibility.Collapsed : Visibility.Visible;
             }
         }

@@ -814,19 +814,24 @@ namespace ConditioningControlPanel.Services
                     borderColor = Colors.White;
                 }
 
+                // Check if floating text mode (no background)
+                var isFloating = settings.AttentionFloatingText;
+
                 // Create container with customizable styling
                 var border = new Border
                 {
-                    Background = new LinearGradientBrush(color1, color2, 90),
-                    CornerRadius = new CornerRadius(20),
-                    BorderBrush = settings.AttentionShowBorder
+                    Background = isFloating
+                        ? Brushes.Transparent
+                        : new LinearGradientBrush(color1, color2, 90),
+                    CornerRadius = isFloating ? new CornerRadius(0) : new CornerRadius(20),
+                    BorderBrush = (settings.AttentionShowBorder && !isFloating)
                         ? new SolidColorBrush(borderColor)
                         : Brushes.Transparent,
-                    BorderThickness = settings.AttentionShowBorder
+                    BorderThickness = (settings.AttentionShowBorder && !isFloating)
                         ? new Thickness(3)
                         : new Thickness(0),
-                    Padding = new Thickness(20, 10, 20, 10),
-                    Effect = new System.Windows.Media.Effects.DropShadowEffect
+                    Padding = isFloating ? new Thickness(0) : new Thickness(20, 10, 20, 10),
+                    Effect = isFloating ? null : new System.Windows.Media.Effects.DropShadowEffect
                     {
                         Color = Colors.Black,
                         BlurRadius = 15,
@@ -836,11 +841,12 @@ namespace ConditioningControlPanel.Services
                     Cursor = System.Windows.Input.Cursors.Hand
                 };
 
-                // Text shadow color - darker version of primary color
+                // Text shadow color - darker version of text color for floating, or primary color otherwise
+                var shadowBase = isFloating ? textColor : color1;
                 var shadowColor = Color.FromRgb(
-                    (byte)(color1.R * 0.4),
-                    (byte)(color1.G * 0.4),
-                    (byte)(color1.B * 0.4));
+                    (byte)(shadowBase.R * 0.4),
+                    (byte)(shadowBase.G * 0.4),
+                    (byte)(shadowBase.B * 0.4));
 
                 // Text with customizable font and colors
                 var textBlock = new TextBlock

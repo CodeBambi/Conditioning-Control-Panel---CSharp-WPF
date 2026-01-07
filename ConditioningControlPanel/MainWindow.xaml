@@ -810,7 +810,7 @@ Bimbo" Foreground="#FF69B4"
                             
                             <!-- Link to Audio -->
                             <Border Background="#3D2D4D" CornerRadius="5" Padding="8,6" Margin="0,5,0,0"
-                                    ToolTip="When enabled, flash duration matches audio length.&#x0a;Disable to use manual duration slider.&#x0a;Audio disabled automatically above 30 flashes/hour.">
+                                    ToolTip="When enabled, flash duration matches audio length.&#x0a;Disable to use manual duration slider.&#x0a;Audio disabled automatically above 60 flashes/hour.">
                                 <Grid>
                                     <CheckBox x:Name="ChkFlashAudio" IsChecked="True" Checked="ChkFlashAudio_Changed" Unchecked="ChkFlashAudio_Changed">
                                         <TextBlock Text="📊 Link to Audio Trigger" FontSize="12" FontWeight="SemiBold"/>

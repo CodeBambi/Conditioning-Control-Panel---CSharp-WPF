@@ -264,6 +264,13 @@ namespace ConditioningControlPanel.Models
             set { _attentionFont = value; OnPropertyChanged(); }
         }
 
+        private bool _attentionFloatingText = false; // No background, just text
+        public bool AttentionFloatingText
+        {
+            get => _attentionFloatingText;
+            set { _attentionFloatingText = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Audio

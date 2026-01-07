@@ -28,7 +28,17 @@
       "Bash(vercel logs:*)",
       "Bash(dir \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\Conditioning Control Panel v4.1.zip\")",
       "Bash(du -sh:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(dir /s /b \"C:\\\\Projects\")",
+      "Bash(dir \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\ConditioningControlPanel\\\\bin\\\\Release\\\\net8.0-windows\")",
+      "Bash(dir:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\ConditioningControlPanel\\\\Resources\\\\split_avatar.ps1\")",
+      "Bash(csc:*)",
+      "Bash(SplitImage.exe)",
+      "Bash(dotnet --list-sdks:*)",
+      "Bash(dotnet new:*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet run)"
     ]
   }
 }

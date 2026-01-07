@@ -114,7 +114,7 @@
                     <Border.Effect>
                         <DropShadowEffect Color="Black" BlurRadius="15" ShadowDepth="5" Opacity="0.6"/>
                     </Border.Effect>
-                    <TextBlock x:Name="PreviewText" Text="CLICK ME"
+                    <TextBlock x:Name="PreviewText" Text="BAMBI"
                                FontSize="40" FontWeight="Bold"
                                HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock.Effect>
@@ -184,8 +184,21 @@
                                    VerticalAlignment="Center" Margin="10,0,0,0" FontSize="11"/>
                     </Grid>
 
-                    <!-- Border Toggle -->
+                    <!-- Floating Text Toggle -->
                     <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Floating Text" Foreground="White" VerticalAlignment="Center"
+                                   ToolTip="Remove background - just show text (transparent holes visible)"/>
+                        <CheckBox x:Name="ChkFloatingText" Grid.Column="1" VerticalAlignment="Center"
+                                  Checked="ChkFloatingText_Changed" Unchecked="ChkFloatingText_Changed"/>
+                    </Grid>
+
+                    <!-- Border Toggle -->
+                    <Grid x:Name="BorderToggleRow" Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="120"/>
                             <ColumnDefinition Width="Auto"/>
