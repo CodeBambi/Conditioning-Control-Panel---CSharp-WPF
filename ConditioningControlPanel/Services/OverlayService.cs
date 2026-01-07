@@ -340,17 +340,15 @@ public class OverlayService : IDisposable
     {
         try
         {
-            double monitorDpi = GetMonitorDpi(screen);
             double primaryDpi = GetPrimaryMonitorDpi();
             double primaryScale = primaryDpi / 96.0;
-            double monitorScale = monitorDpi / 96.0;
+            double monitorDpi = GetMonitorDpi(screen);
 
-            // Position uses primary DPI (WPF virtual coordinates)
-            // Size uses the target monitor's DPI for correct scaling
+            // All WPF coordinates use primary DPI as the reference
             double left = screen.Bounds.X / primaryScale;
             double top = screen.Bounds.Y / primaryScale;
-            double width = screen.Bounds.Width / monitorScale;
-            double height = screen.Bounds.Height / monitorScale;
+            double width = screen.Bounds.Width / primaryScale;
+            double height = screen.Bounds.Height / primaryScale;
 
             // Linear opacity (no exponential curve)
             var actualOpacity = opacity / 100.0;
@@ -519,17 +517,14 @@ public class OverlayService : IDisposable
     {
         try
         {
-            double monitorDpi = GetMonitorDpi(screen);
             double primaryDpi = GetPrimaryMonitorDpi();
             double primaryScale = primaryDpi / 96.0;
-            double monitorScale = monitorDpi / 96.0;
 
-            // Position uses primary DPI (WPF virtual coordinates)
-            // Size uses the target monitor's DPI for correct scaling
+            // All WPF coordinates use primary DPI as the reference
             double left = screen.Bounds.X / primaryScale;
             double top = screen.Bounds.Y / primaryScale;
-            double width = screen.Bounds.Width / monitorScale;
-            double height = screen.Bounds.Height / monitorScale;
+            double width = screen.Bounds.Width / primaryScale;
+            double height = screen.Bounds.Height / primaryScale;
 
             // Very subtle opacity - 90% reduction
             var actualOpacity = (opacity / 100.0) * 0.1;
