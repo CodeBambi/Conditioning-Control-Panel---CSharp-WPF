@@ -342,12 +342,15 @@ public class OverlayService : IDisposable
         {
             double monitorDpi = GetMonitorDpi(screen);
             double primaryDpi = GetPrimaryMonitorDpi();
-            double scale = primaryDpi / 96.0;
+            double primaryScale = primaryDpi / 96.0;
+            double monitorScale = monitorDpi / 96.0;
 
-            double left = screen.Bounds.X / scale;
-            double top = screen.Bounds.Y / scale;
-            double width = screen.Bounds.Width / scale;
-            double height = screen.Bounds.Height / scale;
+            // Position uses primary DPI (WPF virtual coordinates)
+            // Size uses the target monitor's DPI for correct scaling
+            double left = screen.Bounds.X / primaryScale;
+            double top = screen.Bounds.Y / primaryScale;
+            double width = screen.Bounds.Width / monitorScale;
+            double height = screen.Bounds.Height / monitorScale;
 
             // Linear opacity (no exponential curve)
             var actualOpacity = opacity / 100.0;
@@ -518,12 +521,15 @@ public class OverlayService : IDisposable
         {
             double monitorDpi = GetMonitorDpi(screen);
             double primaryDpi = GetPrimaryMonitorDpi();
-            double scale = primaryDpi / 96.0;
+            double primaryScale = primaryDpi / 96.0;
+            double monitorScale = monitorDpi / 96.0;
 
-            double left = screen.Bounds.X / scale;
-            double top = screen.Bounds.Y / scale;
-            double width = screen.Bounds.Width / scale;
-            double height = screen.Bounds.Height / scale;
+            // Position uses primary DPI (WPF virtual coordinates)
+            // Size uses the target monitor's DPI for correct scaling
+            double left = screen.Bounds.X / primaryScale;
+            double top = screen.Bounds.Y / primaryScale;
+            double width = screen.Bounds.Width / monitorScale;
+            double height = screen.Bounds.Height / monitorScale;
 
             // Very subtle opacity - 90% reduction
             var actualOpacity = (opacity / 100.0) * 0.1;
@@ -1068,13 +1074,17 @@ public class OverlayService : IDisposable
     {
         try
         {
+            double monitorDpi = GetMonitorDpi(screen);
             double primaryDpi = GetPrimaryMonitorDpi();
-            double scale = primaryDpi / 96.0;
+            double primaryScale = primaryDpi / 96.0;
+            double monitorScale = monitorDpi / 96.0;
 
-            double left = screen.Bounds.X / scale;
-            double top = screen.Bounds.Y / scale;
-            double width = screen.Bounds.Width / scale;
-            double height = screen.Bounds.Height / scale;
+            // Position uses primary DPI (WPF virtual coordinates)
+            // Size uses the target monitor's DPI for correct scaling
+            double left = screen.Bounds.X / primaryScale;
+            double top = screen.Bounds.Y / primaryScale;
+            double width = screen.Bounds.Width / monitorScale;
+            double height = screen.Bounds.Height / monitorScale;
 
             // Scale intensity to blur radius - keep it subtle for performance
             // intensity 0-25 maps to blur radius 0-12.5 (0.5x multiplier)

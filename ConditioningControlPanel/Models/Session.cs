@@ -454,11 +454,11 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                 MindWipeBaseMultiplier = 2, // Medium start (2 per 5min block)
                 MindWipeVolume = 25,
 
-                // Brain Drain - Last 10 minutes, ramps from 1% to 10%
+                // Brain Drain - Last 10 minutes, ramps from 5% (super low) to 25% (medium)
                 BrainDrainEnabled = true,
                 BrainDrainStartMinute = 50, // Start at 50 min (last 10 min of 60)
-                BrainDrainStartIntensity = 1,
-                BrainDrainEndIntensity = 10,
+                BrainDrainStartIntensity = 5,
+                BrainDrainEndIntensity = 25,
 
                 // Bubbles (ramping)
                 BubblesEnabled = true,

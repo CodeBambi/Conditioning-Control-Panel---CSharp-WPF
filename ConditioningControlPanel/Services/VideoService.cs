@@ -567,10 +567,10 @@ namespace ConditioningControlPanel.Services
                 else
                     ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😜" : "DUMB BAMBI!\nTRY AGAIN", 2000, () =>
                     {
-                        CloseAll();
+                        // ShowMessage already set _videoPlaying = false and called CloseAll()
+                        // Reset attention tracking for retry
                         _hits = 0;
                         _spawnTimes.Clear();
-                        _videoPlaying = false;
                         PlayVideo(_retryPath!, _strictActive);
                     });
                 return;
@@ -581,6 +581,9 @@ namespace ConditioningControlPanel.Services
 
         private void ShowMessage(string text, int ms, Action then)
         {
+            // CRITICAL: Set _videoPlaying to false BEFORE CloseAll() so strict mode
+            // handlers don't cancel window closing (they check _videoPlaying in Closing event)
+            _videoPlaying = false;
             CloseAll();
 
             var screens = App.Settings.Current.DualMonitorEnabled ? Screen.AllScreens : new[] { Screen.PrimaryScreen! };
@@ -769,7 +772,7 @@ namespace ConditioningControlPanel.Services
     }
 
     /// <summary>
-    /// Bouncing bubbly text target - round, friendly, and highly visible
+    /// Bouncing text target - customizable via settings
     /// </summary>
     internal class FloatingText
     {
@@ -792,16 +795,36 @@ namespace ConditioningControlPanel.Services
                 _maxX = area.X + area.Width - 200;  // Account for target size + margin
                 _maxY = area.Y + area.Height - 150;
 
-                // Create bubbly container with rounded pink background
+                // Load style settings
+                var settings = App.Settings.Current;
+                Color color1, color2, textColor, borderColor;
+                try
+                {
+                    color1 = (Color)ColorConverter.ConvertFromString(settings.AttentionColor1);
+                    color2 = (Color)ColorConverter.ConvertFromString(settings.AttentionColor2);
+                    textColor = (Color)ColorConverter.ConvertFromString(settings.AttentionTextColor);
+                    borderColor = (Color)ColorConverter.ConvertFromString(settings.AttentionBorderColor);
+                }
+                catch
+                {
+                    // Fallback to purple classic if colors invalid
+                    color1 = Color.FromRgb(155, 89, 182);
+                    color2 = Color.FromRgb(142, 68, 173);
+                    textColor = Colors.White;
+                    borderColor = Colors.White;
+                }
+
+                // Create container with customizable styling
                 var border = new Border
                 {
-                    Background = new LinearGradientBrush(
-                        Color.FromRgb(255, 100, 200),  // Light pink
-                        Color.FromRgb(255, 50, 150),   // Darker pink
-                        90),
-                    CornerRadius = new CornerRadius(25),
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(255, 255, 255)),
-                    BorderThickness = new Thickness(4),
+                    Background = new LinearGradientBrush(color1, color2, 90),
+                    CornerRadius = new CornerRadius(20),
+                    BorderBrush = settings.AttentionShowBorder
+                        ? new SolidColorBrush(borderColor)
+                        : Brushes.Transparent,
+                    BorderThickness = settings.AttentionShowBorder
+                        ? new Thickness(3)
+                        : new Thickness(0),
                     Padding = new Thickness(20, 10, 20, 10),
                     Effect = new System.Windows.Media.Effects.DropShadowEffect
                     {
@@ -813,19 +836,25 @@ namespace ConditioningControlPanel.Services
                     Cursor = System.Windows.Input.Cursors.Hand
                 };
 
-                // Bubbly text with white color and rounded font
+                // Text shadow color - darker version of primary color
+                var shadowColor = Color.FromRgb(
+                    (byte)(color1.R * 0.4),
+                    (byte)(color1.G * 0.4),
+                    (byte)(color1.B * 0.4));
+
+                // Text with customizable font and colors
                 var textBlock = new TextBlock
                 {
                     Text = text,
-                    FontFamily = new FontFamily("Comic Sans MS, Segoe UI, Arial Rounded MT Bold"),
+                    FontFamily = new FontFamily($"{settings.AttentionFont}, Segoe UI, Arial"),
                     FontSize = size,
                     FontWeight = FontWeights.Bold,
-                    Foreground = Brushes.White,
+                    Foreground = new SolidColorBrush(textColor),
                     HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
                     Effect = new System.Windows.Media.Effects.DropShadowEffect
                     {
-                        Color = Color.FromRgb(150, 0, 100),
+                        Color = shadowColor,
                         BlurRadius = 3,
                         ShadowDepth = 2,
                         Opacity = 0.8

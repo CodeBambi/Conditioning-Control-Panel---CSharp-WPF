@@ -28,7 +28,11 @@ namespace ConditioningControlPanel.Services
         // State
         private Session? _currentSession;
         private bool _isRunning;
+        private bool _isPaused;
+        private int _pauseCount;
+        private TimeSpan _pausedElapsedTime; // Time accumulated before pause
         private DateTime _startTime;
+        private DateTime _pauseStartTime;
         private DispatcherTimer? _mainTimer;
         private DispatcherTimer? _phaseTimer;
         private int _currentPhaseIndex;
@@ -65,13 +69,24 @@ namespace ConditioningControlPanel.Services
         private readonly MainWindow _mainWindow;
         
         public bool IsRunning => _isRunning;
+        public bool IsPaused => _isPaused;
+        public int PauseCount => _pauseCount;
+        public int XPPenalty => _pauseCount * 100; // 100 XP per pause
         public Session? CurrentSession => _currentSession;
-        public TimeSpan ElapsedTime => _isRunning ? DateTime.Now - _startTime : TimeSpan.Zero;
-        public TimeSpan RemainingTime => _currentSession != null 
-            ? TimeSpan.FromMinutes(_currentSession.DurationMinutes) - ElapsedTime 
+        public TimeSpan ElapsedTime
+        {
+            get
+            {
+                if (!_isRunning) return TimeSpan.Zero;
+                if (_isPaused) return _pausedElapsedTime;
+                return _pausedElapsedTime + (DateTime.Now - _startTime);
+            }
+        }
+        public TimeSpan RemainingTime => _currentSession != null
+            ? TimeSpan.FromMinutes(_currentSession.DurationMinutes) - ElapsedTime
             : TimeSpan.Zero;
-        public double ProgressPercent => _currentSession != null 
-            ? Math.Min(100, (ElapsedTime.TotalMinutes / _currentSession.DurationMinutes) * 100) 
+        public double ProgressPercent => _currentSession != null
+            ? Math.Min(100, (ElapsedTime.TotalMinutes / _currentSession.DurationMinutes) * 100)
             : 0;
         
         public SessionEngine(MainWindow mainWindow)
@@ -91,6 +106,9 @@ namespace ConditioningControlPanel.Services
             
             _currentSession = session;
             _isRunning = true;
+            _isPaused = false;
+            _pauseCount = 0;
+            _pausedElapsedTime = TimeSpan.Zero;
             _startTime = DateTime.Now;
             _currentPhaseIndex = 0;
             _cancellationToken = new CancellationTokenSource();
@@ -191,14 +209,18 @@ namespace ConditioningControlPanel.Services
             
             if (completed && _currentSession != null)
             {
+                // Calculate XP with pause penalty (100 XP per pause)
+                int finalXP = Math.Max(0, _currentSession.BonusXP - XPPenalty);
+
                 SessionCompleted?.Invoke(this, new SessionCompletedEventArgs(
                     _currentSession,
                     ElapsedTime,
-                    _currentSession.BonusXP
+                    finalXP,
+                    _pauseCount
                 ));
-                
-                App.Logger?.Information("Session completed: {Name}, XP: {XP}", 
-                    _currentSession.Name, _currentSession.BonusXP);
+
+                App.Logger?.Information("Session completed: {Name}, XP: {XP} (paused {PauseCount}x, penalty: -{Penalty})",
+                    _currentSession.Name, finalXP, _pauseCount, XPPenalty);
                 
                 // Track achievement for session completion
                 // Use App.Settings.Current for panic/strict lock as these are app-level settings
@@ -220,10 +242,71 @@ namespace ConditioningControlPanel.Services
             
             _currentSession = null;
         }
-        
+
+        /// <summary>
+        /// Pause the current session. Each pause costs 100 XP.
+        /// </summary>
+        public void PauseSession()
+        {
+            if (!_isRunning || _isPaused || _currentSession == null) return;
+
+            _isPaused = true;
+            _pauseCount++;
+            _pausedElapsedTime = ElapsedTime; // Store accumulated time
+            _pauseStartTime = DateTime.Now;
+
+            // Stop timers but keep session state
+            _mainTimer?.Stop();
+            _phaseTimer?.Stop();
+
+            // Pause services by stopping them
+            App.Flash?.Stop();
+            App.Subliminal?.Stop();
+            App.Bubbles?.Stop();
+            App.LockCard?.Stop();
+            App.BubbleCount?.Stop();
+            App.BouncingText?.Stop();
+            App.MindWipe?.Stop();
+            App.BrainDrain?.Stop();
+            App.Overlay?.Stop(); // Stops all overlays
+
+            App.Logger?.Information("Session paused (pause #{Count}, -100 XP penalty)", _pauseCount);
+        }
+
+        /// <summary>
+        /// Resume a paused session
+        /// </summary>
+        public void ResumeSession()
+        {
+            if (!_isRunning || !_isPaused || _currentSession == null) return;
+
+            _isPaused = false;
+            _startTime = DateTime.Now; // Reset start time, elapsed time is tracked in _pausedElapsedTime
+
+            // Restart timers
+            _mainTimer?.Start();
+            _phaseTimer?.Start();
+
+            // Re-apply current session settings to restart services
+            var settings = _currentSession.Settings;
+            if (settings.FlashEnabled) App.Flash?.Start();
+            if (settings.SubliminalEnabled) App.Subliminal?.Start();
+            if (settings.BubblesEnabled && App.Settings.Current.PlayerLevel >= 20) App.Bubbles?.Start();
+            if (settings.LockCardEnabled && App.Settings.Current.PlayerLevel >= 35) App.LockCard?.Start();
+            if (settings.BubbleCountEnabled && App.Settings.Current.PlayerLevel >= 50) App.BubbleCount?.Start();
+            if (settings.BouncingTextEnabled && App.Settings.Current.PlayerLevel >= 60) App.BouncingText?.Start();
+            if (settings.MindWipeEnabled && App.Settings.Current.PlayerLevel >= 75)
+                App.MindWipe?.Start(settings.MindWipeBaseMultiplier, settings.MindWipeVolume / 100.0);
+            if (_brainDrainActive && App.Settings.Current.PlayerLevel >= 70) App.BrainDrain?.Start();
+            // Re-enable overlays via the overlay service
+            if (App.Settings.Current.PlayerLevel >= 10) App.Overlay?.Start();
+
+            App.Logger?.Information("Session resumed");
+        }
+
         private void MainTimer_Tick(object? sender, EventArgs e)
         {
-            if (!_isRunning || _currentSession == null) return;
+            if (!_isRunning || _isPaused || _currentSession == null) return;
             
             var elapsed = ElapsedTime;
             var elapsedMinutes = elapsed.TotalMinutes;
@@ -1096,12 +1179,15 @@ namespace ConditioningControlPanel.Services
         public Session Session { get; }
         public TimeSpan Duration { get; }
         public int XPEarned { get; }
-        
-        public SessionCompletedEventArgs(Session session, TimeSpan duration, int xp)
+        public int PauseCount { get; }
+        public int XPPenalty => PauseCount * 100;
+
+        public SessionCompletedEventArgs(Session session, TimeSpan duration, int xp, int pauseCount = 0)
         {
             Session = session;
             Duration = duration;
             XPEarned = xp;
+            PauseCount = pauseCount;
         }
     }
     

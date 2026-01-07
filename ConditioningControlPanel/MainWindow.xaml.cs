@@ -1838,19 +1838,71 @@ namespace ConditioningControlPanel
         private void BtnStartSession_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedSession == null || !_selectedSession.IsAvailable) return;
-            
+
+            // Check for locked features in this session
+            var lockedFeatures = GetLockedFeaturesForSession(_selectedSession);
+            string lockedFeaturesMsg = "";
+            if (lockedFeatures.Count > 0)
+            {
+                lockedFeaturesMsg = $"\n\n⚠️ Features you haven't unlocked yet:\n• {string.Join("\n• ", lockedFeatures)}\n\n(These will be skipped during the session)";
+            }
+
             var confirmed = ShowStyledDialog(
                 $"🌅 Start {_selectedSession.Name}?",
                 $"Duration: {_selectedSession.DurationMinutes} minutes\n\n" +
                 "Your current settings will be temporarily replaced.\n" +
-                "They will be restored when the session ends.\n\n" +
-                "Ready to begin?",
+                "They will be restored when the session ends." +
+                lockedFeaturesMsg +
+                "\n\nReady to begin?",
                 "▶ Start Session", "Not yet");
-                
+
             if (confirmed)
             {
                 StartSession(_selectedSession);
             }
+        }
+
+        /// <summary>
+        /// Get a list of features used by a session that the player hasn't unlocked yet
+        /// </summary>
+        private List<string> GetLockedFeaturesForSession(Models.Session session)
+        {
+            var locked = new List<string>();
+            int level = App.Settings.Current.PlayerLevel;
+            var settings = session.Settings;
+
+            // Level 10: Spiral, Pink Filter
+            if (level < 10)
+            {
+                if (settings.SpiralEnabled) locked.Add("Spiral Overlay (Lv.10)");
+                if (settings.PinkFilterEnabled) locked.Add("Pink Filter (Lv.10)");
+            }
+
+            // Level 20: Bubbles
+            if (level < 20 && settings.BubblesEnabled)
+                locked.Add("Bubbles (Lv.20)");
+
+            // Level 35: Lock Cards
+            if (level < 35 && settings.LockCardEnabled)
+                locked.Add("Lock Cards (Lv.35)");
+
+            // Level 50: Bubble Count
+            if (level < 50 && settings.BubbleCountEnabled)
+                locked.Add("Bubble Count Game (Lv.50)");
+
+            // Level 60: Bouncing Text
+            if (level < 60 && settings.BouncingTextEnabled)
+                locked.Add("Bouncing Text (Lv.60)");
+
+            // Level 70: Brain Drain
+            if (level < 70 && settings.BrainDrainEnabled)
+                locked.Add("Brain Drain (Lv.70)");
+
+            // Level 75: Mind Wipe
+            if (level < 75 && settings.MindWipeEnabled)
+                locked.Add("Mind Wipe (Lv.75)");
+
+            return locked;
         }
         
         private async void StartSession(Models.Session session)
@@ -1922,7 +1974,17 @@ namespace ConditioningControlPanel
                 if (_sessionEngine?.CurrentSession != null)
                 {
                     var remaining = e.Remaining;
+                    var session = _sessionEngine.CurrentSession;
+
+                    // Update session button with remaining time
                     BtnStartSession.Content = $"STOP SESSION ({remaining.Minutes:D2}:{remaining.Seconds:D2})";
+
+                    // Update Start button label with session name + timer
+                    var name = session.Name.Length > 14
+                        ? session.Name.Substring(0, 11) + "..."
+                        : session.Name;
+                    var pauseIndicator = _sessionEngine.IsPaused ? " [PAUSED]" : "";
+                    TxtStartLabel.Text = $"{name} {remaining.Minutes:D2}:{remaining.Seconds:D2}{pauseIndicator}";
                 }
             });
         }
@@ -1942,6 +2004,27 @@ namespace ConditioningControlPanel
                 BtnStartSession.Content = "STOP SESSION";
                 BtnStartSession.Click -= BtnStartSession_Click;
                 BtnStartSession.Click += BtnStopSession_Click;
+
+                // Update Start button to show session info
+                var session = _sessionEngine?.CurrentSession;
+                if (session != null)
+                {
+                    // Abbreviate name if over 22 chars
+                    var name = session.Name.Length > 22
+                        ? session.Name.Substring(0, 19) + "..."
+                        : session.Name;
+
+                    TxtStartIcon.Text = "⏹";
+                    TxtStartLabel.Text = name;
+
+                    // Make button red during session
+                    BtnStart.Background = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromRgb(220, 53, 69)); // Bootstrap danger red
+
+                    // Show pause button
+                    BtnPauseSession.Visibility = Visibility.Visible;
+                    if (TxtPauseIcon != null) TxtPauseIcon.Text = "⏸";
+                }
             });
         }
 
@@ -1952,12 +2035,53 @@ namespace ConditioningControlPanel
                 BtnStartSession.Content = "▶ Start Session";
                 BtnStartSession.Click -= BtnStopSession_Click;
                 BtnStartSession.Click += BtnStartSession_Click;
+
+                // Reset Start button to normal state
+                TxtStartIcon.Text = "▶";
+                TxtStartLabel.Text = "START";
+
+                // Restore pink color
+                BtnStart.ClearValue(System.Windows.Controls.Control.BackgroundProperty);
+
+                // Hide pause button
+                BtnPauseSession.Visibility = Visibility.Collapsed;
             });
         }
 
         private void BtnStopSession_Click(object sender, RoutedEventArgs e)
         {
             _sessionEngine?.StopSession();
+        }
+
+        private void BtnPauseSession_Click(object sender, RoutedEventArgs e)
+        {
+            if (_sessionEngine == null || !_sessionEngine.IsRunning) return;
+
+            if (_sessionEngine.IsPaused)
+            {
+                // Resume
+                _sessionEngine.ResumeSession();
+                if (TxtPauseIcon != null) TxtPauseIcon.Text = "⏸";
+                BtnPauseSession.ToolTip = $"Pause session (-100 XP penalty per pause)\nPaused {_sessionEngine.PauseCount}x so far";
+            }
+            else
+            {
+                // Confirm pause (costs XP)
+                var confirmed = ShowStyledDialog(
+                    "⏸ Pause Session?",
+                    "Pausing will cost you 100 XP from your session reward.\n\n" +
+                    $"Current penalty: -{_sessionEngine.XPPenalty} XP\n" +
+                    $"After this pause: -{_sessionEngine.XPPenalty + 100} XP\n\n" +
+                    "Are you sure?",
+                    "Yes, pause", "Keep going");
+
+                if (confirmed)
+                {
+                    _sessionEngine.PauseSession();
+                    if (TxtPauseIcon != null) TxtPauseIcon.Text = "▶";
+                    BtnPauseSession.ToolTip = "Resume session";
+                }
+            }
         }
         
         // Methods called by SessionEngine to control features
@@ -3083,18 +3207,27 @@ namespace ConditioningControlPanel
                 {
                     var session = _sessionEngine.CurrentSession;
                     var elapsed = _sessionEngine.ElapsedTime;
-                    
+                    var remaining = _sessionEngine.RemainingTime;
+                    var potentialXP = session?.BonusXP ?? 0;
+                    var penalty = _sessionEngine.XPPenalty;
+                    var finalXP = Math.Max(0, potentialXP - penalty);
+
+                    var penaltyText = penalty > 0
+                        ? $"\n(Pause penalty: -{penalty} XP, would earn: {finalXP} XP)"
+                        : "";
+
                     var confirmed = ShowStyledDialog(
                         "⚠ Stop Session?",
                         $"You're currently in a session:\n" +
                         $"{session?.Icon} {session?.Name}\n\n" +
-                        $"Time elapsed: {elapsed.Minutes:D2}:{elapsed.Seconds:D2}\n\n" +
-                        "If you stop now, you will NOT receive the XP reward.\n" +
+                        $"Time elapsed: {elapsed.Minutes:D2}:{elapsed.Seconds:D2}\n" +
+                        $"Time remaining: {remaining.Minutes:D2}:{remaining.Seconds:D2}\n\n" +
+                        $"If you stop now, you will lose ALL {potentialXP} XP.{penaltyText}\n\n" +
                         "Are you sure you want to quit?",
                         "Yes, stop session", "Keep going");
-                    
+
                     if (!confirmed) return;
-                    
+
                     // Stop the session without completing it
                     _sessionEngine.StopSession(completed: false);
                     if (TxtPresetsStatus != null)
@@ -4941,12 +5074,19 @@ namespace ConditioningControlPanel
         {
             var dialog = new TextEditorDialog("Attention Targets", App.Settings.Current.AttentionPool);
             dialog.Owner = this;
-            
+
             if (dialog.ShowDialog() == true && dialog.ResultData != null)
             {
                 App.Settings.Current.AttentionPool = dialog.ResultData;
                 App.Logger?.Information("Attention pool updated: {Count} items", dialog.ResultData.Count);
             }
+        }
+
+        private void BtnAttentionStyle_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new AttentionTargetEditorDialog();
+            dialog.Owner = this;
+            dialog.ShowDialog();
         }
 
         private void BtnSubliminalSettings_Click(object sender, RoutedEventArgs e)

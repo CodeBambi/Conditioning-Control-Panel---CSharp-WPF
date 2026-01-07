@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Conditioning Control Panel v4.1"
-        Height="901" Width="1385"
+        Height="943" Width="1385"
         MinHeight="620" MinWidth="978"
         Background="#1A1A2E"
         WindowStartupLocation="Manual"
@@ -903,8 +903,12 @@ Bimbo" Foreground="#FF69B4"
                                         </StackPanel>
                                     </Grid>
                                     
-                                    <Button Content="📝 Manage" Style="{StaticResource PinkButton}" Margin="0,12,0,0" Padding="10,8" Click="BtnManageAttention_Click"
-                                            ToolTip="Edit attention check phrases"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                        <Button Content="📝 Phrases" Style="{StaticResource PinkButton}" Padding="10,8" Click="BtnManageAttention_Click"
+                                                ToolTip="Edit attention check phrases"/>
+                                        <Button Content="🎨 Style" Style="{StaticResource OutlineButton}" Margin="8,0,0,0" Padding="10,8" Click="BtnAttentionStyle_Click"
+                                                ToolTip="Customize target appearance (colors, border, font)"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -2949,15 +2953,45 @@ Bimbo" Foreground="#FF69B4"
                            Text="" Foreground="#808090" FontSize="11"
                            HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-20,0,0"/>
 
-                <!-- START Button (half width) -->
-                <Button x:Name="BtnStart" Grid.Column="0" Style="{StaticResource PinkButton}"
-                        Height="50" FontSize="18" Margin="0,0,8,0" Click="BtnStart_Click"
-                        ToolTip="Start/Stop the conditioning engine">
-                    <StackPanel Orientation="Horizontal" Height="24" VerticalAlignment="Center">
-                        <TextBlock Text="▶" FontSize="16" Width="20" Margin="0,0,10,0" VerticalAlignment="Center" TextAlignment="Center"/>
-                        <TextBlock Text="START" FontSize="18" Width="60" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
+                <!-- START Button (with session timer display) -->
+                <Grid Grid.Column="0" Margin="0,0,8,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="BtnStart" Grid.Column="0" Style="{StaticResource PinkButton}"
+                            Height="50" FontSize="18" Click="BtnStart_Click"
+                            ToolTip="Start/Stop the conditioning engine">
+                        <StackPanel x:Name="StartButtonContent" Orientation="Horizontal" Height="24" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtStartIcon" Text="▶" FontSize="16" Width="20" Margin="0,0,10,0" VerticalAlignment="Center" TextAlignment="Center"/>
+                            <TextBlock x:Name="TxtStartLabel" Text="START" FontSize="18" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <!-- Pause Button (visible only during sessions) -->
+                    <Button x:Name="BtnPauseSession" Grid.Column="1" Width="50" Height="50" Margin="5,0,0,0"
+                            Visibility="Collapsed" Click="BtnPauseSession_Click"
+                            ToolTip="Pause session (-100 XP penalty per pause)">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="#FFA500"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                                <Setter Property="FontSize" Value="20"/>
+                                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="6">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                        <TextBlock x:Name="TxtPauseIcon" Text="⏸" FontSize="20"/>
+                    </Button>
+                </Grid>
                 
                 <!-- Save / Exit (other half) -->
                 <Grid Grid.Column="1" Margin="8,0,0,0">

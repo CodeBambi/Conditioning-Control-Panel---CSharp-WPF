@@ -34,10 +34,11 @@ namespace ConditioningControlPanel
         // Avatar set titles
         private static readonly string[] AvatarTitles = new[]
         {
-            "BASIC BIMBO",      // Set 1: Level 1-19
-            "DUMB AIRHEAD",     // Set 2: Level 20-49
-            "SYNTHETIC BLOWDOLL", // Set 3: Level 50-99
-            "PERFECT FUCKPUPPET"  // Set 4: Level 100+
+            "BASIC BIMBO",        // Set 1: Level 1-19
+            "DUMB AIRHEAD",       // Set 2: Level 20-34
+            "SYNTHETIC BLOWDOLL", // Set 3: Level 35-49
+            "PERFECT FUCKPUPPET", // Set 4: Level 50-99
+            "DIVINE GODDESS"      // Set 5: Level 100+
         };
 
         // Companion speech and chat
@@ -327,14 +328,16 @@ namespace ConditioningControlPanel
         /// Determines which avatar set to use based on player level
         /// </summary>
         /// <param name="level">Player's current level</param>
-        /// <returns>Avatar set number (1-4)</returns>
+        /// <returns>Avatar set number (1-5)</returns>
         public static int GetAvatarSetForLevel(int level)
         {
-            // Avatar Set 4: Level 100+
-            if (level >= 100) return 4;
-            // Avatar Set 3: Level 50-99
-            if (level >= 50) return 3;
-            // Avatar Set 2: Level 20-49
+            // Avatar Set 5: Level 100+
+            if (level >= 100) return 5;
+            // Avatar Set 4: Level 50-99
+            if (level >= 50) return 4;
+            // Avatar Set 3: Level 35-49
+            if (level >= 35) return 3;
+            // Avatar Set 2: Level 20-34
             if (level >= 20) return 2;
             // Avatar Set 1: Level 1-19 (default)
             return 1;
@@ -628,27 +631,43 @@ namespace ConditioningControlPanel
             {
                 bool isOtherAppFullscreen = IsOtherAppFullscreen();
 
-                if (isOtherAppFullscreen && !_hiddenForFullscreen)
+                // When DETACHED, avatar should stay visible as a widget overlay
+                // Only hide for fullscreen when ATTACHED
+                if (_isAttached)
                 {
-                    // Another app went fullscreen - hide the avatar
-                    _hiddenForFullscreen = true;
-                    _wasAttachedBeforeFullscreen = _isAttached;
-                    Hide();
-                    App.Logger?.Debug("Avatar hidden - fullscreen app detected");
-                }
-                else if (!isOtherAppFullscreen && _hiddenForFullscreen)
-                {
-                    // Fullscreen app closed - restore the avatar
-                    _hiddenForFullscreen = false;
-                    if (_parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized)
+                    if (isOtherAppFullscreen && !_hiddenForFullscreen)
                     {
-                        Show();
-                        if (_wasAttachedBeforeFullscreen && _isAttached)
-                        {
-                            UpdatePosition();
-                        }
-                        App.Logger?.Debug("Avatar restored - fullscreen app closed");
+                        // Another app went fullscreen - hide the avatar (attached mode only)
+                        _hiddenForFullscreen = true;
+                        _wasAttachedBeforeFullscreen = _isAttached;
+                        Hide();
+                        App.Logger?.Debug("Avatar hidden - fullscreen app detected (attached mode)");
                     }
+                    else if (!isOtherAppFullscreen && _hiddenForFullscreen)
+                    {
+                        // Fullscreen app closed - restore the avatar
+                        _hiddenForFullscreen = false;
+                        if (_parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized)
+                        {
+                            Show();
+                            if (_wasAttachedBeforeFullscreen && _isAttached)
+                            {
+                                UpdatePosition();
+                            }
+                            App.Logger?.Debug("Avatar restored - fullscreen app closed");
+                        }
+                    }
+                }
+                else
+                {
+                    // DETACHED mode - periodically reassert topmost to stay visible as widget
+                    // This handles cases where other topmost windows or focus changes demote us
+                    if (_hiddenForFullscreen)
+                    {
+                        _hiddenForFullscreen = false;
+                        Show();
+                    }
+                    ReassertTopmost();
                 }
             }
             catch (Exception ex)
@@ -759,14 +778,15 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Ensure the window is visible when detached
+        /// Ensure the window is visible when detached - acts as a persistent widget
         /// </summary>
         private void EnsureVisibleWhenDetached()
         {
             if (!_isAttached)
             {
                 Show();
-                // Don't activate or force topmost - let Windows handle focus normally
+                // Reassert topmost so avatar stays visible as a widget overlay
+                ReassertTopmost();
             }
         }
 
@@ -815,16 +835,17 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Load avatar poses for a specific set
         /// </summary>
-        /// <param name="setNumber">1 = default, 2 = level 20, 3 = level 50, 4 = level 100</param>
+        /// <param name="setNumber">1 = default, 2 = level 20, 3 = level 35, 4 = level 50, 5 = level 100</param>
         private BitmapImage[] LoadAvatarPoses(int setNumber = 1)
         {
             var poses = new BitmapImage[4];
-            
+
             // Determine the resource path based on set number
             // Set 1: avatar_pose1.png - avatar_pose4.png (original)
             // Set 2: avatar2_pose1.png - avatar2_pose4.png (level 20)
-            // Set 3: avatar3_pose1.png - avatar3_pose4.png (level 50)
-            // Set 4: avatar4_pose1.png - avatar4_pose4.png (level 100)
+            // Set 3: avatar3_pose1.png - avatar3_pose4.png (level 35)
+            // Set 4: avatar4_pose1.png - avatar4_pose4.png (level 50)
+            // Set 5: avatar5_pose1.png - avatar5_pose4.png (level 100)
             string prefix = setNumber == 1 ? "avatar_pose" : $"avatar{setNumber}_pose";
             
             for (int i = 0; i < 4; i++)
@@ -1699,6 +1720,19 @@ namespace ConditioningControlPanel
             // Bring to front without making it topmost
             SetWindowPos(_tubeHandle, IntPtr.Zero, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+
+        /// <summary>
+        /// Reassert topmost status when detached - ensures avatar stays on top as a widget
+        /// </summary>
+        private void ReassertTopmost()
+        {
+            if (_tubeHandle == IntPtr.Zero || _isAttached) return;
+
+            // Use Win32 SetWindowPos with HWND_TOPMOST to force topmost z-order
+            // This is more reliable than WPF's Topmost property across monitor/focus changes
+            SetWindowPos(_tubeHandle, HWND_TOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
 
         private void StartIdleTimer()
@@ -3004,8 +3038,9 @@ namespace ConditioningControlPanel
             ShowInTaskbar = false;
             SetToolWindowStyle(true);
 
-            // Set topmost (use WPF property only - don't force aggressively)
+            // Set topmost - use both WPF property and Win32 for reliability
             Topmost = true;
+            ReassertTopmost(); // Use Win32 to ensure topmost is applied immediately
 
             // Enable dragging from anywhere on the window
             Cursor = Cursors.SizeAll;
@@ -3060,6 +3095,12 @@ namespace ConditioningControlPanel
             Cursor = Cursors.Arrow;
             MouseLeftButtonDown -= Window_MouseLeftButtonDown;
 
+            // Reset scale BEFORE updating position - otherwise position is calculated
+            // using the old scaled dimensions from when it was detached
+            _currentScale = 1.0;
+            ContentViewbox.LayoutTransform = null;
+            UpdateLayout(); // Force layout update so ActualWidth/Height reflect new size
+
             // Snap back to parent window position
             UpdatePosition();
             BringToFrontTemporarily();
@@ -3072,10 +3113,6 @@ namespace ConditioningControlPanel
 
             // Update context menu visibility
             UpdateContextMenuForState();
-
-            // Reset scale when attached
-            _currentScale = 1.0;
-            ContentViewbox.LayoutTransform = null;
 
             App.Logger?.Information("Avatar tube attached - anchored to main window");
             Giggle("Back home~");

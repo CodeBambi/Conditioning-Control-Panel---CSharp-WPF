@@ -221,6 +221,49 @@ namespace ConditioningControlPanel.Models
             set { _attentionSize = Math.Clamp(value, 30, 150); OnPropertyChanged(); }
         }
 
+        // Attention target styling
+        private string _attentionColor1 = "#9B59B6"; // Purple (classic style)
+        public string AttentionColor1
+        {
+            get => _attentionColor1;
+            set { _attentionColor1 = value; OnPropertyChanged(); }
+        }
+
+        private string _attentionColor2 = "#8E44AD"; // Darker purple
+        public string AttentionColor2
+        {
+            get => _attentionColor2;
+            set { _attentionColor2 = value; OnPropertyChanged(); }
+        }
+
+        private string _attentionTextColor = "#FFFFFF"; // White
+        public string AttentionTextColor
+        {
+            get => _attentionTextColor;
+            set { _attentionTextColor = value; OnPropertyChanged(); }
+        }
+
+        private bool _attentionShowBorder = false; // No border by default (cleaner look)
+        public bool AttentionShowBorder
+        {
+            get => _attentionShowBorder;
+            set { _attentionShowBorder = value; OnPropertyChanged(); }
+        }
+
+        private string _attentionBorderColor = "#FFFFFF";
+        public string AttentionBorderColor
+        {
+            get => _attentionBorderColor;
+            set { _attentionBorderColor = value; OnPropertyChanged(); }
+        }
+
+        private string _attentionFont = "Segoe UI"; // Clean modern font
+        public string AttentionFont
+        {
+            get => _attentionFont;
+            set { _attentionFont = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Audio
