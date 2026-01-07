@@ -2053,7 +2053,30 @@ namespace ConditioningControlPanel
 
         private void BtnStopSession_Click(object sender, RoutedEventArgs e)
         {
-            _sessionEngine?.StopSession();
+            if (_sessionEngine == null || !_sessionEngine.IsRunning) return;
+
+            var session = _sessionEngine.CurrentSession;
+            var elapsed = _sessionEngine.ElapsedTime;
+            var remaining = _sessionEngine.RemainingTime;
+            var potentialXP = session?.BonusXP ?? 0;
+            var penaltyText = _sessionEngine.PauseCount > 0
+                ? $"\n(Plus {_sessionEngine.XPPenalty} XP pause penalty)"
+                : "";
+
+            var confirmed = ShowStyledDialog(
+                "⚠ Stop Session?",
+                $"You're currently in a session:\n" +
+                $"{session?.Icon} {session?.Name}\n\n" +
+                $"Time elapsed: {elapsed.Minutes:D2}:{elapsed.Seconds:D2}\n" +
+                $"Time remaining: {remaining.Minutes:D2}:{remaining.Seconds:D2}\n\n" +
+                $"If you stop now, you will lose ALL {potentialXP} XP.{penaltyText}\n\n" +
+                "Are you sure you want to quit?",
+                "Yes, stop session", "Keep going");
+
+            if (confirmed)
+            {
+                _sessionEngine.StopSession(completed: false);
+            }
         }
 
         private void BtnPauseSession_Click(object sender, RoutedEventArgs e)
