@@ -105,10 +105,10 @@ namespace ConditioningControlPanel.Services
             _isRunning = true;
             _cancellationSource = new CancellationTokenSource();
             _heartbeatTimer?.Start();
-            
+
             ScheduleNextFlash();
-            
-            App.Logger.Information("FlashService started");
+
+            App.Logger.Information("FlashService started, images path: {Path}", _imagesPath);
         }
 
         public void Stop()
@@ -160,9 +160,13 @@ namespace ConditioningControlPanel.Services
         private void ScheduleNextFlash()
         {
             if (!_isRunning) return;
-            
+
             var settings = App.Settings.Current;
-            if (!settings.FlashEnabled) return;
+            if (!settings.FlashEnabled)
+            {
+                App.Logger.Debug("FlashService: Flashes disabled in settings");
+                return;
+            }
             
             // flash_freq = flashes per HOUR (1-180)
             var baseFreq = Math.Max(1, settings.FlashFrequency);
@@ -203,9 +207,12 @@ namespace ConditioningControlPanel.Services
 
                 if (images.Count == 0)
                 {
+                    App.Logger.Warning("FlashService: No images found in {Path}", _imagesPath);
                     _isBusy = false;
                     return;
                 }
+
+                App.Logger.Information("FlashService: Displaying {Count} flash image(s)", images.Count);
 
                 // Fire pre-event so avatar can announce the flash
                 FlashAboutToDisplay?.Invoke(this, EventArgs.Empty);
