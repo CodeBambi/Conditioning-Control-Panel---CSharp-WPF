@@ -127,6 +127,12 @@ namespace ConditioningControlPanel.Models
         public string? PatronEmail { get; set; }
 
         /// <summary>
+        /// Custom display name chosen by user on first login (can only be set once)
+        /// </summary>
+        [JsonProperty("display_name")]
+        public string? DisplayName { get; set; }
+
+        /// <summary>
         /// Check if the cache has expired (older than 24 hours)
         /// </summary>
         [Newtonsoft.Json.JsonIgnore]

@@ -8,7 +8,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>4.1.0</Version>
+    <Version>4.2.13</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -20,8 +20,17 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     
-    <!-- Disable auto-generated assembly info -->
+    <!-- Disable most auto-generated assembly info (we have AssemblyInfo.cs) but enable version -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateAssemblyVersionAttribute>true</GenerateAssemblyVersionAttribute>
+    <GenerateAssemblyFileVersionAttribute>true</GenerateAssemblyFileVersionAttribute>
+    <GenerateAssemblyInformationalVersionAttribute>true</GenerateAssemblyInformationalVersionAttribute>
+
+    <!-- Use custom Main entry point for Velopack -->
+    <StartupObject>ConditioningControlPanel.App</StartupObject>
+
+    <!-- Disable WPF auto-generated entry point so we can use our custom Main -->
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     
     <!-- Trimming disabled - not supported with WPF -->
     <PublishTrimmed>false</PublishTrimmed>
@@ -72,6 +81,9 @@
 
     <!-- GIF Animation Support -->
     <PackageReference Include="XamlAnimatedGif" Version="2.3.0" />
+
+    <!-- Auto-Update -->
+    <PackageReference Include="Velopack" Version="0.0.1298" />
   </ItemGroup>
 
   <ItemGroup>

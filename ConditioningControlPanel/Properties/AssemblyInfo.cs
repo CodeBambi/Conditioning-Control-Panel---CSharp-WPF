@@ -18,5 +18,5 @@ using System.Windows;
     ResourceDictionaryLocation.SourceAssembly
 )]
 
-[assembly: AssemblyVersion("2.1.0.0")]
-[assembly: AssemblyFileVersion("2.1.0.0")]
+// Version is set in .csproj - do not set here to avoid conflicts
+// [assembly: AssemblyVersion] and [assembly: AssemblyFileVersion] are auto-generated

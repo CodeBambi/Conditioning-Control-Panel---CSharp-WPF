@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-        Title="Conditioning Control Panel v4.1.1"
+        Title="Conditioning Control Panel"
         Height="943" Width="1385"
         MinHeight="620" MinWidth="978"
         Background="#1A1A2E"
@@ -550,7 +550,7 @@
                 <!-- Icon and Title -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
                     <TextBlock Text="💗" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                    <TextBlock Text="Conditioning Control Panel v4.1" Foreground="White" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtTitleBarVersion" Text="Conditioning Control Panel" Foreground="White" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
                 </StackPanel>
                 
                 <!-- Window Control Buttons -->
@@ -592,7 +592,7 @@ Bimbo" Foreground="#FF69B4"
                     <!-- App Title -->
                     <TextBlock Text="💗" FontSize="15" Margin="0,0,8,0"/>
                     <TextBlock Text="Conditioning Control Panel" Foreground="White" FontSize="18" FontWeight="Bold"/>
-                    <TextBlock Text="v4.1" Foreground="{StaticResource PinkBrush}" FontSize="12" FontWeight="Normal" 
+                    <TextBlock x:Name="TxtHeaderVersion" Text="" Foreground="{StaticResource PinkBrush}" FontSize="12" FontWeight="Normal"
                                VerticalAlignment="Bottom" Margin="6,0,0,2"/>
                     </StackPanel>
 
@@ -1218,6 +1218,7 @@ Bimbo" Foreground="#FF69B4"
                                        ToolTip="Lower system volume during video playback"/>
                                 <CheckBox x:Name="ChkAudioDuck" Style="{StaticResource ToggleStyle}" 
                                       HorizontalAlignment="Right" IsChecked="True"
+                                      Checked="ChkAudioDuck_Changed" Unchecked="ChkAudioDuck_Changed"
                                       ToolTip="Automatically reduce other app volumes during videos"/>
                             </Grid>
 
@@ -2635,10 +2636,51 @@ Bimbo" Foreground="#FF69B4"
                             </Button>
                             <TextBlock Text="Click to join!" Foreground="#888888"
                                    FontSize="10" FontStyle="Italic" HorizontalAlignment="Center" Margin="0,5,0,5"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- App Info / Updates -->
+                <Border Style="{StaticResource SectionPanel}" Margin="5" Padding="10,8">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="App Info" Foreground="{StaticResource PinkBrush}"
+                                   FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                        <TextBlock x:Name="TxtVersion" Text="Version" Foreground="#888888"
+                                   FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                        <Button x:Name="BtnCheckUpdates" Content="Check for Updates"
+                                Click="BtnCheckUpdates_Click" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="#252542"/>
+                                    <Setter Property="Foreground" Value="#E0E0E0"/>
+                                    <Setter Property="FontSize" Value="12"/>
+                                    <Setter Property="Padding" Value="16,8"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                        CornerRadius="6" Padding="{TemplateBinding Padding}"
+                                                        BorderBrush="#404060" BorderThickness="1">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="border" Property="Background" Value="#353560"/>
+                                                        <Setter TargetName="border" Property="BorderBrush" Value="#FF69B4"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsEnabled" Value="False">
+                                                        <Setter TargetName="border" Property="Opacity" Value="0.5"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
 
             <!-- Achievements Tab -->
             <Border x:Name="AchievementsTab" Grid.Row="3" Margin="10,5,10,10" Visibility="Collapsed"
