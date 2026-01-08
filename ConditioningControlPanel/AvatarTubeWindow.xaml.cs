@@ -42,20 +42,38 @@ namespace ConditioningControlPanel
         };
 
         // Companion speech and chat
-        private readonly Queue<string> _speechQueue = new();
+        private readonly Queue<(string text, SpeechSource source)> _speechQueue = new();
         private bool _isGiggling = false;
         private bool _isWaitingForAi = false; // Blocks other giggles while waiting for AI
         private DispatcherTimer? _speechTimer;
+        private DispatcherTimer? _speechDelayTimer; // Delay between speech instances
         private DispatcherTimer? _idleTimer;
         private DispatcherTimer? _triggerTimer; // Random trigger phrases
         private DispatcherTimer? _randomBubbleTimer; // Random bubble spawning
         private DateTime _lastClickTime = DateTime.MinValue;
+        private DateTime _lastSpeechEndTime = DateTime.MinValue; // Track when last speech ended
+        private SpeechSource _lastSpeechSource = SpeechSource.Preset; // Track last speech source for delay calc
+        private int _lastSpeechLength = 0; // Track last speech length for delay calc
         private bool _isInputVisible = false;
         private readonly Random _random = new();
         private bool _mainWindowClosed = false;
         private int _presetGiggleCounter = 0; // Counter for 1-in-5 giggle sound on presets
         private readonly List<DateTime> _rapidClickTimestamps = new(); // Track clicks for 50-in-1-minute trigger
         private bool _isMuted = false; // Mute avatar speech and sounds
+
+        // Speech source for priority/delay calculation
+        private enum SpeechSource
+        {
+            Preset,     // Preset phrases (click reactions, idle, etc.)
+            Trigger,    // Random trigger phrases
+            AI          // AI-generated responses
+        }
+
+        // Speech delay constants
+        private const double MinSpeechDelaySeconds = 2.0;      // Minimum delay between any speech
+        private const double AiSpeechBonusSeconds = 1.0;       // Extra delay for AI responses
+        private const int LongTextThreshold = 100;             // Characters before adding per-char delay
+        private const double PerCharDelaySeconds = 0.01;       // Delay per character over threshold
         // Note: Whispers mute state is now read from App.Settings.Current.SubAudioEnabled
         private bool _isBrowserPaused = false; // Browser audio paused state
 
@@ -113,6 +131,9 @@ namespace ConditioningControlPanel
 
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct RECT
@@ -601,10 +622,9 @@ namespace ConditioningControlPanel
                 }
 
                             // Reset bubble position to ensure correct placement after layout
-                            // Attached anchor: right=770, so left = 770 - width
-                            SpeechBubble.Margin = new Thickness(350, 350, 0, 0); // 350 = 770 - 420 (BaseBubbleWidth)
-                            SpeechBubble.Width = BaseBubbleWidth;
-                            SpeechBubble.Height = BaseBubbleHeight;            }), System.Windows.Threading.DispatcherPriority.Loaded);
+                            // Anchored at bottom, grows upward. Margin = left, top, right, bottom
+                            SpeechBubble.Margin = new Thickness(0, 0, 90, 550);
+                        }), System.Windows.Threading.DispatcherPriority.Loaded);
 
             // Start fullscreen detection timer
             StartFullscreenDetection();
@@ -675,7 +695,9 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Check if another application (not our app) is running fullscreen
+        /// Check if another application (not our app) is running in EXCLUSIVE fullscreen mode.
+        /// This is conservative - only hides for true DirectX/OpenGL exclusive fullscreen,
+        /// NOT for borderless windowed games or browser video fullscreen.
         /// </summary>
         private bool IsOtherAppFullscreen()
         {
@@ -694,13 +716,53 @@ namespace ConditioningControlPanel
                 if (foregroundPid == ourPid)
                     return false;
 
-                // Get the window style - only consider true fullscreen apps (no caption/border)
-                int style = GetWindowLong(foregroundWindow, GWL_STYLE);
-                bool hasCaption = (style & WS_CAPTION) == WS_CAPTION;
+                // Get window class name to exclude known safe applications
+                var className = new System.Text.StringBuilder(256);
+                GetClassName(foregroundWindow, className, className.Capacity);
+                string windowClass = className.ToString();
 
-                // If the window has a caption (title bar), it's not exclusive fullscreen
-                // This excludes maximized windows and borderless windowed games
+                // Exclude browsers and common media applications - these use "fake" fullscreen
+                // that covers the screen but isn't exclusive DirectX/OpenGL fullscreen
+                string[] safeClasses = {
+                    "Chrome_WidgetWin",      // Chrome, Edge (Chromium), Brave, etc.
+                    "MozillaWindowClass",    // Firefox
+                    "ApplicationFrameWindow", // UWP apps (Netflix, Disney+, etc.)
+                    "Windows.UI.Core",       // Modern Windows apps
+                    "CabinetWClass",         // Windows Explorer
+                    "Shell_TrayWnd",         // Taskbar
+                    "Progman",               // Desktop
+                    "WorkerW",               // Desktop worker
+                    "XLMAIN",                // Excel
+                    "OpusApp",               // Word
+                    "PPTFrameClass",         // PowerPoint
+                    "VLC",                   // VLC media player
+                    "mpv",                   // mpv player
+                    "MediaPlayerClassicW",   // MPC
+                };
+
+                foreach (var safeClass in safeClasses)
+                {
+                    if (windowClass.StartsWith(safeClass, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                }
+
+                // Get the window style
+                int style = GetWindowLong(foregroundWindow, GWL_STYLE);
+                int exStyle = GetWindowLong(foregroundWindow, GWL_EXSTYLE);
+
+                bool hasCaption = (style & WS_CAPTION) == WS_CAPTION;
+                bool isPopup = (style & WS_POPUP) == WS_POPUP;
+                bool isTopmost = (exStyle & WS_EX_TOPMOST) == WS_EX_TOPMOST;
+
+                // If the window has a caption (title bar), it's definitely not exclusive fullscreen
                 if (hasCaption)
+                    return false;
+
+                // For exclusive fullscreen, we require BOTH:
+                // 1. Window is popup style (no borders) AND
+                // 2. Window is topmost (exclusive fullscreen apps set this)
+                // This excludes borderless windowed games which usually aren't topmost
+                if (!isPopup || !isTopmost)
                     return false;
 
                 // Get the window rect
@@ -712,13 +774,18 @@ namespace ConditioningControlPanel
                 var screenBounds = screen.Bounds;
 
                 // For true fullscreen, window must cover the ENTIRE screen including taskbar
-                // Use tight tolerance - exclusive fullscreen should match exactly
                 int tolerance = 5;
                 bool coversFullScreen =
                     windowRect.Left <= screenBounds.Left + tolerance &&
                     windowRect.Top <= screenBounds.Top + tolerance &&
                     windowRect.Right >= screenBounds.Right - tolerance &&
                     windowRect.Bottom >= screenBounds.Bottom - tolerance;
+
+                if (coversFullScreen)
+                {
+                    App.Logger?.Debug("Exclusive fullscreen detected: class={Class}, popup={Popup}, topmost={Topmost}",
+                        windowClass, isPopup, isTopmost);
+                }
 
                 return coversFullScreen;
             }
@@ -1454,9 +1521,87 @@ namespace ConditioningControlPanel
         // COMPANION SPEECH & CHAT
         // ============================================================
 
-        // Base speech bubble dimensions (10% smaller)
-        private const double BaseBubbleWidth = 420;
-        private const double BaseBubbleHeight = 260;
+        /// <summary>
+        /// Calculates the required delay before showing the next speech.
+        /// Delay is based on the PREVIOUS speech's properties - AI responses and long texts
+        /// get more time after they end so users can read them.
+        /// </summary>
+        private double CalculateRequiredDelayAfterLastSpeech()
+        {
+            double delay = MinSpeechDelaySeconds;
+
+            // Add bonus delay after AI responses (they're more important, give time to read)
+            if (_lastSpeechSource == SpeechSource.AI)
+            {
+                delay += AiSpeechBonusSeconds;
+            }
+
+            // Add per-character delay for long texts (so users can read them)
+            if (_lastSpeechLength > LongTextThreshold)
+            {
+                int extraChars = _lastSpeechLength - LongTextThreshold;
+                delay += extraChars * PerCharDelaySeconds;
+            }
+
+            return delay;
+        }
+
+        /// <summary>
+        /// Processes the next speech in the queue with proper delay.
+        /// </summary>
+        private void ProcessNextSpeech()
+        {
+            if (_speechQueue.Count == 0)
+            {
+                _isGiggling = false;
+                return;
+            }
+
+            var (nextText, source) = _speechQueue.Dequeue();
+            App.Logger?.Debug("Dequeued speech ({Source}): {Text}", source, nextText);
+
+            // Calculate how long since last speech ended (delay based on PREVIOUS speech properties)
+            double timeSinceLastSpeech = (DateTime.Now - _lastSpeechEndTime).TotalSeconds;
+            double requiredDelay = CalculateRequiredDelayAfterLastSpeech();
+            double remainingDelay = Math.Max(0, requiredDelay - timeSinceLastSpeech);
+
+            if (remainingDelay > 0)
+            {
+                // Wait before showing next speech
+                _speechDelayTimer?.Stop();
+                _speechDelayTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(remainingDelay) };
+                _speechDelayTimer.Tick += (s, e) =>
+                {
+                    _speechDelayTimer.Stop();
+                    ShowSpeechBySource(nextText, source);
+                };
+                _speechDelayTimer.Start();
+                App.Logger?.Debug("Delaying speech by {Delay:F1}s", remainingDelay);
+            }
+            else
+            {
+                // Show immediately
+                ShowSpeechBySource(nextText, source);
+            }
+        }
+
+        /// <summary>
+        /// Shows speech based on its source (triggers play audio, others don't)
+        /// </summary>
+        private void ShowSpeechBySource(string text, SpeechSource source)
+        {
+            if (source == SpeechSource.Trigger)
+            {
+                // Triggers have their own display method with audio
+                ShowTriggerBubbleImmediate(text);
+            }
+            else
+            {
+                // Determine sound: always for AI, 1 in 5 for presets
+                bool playSound = source == SpeechSource.AI || (source == SpeechSource.Preset && ++_presetGiggleCounter % 5 == 0);
+                ShowGiggle(text, playSound, source);
+            }
+        }
 
         /// <summary>
         /// Queues a speech bubble to be displayed. Bubbles are shown one at a time.
@@ -1472,20 +1617,34 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // Determine if we should play giggle sound (1 in 5 for presets)
-            _presetGiggleCounter++;
-            bool playSound = _presetGiggleCounter % 5 == 0;
-
             // Use BeginInvoke for non-blocking UI update
             Application.Current.Dispatcher.BeginInvoke(() =>
             {
                 if (_isGiggling)
                 {
-                    _speechQueue.Enqueue(text);
-                    App.Logger?.Debug("Queued speech: {Text}", text);
+                    _speechQueue.Enqueue((text, SpeechSource.Preset));
+                    App.Logger?.Debug("Queued preset speech: {Text}", text);
                     return;
                 }
-                ShowGiggle(text, playSound);
+
+                // Check if we need to delay based on last speech (delay based on PREVIOUS speech properties)
+                double timeSinceLastSpeech = (DateTime.Now - _lastSpeechEndTime).TotalSeconds;
+                double requiredDelay = CalculateRequiredDelayAfterLastSpeech();
+
+                if (timeSinceLastSpeech < requiredDelay)
+                {
+                    // Queue it and let the delay system handle it
+                    _speechQueue.Enqueue((text, SpeechSource.Preset));
+                    _isGiggling = true;
+                    ProcessNextSpeech();
+                }
+                else
+                {
+                    // Determine if we should play giggle sound (1 in 5 for presets)
+                    _presetGiggleCounter++;
+                    bool playSound = _presetGiggleCounter % 5 == 0;
+                    ShowGiggle(text, playSound, SpeechSource.Preset);
+                }
             });
         }
 
@@ -1505,12 +1664,13 @@ namespace ConditioningControlPanel
                 // Clear the queue - AI response takes priority
                 _speechQueue.Clear();
 
-                // Stop any current speech timer
+                // Stop any current speech/delay timers
                 _speechTimer?.Stop();
+                _speechDelayTimer?.Stop();
 
                 // Show immediately with giggle sound (always for AI/priority)
                 _isGiggling = false;
-                ShowGiggle(text, playSound: true);
+                ShowGiggle(text, playSound: true, source: SpeechSource.AI);
 
                 App.Logger?.Debug("Priority speech (queue cleared): {Text}", text);
             });
@@ -1521,12 +1681,18 @@ namespace ConditioningControlPanel
         /// </summary>
         /// <param name="text">The text to display</param>
         /// <param name="playSound">Whether to play a giggle sound</param>
-        private void ShowGiggle(string text, bool playSound = false)
+        /// <param name="source">The source of the speech (for delay calculation)</param>
+        private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset)
         {
             // Skip if muted
             if (_isMuted)
             {
                 _isGiggling = false;
+                // Track timing and properties even when muted (for delay calculation)
+                _lastSpeechEndTime = DateTime.Now;
+                _lastSpeechSource = source;
+                _lastSpeechLength = text.Length;
+                ProcessNextSpeech();
                 return;
             }
 
@@ -1555,123 +1721,86 @@ namespace ConditioningControlPanel
 
             // Calculate display duration based on text length
             // Base: 5 seconds, plus ~0.05s per character, min 5s, max 14s
-            double baseDuration = 5.0;
+            // AI responses get slightly longer display time
+            double baseDuration = source == SpeechSource.AI ? 6.0 : 5.0;
             double perCharDuration = 0.05;
             double calculatedDuration = baseDuration + (text.Length * perCharDuration);
-            double displayDuration = Math.Clamp(calculatedDuration, 5.0, 14.0);
+            double displayDuration = Math.Clamp(calculatedDuration, 5.0, 16.0);
 
             // Hide after calculated duration
             _speechTimer?.Stop();
             _speechTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(displayDuration) };
+
+            // Capture current speech properties for delay calculation
+            var currentSource = source;
+            var currentLength = text.Length;
+
             _speechTimer.Tick += (s, e) =>
             {
                 _speechTimer.Stop();
                 SpeechBubble.Visibility = Visibility.Collapsed;
 
-                // After a 1-second break, check the queue for the next message
-                var breakTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                breakTimer.Tick += (s_break, e_break) =>
-                {
-                    breakTimer.Stop();
-                    _isGiggling = false;
-                    if (_speechQueue.Count > 0)
-                    {
-                        var nextText = _speechQueue.Dequeue();
-                        App.Logger?.Debug("Dequeued speech: {Text}", nextText);
+                // Track this speech's properties for delay calculation on next speech
+                _lastSpeechEndTime = DateTime.Now;
+                _lastSpeechSource = currentSource;
+                _lastSpeechLength = currentLength;
 
-                        // Queued messages are presets - 1 in 5 chance for sound
-                        _presetGiggleCounter++;
-                        bool playSoundForQueued = _presetGiggleCounter % 5 == 0;
-                        ShowGiggle(nextText, playSoundForQueued);
-                    }
-                };
-                breakTimer.Start();
+                // Process next speech with proper delay handling
+                ProcessNextSpeech();
             };
             _speechTimer.Start();
 
             // Reset idle timer when speaking
             ResetIdleTimer();
 
-            App.Logger?.Debug("Companion says ({Chars} chars, {Duration:F1}s): {Text}",
-                text.Length, displayDuration, text);
+            App.Logger?.Debug("Companion says ({Source}, {Chars} chars, {Duration:F1}s): {Text}",
+                source, text.Length, displayDuration, text);
         }
 
         /// <summary>
-        /// Adjusts the speech bubble size, font size, and position based on text length.
-        /// Moves bubble up and right when it grows to avoid overlapping the tube.
+        /// Adjusts the speech bubble font size and position based on text length.
+        /// The bubble has fixed width (380) and MaxHeight (420) - ScrollViewer handles overflow.
         /// </summary>
         private void AdjustBubbleSize(string text)
         {
             int charCount = text.Length;
 
-            // Determine size/font based on character count
-            // Short (1-30 chars): normal size, normal font
-            // Medium (31-60 chars): taller bubble for more lines
-            // Long (61-100 chars): larger bubble, smaller font
-            // Very long (101+ chars): largest bubble, smallest font
-
-            double widthMultiplier;
-            double heightMultiplier;
+            // Adjust font size for readability based on text length
+            // Shorter text can use larger font, longer text uses smaller font
             double fontSize;
-
-            if (charCount <= 30)
+            if (charCount <= 50)
             {
-                // Short text - normal everything
-                widthMultiplier = 1.0;
-                heightMultiplier = 1.0;
-                fontSize = 26;
+                fontSize = 22; // Normal size for short messages
             }
-            else if (charCount <= 60)
+            else if (charCount <= 120)
             {
-                // Medium text - taller bubble, slightly smaller font
-                widthMultiplier = 1.05;
-                heightMultiplier = 1.5;
-                fontSize = 22;
+                fontSize = 20; // Slightly smaller for medium messages
             }
-            else if (charCount <= 100)
+            else if (charCount <= 250)
             {
-                // Long text - taller bubble, smaller font
-                widthMultiplier = 1.1;
-                heightMultiplier = 2.0;
-                fontSize = 20;
-            }
-            else if (charCount <= 150)
-            {
-                // Very long text - much taller, even smaller font
-                widthMultiplier = 1.15;
-                heightMultiplier = 2.4;
-                fontSize = 18;
+                fontSize = 18; // Smaller for longer messages
             }
             else
             {
-                // Extra long text - tallest bubble, smallest font
-                widthMultiplier = 1.15;
-                heightMultiplier = 2.8;
-                fontSize = 16;
+                fontSize = 16; // Smallest for very long AI responses
             }
 
-            double newWidth = BaseBubbleWidth * widthMultiplier;
-            double newHeight = BaseBubbleHeight * heightMultiplier;
-
-            SpeechBubble.Width = newWidth;
-            SpeechBubble.Height = newHeight;
             TxtSpeech.FontSize = fontSize;
 
-            // Anchor bottom-left corner at fixed position, bubble grows up and right
-            // Attached anchor: left=420, bottom=610 (so top = 610 - height)
-            // Detached anchor: left=210, bottom=530 (so top = 530 - height)
+            // Reset scroll position to top when new text is shown
+            SpeechScroller?.ScrollToTop();
+
+            // Position bubble next to avatar - anchored at bottom, grows upward
+            // Margin = left, top, right, bottom
             if (_isAttached)
             {
-                double anchorBottom = 610;
-                double anchorRight = 770; // Anchored to the right edge (780) with a 10px margin
-                double newLeft = anchorRight - newWidth;
-                SpeechBubble.Margin = new Thickness(newLeft, anchorBottom - newHeight, 0, 0);
+                // Position to the right of the avatar
+                SpeechBubble.Margin = new Thickness(0, 0, 90, 550);
             }
             else
             {
-                double anchorBottom = 530;
-                double anchorLeft = 210;
-                SpeechBubble.Margin = new Thickness(anchorLeft, anchorBottom - newHeight, 0, 0);
+                // Position to the left of the avatar (detached mode)
+                SpeechBubble.Margin = new Thickness(0, 0, 90, 550);
             }
         }
 
@@ -1715,7 +1844,7 @@ namespace ConditioningControlPanel
         {
             if (_tubeHandle == IntPtr.Zero) return;
 
-            // Bring to front without making it topmost
+            // Bring window to top of z-order (above main window)
             SetWindowPos(_tubeHandle, IntPtr.Zero, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         }
@@ -1965,59 +2094,90 @@ namespace ConditioningControlPanel
             {
                 if (_isMuted) return;
 
-                // Show the speech bubble
-                _isGiggling = true;
-                var formattedText = FormatTextForBubble(trigger);
-                TxtSpeech.Text = formattedText;
-                AdjustBubbleSize(formattedText);
-                SpeechBubble.Visibility = Visibility.Visible;
+                // Check if we need to delay based on last speech (delay based on PREVIOUS speech properties)
+                double timeSinceLastSpeech = (DateTime.Now - _lastSpeechEndTime).TotalSeconds;
+                double requiredDelay = CalculateRequiredDelayAfterLastSpeech();
 
-                if (_isAttached)
+                if (_isGiggling || timeSinceLastSpeech < requiredDelay)
                 {
-                    BringToFrontTemporarily();
+                    // Queue the trigger and let delay system handle it
+                    _speechQueue.Enqueue((trigger, SpeechSource.Trigger));
+                    App.Logger?.Debug("Queued trigger speech: {Trigger}", trigger);
+                    if (!_isGiggling)
+                    {
+                        _isGiggling = true;
+                        ProcessNextSpeech();
+                    }
+                    return;
                 }
 
-                // Play matching audio clip RIGHT when bubble appears
-                App.Subliminal?.PlayTriggerAudio(trigger);
-
-                App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
-
-                // Calculate display duration based on text length
-                double baseDuration = 5.0;
-                double perCharDuration = 0.05;
-                double calculatedDuration = baseDuration + (trigger.Length * perCharDuration);
-                double displayDuration = Math.Clamp(calculatedDuration, 5.0, 14.0);
-
-                // Hide after calculated duration
-                _speechTimer?.Stop();
-                _speechTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(displayDuration) };
-                _speechTimer.Tick += (s, e) =>
-                {
-                    _speechTimer.Stop();
-                    SpeechBubble.Visibility = Visibility.Collapsed;
-
-                    // Process queue after 1 second break (same as ShowGiggle)
-                    var breakTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                    breakTimer.Tick += (s_break, e_break) =>
-                    {
-                        ((DispatcherTimer)s_break!).Stop();
-                        _isGiggling = false;
-                        if (_speechQueue.Count > 0)
-                        {
-                            var nextText = _speechQueue.Dequeue();
-                            App.Logger?.Debug("Dequeued speech: {Text}", nextText);
-                            _presetGiggleCounter++;
-                            bool playSoundForQueued = _presetGiggleCounter % 5 == 0;
-                            ShowGiggle(nextText, playSoundForQueued);
-                        }
-                    };
-                    breakTimer.Start();
-                };
-                _speechTimer.Start();
-
-                // Reset idle timer when speaking
-                ResetIdleTimer();
+                // Show the speech bubble immediately
+                ShowTriggerBubbleImmediate(trigger);
             });
+        }
+
+        /// <summary>
+        /// Internal method to show trigger bubble immediately (called after delay if needed)
+        /// </summary>
+        private void ShowTriggerBubbleImmediate(string trigger)
+        {
+            if (_isMuted)
+            {
+                _isGiggling = false;
+                // Track timing and properties even when muted (for delay calculation)
+                _lastSpeechEndTime = DateTime.Now;
+                _lastSpeechSource = SpeechSource.Trigger;
+                _lastSpeechLength = trigger.Length;
+                ProcessNextSpeech();
+                return;
+            }
+
+            _isGiggling = true;
+            var formattedText = FormatTextForBubble(trigger);
+            TxtSpeech.Text = formattedText;
+            AdjustBubbleSize(formattedText);
+            SpeechBubble.Visibility = Visibility.Visible;
+
+            if (_isAttached)
+            {
+                BringToFrontTemporarily();
+            }
+
+            // Play matching audio clip RIGHT when bubble appears
+            App.Subliminal?.PlayTriggerAudio(trigger);
+
+            App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
+
+            // Calculate display duration based on text length
+            double baseDuration = 5.0;
+            double perCharDuration = 0.05;
+            double calculatedDuration = baseDuration + (trigger.Length * perCharDuration);
+            double displayDuration = Math.Clamp(calculatedDuration, 5.0, 14.0);
+
+            // Hide after calculated duration
+            _speechTimer?.Stop();
+            _speechTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(displayDuration) };
+
+            // Capture trigger length for delay calculation
+            var triggerLength = trigger.Length;
+
+            _speechTimer.Tick += (s, e) =>
+            {
+                _speechTimer.Stop();
+                SpeechBubble.Visibility = Visibility.Collapsed;
+
+                // Track this speech's properties for delay calculation on next speech
+                _lastSpeechEndTime = DateTime.Now;
+                _lastSpeechSource = SpeechSource.Trigger;
+                _lastSpeechLength = triggerLength;
+
+                // Process next speech with proper delay handling
+                ProcessNextSpeech();
+            };
+            _speechTimer.Start();
+
+            // Reset idle timer when speaking
+            ResetIdleTimer();
         }
 
         /// <summary>
@@ -2411,7 +2571,7 @@ namespace ConditioningControlPanel
                     reaction = await App.Ai.GetAwarenessReactionAsync(displayName, e.Category.ToString(), e.ServiceName, pageTitle);
                     if (reaction != null)
                     {
-                        reaction = TruncateToWords(reaction, 30);
+                        // No truncation - scrollable speech bubble handles long text
                         isAiResponse = true;
                     }
                 }
@@ -2476,7 +2636,7 @@ namespace ConditioningControlPanel
                     reaction = await App.Ai.GetStillOnReactionAsync(displayName, e.Category.ToString(), duration);
                     if (reaction != null)
                     {
-                        reaction = TruncateToWords(reaction, 30);
+                        // No truncation - scrollable speech bubble handles long text
                         isAiResponse = true;
                     }
                 }
@@ -2928,9 +3088,8 @@ namespace ConditioningControlPanel
                     // Show quick thinking phrase immediately
                     GigglePriority(GetRandomThinkingPhrase());
 
-                    // Get AI response and truncate to 30 words max
+                    // Get AI response - no truncation, scrollable bubble handles long text
                     var reply = await App.Ai.GetBambiReplyAsync(input);
-                    reply = TruncateToWords(reply, 30);
 
                     // Double bounce to attract attention, then show AI response
                     PlayDoubleBounce();
@@ -3015,10 +3174,7 @@ namespace ConditioningControlPanel
             // Move avatar position when detached (6px more left from previous)
             AvatarBorder.Margin = new Thickness(5, 100, 426, 203);
 
-            // Speech bubble position when detached - use left-based margin consistent with AdjustBubbleSizeToText
-            // Detached anchor: left=210, bottom=530, so top=530-260=270
-            SpeechBubble.LayoutTransform = new ScaleTransform(1.21, 1.21);
-
+            // Speech bubble position when detached - left side of avatar
             // If a bubble is currently visible, recalculate its position for detached mode
             if (SpeechBubble.Visibility == Visibility.Visible && !string.IsNullOrEmpty(TxtSpeech.Text))
             {
@@ -3026,7 +3182,7 @@ namespace ConditioningControlPanel
             }
             else
             {
-                SpeechBubble.Margin = new Thickness(210, 270, 0, 0);
+                SpeechBubble.Margin = new Thickness(0, 0, 90, 550);
             }
 
             // Title box position when detached (120px to the left)
@@ -3066,10 +3222,7 @@ namespace ConditioningControlPanel
             // Restore avatar position when attached (matches XAML default)
             AvatarBorder.Margin = new Thickness(5, 100, 126, 205);
 
-            // Restore speech bubble position when attached
-            // Attached anchor: right=770, so left = 770 - width
-            SpeechBubble.LayoutTransform = null;
-
+            // Restore speech bubble position when attached - right side of avatar
             // If a bubble is currently visible, recalculate its position for attached mode
             if (SpeechBubble.Visibility == Visibility.Visible && !string.IsNullOrEmpty(TxtSpeech.Text))
             {
@@ -3077,7 +3230,7 @@ namespace ConditioningControlPanel
             }
             else
             {
-                SpeechBubble.Margin = new Thickness(350, 350, 0, 0); // 350 = 770 - 420 (BaseBubbleWidth)
+                SpeechBubble.Margin = new Thickness(0, 0, 90, 550);
             }
 
             // Restore title box position when attached (matches XAML default)

@@ -97,6 +97,16 @@ namespace ConditioningControlPanel.Services
         public string? PatronEmail { get; private set; }
 
         /// <summary>
+        /// Custom display name chosen by user on first login
+        /// </summary>
+        public string? DisplayName { get; private set; }
+
+        /// <summary>
+        /// Whether this is the user's first login (no display name set yet)
+        /// </summary>
+        public bool IsFirstLogin => IsAuthenticated && string.IsNullOrEmpty(DisplayName);
+
+        /// <summary>
         /// Whether the user is whitelisted (gets Tier 1 access regardless of subscription)
         /// Checks both email and name as fallback
         /// </summary>
@@ -367,7 +377,7 @@ namespace ConditioningControlPanel.Services
                     var cachedState = _tokenStorage.RetrieveCachedState();
                     if (cachedState != null && !cachedState.IsExpired)
                     {
-                        UpdateTier(cachedState.Tier, cachedState.IsActive, cachedState.PatronName, cachedState.PatronEmail);
+                        UpdateTier(cachedState.Tier, cachedState.IsActive, cachedState.PatronName, cachedState.PatronEmail, cachedState.DisplayName);
                         return CurrentTier;
                     }
                 }
@@ -456,6 +466,8 @@ namespace ConditioningControlPanel.Services
                 UpdateTier(newTier, effectivelyActive, subscription.PatronName, subscription.PatronEmail);
 
                 // Cache result for 24 hours (use effective values for whitelisted users)
+                // Preserve existing DisplayName from current cache
+                var existingCache = _tokenStorage.RetrieveCachedState();
                 _tokenStorage.StoreCachedState(new PatreonCachedState
                 {
                     Tier = newTier,
@@ -463,7 +475,8 @@ namespace ConditioningControlPanel.Services
                     LastVerified = DateTime.UtcNow,
                     CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours),
                     PatronName = subscription.PatronName,
-                    PatronEmail = subscription.PatronEmail
+                    PatronEmail = subscription.PatronEmail,
+                    DisplayName = existingCache?.DisplayName ?? DisplayName
                 });
 
                 App.Logger?.Information("Patreon subscription validated: Tier={Tier}, ProxyActive={ProxyActive}, EffectiveActive={EffectiveActive}, Name={Name}, Email={Email}, Whitelisted={Whitelisted}",
@@ -521,13 +534,18 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void UpdateTier(PatreonTier tier, bool isActive, string? patronName, string? patronEmail = null)
+        private void UpdateTier(PatreonTier tier, bool isActive, string? patronName, string? patronEmail = null, string? displayName = null)
         {
             var tierChanged = CurrentTier != tier;
             CurrentTier = tier;
             IsActivePatron = isActive;
             PatronName = patronName;
             PatronEmail = patronEmail;
+            // Only update DisplayName if provided (preserve existing)
+            if (displayName != null)
+            {
+                DisplayName = displayName;
+            }
 
             if (tierChanged)
             {
@@ -539,6 +557,30 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Information("User {Email} is whitelisted - granting premium access", PatronEmail);
             }
+        }
+
+        /// <summary>
+        /// Set the user's display name (can only be set once)
+        /// </summary>
+        public void SetDisplayName(string displayName)
+        {
+            if (!string.IsNullOrEmpty(DisplayName))
+            {
+                App.Logger?.Warning("Attempted to change display name, but it's already set");
+                return;
+            }
+
+            DisplayName = displayName.Trim();
+
+            // Update the cached state with the new display name
+            var cachedState = _tokenStorage.RetrieveCachedState();
+            if (cachedState != null)
+            {
+                cachedState.DisplayName = DisplayName;
+                _tokenStorage.StoreCachedState(cachedState);
+            }
+
+            App.Logger?.Information("Display name set to: {DisplayName}", DisplayName);
         }
 
         private void LoadCachedState()
@@ -555,6 +597,7 @@ namespace ConditioningControlPanel.Services
                     IsActivePatron = cachedState.IsActive;
                     PatronName = cachedState.PatronName;
                     PatronEmail = cachedState.PatronEmail;
+                    DisplayName = cachedState.DisplayName;
                 }
             }
             catch (Exception ex)

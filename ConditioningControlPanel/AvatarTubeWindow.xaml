@@ -11,6 +11,64 @@
         ResizeMode="NoResize"
         SizeToContent="WidthAndHeight">
 
+    <Window.Resources>
+        <!-- Purplish gradient background for speech bubble -->
+        <LinearGradientBrush x:Key="BubbleGradient" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#3D2066" Offset="0"/>
+            <GradientStop Color="#1A1A2E" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Tiny pink scrollbar style -->
+        <Style x:Key="TinyPinkScrollBar" TargetType="ScrollBar">
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="MinWidth" Value="6"/>
+            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="{TemplateBinding Background}">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.Thumb>
+                                    <Thumb Background="#FF69B4" BorderThickness="0">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="3"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ScrollViewer style using tiny pink scrollbar -->
+        <Style x:Key="TinyPinkScrollViewer" TargetType="ScrollViewer">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ScrollContentPresenter Grid.Column="0" Margin="0,0,4,0"/>
+                            <ScrollBar x:Name="PART_VerticalScrollBar"
+                                       Grid.Column="1"
+                                       Style="{StaticResource TinyPinkScrollBar}"
+                                       Value="{TemplateBinding VerticalOffset}"
+                                       Maximum="{TemplateBinding ScrollableHeight}"
+                                       ViewportSize="{TemplateBinding ViewportHeight}"
+                                       Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
 
     <Grid>
         <!-- Viewbox scales content uniformly to fit any screen size -->
@@ -25,40 +83,45 @@
                    VerticalAlignment="Center"
                    IsHitTestVisible="False"/>
 
-            <!-- Speech Bubble - Z-Index 10, anchored bottom-left, grows up and right -->
-            <!-- Attached anchor: left=420, bottom=610, so top=610-260=350 -->
-            <Grid x:Name="SpeechBubble"
-                  Panel.ZIndex="10"
-                  Visibility="Collapsed"
-                  HorizontalAlignment="Left"
-                  VerticalAlignment="Top"
-                  Opacity="0.75"
-                  Margin="420,350,0,0"
-                  Width="420" Height="260">
+            <!-- Speech Bubble - Z-Index 10, positioned next to avatar -->
+            <!-- Dynamic bubble that sizes to content, grows UPWARD, scrolls when exceeding max -->
+            <Border x:Name="SpeechBubble"
+                    Panel.ZIndex="10"
+                    Visibility="Collapsed"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Opacity="0.92"
+                    Margin="0,0,90,550"
+                    MinWidth="120" MaxWidth="380"
+                    Background="{StaticResource BubbleGradient}"
+                    CornerRadius="20"
+                    BorderBrush="#FF69B4"
+                    BorderThickness="3"
+                    Padding="15,12">
 
-                <!-- Bubble background image -->
-                <Image x:Name="ImgSpeechBubble"
-                       Source="pack://application:,,,/Resources/speechbubble1.png"
-                       Stretch="Fill"
-                       IsHitTestVisible="False"/>
+                <!-- ScrollViewer sizes to content, scrolls when over MaxHeight -->
+                <ScrollViewer x:Name="SpeechScroller"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              MaxHeight="280"
+                              Style="{StaticResource TinyPinkScrollViewer}">
 
-                <!-- Speech text centered over bubble, bubbly Comic Sans font -->
-                <TextBlock x:Name="TxtSpeech"
-                           Text=""
-                           Foreground="#FF10F0"
-                           FontFamily="Comic Sans MS"
-                           FontSize="33"
-                           FontWeight="Bold"
-                           TextWrapping="Wrap"
-                           TextAlignment="Center"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Margin="70,24,120,42">
-                    <TextBlock.Effect>
-                        <DropShadowEffect Color="Black" BlurRadius="1" ShadowDepth="1.5" Direction="315" Opacity="1"/>
-                    </TextBlock.Effect>
-                </TextBlock>
-            </Grid>
+                    <!-- Speech text with bubbly pink font -->
+                    <TextBlock x:Name="TxtSpeech"
+                               Text=""
+                               Foreground="#FF69B4"
+                               FontFamily="Comic Sans MS"
+                               FontSize="20"
+                               FontWeight="Bold"
+                               TextWrapping="Wrap"
+                               TextAlignment="Left"
+                               Padding="0,0,8,0">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="Black" BlurRadius="2" ShadowDepth="1.5" Direction="315" Opacity="0.8"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                </ScrollViewer>
+            </Border>
 
             <!-- Text Input Panel (hidden by default) - Z-Index 3, positioned near avatar -->
             <Border x:Name="InputPanel"

@@ -64,10 +64,22 @@ namespace ConditioningControlPanel
         private bool _schedulerAutoStarted = false;
         private bool _manuallyStoppedDuringSchedule = false;
 
+        // Banner rotation
+        private DispatcherTimer? _bannerRotationTimer;
+        private bool _bannerShowingPrimary = true;
+        private List<string> _bannerMessages = new();
+
         public MainWindow()
         {
             InitializeComponent();
-            
+
+            // Set version dynamically from assembly
+            var version = Services.UpdateService.GetCurrentVersion();
+            TxtVersion.Text = $"Version {version}";
+            Title = $"Conditioning Control Panel v{version}";
+            TxtTitleBarVersion.Text = $"Conditioning Control Panel v{version}";
+            TxtHeaderVersion.Text = $"v{version}";
+
             // Center on primary monitor
             CenterOnPrimaryScreen();
             
@@ -109,7 +121,10 @@ namespace ConditioningControlPanel
             // Subscribe to progression events for real-time XP updates
             App.Progression.XPChanged += OnXPChanged;
             App.Progression.LevelUp += OnLevelUp;
-            
+
+            // Subscribe to cloud profile sync event to refresh UI when profile loads
+            App.ProfileSync.ProfileLoaded += OnProfileLoaded;
+
             LoadSettings();
             InitializePresets();
             UpdateUI();
@@ -128,16 +143,33 @@ namespace ConditioningControlPanel
 
             // Initialize Avatar tab settings
             InitializePatreonTab();
-            
+
+            // Initialize banner rotation
+            InitializeBannerRotation();
+
             // Ensure all services are stopped on startup (cleanup any leftover state)
             App.BouncingText.Stop();
             App.Overlay.Stop();
             
             // Show welcome dialog on first launch, then start tutorial
+            // But delay tutorial if update dialog is being shown
             if (WelcomeDialog.ShowIfNeeded())
             {
-                Dispatcher.BeginInvoke(new Action(() => StartTutorial()),
-                    System.Windows.Threading.DispatcherPriority.Loaded);
+                Dispatcher.BeginInvoke(new Action(async () =>
+                {
+                    // Wait for any update dialog to be dismissed first
+                    // Check every 500ms for up to 30 seconds
+                    for (int i = 0; i < 60 && App.IsUpdateDialogActive; i++)
+                    {
+                        await Task.Delay(500);
+                    }
+
+                    // Only start tutorial if update dialog is done
+                    if (!App.IsUpdateDialogActive)
+                    {
+                        StartTutorial();
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Loaded);
             }
             
             // Initialize scheduler timer (checks every 30 seconds)
@@ -158,6 +190,18 @@ namespace ConditioningControlPanel
         private void OnXPChanged(object? sender, double xp)
         {
             Dispatcher.Invoke(() => UpdateLevelDisplay());
+        }
+
+        private void OnProfileLoaded(object? sender, EventArgs e)
+        {
+            // Cloud profile was loaded - refresh UI to show updated XP/level
+            Dispatcher.Invoke(() =>
+            {
+                App.Logger?.Information("Cloud profile loaded, refreshing UI");
+                UpdateLevelDisplay();
+                // Also update avatar in case level changed significantly
+                _avatarTubeWindow?.UpdateAvatarForLevel(App.Settings.Current.PlayerLevel);
+            });
         }
 
         private void OnLevelUp(object? sender, int newLevel)
@@ -574,6 +618,44 @@ namespace ConditioningControlPanel
             }
         }
 
+        private async void BtnCheckUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            BtnCheckUpdates.IsEnabled = false;
+            BtnCheckUpdates.Content = "Checking...";
+
+            try
+            {
+                await App.CheckForUpdatesManuallyAsync(this);
+            }
+            finally
+            {
+                BtnCheckUpdates.IsEnabled = true;
+                BtnCheckUpdates.Content = "Check for Updates";
+            }
+        }
+
+        private async void BtnUpdateAvailable_Click(object sender, RoutedEventArgs e)
+        {
+            // Trigger the update installation
+            await App.CheckForUpdatesManuallyAsync(this);
+        }
+
+        /// <summary>
+        /// Sets the update button state in the tab bar.
+        /// Called from App when an update is detected or after checking.
+        /// </summary>
+        public void ShowUpdateAvailableButton(bool updateAvailable)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                BtnUpdateAvailable.Tag = updateAvailable ? "UpdateAvailable" : "NoUpdate";
+                BtnUpdateAvailable.Content = updateAvailable ? "UPDATE" : "LATEST VERSION :3";
+                BtnUpdateAvailable.ToolTip = updateAvailable
+                    ? "Update Available - Click to install!"
+                    : "You're on the latest version";
+            });
+        }
+
         private void ShowTab(string tab)
         {
             // Hide all tabs
@@ -772,6 +854,7 @@ namespace ConditioningControlPanel
                 // Logout
                 App.Patreon.Logout();
                 UpdatePatreonUI();
+                UpdateBannerWelcomeMessage();
             }
             else
             {
@@ -782,6 +865,24 @@ namespace ConditioningControlPanel
                 try
                 {
                     await App.Patreon.StartOAuthFlowAsync();
+
+                    // Check if this is a first-time login (no display name set)
+                    if (App.Patreon.IsFirstLogin)
+                    {
+                        // Prompt user to choose their display name
+                        var dialog = new DisplayNameDialog
+                        {
+                            Owner = this
+                        };
+
+                        if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.DisplayName))
+                        {
+                            App.Patreon.SetDisplayName(dialog.DisplayName);
+                        }
+                    }
+
+                    // Update banner with welcome message
+                    UpdateBannerWelcomeMessage();
                 }
                 catch (OperationCanceledException)
                 {
@@ -1236,6 +1337,98 @@ namespace ConditioningControlPanel
             finally
             {
                 _isLoading = false;
+            }
+        }
+
+        #endregion
+
+        #region Banner Rotation
+
+        private void InitializeBannerRotation()
+        {
+            // Start the rotation timer (switches every 4 seconds)
+            _bannerRotationTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(4)
+            };
+            _bannerRotationTimer.Tick += BannerRotationTimer_Tick;
+
+            // Update welcome message based on login status
+            UpdateBannerWelcomeMessage();
+
+            // Start timer if we have a welcome message
+            if (App.Patreon?.IsAuthenticated == true && !string.IsNullOrEmpty(App.Patreon.DisplayName))
+            {
+                _bannerRotationTimer.Start();
+            }
+        }
+
+        private void UpdateBannerWelcomeMessage()
+        {
+            var displayName = App.Patreon?.DisplayName;
+            if (!string.IsNullOrEmpty(displayName))
+            {
+                TxtBannerSecondary.Text = $"Welcome back, {displayName}!";
+
+                // Start rotation if not already running
+                if (_bannerRotationTimer != null && !_bannerRotationTimer.IsEnabled)
+                {
+                    _bannerRotationTimer.Start();
+                }
+            }
+            else if (App.Patreon?.IsAuthenticated != true)
+            {
+                // Not logged in - stop rotation and show primary
+                _bannerRotationTimer?.Stop();
+                _bannerShowingPrimary = true;
+                TxtBannerPrimary.Opacity = 1;
+                TxtBannerSecondary.Opacity = 0;
+            }
+        }
+
+        private void BannerRotationTimer_Tick(object? sender, EventArgs e)
+        {
+            // Animate the fade transition
+            var fadeOutTarget = _bannerShowingPrimary ? TxtBannerPrimary : TxtBannerSecondary;
+            var fadeInTarget = _bannerShowingPrimary ? TxtBannerSecondary : TxtBannerPrimary;
+
+            // Create fade animations
+            var fadeOut = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                From = 1,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(500),
+                EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+            };
+
+            var fadeIn = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(500),
+                EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+            };
+
+            // Apply animations
+            fadeOutTarget.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+            fadeInTarget.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+
+            _bannerShowingPrimary = !_bannerShowingPrimary;
+        }
+
+        /// <summary>
+        /// Set a temporary announcement message to display in the banner rotation
+        /// </summary>
+        public void SetBannerAnnouncement(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return;
+
+            TxtBannerSecondary.Text = message;
+
+            // Ensure timer is running
+            if (_bannerRotationTimer != null && !_bannerRotationTimer.IsEnabled)
+            {
+                _bannerRotationTimer.Start();
             }
         }
 
@@ -1956,14 +2149,19 @@ namespace ConditioningControlPanel
             {
                 // Award XP
                 App.Progression.AddXP(e.XPEarned);
-                
+
                 // Show completion window
                 var completeWindow = new SessionCompleteWindow(e.Session, e.Duration, e.XPEarned);
                 completeWindow.Owner = this;
                 completeWindow.ShowDialog();
-                
-                
+
                 App.Logger?.Information("Session {Name} completed, awarded {XP} XP", e.Session.Name, e.XPEarned);
+
+                // Sync progress to cloud after session (fire and forget)
+                if (App.ProfileSync?.IsSyncEnabled == true)
+                {
+                    _ = App.ProfileSync.SyncProfileAsync();
+                }
             });
         }
         
@@ -4552,6 +4750,19 @@ namespace ConditioningControlPanel
         {
             if (_isLoading || TxtDuck == null) return;
             TxtDuck.Text = $"{(int)e.NewValue}%";
+            ApplySettingsLive();
+        }
+
+        private void ChkAudioDuck_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            // If ducking was just disabled, immediately restore audio for any ducked sessions
+            if (ChkAudioDuck.IsChecked == false)
+            {
+                App.Audio?.Unduck();
+            }
+
             ApplySettingsLive();
         }
 

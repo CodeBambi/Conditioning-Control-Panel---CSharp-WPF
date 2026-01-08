@@ -340,15 +340,12 @@ public class OverlayService : IDisposable
     {
         try
         {
-            double primaryDpi = GetPrimaryMonitorDpi();
-            double primaryScale = primaryDpi / 96.0;
-            double monitorDpi = GetMonitorDpi(screen);
-
-            // All WPF coordinates use primary DPI as the reference
-            double left = screen.Bounds.X / primaryScale;
-            double top = screen.Bounds.Y / primaryScale;
-            double width = screen.Bounds.Width / primaryScale;
-            double height = screen.Bounds.Height / primaryScale;
+            // Get WPF-compatible screen bounds using per-monitor DPI awareness
+            var wpfBounds = GetWpfScreenBounds(screen);
+            double left = wpfBounds.Left;
+            double top = wpfBounds.Top;
+            double width = wpfBounds.Width;
+            double height = wpfBounds.Height;
 
             // Linear opacity (no exponential curve)
             var actualOpacity = opacity / 100.0;
@@ -387,8 +384,8 @@ public class OverlayService : IDisposable
             
             window.Show();
             
-            App.Logger?.Debug("Pink filter for {Screen} at {X},{Y} size {W}x{H} (MonitorDPI:{MonDpi}, PrimaryDPI:{PriDpi})", 
-                screen.DeviceName, left, top, width, height, monitorDpi, primaryDpi);
+            App.Logger?.Debug("Pink filter for {Screen} at WPF coords ({X},{Y}) size {W}x{H}",
+                screen.DeviceName, left, top, width, height);
             
             return window;
         }
@@ -517,14 +514,8 @@ public class OverlayService : IDisposable
     {
         try
         {
-            double primaryDpi = GetPrimaryMonitorDpi();
-            double primaryScale = primaryDpi / 96.0;
-
-            // All WPF coordinates use primary DPI as the reference
-            double left = screen.Bounds.X / primaryScale;
-            double top = screen.Bounds.Y / primaryScale;
-            double width = screen.Bounds.Width / primaryScale;
-            double height = screen.Bounds.Height / primaryScale;
+            // Get WPF-compatible screen bounds using per-monitor DPI awareness
+            var wpfBounds = GetWpfScreenBounds(screen);
 
             // Very subtle opacity - 90% reduction
             var actualOpacity = (opacity / 100.0) * 0.1;
@@ -536,13 +527,23 @@ public class OverlayService : IDisposable
                 UnloadedBehavior = MediaState.Manual,
                 Stretch = Stretch.UniformToFill,
                 Opacity = actualOpacity,
-                IsMuted = true
+                IsMuted = true,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
             };
 
             mediaElement.MediaEnded += (s, e) =>
             {
                 mediaElement.Position = TimeSpan.Zero;
                 mediaElement.Play();
+            };
+
+            // Use a Viewbox to ensure proper centering and scaling on all monitors
+            var viewbox = new Viewbox
+            {
+                Stretch = Stretch.UniformToFill,
+                StretchDirection = StretchDirection.Both,
+                Child = mediaElement
             };
 
             var window = new Window
@@ -556,11 +557,11 @@ public class OverlayService : IDisposable
                 Focusable = false,
                 IsHitTestVisible = false,
                 WindowStartupLocation = WindowStartupLocation.Manual,
-                Left = left,
-                Top = top,
-                Width = width,
-                Height = height,
-                Content = mediaElement
+                Left = wpfBounds.Left,
+                Top = wpfBounds.Top,
+                Width = wpfBounds.Width,
+                Height = wpfBounds.Height,
+                Content = viewbox
             };
 
             window.SourceInitialized += (s, e) =>
@@ -571,7 +572,10 @@ public class OverlayService : IDisposable
             };
 
             window.Show();
-            
+
+            App.Logger?.Debug("Spiral for {Screen} at WPF coords ({X},{Y}) size {W}x{H}",
+                screen.DeviceName, wpfBounds.Left, wpfBounds.Top, wpfBounds.Width, wpfBounds.Height);
+
             return (window, mediaElement);
         }
         catch (Exception ex)
@@ -1069,15 +1073,12 @@ public class OverlayService : IDisposable
     {
         try
         {
-            double primaryDpi = GetPrimaryMonitorDpi();
-            double primaryScale = primaryDpi / 96.0;
-
-            // All WPF coordinates use primary DPI as the reference
-            // This ensures correct sizing on monitors with different DPI
-            double left = screen.Bounds.X / primaryScale;
-            double top = screen.Bounds.Y / primaryScale;
-            double width = screen.Bounds.Width / primaryScale;
-            double height = screen.Bounds.Height / primaryScale;
+            // Get WPF-compatible screen bounds using per-monitor DPI awareness
+            var wpfBounds = GetWpfScreenBounds(screen);
+            double left = wpfBounds.Left;
+            double top = wpfBounds.Top;
+            double width = wpfBounds.Width;
+            double height = wpfBounds.Height;
 
             // Scale intensity to blur radius - keep it subtle for performance
             // intensity 0-25 maps to blur radius 0-12.5 (0.5x multiplier)
@@ -1171,6 +1172,55 @@ public class OverlayService : IDisposable
     #endregion
 
     #region Helpers
+
+    /// <summary>
+    /// Represents screen bounds in WPF device-independent units
+    /// </summary>
+    private struct WpfScreenBounds
+    {
+        public double Left;
+        public double Top;
+        public double Width;
+        public double Height;
+    }
+
+    /// <summary>
+    /// Gets the screen bounds converted to WPF device-independent coordinates.
+    /// This properly handles multi-monitor setups with different DPI settings.
+    /// </summary>
+    private WpfScreenBounds GetWpfScreenBounds(System.Windows.Forms.Screen screen)
+    {
+        // WPF uses the primary monitor's DPI as the reference for all coordinate calculations
+        double primaryDpi = GetPrimaryMonitorDpi();
+        double primaryScale = primaryDpi / 96.0;
+
+        // Get the target monitor's DPI for proper size calculation
+        double monitorDpi = GetMonitorDpi(screen);
+        double monitorScale = monitorDpi / 96.0;
+
+        // Position is always relative to primary monitor's coordinate space
+        double left = screen.Bounds.X / primaryScale;
+        double top = screen.Bounds.Y / primaryScale;
+
+        // Size needs to account for both the physical size and DPI difference
+        // The physical pixels are reported by screen.Bounds, we convert to WPF units
+        double width = screen.Bounds.Width / primaryScale;
+        double height = screen.Bounds.Height / primaryScale;
+
+        App.Logger?.Debug("Screen {Name}: Physical=({PX},{PY},{PW}x{PH}), PrimaryDPI={PDPI}, MonitorDPI={MDPI}, WPF=({WX},{WY},{WW}x{WH})",
+            screen.DeviceName,
+            screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height,
+            primaryDpi, monitorDpi,
+            left, top, width, height);
+
+        return new WpfScreenBounds
+        {
+            Left = left,
+            Top = top,
+            Width = width,
+            Height = height
+        };
+    }
 
     private double GetMonitorDpi(System.Windows.Forms.Screen screen)
     {

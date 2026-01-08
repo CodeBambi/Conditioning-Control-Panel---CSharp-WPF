@@ -2,14 +2,37 @@ using System;
 using System.IO;
 using System.Media;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Serilog;
+using Velopack;
+
+// Alias to avoid ambiguity with Velopack.UpdateInfo
+using AppUpdateInfo = ConditioningControlPanel.Models.UpdateInfo;
 
 namespace ConditioningControlPanel
 {
     public partial class App : Application
     {
+        /// <summary>
+        /// Custom entry point required for Velopack auto-updates.
+        /// Must call VelopackApp.Build().Run() before WPF Application starts.
+        /// </summary>
+        [STAThread]
+        public static void Main(string[] args)
+        {
+            // Velopack: Handle updates before anything else
+            // This allows Velopack to process update commands (install, uninstall, etc.)
+            VelopackApp.Build().Run();
+
+            // Now start the WPF application normally
+            var app = new App();
+            app.InitializeComponent();
+            app.Run();
+        }
+
         // Single instance mutex
         private static Mutex? _mutex;
         private const string MutexName = "ConditioningControlPanel_SingleInstance_Mutex";
@@ -34,6 +57,19 @@ namespace ConditioningControlPanel
         public static AiService Ai { get; private set; } = null!;
         public static WindowAwarenessService WindowAwareness { get; private set; } = null!;
         public static PatreonService Patreon { get; private set; } = null!;
+        public static UpdateService Update { get; private set; } = null!;
+        public static ProfileSyncService ProfileSync { get; private set; } = null!;
+
+        /// <summary>
+        /// Flag to indicate if an update dialog is currently being shown.
+        /// Used to delay tutorial until update is handled.
+        /// </summary>
+        public static bool IsUpdateDialogActive { get; set; } = false;
+
+        /// <summary>
+        /// Flag to prevent concurrent update checks
+        /// </summary>
+        private static bool _isCheckingForUpdates = false;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -100,9 +136,15 @@ namespace ConditioningControlPanel
             Ai = new AiService();
             WindowAwareness = new WindowAwarenessService();
             Patreon = new PatreonService();
+            ProfileSync = new ProfileSyncService();
 
             // Initialize Patreon (validate subscription in background)
-            _ = Patreon.InitializeAsync();
+            // Then load cloud profile if authenticated
+            _ = InitializePatreonAndSyncAsync();
+
+            // Initialize Update service and check for updates in background
+            Update = new UpdateService();
+            _ = CheckForUpdatesInBackgroundAsync();
 
             // Wire up achievement popup BEFORE checking any achievements
             Achievements.AchievementUnlocked += OnAchievementUnlocked;
@@ -142,6 +184,269 @@ namespace ConditioningControlPanel
             PlayAchievementSound();
         }
         
+        /// <summary>
+        /// Initialize Patreon and load cloud profile if authenticated
+        /// </summary>
+        private async Task InitializePatreonAndSyncAsync()
+        {
+            try
+            {
+                // Initialize Patreon authentication
+                await Patreon.InitializeAsync();
+
+                // If authenticated, load cloud profile
+                if (Patreon.IsAuthenticated)
+                {
+                    Logger?.Information("Patreon authenticated, loading cloud profile...");
+                    await ProfileSync.LoadProfileAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to initialize Patreon and sync profile");
+            }
+        }
+
+        /// <summary>
+        /// Check for updates in the background after a short delay
+        /// </summary>
+        private async Task CheckForUpdatesInBackgroundAsync()
+        {
+            try
+            {
+                // Delay update check to let app fully load
+                await Task.Delay(3000);
+
+                var updateInfo = await Update.CheckForUpdatesAsync();
+
+                if (updateInfo?.IsNewer == true)
+                {
+                    // Show notification and update button via dispatcher
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        var mainWindow = Application.Current.MainWindow as MainWindow;
+                        if (mainWindow != null)
+                        {
+                            // Show the update button in tab bar
+                            mainWindow.ShowUpdateAvailableButton(true);
+
+                            // Show the update notification dialog
+                            ShowUpdateNotification(updateInfo, mainWindow);
+                        }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Background update check failed");
+                // Silently fail - don't disrupt user
+            }
+        }
+
+        /// <summary>
+        /// Show update notification dialog and handle user response
+        /// </summary>
+        private void ShowUpdateNotification(AppUpdateInfo updateInfo, Window owner)
+        {
+            try
+            {
+                Logger?.Information("Showing update notification dialog for version {Version}", updateInfo.Version);
+                IsUpdateDialogActive = true;
+
+                var dialog = new UpdateNotificationDialog(updateInfo)
+                {
+                    Owner = owner,
+                    Topmost = true,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+
+                var installRequested = dialog.ShowDialog() == true && dialog.InstallRequested;
+                Logger?.Information("Update dialog closed, install requested: {InstallRequested}", installRequested);
+
+                if (installRequested)
+                {
+                    // Keep flag active during download
+                    DownloadAndInstallUpdateAsync(owner);
+                }
+                else
+                {
+                    // User declined or closed dialog
+                    IsUpdateDialogActive = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Error showing update notification dialog");
+                IsUpdateDialogActive = false;
+            }
+        }
+
+        /// <summary>
+        /// Download and install the update with progress dialog
+        /// </summary>
+        private async void DownloadAndInstallUpdateAsync(Window owner)
+        {
+            UpdateProgressDialog? progressDialog = null;
+            EventHandler<int>? progressHandler = null;
+
+            try
+            {
+                // Create and show dialog directly (we're already on UI thread)
+                Logger?.Information("Creating progress dialog...");
+                progressDialog = new UpdateProgressDialog();
+                progressDialog.Topmost = true;
+                Logger?.Information("Showing progress dialog...");
+                progressDialog.Show();
+                Logger?.Information("Progress dialog shown");
+
+                // Allow UI to update
+                await Task.Delay(100);
+
+                Logger?.Information("Starting update download...");
+
+                // Create progress handler that safely updates the dialog
+                progressHandler = (s, progress) =>
+                {
+                    try
+                    {
+                        progressDialog?.Dispatcher.BeginInvoke(() =>
+                        {
+                            if (progressDialog.IsVisible)
+                            {
+                                progressDialog.SetProgress(progress);
+                            }
+                        });
+                    }
+                    catch
+                    {
+                        // Ignore if dialog was closed
+                    }
+                };
+
+                Update.DownloadProgressChanged += progressHandler;
+
+                await Update.DownloadUpdateAsync();
+
+                progressDialog.Close();
+                progressDialog = null;
+
+                // Ask user to restart
+                var result = MessageBox.Show(
+                    owner,
+                    "Update downloaded successfully. Restart now to apply the update?",
+                    "Update Ready",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    Update.ApplyUpdateAndRestart();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to download update");
+
+                try
+                {
+                    progressDialog?.Close();
+                }
+                catch
+                {
+                    // Ignore close errors
+                }
+
+                MessageBox.Show(
+                    owner,
+                    $"Failed to download update: {ex.Message}",
+                    "Update Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            finally
+            {
+                // Always unsubscribe the event handler
+                if (progressHandler != null)
+                {
+                    Update.DownloadProgressChanged -= progressHandler;
+                }
+
+                IsUpdateDialogActive = false;
+            }
+        }
+
+        /// <summary>
+        /// Manually check for updates (called from MainWindow)
+        /// </summary>
+        public static async Task<bool> CheckForUpdatesManuallyAsync(Window owner)
+        {
+            // Prevent concurrent update checks
+            if (_isCheckingForUpdates || IsUpdateDialogActive)
+            {
+                Logger?.Information("Update check already in progress, skipping");
+                return false;
+            }
+
+            _isCheckingForUpdates = true;
+
+            try
+            {
+                var updateInfo = await Update.CheckForUpdatesAsync();
+
+                if (updateInfo?.IsNewer == true)
+                {
+                    IsUpdateDialogActive = true;
+
+                    var dialog = new UpdateNotificationDialog(updateInfo)
+                    {
+                        Owner = owner,
+                        Topmost = true,
+                        WindowStartupLocation = WindowStartupLocation.CenterOwner
+                    };
+
+                    var installRequested = dialog.ShowDialog() == true && dialog.InstallRequested;
+
+                    if (installRequested)
+                    {
+                        ((App)Current).DownloadAndInstallUpdateAsync(owner);
+                    }
+                    else
+                    {
+                        IsUpdateDialogActive = false;
+                    }
+                    return true;
+                }
+                else
+                {
+                    // Hide the update button since we're on latest
+                    (owner as MainWindow)?.ShowUpdateAvailableButton(false);
+
+                    MessageBox.Show(
+                        owner,
+                        $"You're running the latest version ({UpdateService.GetCurrentVersion()}).",
+                        "No Updates",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Manual update check failed");
+                MessageBox.Show(
+                    owner,
+                    $"Failed to check for updates: {ex.Message}",
+                    "Update Check Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return false;
+            }
+            finally
+            {
+                _isCheckingForUpdates = false;
+            }
+        }
+
         /// <summary>
         /// Play the achievement notification sound
         /// </summary>
@@ -183,6 +488,20 @@ namespace ConditioningControlPanel
         {
             Logger?.Information("Application shutting down...");
 
+            // Sync profile to cloud on exit (fire and forget, don't block shutdown)
+            if (ProfileSync?.IsSyncEnabled == true)
+            {
+                try
+                {
+                    Logger?.Information("Syncing profile to cloud before exit...");
+                    ProfileSync.SyncProfileAsync().Wait(TimeSpan.FromSeconds(5));
+                }
+                catch (Exception ex)
+                {
+                    Logger?.Warning(ex, "Failed to sync profile on exit");
+                }
+            }
+
             Flash?.Dispose();
             Video?.Dispose();
             Subliminal?.Dispose();
@@ -197,6 +516,8 @@ namespace ConditioningControlPanel
             WindowAwareness?.Dispose();
             Ai?.Dispose();
             Patreon?.Dispose();
+            Update?.Dispose();
+            ProfileSync?.Dispose();
             Audio?.Dispose();
             Settings?.Save();
 
