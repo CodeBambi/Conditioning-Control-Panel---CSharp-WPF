@@ -165,6 +165,10 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Themes\" />
+  </ItemGroup>
+
   <!-- Ensure all content files are copied during publish -->
   <Target Name="CopyContentAfterPublish" AfterTargets="Publish">
     <ItemGroup>

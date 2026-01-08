@@ -11,9 +11,6 @@
         ResizeMode="NoResize">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="PinkBrush" Color="#FF69B4"/>
-        <SolidColorBrush x:Key="DarkBgBrush" Color="#1A1A2E"/>
-        <SolidColorBrush x:Key="PanelBgBrush" Color="#252542"/>
     </Window.Resources>
 
     <Grid x:Name="RootGrid" MouseLeftButtonDown="RootGrid_MouseLeftButtonDown">
@@ -79,7 +76,7 @@
                         Margin="0,5,0,15">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Setter Property="Background" Value="#FF69B4"/>
+                            <Setter Property="Background" Value= "{StaticResource PinkBrush}"/>
                             <Setter Property="Foreground" Value="White"/>
                             <Setter Property="FontWeight" Value="Bold"/>
                             <Setter Property="Padding" Value="20,10"/>
@@ -96,7 +93,7 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="#FF1493"/>
+                                                <Setter TargetName="border" Property="Background" Value="{StaticResource DarkPinkBrush}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -147,8 +144,8 @@
                         <Button.Style>
                             <Style TargetType="Button">
                                 <Setter Property="Background" Value="Transparent"/>
-                                <Setter Property="Foreground" Value="#FF69B4"/>
-                                <Setter Property="BorderBrush" Value="#FF69B4"/>
+                                <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+                                <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
                                 <Setter Property="BorderThickness" Value="1"/>
                                 <Setter Property="Padding" Value="15,8"/>
                                 <Setter Property="FontSize" Value="13"/>
@@ -182,7 +179,7 @@
                             Click="BtnNext_Click">
                         <Button.Style>
                             <Style TargetType="Button">
-                                <Setter Property="Background" Value="#FF69B4"/>
+                                <Setter Property="Background" Value ="{StaticResource PinkBrush}"/>
                                 <Setter Property="Foreground" Value="White"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                                 <Setter Property="Padding" Value="20,10"/>
@@ -199,7 +196,7 @@
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="#FF1493"/>
+                                                    <Setter TargetName="border" Property="Background" Value="{StaticResource DarkPinkBrush}"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>

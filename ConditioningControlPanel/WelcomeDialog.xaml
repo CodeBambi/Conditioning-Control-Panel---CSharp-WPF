@@ -81,7 +81,7 @@
             <Button Grid.Row="3" Content="💜 Let's Begin!" Click="BtnBegin_Click" Cursor="Hand">
                 <Button.Style>
                     <Style TargetType="Button">
-                        <Setter Property="Background" Value="#FF69B4"/>
+                        <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
                         <Setter Property="Foreground" Value="White"/>
                         <Setter Property="FontWeight" Value="Bold"/>
                         <Setter Property="FontSize" Value="16"/>
@@ -96,7 +96,7 @@
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="#FF85C1"/>
+                                            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>

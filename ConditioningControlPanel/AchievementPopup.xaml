@@ -10,11 +10,7 @@
         ShowInTaskbar="False"
         WindowStartupLocation="Manual"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
-    
-    <Window.Resources>
-        <SolidColorBrush x:Key="PinkBrush" Color="#FF69B4"/>
-    </Window.Resources>
-    
+
     <Border Background="#E0151530" CornerRadius="12" BorderBrush="{StaticResource PinkBrush}" BorderThickness="2"
             Margin="10">
         <Border.Effect>

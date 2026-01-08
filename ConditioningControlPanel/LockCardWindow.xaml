@@ -13,8 +13,6 @@
         Loaded="Window_Loaded">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="PinkBrush" Color="#FF69B4"/>
-        <SolidColorBrush x:Key="DarkPinkBrush" Color="#FF1493"/>
     </Window.Resources>
 
     <!-- Semi-transparent background -->

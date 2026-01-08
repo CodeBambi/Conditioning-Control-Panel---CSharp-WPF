@@ -8,98 +8,8 @@
         ResizeMode="NoResize">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="PinkBrush" Color="#FF69B4"/>
-        <SolidColorBrush x:Key="DarkPinkBrush" Color="#FF1493"/>
-        <SolidColorBrush x:Key="PanelBgBrush" Color="#252542"/>
-        <SolidColorBrush x:Key="TextLightBrush" Color="#E0E0E0"/>
-
-        <Style x:Key="ActionButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="15,8"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{StaticResource DarkPinkBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="SecondaryButton" TargetType="Button">
-            <Setter Property="Background" Value="#404060"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#505080"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ColorButton" TargetType="Button">
-            <Setter Property="Width" Value="40"/>
-            <Setter Property="Height" Value="40"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="5" 
-                                BorderBrush="#606080" BorderThickness="2">
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ToggleStyle" TargetType="CheckBox">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="CheckBox">
-                        <Grid>
-                            <Border x:Name="track" Width="44" Height="22" CornerRadius="11" 
-                                    Background="#404060" Cursor="Hand"/>
-                            <Border x:Name="thumb" Width="18" Height="18" CornerRadius="9" 
-                                    Background="White" HorizontalAlignment="Left" Margin="2,0,0,0"/>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="track" Property="Background" Value="{StaticResource PinkBrush}"/>
-                                <Setter TargetName="thumb" Property="Margin" Value="24,0,0,0"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <!-- keep existing ToggleStyle... -->
+      
     </Window.Resources>
 
     <Grid Margin="20">
@@ -127,7 +37,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="Background" Foreground="{StaticResource TextLightBrush}" 
                            FontSize="14" VerticalAlignment="Center"/>
-                <Button x:Name="BtnBgColor" Grid.Column="1" Style="{StaticResource ColorButton}"
+                <Button x:Name="BtnBgColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
                         Click="BtnBgColor_Click" ToolTip="Click to change"/>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="15,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="Transparent" Foreground="#808080" FontSize="11" 
@@ -145,7 +55,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="Text" Foreground="{StaticResource TextLightBrush}" 
                            FontSize="14" VerticalAlignment="Center"/>
-                <Button x:Name="BtnTextColor" Grid.Column="1" Style="{StaticResource ColorButton}"
+                <Button x:Name="BtnTextColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
                         Click="BtnTextColor_Click" ToolTip="Click to change"/>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="15,0,0,0" VerticalAlignment="Center"
                             Visibility="Collapsed">
@@ -163,7 +73,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="Border/Outline" Foreground="{StaticResource TextLightBrush}" 
                            FontSize="14" VerticalAlignment="Center"/>
-                <Button x:Name="BtnBorderColor" Grid.Column="1" Style="{StaticResource ColorButton}"
+                <Button x:Name="BtnBorderColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
                         Click="BtnBorderColor_Click" ToolTip="Click to change"/>
             </Grid>
         </StackPanel>

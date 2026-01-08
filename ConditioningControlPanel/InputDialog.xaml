@@ -10,8 +10,6 @@
         AllowsTransparency="False">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="PinkBrush" Color="#FF69B4"/>
-        <SolidColorBrush x:Key="DarkPinkBrush" Color="#FF1493"/>
     </Window.Resources>
 
     <Border BorderBrush="{StaticResource PinkBrush}" BorderThickness="1" CornerRadius="0">

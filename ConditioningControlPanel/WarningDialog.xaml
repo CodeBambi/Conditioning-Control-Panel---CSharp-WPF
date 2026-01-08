@@ -72,8 +72,8 @@
                         Click="BtnCancel_Click" IsCancel="True">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Setter Property="Background" Value="#252542"/>
-                            <Setter Property="Foreground" Value="#E0E0E0"/>
+                            <Setter Property="Background" Value="{StaticResource PanelBgBrush}"/>
+                            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
                             <Setter Property="FontWeight" Value="Bold"/>
                             <Setter Property="FontSize" Value="15"/>
                             <Setter Property="Padding" Value="24,14"/>

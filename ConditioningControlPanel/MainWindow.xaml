@@ -25,25 +25,10 @@
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
-        <!-- Colors -->
-        <Color x:Key="PinkColor">#FF69B4</Color>
-        <Color x:Key="DarkPink">#FF1493</Color>
-        <Color x:Key="PanelBg">#252542</Color>
-        <Color x:Key="DarkerBg">#1A1A2E</Color>
-        <Color x:Key="TextLight">#E0E0E0</Color>
-        <Color x:Key="TextMuted">#808080</Color>
-        
-        <SolidColorBrush x:Key="PinkBrush" Color="{StaticResource PinkColor}"/>
-        <SolidColorBrush x:Key="DarkPinkBrush" Color="{StaticResource DarkPink}"/>
-        <SolidColorBrush x:Key="PanelBgBrush" Color="{StaticResource PanelBg}"/>
-        <SolidColorBrush x:Key="DarkerBgBrush" Color="{StaticResource DarkerBg}"/>
-        <SolidColorBrush x:Key="TextLightBrush" Color="{StaticResource TextLight}"/>
-        <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMuted}"/>
-
         <!-- Custom Tooltip Style -->
         <Style TargetType="ToolTip">
-            <Setter Property="Background" Value="#1A1A2E"/>
-            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="Background" Value="{StaticResource DarkerBgBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="10,6"/>
@@ -62,58 +47,6 @@
                             </Border.Effect>
                             <ContentPresenter/>
                         </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Toggle Switch Style -->
-        <Style x:Key="ToggleStyle" TargetType="CheckBox">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="CheckBox">
-                        <Grid>
-                            <Border x:Name="track" Width="44" Height="22" CornerRadius="11" 
-                                    Background="#404060" Cursor="Hand"/>
-                            <Border x:Name="thumb" Width="18" Height="18" CornerRadius="9" 
-                                    Background="White" HorizontalAlignment="Left" Margin="2,0,0,0"/>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="track" Property="Background" Value="{StaticResource PinkBrush}"/>
-                                <Setter TargetName="thumb" Property="Margin" Value="24,0,0,0"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Pink Button Style -->
-        <Style x:Key="PinkButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Padding" Value="20,10"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="BorderBrush" Value="White"/>
-            <Setter Property="BorderThickness" Value="2"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{StaticResource DarkPinkBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -141,7 +74,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#30FF69B4"/>
+                                <Setter Property="Background" Value="{StaticResource TransparentPinkBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -178,7 +111,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#30FF69B4"/>
+                                <Setter Property="Background" Value="{StaticResource TransparentPinkBrush}"/>
                                 <Setter TargetName="LabelText" Property="Visibility" Value="Visible"/>
                                 <Setter TargetName="LabelText" Property="Opacity" Value="1"/>
                                 <Setter TargetName="LabelText" Property="Margin" Value="6,0,0,0"/>
@@ -286,7 +219,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#40FFFFFF"/>
+                                <Setter Property="Background" Value="{StaticResource TransparentWhiteBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -309,7 +242,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#E81123"/>
+                                <Setter Property="Background" Value="{StaticResource DangerBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -454,7 +387,7 @@
             <Setter Property="Width" Value="180"/>
             <Setter Property="Height" Value="180"/>
             <Setter Property="CornerRadius" Value="15"/>
-            <Setter Property="Background" Value="#1A1A2E"/>
+            <Setter Property="Background" Value="{StaticResource DarkerBgBrush}"/>
             <Setter Property="Margin" Value="10,0,0,0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
@@ -565,7 +498,7 @@ Bimbo" Foreground="#FF69B4"
                         <ComboBox.Style>
                             <Style TargetType="ComboBox">
                                 <Setter Property="Background" Value="#1E1E3A"/>
-                                <Setter Property="Foreground" Value="#E0E0E0"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
                                 <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
                                 <Setter Property="BorderThickness" Value="1"/>
                                 <Setter Property="Padding" Value="8,6"/>
@@ -598,7 +531,7 @@ Bimbo" Foreground="#FF69B4"
                                                                   Margin="8,6,25,6" VerticalAlignment="Center" HorizontalAlignment="Left">
                                                     <ContentPresenter.Resources>
                                                         <Style TargetType="TextBlock">
-                                                            <Setter Property="Foreground" Value="#E0E0E0"/>
+                                                            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
                                                         </Style>
                                                     </ContentPresenter.Resources>
                                                 </ContentPresenter>
@@ -629,7 +562,7 @@ Bimbo" Foreground="#FF69B4"
                         </ComboBox.Style>
                         <ComboBox.ItemContainerStyle>
                             <Style TargetType="ComboBoxItem">
-                                <Setter Property="Foreground" Value="#E0E0E0"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
                                 <Setter Property="Background" Value="#1E1E3A"/>
                                 <Setter Property="Padding" Value="8,6"/>
                                 <Setter Property="Cursor" Value="Hand"/>
@@ -641,7 +574,7 @@ Bimbo" Foreground="#FF69B4"
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#30FF69B4"/>
+                                                    <Setter Property="Background" Value="{StaticResource TransparentPinkBrush}"/>
                                                 </Trigger>
                                                 <Trigger Property="IsSelected" Value="True">
                                                     <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
@@ -1187,7 +1120,7 @@ Bimbo" Foreground="#FF69B4"
                                         ToolTip="Create a new preset from current settings">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="BorderBrush" Value="#404060"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource PanelAccentBrush}"/>
                                             <Setter Property="BorderThickness" Value="2"/>
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
@@ -1228,7 +1161,7 @@ Bimbo" Foreground="#FF69B4"
                                         Cursor="Hand" x:Name="SessionMorningDrift" MouseLeftButtonUp="SessionCard_Click" Tag="morning_drift">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="BorderBrush" Value="#404060"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource PanelAccentBrush}"/>
                                             <Setter Property="BorderThickness" Value="2"/>
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
@@ -1272,7 +1205,7 @@ Bimbo" Foreground="#FF69B4"
                                         Cursor="Hand" x:Name="SessionGamerGirl" MouseLeftButtonUp="SessionCard_Click" Tag="gamer_girl">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="BorderBrush" Value="#404060"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource PanelAccentBrush}"/>
                                             <Setter Property="BorderThickness" Value="2"/>
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
@@ -1316,7 +1249,7 @@ Bimbo" Foreground="#FF69B4"
                                         Cursor="Hand" x:Name="SessionDistantDoll" MouseLeftButtonUp="SessionCard_Click" Tag="distant_doll">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="BorderBrush" Value="#404060"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource PanelAccentBrush}"/>
                                             <Setter Property="BorderThickness" Value="2"/>
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
@@ -1360,7 +1293,7 @@ Bimbo" Foreground="#FF69B4"
                                         Cursor="Hand" x:Name="SessionGoodGirls" MouseLeftButtonUp="SessionCard_Click" Tag="good_girls_dont_cum">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="BorderBrush" Value="#404060"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource PanelAccentBrush}"/>
                                             <Setter Property="BorderThickness" Value="2"/>
                                             <Style.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
@@ -1475,7 +1408,7 @@ Bimbo" Foreground="#FF69B4"
                                                         </Border>
                                                         <ControlTemplate.Triggers>
                                                             <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter Property="Background" Value="#FF85C1"/>
+                                                                <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
                                                             </Trigger>
                                                         </ControlTemplate.Triggers>
                                                     </ControlTemplate>
