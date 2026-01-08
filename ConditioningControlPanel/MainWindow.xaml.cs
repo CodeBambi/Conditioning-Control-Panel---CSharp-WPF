@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -19,6 +20,105 @@ namespace ConditioningControlPanel
 {
     public partial class MainWindow : Window
     {
+        // Smoothly expand to fit contents on hover, then collapse back.
+        private void ExpandableIcon_MouseEnter(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn) return;
+
+            // find template parts
+            var label = btn.Template.FindName("LabelText", btn) as FrameworkElement;
+            var icon = btn.Template.FindName("IconText", btn) as FrameworkElement;
+            var border = btn.Template.FindName("ButtonBorder", btn) as Border;
+
+            if (label == null || icon == null || border == null) return;
+
+            // Stop any running width animation so we don't leave stray Completed handlers racing
+            btn.BeginAnimation(FrameworkElement.WidthProperty, null);
+
+            // Make label visible so it can be measured
+            label.Visibility = Visibility.Visible;
+            label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            icon.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            border.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+
+            double gap = 6; // spacing between icon and label
+            double padding = border.Padding.Left + border.Padding.Right + border.BorderThickness.Left + border.BorderThickness.Right;
+            double targetWidth = icon.DesiredSize.Width + label.DesiredSize.Width + padding + gap;
+
+            // Start the animation from current rendered width
+            double start = btn.ActualWidth;
+            // set explicit Width so animation has a numeric start
+            btn.Width = start;
+
+            var anim = new DoubleAnimation(targetWidth, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+                FillBehavior = FillBehavior.Stop
+            };
+
+            anim.Completed += (s, _) =>
+            {
+                // Only commit the expanded width if the mouse is still over this button.
+                // This prevents an older Enter animation from re-expanding after a newer Leave completed.
+                if (btn.IsMouseOver)
+                {
+                    btn.Width = targetWidth;
+                    // ensure label stays visible
+                    label.Visibility = Visibility.Visible;
+                }
+                // otherwise do nothing — the Leave logic will handle shrinking / collapsing
+            };
+
+            btn.BeginAnimation(FrameworkElement.WidthProperty, anim);
+        }
+
+        private void ExpandableIcon_MouseLeave(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn) return;
+
+            var label = btn.Template.FindName("LabelText", btn) as FrameworkElement;
+            var icon = btn.Template.FindName("IconText", btn) as FrameworkElement;
+            var border = btn.Template.FindName("ButtonBorder", btn) as Border;
+
+            if (label == null || icon == null || border == null) return;
+
+            // Stop any running width animation so we don't leave stray Completed handlers racing
+            btn.BeginAnimation(FrameworkElement.WidthProperty, null);
+
+            // Compute compact width (icon + padding). Use MinWidth as safe fallback.
+            icon.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            border.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+
+            double padding = border.Padding.Left + border.Padding.Right + border.BorderThickness.Left + border.BorderThickness.Right;
+            double compact = icon.DesiredSize.Width + padding;
+            if (!double.IsNaN(btn.MinWidth) && btn.MinWidth > compact) compact = btn.MinWidth;
+
+            // ensure an explicit start width
+            double start = btn.ActualWidth;
+            btn.Width = start;
+
+            var anim = new DoubleAnimation(compact, TimeSpan.FromMilliseconds(140))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn },
+                FillBehavior = FillBehavior.Stop
+            };
+
+            anim.Completed += (s, _) =>
+            {
+                // Only collapse the label and release Width if the mouse is truly not over the button.
+                // If the user re-entered quickly, IsMouseOver will be true and we avoid clobbering the expanded state.
+                if (!btn.IsMouseOver)
+                {
+                    // collapse label after animation completes and return to Auto layout
+                    label.Visibility = Visibility.Collapsed;
+                    btn.Width = double.NaN; // Auto — let layout compute (label is collapsed so size shrinks)
+                }
+                // otherwise do nothing — the Enter logic will finalize expanded width
+            };
+
+            btn.BeginAnimation(FrameworkElement.WidthProperty, anim);
+        }
+
         private bool _isRunning = false;
         private bool _isLoading = true;
         private BrowserService? _browser;

@@ -9,7 +9,8 @@
         Background="Transparent"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
-        SizeToContent="WidthAndHeight">
+        SizeToContent="WidthAndHeight"
+        FontFamily="Comic Sans MS">
 
 
     <Grid>
@@ -46,7 +47,6 @@
                 <TextBlock x:Name="TxtSpeech"
                            Text=""
                            Foreground="#FF10F0"
-                           FontFamily="Comic Sans MS"
                            FontSize="33"
                            FontWeight="Bold"
                            TextWrapping="Wrap"
@@ -191,7 +191,6 @@
                     <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock x:Name="TxtAvatarTitle"
                                    Text="BASIC BIMBO"
-                                   FontFamily="Comic Sans MS"
                                    FontSize="16"
                                    FontWeight="Bold"
                                    Foreground="#FF69B4"
@@ -203,7 +202,6 @@
                         </TextBlock>
                         <TextBlock x:Name="TxtAvatarLevel"
                                    Text="Lv. 1"
-                                   FontFamily="Comic Sans MS"
                                    FontSize="13"
                                    Foreground="#B0B0B0"
                                    TextAlignment="Center"
