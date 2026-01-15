@@ -865,14 +865,63 @@ namespace ConditioningControlPanel
 
         #region Leaderboard
 
-        private async void CmbLeaderboardSort_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async void LeaderboardColumnHeader_Click(object sender, RoutedEventArgs e)
         {
             // Ignore during window initialization
-            if (_isLoading || TxtLeaderboardStatus == null) return;
+            if (_isLoading || TxtLeaderboardStatus == null || App.Leaderboard == null) return;
 
-            if (CmbLeaderboardSort?.SelectedItem is ComboBoxItem item && item.Tag is string sortBy)
+            if (e.OriginalSource is GridViewColumnHeader header && header.Content is string headerText)
             {
-                await RefreshLeaderboardAsync(sortBy);
+                // Map header text to sort field
+                string? sortField = headerText switch
+                {
+                    "Rank" => "level",
+                    "Level" => "level",
+                    "XP" => "xp",
+                    "Bubbles" => "total_bubbles_popped",
+                    "GIFs" => "total_flashes",
+                    "Video Min" => "total_video_minutes",
+                    "Lock Cards" => "total_lock_cards_completed",
+                    "Name" => null, // Client-side sort
+                    "Online" => null, // Client-side sort
+                    "Achievements" => null, // Client-side sort
+                    _ => null
+                };
+
+                if (sortField != null)
+                {
+                    // Server-side sort
+                    await RefreshLeaderboardAsync(sortField);
+                }
+                else if (headerText == "Name")
+                {
+                    // Client-side alphabetical sort
+                    TxtLeaderboardStatus.Text = "Sorting by name...";
+                    var sorted = App.Leaderboard.Entries.OrderBy(x => x.DisplayName).ToList();
+                    LstLeaderboard.ItemsSource = sorted;
+                    TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users • Sorted by Name";
+                }
+                else if (headerText == "Online")
+                {
+                    // Client-side: online first, then by level descending
+                    TxtLeaderboardStatus.Text = "Sorting by online status...";
+                    var sorted = App.Leaderboard.Entries
+                        .OrderByDescending(x => x.IsOnline)
+                        .ThenByDescending(x => x.Level)
+                        .ToList();
+                    LstLeaderboard.ItemsSource = sorted;
+                    TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users • Online first";
+                }
+                else if (headerText == "Achievements")
+                {
+                    // Client-side: by achievement count descending
+                    TxtLeaderboardStatus.Text = "Sorting by achievements...";
+                    var sorted = App.Leaderboard.Entries
+                        .OrderByDescending(x => x.AchievementsCount)
+                        .ToList();
+                    LstLeaderboard.ItemsSource = sorted;
+                    TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users • Sorted by Achievements";
+                }
             }
         }
 

@@ -3956,25 +3956,6 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Sort by:" Foreground="#FF69B4" VerticalAlignment="Center" Margin="0,0,10,0"
-                                           FontSize="14" FontWeight="Bold" FontFamily="Segoe Print"/>
-                                <ComboBox x:Name="CmbLeaderboardSort" Width="160" Height="28" SelectionChanged="CmbLeaderboardSort_SelectionChanged"
-                                          Background="#352545" Foreground="#FF69B4" FontSize="12" FontWeight="SemiBold"
-                                          FontFamily="Segoe Print" BorderBrush="#FF69B4" BorderThickness="2">
-                                    <ComboBox.Resources>
-                                        <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#252542"/>
-                                        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FF69B4"/>
-                                    </ComboBox.Resources>
-                                    <ComboBoxItem Content="XP" Tag="xp" IsSelected="True" Foreground="#FF69B4"/>
-                                    <ComboBoxItem Content="Level" Tag="level" Foreground="#FF69B4"/>
-                                    <ComboBoxItem Content="Bubbles Popped" Tag="total_bubbles_popped" Foreground="#FF69B4"/>
-                                    <ComboBoxItem Content="GIFs Spawned" Tag="total_flashes" Foreground="#FF69B4"/>
-                                    <ComboBoxItem Content="Video Minutes" Tag="total_video_minutes" Foreground="#FF69B4"/>
-                                    <ComboBoxItem Content="Lock Cards" Tag="total_lock_cards_completed" Foreground="#FF69B4"/>
-                                </ComboBox>
-                            </StackPanel>
-
                             <!-- Big LEADERBOARD title with stroke effect -->
                             <Grid Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <!-- Shadow/outline layer -->
@@ -4012,9 +3993,10 @@
                     <ListView x:Name="LstLeaderboard" Grid.Row="1" Background="Transparent"
                               BorderThickness="0" Margin="10,5,10,10" Foreground="#FF69B4"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                              FontSize="21" FontFamily="Segoe Print" FontWeight="ExtraBold">
+                              FontSize="21" FontFamily="Segoe Print" FontWeight="ExtraBold"
+                              GridViewColumnHeader.Click="LeaderboardColumnHeader_Click">
                         <ListView.Resources>
-                            <!-- Header style for dark theme -->
+                            <!-- Header style for dark theme - clickable for sorting -->
                             <Style TargetType="GridViewColumnHeader">
                                 <Setter Property="Background" Value="#352545"/>
                                 <Setter Property="Foreground" Value="#FF69B4"/>
@@ -4024,6 +4006,12 @@
                                 <Setter Property="Padding" Value="12,10"/>
                                 <Setter Property="BorderThickness" Value="0,0,1,2"/>
                                 <Setter Property="BorderBrush" Value="#FF69B4"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#452555"/>
+                                    </Trigger>
+                                </Style.Triggers>
                             </Style>
                         </ListView.Resources>
                         <ListView.View>

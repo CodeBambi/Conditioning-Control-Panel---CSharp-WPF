@@ -27,7 +27,7 @@ public class LeaderboardService : IDisposable
     public int OnlineUsers { get; private set; }
 
     /// <summary>Current sort field</summary>
-    public string CurrentSortBy { get; private set; } = "xp";
+    public string CurrentSortBy { get; private set; } = "level";
 
     /// <summary>Last successful refresh time</summary>
     public DateTime? LastRefreshTime { get; private set; }
