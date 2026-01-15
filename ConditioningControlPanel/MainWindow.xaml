@@ -2822,10 +2822,10 @@
                             </StackPanel>
                             </Grid>
 
-                            <!-- Feature Image placeholder -->
-                            <Rectangle x:Name="AutonomyFeatureImage" Grid.Column="1" Style="{StaticResource RoundedFeatureImage}" Opacity="0.5">
+                            <!-- Feature Image -->
+                            <Rectangle x:Name="AutonomyFeatureImage" Grid.Column="1" Style="{StaticResource RoundedFeatureImage}">
                                 <Rectangle.Fill>
-                                    <SolidColorBrush Color="#FF69B4"/>
+                                    <ImageBrush ImageSource="pack://application:,,,/Resources/features/bambi takeover.png" Stretch="UniformToFill"/>
                                 </Rectangle.Fill>
                             </Rectangle>
                         </Grid>
