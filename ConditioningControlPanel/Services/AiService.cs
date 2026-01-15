@@ -122,6 +122,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt)
         {
+            // Check offline mode first
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                App.Logger?.Debug("AiService: Offline mode enabled, skipping AI request");
+                return null;
+            }
+
             // Check Patreon access (tier 1+ or whitelisted)
             if (App.Patreon?.HasAiAccess != true)
             {

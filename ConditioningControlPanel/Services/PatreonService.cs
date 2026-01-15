@@ -168,6 +168,14 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // Skip online validation if offline mode is enabled
+                if (App.Settings?.Current?.OfflineMode == true)
+                {
+                    App.Logger?.Information("Offline mode enabled, using cached Patreon state only");
+                    LoadCachedState();
+                    return;
+                }
+
                 // Force clear cache for v4.1 to pick up whitelist changes
                 _tokenStorage.ClearCachedState();
                 App.Logger?.Debug("Cleared Patreon cache for fresh validation");
@@ -391,6 +399,13 @@ namespace ConditioningControlPanel.Services
         public async Task<PatreonTier> ValidateSubscriptionAsync(bool forceRefresh = false)
         {
             if (IsVerifying && !forceRefresh) return CurrentTier;
+
+            // Skip online validation if offline mode is enabled
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                App.Logger?.Debug("Offline mode enabled, skipping Patreon validation");
+                return CurrentTier;
+            }
 
             try
             {

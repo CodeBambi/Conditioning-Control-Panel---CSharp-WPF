@@ -60,6 +60,13 @@ public class LeaderboardService : IDisposable
     /// <returns>True if successful</returns>
     public async Task<bool> RefreshAsync(string? sortBy = null)
     {
+        // Skip if offline mode is enabled
+        if (App.Settings?.Current?.OfflineMode == true)
+        {
+            App.Logger?.Debug("Offline mode enabled, skipping leaderboard refresh");
+            return false;
+        }
+
         if (IsRefreshing) return false;
 
         sortBy ??= CurrentSortBy;

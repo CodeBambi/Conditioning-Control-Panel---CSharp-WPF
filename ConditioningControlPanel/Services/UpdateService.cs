@@ -121,6 +121,13 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // Skip update check if offline mode is enabled
+                if (App.Settings?.Current?.OfflineMode == true)
+                {
+                    App.Logger?.Information("Offline mode enabled, skipping update check");
+                    return null;
+                }
+
                 App.Logger?.Information("Checking for updates... (current AppVersion: {Version}, force: {Force})", AppVersion, forceCheck);
 
                 // Skip update check if running in development/not installed

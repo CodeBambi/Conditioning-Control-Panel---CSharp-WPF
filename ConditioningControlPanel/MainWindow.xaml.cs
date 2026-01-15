@@ -122,10 +122,13 @@ namespace ConditioningControlPanel
                 WakeBambiUp();
             };
 
-            // Initialize global keyboard hook
+            // Initialize global keyboard hook (only if panic key is enabled)
             _keyboardHook = new GlobalKeyboardHook();
             _keyboardHook.KeyPressed += OnGlobalKeyPressed;
-            _keyboardHook.Start();
+            if (App.Settings.Current.PanicKeyEnabled)
+            {
+                _keyboardHook.Start();
+            }
             
             // Subscribe to progression events for real-time XP updates
             App.Progression.XPChanged += OnXPChanged;
@@ -4886,6 +4889,7 @@ namespace ConditioningControlPanel
             ChkAutoRun.IsChecked = s.AutoStartEngine;
             ChkStartHidden.IsChecked = s.StartMinimized;
             ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
+            ChkOfflineMode.IsChecked = s.OfflineMode;
 
             // Startup video display
             if (!string.IsNullOrEmpty(s.StartupVideoPath) && System.IO.File.Exists(s.StartupVideoPath))
@@ -5120,6 +5124,7 @@ namespace ConditioningControlPanel
             s.AutoStartEngine = ChkAutoRun.IsChecked ?? false;
             s.StartMinimized = ChkStartHidden.IsChecked ?? false;
             s.PanicKeyEnabled = !(ChkNoPanic.IsChecked ?? false);
+            s.OfflineMode = ChkOfflineMode.IsChecked ?? false;
 
             // Audio
             s.MasterVolume = (int)SliderMaster.Value;
@@ -6783,6 +6788,30 @@ namespace ConditioningControlPanel
             {
                 ChkNoPanic.IsChecked = false;
             }
+            else
+            {
+                // Stop keyboard hook when panic key is disabled (privacy improvement)
+                _keyboardHook?.Stop();
+                App.Logger?.Information("Keyboard hook stopped - panic key disabled");
+            }
+        }
+
+        private void ChkNoPanic_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            // Start keyboard hook when panic key is re-enabled
+            _keyboardHook?.Start();
+            App.Logger?.Information("Keyboard hook started - panic key enabled");
+        }
+
+        private void ChkOfflineMode_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkOfflineMode.IsChecked ?? false;
+            App.Settings.Current.OfflineMode = isEnabled;
+            App.Logger?.Information("Offline mode {Status}", isEnabled ? "enabled" : "disabled");
         }
 
         private void ChkDualMon_Changed(object sender, RoutedEventArgs e)

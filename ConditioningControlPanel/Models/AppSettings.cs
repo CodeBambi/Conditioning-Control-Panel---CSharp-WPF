@@ -539,6 +539,17 @@ namespace ConditioningControlPanel.Models
             set { _discordRichPresenceEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _offlineMode = false;
+        /// <summary>
+        /// Offline mode - disables all network features (updates, AI chat, leaderboard, Patreon verification).
+        /// When enabled, the app operates completely offline with no external connections.
+        /// </summary>
+        public bool OfflineMode
+        {
+            get => _offlineMode;
+            set { _offlineMode = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Scheduler

@@ -1230,6 +1230,7 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
                                 
                                 <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
@@ -1262,8 +1263,15 @@
                                 </StackPanel>
                                 <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
                                             ToolTip="⚠ DANGER: Completely disables panic key!&#x0a;You won't be able to emergency stop.&#x0a;Use with extreme caution.">
-                                    <CheckBox x:Name="ChkNoPanic" Style="{StaticResource ToggleStyle}" Checked="ChkNoPanic_Checked"/>
+                                    <CheckBox x:Name="ChkNoPanic" Style="{StaticResource ToggleStyle}" Checked="ChkNoPanic_Checked" Unchecked="ChkNoPanic_Unchecked"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="⚠ No Panic" Margin="6,0,0,0" Foreground="#FF6B6B"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
+                                            ToolTip="Disable all network features (updates, AI, leaderboard).&#x0a;App runs completely offline with no external connections.">
+                                    <CheckBox x:Name="ChkOfflineMode" Style="{StaticResource ToggleStyle}"
+                                              Checked="ChkOfflineMode_Changed" Unchecked="ChkOfflineMode_Changed"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Offline Mode" Margin="6,0,0,0"/>
                                 </StackPanel>
                             </Grid>
 
