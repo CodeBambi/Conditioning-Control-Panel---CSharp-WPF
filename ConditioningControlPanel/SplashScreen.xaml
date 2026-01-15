@@ -1,0 +1,79 @@
+<Window x:Class="ConditioningControlPanel.SplashScreen"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Loading..."
+        Height="200" Width="400"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowInTaskbar="False">
+
+    <Border Background="#1A1A2E" CornerRadius="15" BorderBrush="#FF69B4" BorderThickness="2">
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="5" Opacity="0.6"/>
+        </Border.Effect>
+
+        <Grid Margin="30,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <TextBlock Grid.Row="0"
+                       Text="Conditioning Control Panel"
+                       FontSize="22"
+                       FontWeight="Bold"
+                       Foreground="#FF69B4"
+                       HorizontalAlignment="Center"
+                       FontFamily="Segoe UI"/>
+
+            <!-- Loading status -->
+            <TextBlock x:Name="TxtStatus"
+                       Grid.Row="1"
+                       Text="Starting up..."
+                       FontSize="12"
+                       Foreground="#AAAAAA"
+                       HorizontalAlignment="Center"
+                       Margin="0,10,0,15"
+                       FontFamily="Segoe UI"/>
+
+            <!-- Progress bar -->
+            <Grid Grid.Row="2" Height="8">
+                <Border Background="#252542" CornerRadius="4"/>
+                <Border x:Name="ProgressFill">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="#FF69B4" Offset="0"/>
+                            <GradientStop Color="#DA70D6" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Border.CornerRadius>
+                        <CornerRadius TopLeft="4" BottomLeft="4" TopRight="4" BottomRight="4"/>
+                    </Border.CornerRadius>
+                    <Border.RenderTransform>
+                        <ScaleTransform x:Name="ProgressScale" ScaleX="0" ScaleY="1"/>
+                    </Border.RenderTransform>
+                    <Border.RenderTransformOrigin>
+                        <Point X="0" Y="0.5"/>
+                    </Border.RenderTransformOrigin>
+                </Border>
+            </Grid>
+
+            <!-- Version -->
+            <TextBlock x:Name="TxtVersion"
+                       Grid.Row="3"
+                       Text="v4.3.12"
+                       FontSize="10"
+                       Foreground="#666666"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Bottom"
+                       FontFamily="Segoe UI"/>
+        </Grid>
+    </Border>
+</Window>

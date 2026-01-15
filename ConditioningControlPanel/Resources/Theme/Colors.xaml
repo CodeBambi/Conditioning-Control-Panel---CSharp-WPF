@@ -1,0 +1,31 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Colors (central source) -->
+    <Color x:Key="PinkColor">#FFFF69B4</Color>
+    <Color x:Key="DarkPink">#FFFF1493</Color>
+    <Color x:Key="PanelBg">#FF252542</Color>
+    <Color x:Key="DarkerBg">#FF1A1A2E</Color>
+    <Color x:Key="TextLight">#FFE0E0E0</Color>
+    <Color x:Key="TextMuted">#FF808080</Color>
+    <Color x:Key="PanelAccent">#FF404060</Color>
+    <Color x:Key="PanelAccentHover">#FF505080</Color>
+    <Color x:Key="PreviewBg">#FF101020</Color>
+
+    <Color x:Key="Danger">#FFE53935</Color>
+    <Color x:Key="TransparentPink">#30FF69B4</Color>
+
+    <Color x:Key="PinkButtonHovered">#FFFF8FAF</Color>
+
+    <!-- Patreon palette -->
+    <Color x:Key="PatreonPurple">#FF9B59B6</Color>
+    <Color x:Key="PatreonLightPurple">#FFE0B0FF</Color>
+    <Color x:Key="PatreonDarkPurple">#FF8E44AD</Color>
+
+    <!-- Semi-transparent white (alpha 0x40) -->
+    <Color x:Key="TransparentWhite">#40FFFFFF</Color>
+
+    <!-- Added: alternate danger (used by Controls.xaml hover) -->
+    <Color x:Key="DangerHover">#FFE84050</Color>
+
+</ResourceDictionary>

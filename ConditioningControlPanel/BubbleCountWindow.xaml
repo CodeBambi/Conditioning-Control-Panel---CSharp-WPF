@@ -1,0 +1,71 @@
+<Window x:Class="ConditioningControlPanel.BubbleCountWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Bubble Count Challenge"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Black"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="True"
+        ResizeMode="NoResize"
+        FontFamily="Comic Sans MS, Segoe UI">
+
+    <Grid x:Name="MainGrid">
+        <!-- Video Player Background -->
+        <MediaElement x:Name="VideoPlayer"
+                      LoadedBehavior="Manual"
+                      UnloadedBehavior="Manual"
+                      Stretch="Uniform"
+                      MediaEnded="VideoPlayer_MediaEnded"
+                      MediaOpened="VideoPlayer_MediaOpened"
+                      MediaFailed="VideoPlayer_MediaFailed"/>
+
+        <!-- Bubble Overlay Canvas -->
+        <Canvas x:Name="BubbleCanvas"
+                Background="Transparent"
+                IsHitTestVisible="False"/>
+
+        <!-- Top Info Bar -->
+        <Border Background="#80000000"
+                VerticalAlignment="Top"
+                Padding="20,10">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="🫧 COUNT THE BUBBLES! 🫧"
+                           FontSize="32"
+                           FontWeight="Bold"
+                           Foreground="#FF69B4">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.6"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+                <TextBlock x:Name="TxtDifficulty"
+                           Text=" (Medium)"
+                           FontSize="22"
+                           Foreground="#FFB6C1"
+                           VerticalAlignment="Center"
+                           Margin="10,0,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Strict Mode Indicator -->
+        <TextBlock x:Name="TxtStrict"
+                   Text="🔒 STRICT"
+                   FontSize="18"
+                   FontWeight="Bold"
+                   Foreground="#FF6B6B"
+                   VerticalAlignment="Top"
+                   HorizontalAlignment="Right"
+                   Margin="0,15,20,0"
+                   Visibility="Collapsed"/>
+
+        <!-- ESC Hint -->
+        <TextBlock x:Name="TxtEscHint"
+                   Text="Press ESC to skip (won't earn XP)"
+                   FontSize="16"
+                   Foreground="#888888"
+                   VerticalAlignment="Bottom"
+                   HorizontalAlignment="Center"
+                   Margin="0,0,0,20"/>
+    </Grid>
+</Window>

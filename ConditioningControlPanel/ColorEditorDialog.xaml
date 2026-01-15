@@ -1,0 +1,118 @@
+<Window x:Class="ConditioningControlPanel.ColorEditorDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Subliminal Colors" 
+        Height="480" Width="450"
+        WindowStartupLocation="CenterOwner"
+        Background="#1A1A2E"
+        ResizeMode="NoResize">
+
+    <Window.Resources>
+        <!-- keep existing ToggleStyle... -->
+      
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="🎨 Subliminal Colors" 
+                   Foreground="{StaticResource PinkBrush}" 
+                   FontSize="18" FontWeight="Bold" Margin="0,0,0,20"/>
+
+        <!-- Color Settings -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,20">
+            
+            <!-- Background Color -->
+            <Grid Margin="0,0,0,15">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Background" Foreground="{StaticResource TextLightBrush}" 
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnBgColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
+                        Click="BtnBgColor_Click" ToolTip="Click to change"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="15,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="Transparent" Foreground="#808080" FontSize="11" 
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <CheckBox x:Name="ChkBgTransparent" Style="{StaticResource ToggleStyle}"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Text Color -->
+            <Grid Margin="0,0,0,15">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Text" Foreground="{StaticResource TextLightBrush}" 
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnTextColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
+                        Click="BtnTextColor_Click" ToolTip="Click to change"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="15,0,0,0" VerticalAlignment="Center"
+                            Visibility="Collapsed">
+                    <TextBlock Text="Transparent" Foreground="#808080" FontSize="11" 
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <CheckBox x:Name="ChkTextTransparent" Style="{StaticResource ToggleStyle}"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Border Color -->
+            <Grid Margin="0,0,0,15">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Border/Outline" Foreground="{StaticResource TextLightBrush}"
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button x:Name="BtnBorderColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
+                        Click="BtnBorderColor_Click" ToolTip="Click to change"/>
+            </Grid>
+
+            <!-- Steal Focus Toggle -->
+            <Grid Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Steal Keyboard Focus" Foreground="{StaticResource TextLightBrush}"
+                               FontSize="14"/>
+                    <TextBlock Text="Forces attention by stealing keyboard focus when shown"
+                               Foreground="#808080" FontSize="10" Margin="0,2,0,0"/>
+                </StackPanel>
+                <CheckBox x:Name="ChkStealsFocus" Grid.Column="1" Style="{StaticResource ToggleStyle}"
+                          VerticalAlignment="Center"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- Preview -->
+        <Border Grid.Row="2" x:Name="PreviewBorder" Background="Black" CornerRadius="8" 
+                Height="80" Margin="0,0,0,20">
+            <TextBlock x:Name="PreviewText" Text="BAMBI SLEEP" 
+                       FontSize="28" FontWeight="Bold" FontFamily="Arial"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- Buttons -->
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="1" Content="Cancel" Style="{StaticResource SecondaryButton}" 
+                    Margin="0,0,10,0" Click="BtnCancel_Click"/>
+            <Button Grid.Column="2" Content="Save" Style="{StaticResource ActionButton}" 
+                    Click="BtnSave_Click"/>
+        </Grid>
+    </Grid>
+</Window>

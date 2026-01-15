@@ -1,0 +1,650 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using NAudio.Wave;
+
+namespace ConditioningControlPanel.Services;
+
+/// <summary>
+/// Bubble popping game - bubbles float up from bottom of screen, user pops them by clicking
+/// </summary>
+public class BubbleService : IDisposable
+{
+    private const int MAX_BUBBLES = 3;
+    private readonly List<Bubble> _bubbles = new();
+    private readonly Random _random = new();
+    private DispatcherTimer? _spawnTimer;
+    private bool _isRunning;
+    private BitmapImage? _bubbleImage;
+    private string _assetsPath = "";
+
+    public bool IsRunning => _isRunning;
+    public bool IsPaused => _isPaused;
+    public int ActiveBubbles => _bubbles.Count;
+
+    private bool _isPaused;
+
+    public event Action? OnBubblePopped;
+    public event Action? OnBubbleMissed;
+
+    public void Start(bool bypassLevelCheck = false)
+    {
+        if (_isRunning) return;
+
+        var settings = App.Settings.Current;
+
+        // Check level requirement unless bypassed (e.g., during sessions)
+        if (!bypassLevelCheck && settings.PlayerLevel < 20)
+        {
+            App.Logger?.Information("BubbleService: Level {Level} is below 20, bubbles not available", settings.PlayerLevel);
+            return;
+        }
+
+        _isRunning = true;
+
+        _assetsPath = App.UserAssetsPath;
+        
+        // Pre-load bubble image
+        LoadBubbleImage();
+
+        // Start spawning bubbles based on frequency setting
+        var intervalMs = 60000.0 / Math.Max(1, settings.BubblesFrequency); // frequency per minute
+        
+        _spawnTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(intervalMs)
+        };
+        _spawnTimer.Tick += (s, e) => SpawnBubble();
+        _spawnTimer.Start();
+
+        // Spawn first bubble immediately
+        SpawnBubble();
+
+        App.Logger?.Information("BubbleService started - {Freq} bubbles/min", settings.BubblesFrequency);
+    }
+
+    public void Stop()
+    {
+        if (!_isRunning) return;
+        _isRunning = false;
+
+        _spawnTimer?.Stop();
+        _spawnTimer = null;
+
+        // Pop all remaining bubbles
+        PopAllBubbles();
+
+        App.Logger?.Information("BubbleService stopped");
+    }
+
+    public void RefreshFrequency()
+    {
+        if (!_isRunning || _spawnTimer == null) return;
+
+        _spawnTimer.Stop();
+
+        var intervalMs = 60000.0 / Math.Max(1, App.Settings.Current.BubblesFrequency);
+        _spawnTimer.Interval = TimeSpan.FromMilliseconds(intervalMs);
+
+        _spawnTimer.Start();
+
+        App.Logger?.Information("BubbleService frequency updated to {Freq} bubbles/min", App.Settings.Current.BubblesFrequency);
+    }
+
+    /// <summary>
+    /// Pause bubble spawning and clear all active bubbles (for bubble count minigame)
+    /// </summary>
+    public void PauseAndClear()
+    {
+        if (!_isRunning) return;
+
+        _isPaused = true;
+        _spawnTimer?.Stop();
+        PopAllBubbles();
+
+        App.Logger?.Debug("BubbleService paused and cleared for minigame");
+    }
+
+    /// <summary>
+    /// Resume bubble spawning after pause
+    /// </summary>
+    public void Resume()
+    {
+        if (!_isRunning || !_isPaused) return;
+
+        _isPaused = false;
+        _spawnTimer?.Start();
+
+        App.Logger?.Debug("BubbleService resumed");
+    }
+
+            private void LoadBubbleImage()
+            {
+                try
+                {
+                    var resourceUri = new Uri("pack://application:,,,/Resources/bubble.png", UriKind.Absolute);
+                    _bubbleImage = new BitmapImage();
+                    _bubbleImage.BeginInit();
+                    _bubbleImage.UriSource = resourceUri;
+                    _bubbleImage.CacheOption = BitmapCacheOption.OnLoad;
+                    _bubbleImage.EndInit();
+                    _bubbleImage.Freeze();
+                    App.Logger?.Debug("Bubble image loaded from embedded resource");
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error("Failed to load bubble image: {Error}", ex.Message);
+                }
+            }
+    private void SpawnBubble()
+    {
+        if (!_isRunning) return;
+        if (_bubbles.Count >= MAX_BUBBLES)
+        {
+            App.Logger?.Debug("Max bubbles reached, skipping spawn");
+            return;
+        }
+
+        Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            try
+            {
+                var settings = App.Settings.Current;
+                var screens = settings.DualMonitorEnabled 
+                    ? App.GetAllScreensCached() 
+                    : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+                
+                var screen = screens[_random.Next(screens.Length)];
+                var isClickable = settings.BubblesClickable;
+                var bubble = new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, isClickable);
+                _bubbles.Add(bubble);
+                
+                App.Logger?.Debug("Spawned bubble, total: {Count}", _bubbles.Count);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error("Failed to spawn bubble: {Error}", ex.Message);
+            }
+        });
+    }
+
+    private void OnPop(Bubble bubble)
+    {
+        PlayPopSound();
+        _bubbles.Remove(bubble);
+        OnBubblePopped?.Invoke();
+        App.Progression?.AddXP(2);
+        
+        // Track for achievement
+        App.Achievements?.TrackBubblePopped();
+
+        // Haptic feedback with combo system
+        _ = App.Haptics?.BubblePopAsync();
+    }
+
+    private void OnMiss(Bubble bubble)
+    {
+        _bubbles.Remove(bubble);
+        OnBubbleMissed?.Invoke();
+    }
+
+    private void PlayPopSound()
+    {
+        try
+        {
+            var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
+            var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
+            var chosenPop = popFiles[_random.Next(popFiles.Length)];
+            var popPath = Path.Combine(soundsPath, chosenPop);
+
+            if (File.Exists(popPath))
+            {
+                var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                var bubblesVolume = App.Settings.Current.BubblesVolume / 100f;
+                var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
+
+                PlaySoundAsync(popPath, volume);
+            }
+
+            // Random bonus sounds
+            var chance = _random.NextDouble();
+            if (chance < 0.03) // 3% chance
+            {
+                var burstPath = Path.Combine(soundsPath, "burst.mp3");
+                if (File.Exists(burstPath))
+                {
+                    var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                    var bubblesVolume = App.Settings.Current.BubblesVolume / 100f;
+                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
+                    PlaySoundAsync(burstPath, volume);
+                }
+            }
+            else if (chance < 0.08) // 5% chance (8% - 3%)
+            {
+                var ggPath = Path.Combine(soundsPath, "GG.mp3");
+                if (File.Exists(ggPath))
+                {
+                    var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                    var bubblesVolume = App.Settings.Current.BubblesVolume / 100f;
+                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
+                    PlaySoundAsync(ggPath, volume);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("Failed to play pop sound: {Error}", ex.Message);
+        }
+    }
+
+    // Performance: Pool of audio devices to avoid creating new ones for each sound
+    private static readonly Queue<WaveOutEvent> _audioDevicePool = new();
+    private static readonly object _audioPoolLock = new();
+    private const int MAX_POOLED_DEVICES = 4;
+
+    private WaveOutEvent GetPooledAudioDevice()
+    {
+        lock (_audioPoolLock)
+        {
+            if (_audioDevicePool.Count > 0)
+            {
+                return _audioDevicePool.Dequeue();
+            }
+        }
+        return new WaveOutEvent();
+    }
+
+    private void ReturnAudioDevice(WaveOutEvent device)
+    {
+        lock (_audioPoolLock)
+        {
+            if (_audioDevicePool.Count < MAX_POOLED_DEVICES)
+            {
+                _audioDevicePool.Enqueue(device);
+            }
+            else
+            {
+                device.Dispose();
+            }
+        }
+    }
+
+    private void PlaySoundAsync(string path, float volume)
+    {
+        Task.Run(() =>
+        {
+            WaveOutEvent? outputDevice = null;
+            AudioFileReader? audioFile = null;
+            try
+            {
+                audioFile = new AudioFileReader(path);
+                audioFile.Volume = volume;
+
+                outputDevice = GetPooledAudioDevice();  // Performance: Reuse pooled device
+                outputDevice.Init(audioFile);
+                outputDevice.Play();
+
+                while (outputDevice.PlaybackState == PlaybackState.Playing)
+                {
+                    Thread.Sleep(50);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Audio playback failed: {Error}", ex.Message);
+            }
+            finally
+            {
+                audioFile?.Dispose();
+                if (outputDevice != null)
+                {
+                    try { outputDevice.Stop(); } catch { }
+                    ReturnAudioDevice(outputDevice);  // Performance: Return to pool
+                }
+            }
+        });
+    }
+
+    public void PopAllBubbles()
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            foreach (var bubble in _bubbles.ToArray())
+            {
+                bubble.Pop();
+            }
+            _bubbles.Clear();
+        });
+    }
+
+    public void Dispose()
+    {
+        Stop();
+    }
+}
+
+/// <summary>
+/// Individual bubble that floats upward and can be popped
+/// </summary>
+internal class Bubble
+{
+    private readonly Window _window;
+    private readonly DispatcherTimer _animTimer;
+    private readonly Random _random;
+    private readonly Action<Bubble> _onPop;
+    private readonly Action<Bubble> _onMiss;
+    private readonly bool _isClickable;
+
+    private double _posX, _posY;
+    private double _startX;
+    private double _speed;
+    private double _timeAlive;
+    private double _wobbleOffset;
+    private double _angle;
+    private double _scale = 1.0;
+    private double _fadeAlpha = 1.0;
+    private int _animType;
+    private bool _isPopping;
+    private bool _isAlive = true;
+
+    private readonly Image _bubbleImage;
+    private readonly int _size;
+    private readonly double _screenTop;
+
+    public Bubble(System.Windows.Forms.Screen screen, BitmapImage? image, Random random,
+                  Action<Bubble> onPop, Action<Bubble> onMiss, bool isClickable = true)
+    {
+        _random = random;
+        _onPop = onPop;
+        _onMiss = onMiss;
+        _isClickable = isClickable;
+        
+        // Random properties
+        _size = random.Next(150, 250);
+        _speed = 0.5 + random.NextDouble() * 0.5; // 0.5 to 1.0 pixels per frame (scaled for 60fps)
+        _animType = random.Next(4);
+        _wobbleOffset = random.NextDouble() * 100;
+        _angle = random.Next(360);
+
+        // Get DPI scale
+        var dpiScale = GetDpiScale();
+        
+        // Position - start at bottom of screen
+        var area = screen.WorkingArea;
+        _startX = (area.X + random.Next(50, Math.Max(100, area.Width - _size - 50))) / dpiScale;
+        _posX = _startX;
+        _posY = (area.Y + area.Height) / dpiScale;
+        _screenTop = area.Y / dpiScale - _size - 50;
+
+        // Create bubble image
+        _bubbleImage = new Image
+        {
+            Width = _size,
+            Height = _size,
+            Stretch = Stretch.Uniform,
+            RenderTransformOrigin = new Point(0.5, 0.5),
+            Cursor = _isClickable ? Cursors.Hand : Cursors.Arrow,
+            IsHitTestVisible = _isClickable
+        };
+
+        if (image != null)
+        {
+            _bubbleImage.Source = image;
+        }
+        else
+        {
+            // Fallback - create simple ellipse
+            var drawing = new DrawingGroup();
+            using (var ctx = drawing.Open())
+            {
+                var gradientBrush = new RadialGradientBrush(
+                    Color.FromArgb(180, 200, 220, 255),
+                    Color.FromArgb(80, 255, 255, 255));
+                ctx.DrawEllipse(gradientBrush, new Pen(Brushes.White, 2), 
+                    new Point(_size / 2, _size / 2), _size / 2 - 5, _size / 2 - 5);
+            }
+            _bubbleImage.Source = new DrawingImage(drawing);
+        }
+
+        // Transform for rotation and scale
+        var transformGroup = new TransformGroup();
+        transformGroup.Children.Add(new ScaleTransform(1, 1));
+        transformGroup.Children.Add(new RotateTransform(0));
+        _bubbleImage.RenderTransform = transformGroup;
+
+        // Make bubble image clickable only if enabled
+        if (_isClickable)
+        {
+            _bubbleImage.MouseLeftButtonDown += (s, e) =>
+            {
+                Pop();
+                e.Handled = true;
+            };
+        }
+
+        // Create invisible hit area ellipse that covers the full bubble
+        // This ensures clicks anywhere in the circular bubble area register
+        var hitArea = new System.Windows.Shapes.Ellipse
+        {
+            Width = _size,
+            Height = _size,
+            Fill = Brushes.Transparent, // Invisible but captures hits
+            IsHitTestVisible = _isClickable,
+            Cursor = _isClickable ? Cursors.Hand : Cursors.Arrow
+        };
+
+        if (_isClickable)
+        {
+            hitArea.MouseLeftButtonDown += (s, e) =>
+            {
+                Pop();
+                e.Handled = true;
+            };
+        }
+
+        // Create container grid with hit area behind the bubble image
+        var grid = new Grid
+        {
+            Width = _size,
+            Height = _size,
+            Background = Brushes.Transparent,
+            IsHitTestVisible = _isClickable
+        };
+        grid.Children.Add(hitArea);      // Hit area first (behind)
+        grid.Children.Add(_bubbleImage); // Image on top
+
+        // Grid click as backup (only if clickable)
+        if (_isClickable)
+        {
+            grid.MouseLeftButtonDown += (s, e) =>
+            {
+                Pop();
+                e.Handled = true;
+            };
+        }
+
+        // Single window - clickable or click-through based on setting
+        _window = new Window
+        {
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = Brushes.Transparent,
+            Topmost = true,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            Focusable = false,
+            Width = _size + 40,
+            Height = _size + 40,
+            Left = _posX - 20,
+            Top = _posY - 20,
+            Content = grid,
+            Cursor = _isClickable ? Cursors.Hand : Cursors.Arrow,
+            IsHitTestVisible = _isClickable
+        };
+
+        // Window click as final backup (only if clickable)
+        if (_isClickable)
+        {
+            _window.MouseLeftButtonDown += (s, e) => Pop();
+        }
+
+        // Show window
+        _window.Show();
+
+        // Hide from Alt+Tab
+        HideFromAltTab();
+
+        // Animation timer (~60 FPS for smooth animation)
+        _animTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _animTimer.Tick += Animate;
+        _animTimer.Start();
+    }
+
+    private void Animate(object? sender, EventArgs e)
+    {
+        if (!_isAlive) return;
+
+        if (_isPopping)
+        {
+            // Pop animation - expand and fade (scaled for 60fps)
+            _scale += 0.02;
+            _fadeAlpha -= 0.033;
+            _angle += 1;
+
+            if (_fadeAlpha <= 0)
+            {
+                Destroy();
+                return;
+            }
+        }
+        else
+        {
+            // Normal float animation (scaled for 60fps)
+            _timeAlive += 0.01;
+            _posY -= _speed;
+
+            // Wobble based on animation type
+            double offset = 0;
+            switch (_animType)
+            {
+                case 0:
+                    offset = Math.Sin(_timeAlive * 6) * 25;
+                    _angle = (_angle + 0.17) % 360;
+                    break;
+                case 1:
+                    offset = Math.Sin(_timeAlive * 7.5) * 30;
+                    _angle = (_angle + 0.07) % 360;
+                    break;
+                case 2:
+                    offset = Math.Cos(_timeAlive * 5.4) * 25;
+                    _angle = (_angle - 0.33) % 360;
+                    break;
+                case 3:
+                    offset = Math.Sin(_timeAlive * 3) * 30 + Math.Cos(_timeAlive * 6) * 15;
+                    _angle = (_angle + 0.27) % 360;
+                    break;
+            }
+            _posX = _startX + offset;
+
+            // Check if floated off screen
+            if (_posY < _screenTop)
+            {
+                _onMiss?.Invoke(this);
+                Destroy();
+                return;
+            }
+        }
+
+        // Update visuals
+        try
+        {
+            // Update scale wobble (scaled for 60fps)
+            var wobble = 0.06 * Math.Sin(_timeAlive * 7.5 + _wobbleOffset);
+            var currentScale = _scale + wobble;
+
+            if (_bubbleImage.RenderTransform is TransformGroup tg && tg.Children.Count >= 2)
+            {
+                if (tg.Children[0] is ScaleTransform st)
+                {
+                    st.ScaleX = currentScale;
+                    st.ScaleY = currentScale;
+                }
+                if (tg.Children[1] is RotateTransform rt)
+                {
+                    rt.Angle = _angle;
+                }
+            }
+
+            _window.Opacity = _fadeAlpha;
+            _window.Left = _posX - 20;
+            _window.Top = _posY - 20;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("Bubble animate error: {Error}", ex.Message);
+            Destroy();
+        }
+    }
+
+    public void Pop()
+    {
+        if (!_isAlive || _isPopping) return;
+        _isPopping = true;
+        _onPop?.Invoke(this);
+    }
+
+    private void Destroy()
+    {
+        if (!_isAlive) return;
+        _isAlive = false;
+        _animTimer.Stop();
+
+        try { _window.Close(); } catch { }
+    }
+
+    #region Win32
+
+    private double GetDpiScale()
+    {
+        try
+        {
+            using var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero);
+            return g.DpiX / 96.0;
+        }
+        catch
+        {
+            return 1.0;
+        }
+    }
+
+    private void HideFromAltTab()
+    {
+        try
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(_window).Handle;
+            var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+        }
+        catch { }
+    }
+
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hwnd, int index);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+
+    #endregion
+}

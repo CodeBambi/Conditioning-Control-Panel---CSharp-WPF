@@ -1,0 +1,116 @@
+<Window x:Class="ConditioningControlPanel.TextEditorDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Text Manager" 
+        Height="500" Width="550"
+        WindowStartupLocation="CenterOwner"
+        Background="#1A1A2E"
+        ResizeMode="CanResizeWithGrip">
+
+    <Window.Resources>
+    </Window.Resources>
+
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Grid.Row="0" Margin="0,0,0,15">
+            <TextBlock x:Name="TxtTitle" Text="Text Manager" Foreground="{StaticResource PinkBrush}" 
+                       FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Sort A-Z" Style="{StaticResource SecondaryButton}" 
+                        Margin="0,0,8,0" Click="BtnSort_Click"/>
+                <Button Content="Toggle All" Style="{StaticResource SecondaryButton}" 
+                        Click="BtnToggleAll_Click"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Add New Item -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="TxtNewItem" Grid.Column="0" 
+                     Background="#1E1E3A" Foreground="White" 
+                     BorderBrush="{StaticResource PinkBrush}" BorderThickness="1"
+                     Padding="10,8" FontSize="13" VerticalContentAlignment="Center"
+                     KeyDown="TxtNewItem_KeyDown"/>
+            <Button Grid.Column="1" Content="+ Add" Style="{StaticResource ActionButton}" 
+                    Margin="8,0,0,0" Click="BtnAdd_Click"/>
+        </Grid>
+
+        <!-- Item List -->
+        <Border Grid.Row="2" Background="{StaticResource PanelBgBrush}" CornerRadius="8">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="5">
+                <ItemsControl x:Name="ItemList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border x:Name="ItemBorder" Background="#1E1E3A" CornerRadius="5" 
+                                    Margin="3" Padding="10,8" Cursor="Hand"
+                                    MouseLeftButtonDown="Item_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Grid.Column="0" Style="{StaticResource ItemCheckBox}"
+                                              IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                              Checked="CheckBox_Changed" Unchecked="CheckBox_Changed"
+                                              Margin="0,0,10,0"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Text}" 
+                                               Foreground="White" FontSize="13"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="2" Text="✕" Foreground="#808080" 
+                                               FontSize="14" VerticalAlignment="Center"
+                                               Cursor="Hand" MouseLeftButtonDown="BtnRemove_Click"
+                                               ToolTip="Remove item">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Foreground" Value="#FF4757"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                            </Border>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                    <Setter TargetName="ItemBorder" Property="Background" Value="#3A2A5A"/>
+                                    <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+                                    <Setter TargetName="ItemBorder" Property="BorderThickness" Value="1"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Footer Buttons -->
+        <Grid Grid.Row="3" Margin="0,15,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Content="🗑️ Remove Selected" Style="{StaticResource DangerButton}" 
+                    Click="BtnRemoveSelected_Click"/>
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button Content="Cancel" Style="{StaticResource SecondaryButton}" 
+                        Margin="0,0,8,0" Click="BtnCancel_Click"/>
+                <Button Content="Save" Style="{StaticResource ActionButton}" 
+                        Click="BtnSave_Click"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

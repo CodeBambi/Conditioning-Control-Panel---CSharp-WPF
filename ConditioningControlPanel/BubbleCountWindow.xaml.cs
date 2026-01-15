@@ -1,0 +1,802 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using NAudio.Wave;
+using ConditioningControlPanel.Services;
+
+namespace ConditioningControlPanel
+{
+    /// <summary>
+    /// Bubble Count Challenge - watch video, count bubbles, enter total
+    /// Multi-monitor support with synced bubbles
+    /// </summary>
+    public partial class BubbleCountWindow : Window
+    {
+        private readonly string _videoPath;
+        private readonly BubbleCountService.Difficulty _difficulty;
+        private readonly bool _strictMode;
+        private readonly Action<bool> _onComplete;
+        private readonly System.Windows.Forms.Screen _screen;
+        private readonly bool _isPrimary;
+        
+        private readonly Random _random = new();
+        private readonly List<CountBubble> _activeBubbles = new();
+        private DispatcherTimer? _bubbleSpawnTimer;
+        private DispatcherTimer? _safetyTimer;
+
+        private int _bubbleCount = 0;
+        private int _targetBubbleCount = 0;
+        private double _videoDurationSeconds = 30;
+        private bool _videoEnded = false;
+        private bool _gameCompleted = false;
+        
+        private BitmapImage? _bubbleImage;
+        private string _assetsPath = "";
+        
+        // Multi-monitor support
+        private static List<BubbleCountWindow> _allWindows = new();
+        private static int _sharedBubbleCount = 0;
+        private static int _sharedTargetCount = 0;
+        private static MediaElement? _primaryMediaElement = null;
+
+        public BubbleCountWindow(string videoPath, BubbleCountService.Difficulty difficulty, 
+            bool strictMode, Action<bool> onComplete, 
+            System.Windows.Forms.Screen? screen = null, bool isPrimary = true)
+        {
+            InitializeComponent();
+            
+            _videoPath = videoPath;
+            _difficulty = difficulty;
+            _strictMode = strictMode;
+            _onComplete = onComplete;
+            _screen = screen ?? System.Windows.Forms.Screen.PrimaryScreen!;
+            _isPrimary = isPrimary;
+            
+            _assetsPath = App.UserAssetsPath;
+            
+            // Set difficulty display
+            TxtDifficulty.Text = $" ({difficulty})";
+            
+            // Handle strict mode
+            if (_strictMode)
+            {
+                TxtStrict.Visibility = Visibility.Visible;
+                TxtEscHint.Visibility = Visibility.Collapsed;
+            }
+            
+            // Initial small position on target screen (will maximize after show)
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Left = _screen.Bounds.X + 100;
+            Top = _screen.Bounds.Y + 100;
+            Width = 400;
+            Height = 300;
+            
+            // Load bubble image
+            LoadBubbleImage();
+            
+            // Key handler
+            KeyDown += OnKeyDown;
+
+            // Hide from Alt+Tab
+            SourceInitialized += (s, e) =>
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+            };
+
+            // Reclaim focus when stolen by other windows (e.g., subliminal triggers)
+            // Only the primary window needs keyboard focus for input
+            if (_isPrimary)
+            {
+                Deactivated += (s, e) =>
+                {
+                    // If game is still active and we lost focus, reclaim it immediately
+                    if (!_gameCompleted && !_videoEnded)
+                    {
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            if (!_gameCompleted && !_videoEnded)
+                            {
+                                Activate();
+                                Focus();
+                            }
+                        }), DispatcherPriority.Input);
+                    }
+                };
+            }
+
+            // Register window
+            _allWindows.Add(this);
+            
+            // Start when loaded
+            Loaded += OnLoaded;
+        }
+
+        /// <summary>
+        /// Show bubble count game on all monitors
+        /// </summary>
+        private static BubbleCountWindow? _primaryWindow;
+
+        public static void ShowOnAllMonitors(string videoPath, BubbleCountService.Difficulty difficulty,
+            bool strictMode, Action<bool> onComplete)
+        {
+            // Reset shared state
+            _allWindows.Clear();
+            _sharedBubbleCount = 0;
+            _sharedTargetCount = 0;
+            _primaryWindow = null;
+            _primaryMediaElement = null;
+
+            var settings = App.Settings.Current;
+            var screens = settings.DualMonitorEnabled
+                ? System.Windows.Forms.Screen.AllScreens
+                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+            var primary = screens.FirstOrDefault(s => s.Primary) ?? screens[0];
+
+            // Create primary window with audio
+            var primaryWindow = new BubbleCountWindow(videoPath, difficulty, strictMode, onComplete, primary, true);
+            _primaryWindow = primaryWindow;
+            primaryWindow.Show();
+            primaryWindow.WindowState = WindowState.Maximized;
+            ForceTopmost(primaryWindow);
+
+            // Create secondary windows - they mirror the primary video via VisualBrush
+            foreach (var screen in screens.Where(s => s != primary))
+            {
+                var secondaryWindow = new BubbleCountWindow(videoPath, difficulty, strictMode, onComplete, screen, false);
+                secondaryWindow.Show();
+                secondaryWindow.WindowState = WindowState.Maximized;
+                ForceTopmost(secondaryWindow);
+            }
+
+            // Activate primary last so it has focus for keyboard input
+            primaryWindow.Activate();
+        }
+
+        private static void ForceTopmost(Window window)
+        {
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            catch { }
+        }
+
+
+        /// <summary>
+        /// Force close all bubble count windows (used by panic button)
+        /// </summary>
+        public static void ForceCloseAll()
+        {
+            var windowsToClose = new List<BubbleCountWindow>(_allWindows);
+            _allWindows.Clear();
+            _primaryMediaElement = null;
+
+            foreach (var window in windowsToClose)
+            {
+                try
+                {
+                    window.ForceClose();
+                }
+                catch { }
+            }
+
+            // Reset the service busy state so it can trigger again
+            App.BubbleCount?.ResetBusyState();
+        }
+
+        /// <summary>
+        /// Force close this window instance
+        /// </summary>
+        private void ForceClose()
+        {
+            try { VideoPlayer?.Stop(); } catch { }
+            try { Close(); } catch { }
+        }
+
+        /// <summary>
+        /// Check if any bubble count window is currently open
+        /// </summary>
+        public static bool IsAnyOpen() => _allWindows.Count > 0;
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_isPrimary)
+                {
+                    // Get video duration
+                    _videoDurationSeconds = GetVideoDuration(_videoPath);
+
+                    // Calculate target bubbles
+                    CalculateTargetBubbles();
+                    _sharedTargetCount = _targetBubbleCount;
+
+                    // Start spawning bubbles
+                    StartBubbleSpawning();
+
+                    // Start safety timer to prevent frozen fullscreen if MediaEnded doesn't fire
+                    StartSafetyTimer(_videoDurationSeconds);
+
+                    App.Logger?.Information("Bubble Count game started - Target: {Target} bubbles, Duration: {Duration}s, Difficulty: {Diff}",
+                        _targetBubbleCount, _videoDurationSeconds, _difficulty);
+
+                    // Store reference for secondary windows to use via VisualBrush
+                    _primaryMediaElement = VideoPlayer;
+
+                    // Primary loads and plays video with audio
+                    VideoPlayer.Volume = 1.0;
+                    VideoPlayer.IsMuted = false;
+                    VideoPlayer.Source = new Uri(_videoPath);
+                    VideoPlayer.Play();
+                }
+                else
+                {
+                    // Secondary windows sync with primary
+                    _targetBubbleCount = _sharedTargetCount;
+
+                    // Use VisualBrush to mirror primary video - perfect sync, no separate decoder
+                    if (_primaryMediaElement != null)
+                    {
+                        var visualBrush = new VisualBrush
+                        {
+                            Visual = _primaryMediaElement,
+                            Stretch = Stretch.Uniform,
+                            AlignmentX = AlignmentX.Center,
+                            AlignmentY = AlignmentY.Center
+                        };
+
+                        // Hide the MediaElement and use a Rectangle with VisualBrush instead
+                        VideoPlayer.Visibility = Visibility.Collapsed;
+
+                        var mirrorRect = new System.Windows.Shapes.Rectangle
+                        {
+                            Fill = visualBrush,
+                            HorizontalAlignment = HorizontalAlignment.Stretch,
+                            VerticalAlignment = VerticalAlignment.Stretch
+                        };
+
+                        // Add mirror rectangle to the MainGrid (behind the canvas)
+                        if (MainGrid != null)
+                        {
+                            MainGrid.Children.Insert(0, mirrorRect);
+                        }
+
+                        App.Logger?.Debug("BubbleCount: Secondary window using VisualBrush mirror");
+                    }
+                    else
+                    {
+                        App.Logger?.Warning("BubbleCount: Primary MediaElement not available for mirror");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to initialize bubble count game");
+                if (_isPrimary)
+                {
+                    CloseAllWindows();
+                    _onComplete?.Invoke(false);
+                }
+            }
+        }
+
+        private void CalculateTargetBubbles()
+        {
+            double baseRate = _difficulty switch
+            {
+                BubbleCountService.Difficulty.Easy => 6,
+                BubbleCountService.Difficulty.Medium => 10,
+                BubbleCountService.Difficulty.Hard => 16,
+                _ => 10
+            };
+            
+            var scaledCount = (baseRate / 30.0) * _videoDurationSeconds;
+            var variance = scaledCount * 0.2;
+            _targetBubbleCount = (int)Math.Round(scaledCount + (_random.NextDouble() * variance * 2 - variance));
+            _targetBubbleCount = Math.Max(3, _targetBubbleCount);
+        }
+
+        private void LoadBubbleImage()
+        {
+            try
+            {
+                var resourceUri = new Uri("pack://application:,,,/Resources/bubble.png", UriKind.Absolute);
+                _bubbleImage = new BitmapImage();
+                _bubbleImage.BeginInit();
+                _bubbleImage.UriSource = resourceUri;
+                _bubbleImage.CacheOption = BitmapCacheOption.OnLoad;
+                _bubbleImage.EndInit();
+                _bubbleImage.Freeze();
+                App.Logger?.Debug("Bubble image loaded from embedded resource");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to load bubble image: {Error}", ex.Message);
+            }
+        }
+
+        private double GetVideoDuration(string path)
+        {
+            try
+            {
+                using var reader = new MediaFoundationReader(path);
+                return reader.TotalTime.TotalSeconds;
+            }
+            catch
+            {
+                return 30;
+            }
+        }
+
+        private void VideoPlayer_MediaOpened(object sender, RoutedEventArgs e)
+        {
+            App.Logger?.Debug("Bubble count video opened on {Primary}", _isPrimary ? "primary" : "secondary");
+        }
+
+        private void VideoPlayer_MediaEnded(object sender, RoutedEventArgs e)
+        {
+            // Only primary triggers end
+            if (_isPrimary)
+            {
+                OnVideoEnded();
+            }
+        }
+
+        private void VideoPlayer_MediaFailed(object sender, ExceptionRoutedEventArgs e)
+        {
+            App.Logger?.Error("Bubble count video failed: {Error}", e.ErrorException?.Message);
+            if (_isPrimary)
+            {
+                OnVideoEnded();
+            }
+        }
+
+        /// <summary>
+        /// Starts a safety timer to force video end if MediaEnded never fires.
+        /// This prevents the game window from getting stuck on fullscreen.
+        /// </summary>
+        private void StartSafetyTimer(double videoDurationSeconds)
+        {
+            _safetyTimer?.Stop();
+
+            // Add 5 second buffer beyond video duration
+            var timeoutSeconds = videoDurationSeconds + 5;
+
+            _safetyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(timeoutSeconds) };
+            _safetyTimer.Tick += (s, e) =>
+            {
+                _safetyTimer?.Stop();
+                if (!_videoEnded)
+                {
+                    App.Logger?.Warning("BubbleCountWindow: Safety timeout triggered - MediaEnded did not fire. Forcing video end.");
+                    OnVideoEnded();
+                }
+            };
+            _safetyTimer.Start();
+
+            App.Logger?.Debug("BubbleCountWindow: Safety timer started for {Duration}s", timeoutSeconds);
+        }
+
+        private void StartBubbleSpawning()
+        {
+            if (!_isPrimary) return;
+
+            var intervalMs = (_videoDurationSeconds * 1000) / Math.Max(1, _targetBubbleCount);
+
+            _bubbleSpawnTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(intervalMs * 0.7)
+            };
+
+            _bubbleSpawnTimer.Tick += (s, e) =>
+            {
+                if (_sharedBubbleCount < _targetBubbleCount && !_videoEnded)
+                {
+                    if (_random.NextDouble() < 0.7 || _sharedBubbleCount < _targetBubbleCount / 2)
+                    {
+                        SpawnBubbleOnAllWindows();
+                    }
+                }
+            };
+
+            // Delay bubble spawning until layout is complete (use 1.5s to ensure canvas is sized)
+            Task.Delay(1500).ContinueWith(_ => Dispatcher.Invoke(() =>
+            {
+                if (_videoEnded) return;
+
+                // Log canvas size for debugging
+                App.Logger?.Information("BubbleCount: Canvas size is {Width}x{Height}, Window size is {WinW}x{WinH}",
+                    BubbleCanvas.ActualWidth, BubbleCanvas.ActualHeight, ActualWidth, ActualHeight);
+
+                // Start the spawning timer
+                _bubbleSpawnTimer.Start();
+
+                // Spawn first bubble
+                SpawnBubbleOnAllWindows();
+            }));
+        }
+
+        private void SpawnBubbleOnAllWindows()
+        {
+            if (_sharedBubbleCount >= _targetBubbleCount) return;
+            _sharedBubbleCount++;
+            _bubbleCount = _sharedBubbleCount;
+
+            // Generate random position (relative 0-1)
+            var relX = _random.NextDouble() * 0.7 + 0.15; // 15% to 85%
+            var relY = _random.NextDouble() * 0.5 + 0.25; // 25% to 75%
+            var size = _random.Next(120, 225); // 50% larger bubbles
+
+            // Spawn on ONE random window (not all windows)
+            if (_allWindows.Count > 0)
+            {
+                var randomWindow = _allWindows[_random.Next(_allWindows.Count)];
+                randomWindow.SpawnBubbleAt(relX, relY, size);
+            }
+        }
+
+        private void SpawnBubbleAt(double relX, double relY, int size)
+        {
+            try
+            {
+                // Use canvas actual size for positioning
+                var canvasWidth = BubbleCanvas.ActualWidth > 0 ? BubbleCanvas.ActualWidth : ActualWidth;
+                var canvasHeight = BubbleCanvas.ActualHeight > 0 ? BubbleCanvas.ActualHeight : ActualHeight;
+
+                var x = relX * canvasWidth - size / 2;
+                var y = relY * canvasHeight - size / 2;
+
+                // Play pop sound when bubble appears (only primary)
+                if (_isPrimary) PlayPopSound();
+
+                // Only primary plays sound on pop
+                var bubble = new CountBubble(_bubbleImage, size, x, y, _random,
+                    _isPrimary ? PlayPopSound : null, OnBubblePopped);
+                _activeBubbles.Add(bubble);
+                BubbleCanvas.Children.Add(bubble.Visual);
+
+                App.Logger?.Debug("Spawned bubble #{Count} at ({X:F0}, {Y:F0}) on {Primary}",
+                    _sharedBubbleCount, x, y, _isPrimary ? "primary" : "secondary");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to spawn bubble: {Error}", ex.Message);
+            }
+        }
+
+        private void OnBubblePopped(CountBubble bubble)
+        {
+            _activeBubbles.Remove(bubble);
+            BubbleCanvas.Children.Remove(bubble.Visual);
+        }
+
+        private void PlayPopSound()
+        {
+            try
+            {
+                var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
+                var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
+                var chosenPop = popFiles[_random.Next(popFiles.Length)];
+                var popPath = Path.Combine(soundsPath, chosenPop);
+
+                if (File.Exists(popPath))
+                {
+                    // Apply master volume and bubbles volume
+                    var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
+                    var bubblesVolume = (App.Settings?.Current?.BubblesVolume ?? 50) / 100f;
+                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
+
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            using var audioFile = new AudioFileReader(popPath);
+                            audioFile.Volume = volume;
+                            using var outputDevice = new WaveOutEvent();
+                            outputDevice.Init(audioFile);
+                            outputDevice.Play();
+                            while (outputDevice.PlaybackState == PlaybackState.Playing)
+                            {
+                                Thread.Sleep(50);
+                            }
+                        }
+                        catch { }
+                    });
+                }
+            }
+            catch { }
+        }
+
+        private void OnVideoEnded()
+        {
+            if (_videoEnded) return;
+            _videoEnded = true;
+
+            _safetyTimer?.Stop();
+            _bubbleSpawnTimer?.Stop();
+
+            // Mark all windows as ended
+            foreach (var window in _allWindows)
+            {
+                window._videoEnded = true;
+                window._bubbleSpawnTimer?.Stop();
+            }
+
+            // Clear remaining bubbles on all windows
+            foreach (var window in _allWindows)
+            {
+                foreach (var bubble in window._activeBubbles.ToArray())
+                {
+                    bubble.ForcePop();
+                }
+                window._activeBubbles.Clear();
+                window.BubbleCanvas.Children.Clear();
+            }
+
+            // Track video watch time for leaderboard (bubble count videos count too!)
+            if (_isPrimary && _videoDurationSeconds > 0)
+            {
+                App.Logger?.Information("BubbleCount video watched, tracking duration: {Duration}s", _videoDurationSeconds);
+                App.Achievements?.TrackVideoWatched(_videoDurationSeconds);
+            }
+
+            // Show result window (only from primary)
+            if (_isPrimary)
+            {
+                ShowResultWindow();
+            }
+        }
+
+        private void ShowResultWindow()
+        {
+            // Hide all game windows first
+            foreach (var window in _allWindows)
+            {
+                window.Hide();
+            }
+            
+            // Show result window on all monitors
+            BubbleCountResultWindow.ShowOnAllMonitors(
+                _sharedBubbleCount, 
+                _strictMode,
+                (success) =>
+                {
+                    _gameCompleted = true;
+                    CloseAllWindows();
+                    _onComplete?.Invoke(success);
+                });
+        }
+
+        private void OnKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape && !_strictMode && !_gameCompleted)
+            {
+                _gameCompleted = true;
+                CloseAllWindows();
+                _onComplete?.Invoke(false);
+            }
+        }
+
+        private void CloseAllWindows()
+        {
+            foreach (var window in _allWindows.ToArray())
+            {
+                try
+                {
+                    window._safetyTimer?.Stop();
+                    window._bubbleSpawnTimer?.Stop();
+                    window.VideoPlayer?.Stop();
+                    window.Close();
+                }
+                catch { }
+            }
+            _allWindows.Clear();
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _safetyTimer?.Stop();
+            _bubbleSpawnTimer?.Stop();
+            VideoPlayer?.Stop();
+
+            foreach (var bubble in _activeBubbles)
+            {
+                bubble.Dispose();
+            }
+            _activeBubbles.Clear();
+
+            _allWindows.Remove(this);
+
+            base.OnClosed(e);
+        }
+    }
+
+    /// <summary>
+    /// Individual bubble for counting game - appears, stays briefly, then pops
+    /// </summary>
+    internal class CountBubble : IDisposable
+    {
+        public FrameworkElement Visual { get; }
+        private readonly Image _imageElement;
+
+        private readonly DispatcherTimer _lifeTimer;
+        private readonly DispatcherTimer _animTimer;
+        private readonly Action? _playSound;
+        private readonly Action<CountBubble> _onPopped;
+        private readonly Random _random;
+
+        private double _scale = 0.1;
+        private double _targetScale = 1.0;
+        private double _opacity = 1.0;
+        private double _rotation = 0;
+        private bool _isPopping = false;
+        private bool _isDisposed = false;
+
+        public CountBubble(BitmapImage? image, int size, double x, double y,
+            Random random, Action? playSound, Action<CountBubble> onPopped)
+        {
+            _random = random;
+            _playSound = playSound;
+            _onPopped = onPopped;
+            _rotation = random.Next(360);
+
+            _imageElement = new Image
+            {
+                Stretch = Stretch.Uniform,
+                Source = image
+            };
+
+            var border = new Border
+            {
+                Width = size,
+                Height = size,
+                CornerRadius = new CornerRadius(size / 2.0),
+                ClipToBounds = true,
+                Child = _imageElement,
+                RenderTransformOrigin = new Point(0.5, 0.5),
+                Opacity = 0
+            };
+            Visual = border;
+
+            Canvas.SetLeft(Visual, x);
+            Canvas.SetTop(Visual, y);
+
+            if (image == null)
+            {
+                // Fallback gradient bubble
+                var drawing = new DrawingGroup();
+                using (var ctx = drawing.Open())
+                {
+                    var gradientBrush = new RadialGradientBrush(
+                        Color.FromArgb(200, 255, 182, 193),
+                        Color.FromArgb(100, 255, 105, 180));
+                    ctx.DrawEllipse(gradientBrush, new Pen(Brushes.White, 2),
+                        new Point(size / 2, size / 2), size / 2 - 5, size / 2 - 5);
+                }
+                _imageElement.Source = new DrawingImage(drawing);
+            }
+
+            // Transform for scale and rotation
+            var transformGroup = new TransformGroup();
+            transformGroup.Children.Add(new ScaleTransform(_scale, _scale));
+            transformGroup.Children.Add(new RotateTransform(_rotation));
+            Visual.RenderTransform = transformGroup;
+
+            // Animation timer
+            _animTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+            _animTimer.Tick += Animate;
+            _animTimer.Start();
+
+            // Life timer - bubble stays for 1-1.5 seconds then pops
+            var lifespan = 1000 + random.Next(500);
+            _lifeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(lifespan) };
+            _lifeTimer.Tick += (s, e) =>
+            {
+                _lifeTimer.Stop();
+                StartPopping();
+            };
+            _lifeTimer.Start();
+        }
+
+        private void Animate(object? sender, EventArgs e)
+        {
+            if (_isDisposed) return;
+
+            try
+            {
+                if (_isPopping)
+                {
+                    _scale += 0.08;
+                    _opacity -= 0.12;
+                    _rotation += 5;
+
+                    if (_opacity <= 0)
+                    {
+                        _animTimer.Stop();
+                        _onPopped?.Invoke(this);
+                        return;
+                    }
+                }
+                else
+                {
+                    if (_scale < _targetScale)
+                    {
+                        _scale = Math.Min(_targetScale, _scale + 0.1);
+                    }
+                    _rotation += 0.5;
+                }
+
+                Visual.Opacity = Math.Max(0, _opacity);
+
+                if (Visual.RenderTransform is TransformGroup tg && tg.Children.Count >= 2)
+                {
+                    if (tg.Children[0] is ScaleTransform st)
+                    {
+                        st.ScaleX = _scale;
+                        st.ScaleY = _scale;
+                    }
+                    if (tg.Children[1] is RotateTransform rt)
+                    {
+                        rt.Angle = _rotation;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void StartPopping()
+        {
+            if (_isPopping || _isDisposed) return;
+            _isPopping = true;
+            _playSound?.Invoke();
+        }
+
+        public void ForcePop()
+        {
+            if (_isDisposed) return;
+            _lifeTimer.Stop();
+            StartPopping();
+        }
+
+        public void Dispose()
+        {
+            if (_isDisposed) return;
+            _isDisposed = true;
+            _lifeTimer.Stop();
+            _animTimer.Stop();
+        }
+    }
+
+    // Win32 for BubbleCountWindow
+    public partial class BubbleCountWindow
+    {
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hwnd, int index);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    }
+}

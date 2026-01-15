@@ -1,0 +1,295 @@
+<Window x:Class="ConditioningControlPanel.AvatarTubeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gif="https://github.com/XamlAnimatedGif/XamlAnimatedGif"
+        Title="Avatar Tube"
+
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        FontFamily="Comic Sans MS">
+
+    <Window.Resources>
+        <!-- Purplish gradient background for speech bubble -->
+        <LinearGradientBrush x:Key="BubbleGradient" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#3D2066" Offset="0"/>
+            <GradientStop Color="#1A1A2E" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Tiny pink scrollbar style -->
+        <Style x:Key="TinyPinkScrollBar" TargetType="ScrollBar">
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="MinWidth" Value="6"/>
+            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="{TemplateBinding Background}">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.Thumb>
+                                    <Thumb Background="#FF69B4" BorderThickness="0">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="3"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ScrollViewer style using tiny pink scrollbar -->
+        <Style x:Key="TinyPinkScrollViewer" TargetType="ScrollViewer">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ScrollContentPresenter Grid.Column="0" Margin="0,0,4,0"/>
+                            <ScrollBar x:Name="PART_VerticalScrollBar"
+                                       Grid.Column="1"
+                                       Style="{StaticResource TinyPinkScrollBar}"
+                                       Value="{TemplateBinding VerticalOffset}"
+                                       Maximum="{TemplateBinding ScrollableHeight}"
+                                       ViewportSize="{TemplateBinding ViewportHeight}"
+                                       Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <!-- Viewbox scales content uniformly to fit any screen size -->
+        <Viewbox x:Name="ContentViewbox" Stretch="Uniform" ClipToBounds="False">
+            <!-- Design canvas at fixed reference size - will be scaled -->
+            <Grid Width="780" Height="1080" ClipToBounds="False">
+            <!-- Tube frame FIRST (behind) - Z-Index 0 implicit -->
+            <Image x:Name="ImgTubeFrame"
+                   Source="pack://application:,,,/Resources/tube.png"
+                   Stretch="Uniform"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   IsHitTestVisible="False"/>
+
+            <!-- Speech Bubble - Z-Index 10, positioned next to avatar -->
+            <!-- Dynamic bubble that sizes to content, grows UPWARD, scrolls when exceeding max -->
+            <Border x:Name="SpeechBubble"
+                    Panel.ZIndex="10"
+                    Visibility="Collapsed"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Opacity="0.92"
+                    Margin="0,0,125,550"
+                    MouseEnter="SpeechBubble_MouseEnter"
+                    MouseLeave="SpeechBubble_MouseLeave"
+                    MinWidth="120" MaxWidth="380"
+                    Background="{StaticResource BubbleGradient}"
+                    CornerRadius="20"
+                    BorderBrush="#FF69B4"
+                    BorderThickness="3"
+                    Padding="15,12">
+
+                <!-- ScrollViewer sizes to content, scrolls when over MaxHeight -->
+                <ScrollViewer x:Name="SpeechScroller"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              MaxHeight="280"
+                              Style="{StaticResource TinyPinkScrollViewer}">
+
+                    <!-- Speech text with bubbly pink font -->
+                    <TextBlock x:Name="TxtSpeech"
+                               Text=""
+                               Foreground="#FF69B4"
+                               FontSize="20"
+                               FontWeight="Bold"
+                               TextWrapping="Wrap"
+                               TextAlignment="Left"
+                               Padding="0,0,8,0">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="Black" BlurRadius="2" ShadowDepth="1.5" Direction="315" Opacity="0.8"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Text Input Panel (hidden by default) - Z-Index 3, positioned near avatar -->
+            <Border x:Name="InputPanel"
+                    Panel.ZIndex="3"
+                    Visibility="Collapsed"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,126,520"
+                    Background="#252542"
+                    CornerRadius="10"
+                    Padding="10"
+                    BorderBrush="#FF69B4"
+                    BorderThickness="2">
+                <StackPanel Orientation="Horizontal">
+                    <TextBox x:Name="TxtUserInput"
+                             Width="180"
+                             Height="30"
+                             FontSize="14"
+                             Background="#1A1A2E"
+                             Foreground="White"
+                             BorderBrush="#FF69B4"
+                             BorderThickness="1"
+                             Padding="5,3"
+                             VerticalContentAlignment="Center"
+                             KeyDown="TxtUserInput_KeyDown"/>
+                    <Button x:Name="BtnSendChat"
+                            Content="Send"
+                            Width="50"
+                            Height="30"
+                            Margin="5,0,0,0"
+                            Background="#FF69B4"
+                            Foreground="White"
+                            FontWeight="Bold"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            Click="BtnSendChat_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Avatar/Sprite - Z-Index 1 implicit, with floating animation -->
+            <Border x:Name="AvatarBorder"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="5,100,126,205"
+                    Cursor="Hand"
+                    MouseLeftButtonDown="ImgAvatar_MouseLeftButtonDown"
+                    MouseRightButtonDown="ImgAvatar_MouseRightButtonDown"
+                    CornerRadius="20" ClipToBounds="True">
+                <Border.ContextMenu>
+                    <ContextMenu x:Name="AvatarContextMenu" Background="#252542" BorderBrush="#FF69B4" BorderThickness="2" Opened="AvatarContextMenu_Opened">
+                        <MenuItem x:Name="MenuItemTalkToBambi" Header="💬 Talk to Bambi" Click="MenuItemTalkToBambi_Click" Foreground="#FF69B4" FontWeight="Bold"/>
+                        <Separator Background="#FF69B4"/>
+                        <MenuItem x:Name="MenuItemDetach" Header="Detach" Click="MenuItemDetach_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemAttach" Header="Attach to Main Window" Click="MenuItemAttach_Click" Foreground="White" Visibility="Collapsed"/>
+                        <MenuItem x:Name="MenuItemShrink" Header="－ Shrink" Click="MenuItemShrink_Click" Foreground="White" Visibility="Collapsed"/>
+                        <MenuItem x:Name="MenuItemGrow" Header="＋ Grow" Click="MenuItemGrow_Click" Foreground="White" Visibility="Collapsed"/>
+                        <MenuItem x:Name="MenuItemDismiss" Header="Dismiss" Click="MenuItemDismiss_Click" Foreground="White" Visibility="Collapsed"/>
+                        <Separator Background="#FF69B4"/>
+                        <MenuItem x:Name="MenuItemEngine" Header="▶ Start Engine" Click="MenuItemEngine_Click" Foreground="#90EE90"/>
+                        <MenuItem x:Name="MenuItemTriggerMode" Header="☐ Trigger Mode" Click="MenuItemTriggerMode_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemRandomBubble" Header="☐ Random Bubble" Click="MenuItemRandomBubble_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemSlutMode" Header="☐ Slut Mode" Click="MenuItemSlutMode_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemMute" Header="☐ Mute Avatar" Click="MenuItemMute_Click" Foreground="White"/>
+                        <Separator Background="#FF69B4"/>
+                        <MenuItem x:Name="MenuItemMuteWhispers" Header="☐ Mute Whispers" Click="MenuItemMuteWhispers_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemPauseBrowser" Header="⏸ Pause Browser" Click="MenuItemPauseBrowser_Click" Foreground="White"/>
+                    </ContextMenu>
+                </Border.ContextMenu>
+                <Grid>
+                    <!-- Static PNG avatar (default) -->
+                    <Image x:Name="ImgAvatar"
+                           Stretch="Uniform"
+                           MaxHeight="340"
+                           RenderTransformOrigin="0.5,0.5">
+                        <Image.RenderTransform>
+                            <TranslateTransform x:Name="AvatarTranslate" Y="0"/>
+                        </Image.RenderTransform>
+                        <Image.Effect>
+                            <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                        </Image.Effect>
+                    </Image>
+                    <!-- Animated GIF avatar (for level 20+) -->
+                    <Image x:Name="ImgAvatarAnimated"
+                           Stretch="Uniform"
+                           MaxHeight="340"
+                           Visibility="Collapsed"
+                           RenderTransformOrigin="0.5,0.5">
+                        <Image.RenderTransform>
+                            <TranslateTransform x:Name="AvatarAnimatedTranslate" Y="0"/>
+                        </Image.RenderTransform>
+                        <Image.Effect>
+                            <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                        </Image.Effect>
+                    </Image>
+                </Grid>
+            </Border>
+
+            <!-- Title/Level Box with Avatar Selection - Z-Index 4 to be above everything -->
+            <Border x:Name="TitleBox"
+                    Panel.ZIndex="4"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,121,180"
+                    Background="#CC1A1A2E"
+                    CornerRadius="12"
+                    BorderBrush="#FF69B4"
+                    BorderThickness="2"
+                    Padding="8,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left Arrow (Previous Avatar) - 50% bigger -->
+                    <Border x:Name="BtnPrevAvatar" Grid.Column="0"
+                            Background="Transparent" Cursor="Hand"
+                            MouseLeftButtonDown="BtnPrevAvatar_Click"
+                            Visibility="Collapsed"
+                            VerticalAlignment="Center" Margin="0,0,10,0">
+                        <TextBlock Text="◀" FontSize="27" Foreground="#9370DB" FontWeight="Bold">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="#9370DB" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </Border>
+
+                    <!-- Title and Level -->
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtAvatarTitle"
+                                   Text="BASIC BIMBO"
+                                   FontSize="16"
+                                   FontWeight="Bold"
+                                   Foreground="#FF69B4"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="Black" BlurRadius="2" ShadowDepth="1" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                        <TextBlock x:Name="TxtAvatarLevel"
+                                   Text="Lv. 1"
+                                   FontSize="13"
+                                   Foreground="#B0B0B0"
+                                   TextAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,-2,0,0"/>
+                    </StackPanel>
+
+                    <!-- Right Arrow (Next Avatar) - 50% bigger -->
+                    <Border x:Name="BtnNextAvatar" Grid.Column="2"
+                            Background="Transparent" Cursor="Hand"
+                            MouseLeftButtonDown="BtnNextAvatar_Click"
+                            Visibility="Collapsed"
+                            VerticalAlignment="Center" Margin="10,0,0,0">
+                        <TextBlock Text="▶" FontSize="27" Foreground="#9370DB" FontWeight="Bold">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="#9370DB" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </Border>
+                </Grid>
+            </Border>
+
+        </Grid>
+        </Viewbox>
+    </Grid>
+</Window>

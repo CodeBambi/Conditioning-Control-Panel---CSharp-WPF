@@ -1,0 +1,30 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Brushes (derived from Colors) -->
+    <SolidColorBrush x:Key="PinkBrush"   Color="{StaticResource PinkColor}"/>
+    <SolidColorBrush x:Key="DarkPinkBrush" Color="{StaticResource DarkPink}"/>
+    <SolidColorBrush x:Key="PanelBgBrush" Color="{StaticResource PanelBg}"/>
+    <SolidColorBrush x:Key="DarkerBgBrush" Color="{StaticResource DarkerBg}"/>
+    <SolidColorBrush x:Key="TextLightBrush" Color="{StaticResource TextLight}"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMuted}"/>
+    <SolidColorBrush x:Key="PanelAccentBrush" Color="{StaticResource PanelAccent}"/>
+    <SolidColorBrush x:Key="PanelAccentHoverBrush" Color="{StaticResource PanelAccentHover}"/>
+    <SolidColorBrush x:Key="PreviewBgBrush" Color="{StaticResource PreviewBg}"/>
+
+    <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Danger}"/>
+    <SolidColorBrush x:Key="TransparentPinkBrush" Color="{StaticResource TransparentPink}"/>
+    <SolidColorBrush x:Key="PinkButtonHoveredBrush" Color="{StaticResource PinkButtonHovered}"/>
+
+    <!-- Patreon brushes -->
+    <SolidColorBrush x:Key="PatreonPurpleBrush" Color="{StaticResource PatreonPurple}"/>
+    <SolidColorBrush x:Key="PatreonLightPurpleBrush" Color="{StaticResource PatreonLightPurple}"/>
+    <SolidColorBrush x:Key="PatreonDarkPurpleBrush" Color="{StaticResource PatreonDarkPurple}"/>
+
+    <!-- Semi-transparent white -->
+    <SolidColorBrush x:Key="TransparentWhiteBrush" Color="{StaticResource TransparentWhite}"/>
+
+    <!-- Added: brush for Controls.xaml hover color -->
+    <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHover}"/>
+
+</ResourceDictionary>
