@@ -335,7 +335,10 @@ namespace ConditioningControlPanel
                 }
 
                 StopEngine();
-                
+
+                // Reset interaction queue to clear any pending queued items
+                App.InteractionQueue?.ForceReset();
+
                 // Restore window
                 if (!IsVisible)
                 {
@@ -549,6 +552,7 @@ namespace ConditioningControlPanel
             try
             {
                 _avatarTubeWindow = new AvatarTubeWindow(this);
+                App.AvatarWindow = _avatarTubeWindow; // Set global reference for services
 
                 // Only show if main window is visible and not minimized
                 if (IsVisible && WindowState != WindowState.Minimized)
@@ -4368,6 +4372,12 @@ namespace ConditioningControlPanel
                 App.BrainDrain.Start();
             }
 
+            // Start autonomy service (requires level 100)
+            if (settings.PlayerLevel >= 100 && settings.AutonomyModeEnabled && settings.AutonomyConsentGiven)
+            {
+                App.Autonomy?.Start();
+            }
+
             // Start ramp timer if enabled
             if (settings.IntensityRampEnabled)
             {
@@ -4395,6 +4405,7 @@ namespace ConditioningControlPanel
             App.BouncingText.Stop();
             App.MindWipe.Stop();
             App.BrainDrain.Stop();
+            App.Autonomy?.Stop();
             App.Audio.Unduck();
 
             // Force close any open lock card windows (panic button should close them immediately)
@@ -4930,6 +4941,19 @@ namespace ConditioningControlPanel
             ChkBrainDrainEnabled.IsChecked = s.BrainDrainEnabled;
             SliderBrainDrainIntensity.Value = s.BrainDrainIntensity;
             ChkBrainDrainHighRefresh.IsChecked = s.BrainDrainHighRefresh;
+
+            // Autonomy Mode
+            ChkAutonomyEnabled.IsChecked = s.AutonomyModeEnabled;
+            SliderAutonomyIntensity.Value = s.AutonomyIntensity;
+            SliderAutonomyCooldown.Value = s.AutonomyCooldownSeconds;
+            ChkAutonomyIdle.IsChecked = s.AutonomyIdleTriggerEnabled;
+            ChkAutonomyRandom.IsChecked = s.AutonomyRandomTriggerEnabled;
+            ChkAutonomyTimeAware.IsChecked = s.AutonomyTimeAwareEnabled;
+            ChkAutonomyFlash.IsChecked = s.AutonomyCanTriggerFlash;
+            ChkAutonomyVideo.IsChecked = s.AutonomyCanTriggerVideo;
+            ChkAutonomySubliminal.IsChecked = s.AutonomyCanTriggerSubliminal;
+            ChkAutonomyComment.IsChecked = s.AutonomyCanComment;
+            SliderAutonomyAnnounce.Value = s.AutonomyAnnouncementChance;
 
             // Bouncing Text Size (add if not already loaded above)
             SliderBouncingTextSize.Value = s.BouncingTextSize;
@@ -5513,6 +5537,12 @@ namespace ConditioningControlPanel
                 if (BrainDrainLocked != null) BrainDrainLocked.Visibility = level70Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (BrainDrainUnlocked != null) BrainDrainUnlocked.Visibility = level70Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level70Unlocked);
+
+                // Level 100 unlocks: Autonomy Mode
+                var level100Unlocked = level >= 100;
+                if (AutonomyLocked != null) AutonomyLocked.Visibility = level100Unlocked ? Visibility.Collapsed : Visibility.Visible;
+                if (AutonomyUnlocked != null) AutonomyUnlocked.Visibility = level100Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                if (AutonomyFeatureImage != null) SetFeatureImageBlur(AutonomyFeatureImage, !level100Unlocked);
 
                 App.Logger?.Debug("UpdateUnlockablesVisibility: Completed successfully.");
             }
@@ -6156,6 +6186,118 @@ namespace ConditioningControlPanel
             }
 
             App.Logger?.Information("Brain Drain High Refresh toggled: {Enabled}", isHighRefresh);
+            App.Settings.Save();
+        }
+
+        #endregion
+
+        #region Autonomy Mode (Lvl 100)
+
+        private void ChkAutonomyEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkAutonomyEnabled.IsChecked ?? false;
+
+            // If enabling for the first time, show consent dialog
+            if (isEnabled && !App.Settings.Current.AutonomyConsentGiven)
+            {
+                var result = MessageBox.Show(
+                    "AUTONOMY MODE\n\n" +
+                    "This feature allows the companion to autonomously trigger effects:\n" +
+                    "• Flash images\n" +
+                    "• Videos (without strict mode)\n" +
+                    "• Subliminal messages\n" +
+                    "• Make comments\n\n" +
+                    "She will act on her own within your configured intensity settings.\n\n" +
+                    "You can disable this at any time. Videos triggered autonomously will NEVER use strict mode.\n\n" +
+                    "Do you consent to enable Autonomy Mode?",
+                    "Enable Autonomy Mode",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    App.Settings.Current.AutonomyConsentGiven = true;
+                }
+                else
+                {
+                    ChkAutonomyEnabled.IsChecked = false;
+                    return;
+                }
+            }
+
+            App.Settings.Current.AutonomyModeEnabled = isEnabled;
+
+            // Start/stop autonomy service if engine is running
+            if (_isRunning)
+            {
+                if (isEnabled && App.Settings.Current.PlayerLevel >= 100 && App.Settings.Current.AutonomyConsentGiven)
+                {
+                    App.Autonomy?.Start();
+                }
+                else
+                {
+                    App.Autonomy?.Stop();
+                }
+                App.Logger?.Information("Autonomy Mode toggled: {Enabled}", isEnabled);
+            }
+
+            App.Settings.Save();
+        }
+
+        private void SliderAutonomyIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtAutonomyIntensity == null) return;
+            TxtAutonomyIntensity.Text = $"{(int)e.NewValue}";
+            App.Settings.Current.AutonomyIntensity = (int)e.NewValue;
+            App.Settings.Save();
+        }
+
+        private void SliderAutonomyCooldown_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtAutonomyCooldown == null) return;
+            TxtAutonomyCooldown.Text = $"{(int)e.NewValue}s";
+            App.Settings.Current.AutonomyCooldownSeconds = (int)e.NewValue;
+            App.Settings.Save();
+        }
+
+        private void ChkAutonomyIdle_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.AutonomyIdleTriggerEnabled = ChkAutonomyIdle.IsChecked ?? false;
+            App.Settings.Save();
+        }
+
+        private void ChkAutonomyRandom_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.AutonomyRandomTriggerEnabled = ChkAutonomyRandom.IsChecked ?? false;
+            App.Settings.Save();
+        }
+
+        private void ChkAutonomyTimeAware_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.AutonomyTimeAwareEnabled = ChkAutonomyTimeAware.IsChecked ?? false;
+            App.Settings.Save();
+        }
+
+        private void ChkAutonomyBehavior_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.AutonomyCanTriggerFlash = ChkAutonomyFlash.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerVideo = ChkAutonomyVideo.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerSubliminal = ChkAutonomySubliminal.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanComment = ChkAutonomyComment.IsChecked ?? false;
+            App.Settings.Save();
+        }
+
+        private void SliderAutonomyAnnounce_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtAutonomyAnnounce == null) return;
+            TxtAutonomyAnnounce.Text = $"{(int)e.NewValue}%";
+            App.Settings.Current.AutonomyAnnouncementChance = (int)e.NewValue;
             App.Settings.Save();
         }
 

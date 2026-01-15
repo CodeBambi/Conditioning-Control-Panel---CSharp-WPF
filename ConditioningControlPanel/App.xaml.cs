@@ -94,6 +94,13 @@ namespace ConditioningControlPanel
         public static DiscordRichPresenceService DiscordRpc { get; private set; } = null!;
         public static DualMonitorVideoService DualMonitorVideo { get; private set; } = null!;
         public static ScreenMirrorService ScreenMirror { get; private set; } = null!;
+        public static AutonomyService Autonomy { get; private set; } = null!;
+        public static InteractionQueueService InteractionQueue { get; private set; } = null!;
+
+        /// <summary>
+        /// Reference to the avatar companion window (set by MainWindow)
+        /// </summary>
+        public static AvatarTubeWindow? AvatarWindow { get; set; }
 
         // Screen enumeration cache
         private static System.Windows.Forms.Screen[]? _cachedScreens;
@@ -316,6 +323,7 @@ namespace ConditioningControlPanel
             Subliminal = new SubliminalService();
             Overlay = new OverlayService();
             Bubbles = new BubbleService();
+            InteractionQueue = new InteractionQueueService();
             LockCard = new LockCardService();
             BubbleCount = new BubbleCountService();
             BouncingText = new BouncingTextService();
@@ -344,6 +352,9 @@ namespace ConditioningControlPanel
             // Initialize dual monitor video service for Hypnotube playback
             DualMonitorVideo = new DualMonitorVideoService();
             ScreenMirror = new ScreenMirrorService();
+
+            // Initialize autonomy service (companion autonomous behavior - Level 100+)
+            Autonomy = new AutonomyService();
 
             // Initialize Patreon (validate subscription in background)
             // Then load cloud profile if authenticated
@@ -918,6 +929,7 @@ Application State:
             DiscordRpc?.Dispose();
             DualMonitorVideo?.Dispose();
             ScreenMirror?.Dispose();
+            Autonomy?.Dispose();
             Audio?.Dispose();
             Settings?.Save();
 

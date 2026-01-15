@@ -101,32 +101,49 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
+                // Check if another fullscreen interaction is active (video, bubble count)
+                // If so, queue this lock card for later
+                if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
+                {
+                    App.InteractionQueue.TryStart(
+                        InteractionQueueService.InteractionType.LockCard,
+                        () => ShowLockCard(),
+                        queue: true);
+                    return;
+                }
+
                 try
                 {
                     var settings = App.Settings.Current;
-                    
+
                     // Get enabled phrases
                     var enabledPhrases = settings.LockCardPhrases?
                         .Where(p => p.Value)
                         .Select(p => p.Key)
                         .ToList() ?? new List<string>();
-                    
+
                     if (enabledPhrases.Count == 0)
                     {
                         App.Logger?.Warning("LockCardService: No phrases enabled");
                         return;
                     }
-                    
+
+                    // Notify queue we're starting
+                    App.InteractionQueue?.TryStart(
+                        InteractionQueueService.InteractionType.LockCard,
+                        () => { }, // Already executing
+                        queue: false);
+
                     // Pick a random phrase
                     var phrase = enabledPhrases[_random.Next(enabledPhrases.Count)];
                     var repeats = settings.LockCardRepeats;
                     var strict = settings.LockCardStrict;
-                    
+
                     // Show on all monitors with synced input
                     LockCardWindow.ShowOnAllMonitors(phrase, repeats, strict);
-                    
+
                     _lastShown = DateTime.Now;
-                    
+
                     App.Logger?.Information("Lock Card shown on all monitors - Phrase: {Phrase}", phrase);
                 }
                 catch (Exception ex)

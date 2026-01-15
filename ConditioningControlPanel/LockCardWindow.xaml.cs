@@ -420,6 +420,9 @@ namespace ConditioningControlPanel
                 }
                 catch { }
             }
+
+            // Notify InteractionQueue that lock card is complete (triggers queued items)
+            App.InteractionQueue?.Complete(Services.InteractionQueueService.InteractionType.LockCard);
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

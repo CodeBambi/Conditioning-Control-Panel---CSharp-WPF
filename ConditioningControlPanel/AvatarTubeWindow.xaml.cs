@@ -1577,6 +1577,9 @@ namespace ConditioningControlPanel
 
         private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
+            // Report user activity to autonomy service
+            App.Autonomy?.ReportUserActivity();
+
             // Close input panel when clicking outside of it
             if (_isInputVisible)
             {
@@ -2055,6 +2058,9 @@ namespace ConditioningControlPanel
         {
             _idleTimer?.Stop();
             StartIdleTimer();
+
+            // Also report user activity to autonomy service
+            App.Autonomy?.ReportUserActivity();
         }
 
         private void OnIdleTick(object? sender, EventArgs e)

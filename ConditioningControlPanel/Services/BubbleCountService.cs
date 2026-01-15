@@ -114,6 +114,23 @@ public class BubbleCountService : IDisposable
         // Level check - skip for forced tests
         if (!forceTest && settings.PlayerLevel < 50) return;
 
+        // Check if another fullscreen interaction is active (video, lock card)
+        // If so, queue this bubble count for later
+        if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
+        {
+            App.InteractionQueue.TryStart(
+                InteractionQueueService.InteractionType.BubbleCount,
+                () => TriggerGame(forceTest),
+                queue: true);
+            return;
+        }
+
+        // Notify queue we're starting
+        App.InteractionQueue?.TryStart(
+            InteractionQueueService.InteractionType.BubbleCount,
+            () => { }, // Already executing
+            queue: false);
+
         _isBusy = true;
 
         // Ensure videos path is set (needed when testing without engine running)
@@ -165,6 +182,9 @@ public class BubbleCountService : IDisposable
 
         // Resume bubble popping challenge
         App.Bubbles?.Resume();
+
+        // Notify InteractionQueue that bubble count is complete (triggers queued items)
+        App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
 
         if (success)
         {

@@ -130,6 +130,14 @@ namespace ConditioningControlPanel.Services
                 anyFixed = true;
             }
 
+            // Autonomy Mode requires Level 100
+            if (settings.AutonomyModeEnabled && level < 100)
+            {
+                settings.AutonomyModeEnabled = false;
+                App.Logger?.Warning("Settings: Disabled AutonomyMode (requires Level 100, user is {Level})", level);
+                anyFixed = true;
+            }
+
             if (anyFixed)
             {
                 App.Logger?.Information("Settings: Fixed level-locked features that were incorrectly enabled");

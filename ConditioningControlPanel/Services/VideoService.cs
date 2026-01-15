@@ -56,6 +56,11 @@ namespace ConditioningControlPanel.Services
         public event EventHandler? VideoStarted;
         public event EventHandler? VideoEnded;
 
+        /// <summary>
+        /// Whether a video is currently playing
+        /// </summary>
+        public bool IsPlaying => _videoPlaying;
+
         public VideoService()
         {
             RefreshVideosPath();
@@ -466,7 +471,7 @@ namespace ConditioningControlPanel.Services
             if (withAudio)
             {
                 mediaPlayer.Mute = false;
-                mediaPlayer.Volume = 100;
+                mediaPlayer.Volume = GetEffectiveVolume();
             }
             else
             {
@@ -737,7 +742,7 @@ namespace ConditioningControlPanel.Services
                 Stretch = Stretch.Uniform,
                 HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
-                Volume = App.Settings.Current.MasterVolume / 100.0
+                Volume = GetEffectiveVolume() / 100.0
             };
 
             mediaElement.MediaOpened += (s, e) =>
@@ -875,7 +880,12 @@ namespace ConditioningControlPanel.Services
         private Window CreateFullscreenVideoWindow(string path, Screen screen, bool strict, bool withAudio)
         {
             var (win, media) = CreateMediaElementVideoWindow(path, screen, strict);
-            if (!withAudio)
+            if (withAudio)
+            {
+                media.Volume = GetEffectiveVolume() / 100.0;
+                media.IsMuted = false;
+            }
+            else
             {
                 media.Volume = 0;
                 media.IsMuted = true;
@@ -1368,6 +1378,9 @@ namespace ConditioningControlPanel.Services
 
             // Stop haptic background vibe
             _ = App.Haptics?.StopVideoBackgroundVibeAsync();
+
+            // Notify InteractionQueue that video is complete (triggers queued items)
+            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
 
             VideoEnded?.Invoke(this, EventArgs.Empty);
 

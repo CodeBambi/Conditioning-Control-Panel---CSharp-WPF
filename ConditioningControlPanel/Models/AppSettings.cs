@@ -1251,6 +1251,227 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Autonomy Mode (Unlocks Lv.100)
+
+        private bool _autonomyModeEnabled = false;
+        /// <summary>
+        /// Enable autonomous companion behavior - she will trigger effects on her own.
+        /// Requires level 100 and explicit consent.
+        /// </summary>
+        public bool AutonomyModeEnabled
+        {
+            get => _autonomyModeEnabled;
+            set { _autonomyModeEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyConsentGiven = false;
+        /// <summary>
+        /// Whether the user has given consent for autonomous behavior.
+        /// Must acknowledge warning before first enable.
+        /// </summary>
+        public bool AutonomyConsentGiven
+        {
+            get => _autonomyConsentGiven;
+            set { _autonomyConsentGiven = value; OnPropertyChanged(); }
+        }
+
+        private int _autonomyIntensity = 5;
+        /// <summary>
+        /// Intensity level 1-10 affecting frequency and action weights
+        /// </summary>
+        public int AutonomyIntensity
+        {
+            get => _autonomyIntensity;
+            set { _autonomyIntensity = Math.Clamp(value, 1, 10); OnPropertyChanged(); }
+        }
+
+        private int _autonomyCooldownSeconds = 30;
+        /// <summary>
+        /// Minimum seconds between autonomous actions (10-300)
+        /// </summary>
+        public int AutonomyCooldownSeconds
+        {
+            get => _autonomyCooldownSeconds;
+            set { _autonomyCooldownSeconds = Math.Clamp(value, 10, 300); OnPropertyChanged(); }
+        }
+
+        // Trigger Sources
+
+        private bool _autonomyIdleTriggerEnabled = true;
+        /// <summary>
+        /// Trigger autonomous actions when user has been idle
+        /// </summary>
+        public bool AutonomyIdleTriggerEnabled
+        {
+            get => _autonomyIdleTriggerEnabled;
+            set { _autonomyIdleTriggerEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _autonomyIdleTimeoutMinutes = 5;
+        /// <summary>
+        /// Minutes of inactivity before idle trigger fires (1-30)
+        /// </summary>
+        public int AutonomyIdleTimeoutMinutes
+        {
+            get => _autonomyIdleTimeoutMinutes;
+            set { _autonomyIdleTimeoutMinutes = Math.Clamp(value, 1, 30); OnPropertyChanged(); }
+        }
+
+        private bool _autonomyRandomTriggerEnabled = true;
+        /// <summary>
+        /// Trigger autonomous actions at random intervals
+        /// </summary>
+        public bool AutonomyRandomTriggerEnabled
+        {
+            get => _autonomyRandomTriggerEnabled;
+            set { _autonomyRandomTriggerEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _autonomyRandomIntervalMinutes = 10;
+        /// <summary>
+        /// Average minutes between random triggers (2-60)
+        /// </summary>
+        public int AutonomyRandomIntervalMinutes
+        {
+            get => _autonomyRandomIntervalMinutes;
+            set { _autonomyRandomIntervalMinutes = Math.Clamp(value, 2, 60); OnPropertyChanged(); }
+        }
+
+        private bool _autonomyContextTriggerEnabled = false;
+        /// <summary>
+        /// Trigger autonomous actions based on window activity context.
+        /// Requires Awareness Mode to be enabled.
+        /// </summary>
+        public bool AutonomyContextTriggerEnabled
+        {
+            get => _autonomyContextTriggerEnabled;
+            set { _autonomyContextTriggerEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyTimeAwareEnabled = false;
+        /// <summary>
+        /// Adjust intensity based on time of day (more active at night)
+        /// </summary>
+        public bool AutonomyTimeAwareEnabled
+        {
+            get => _autonomyTimeAwareEnabled;
+            set { _autonomyTimeAwareEnabled = value; OnPropertyChanged(); }
+        }
+
+        private double _autonomyMorningMultiplier = 0.5;
+        /// <summary>
+        /// Intensity multiplier for morning hours (6am-12pm)
+        /// </summary>
+        public double AutonomyMorningMultiplier
+        {
+            get => _autonomyMorningMultiplier;
+            set { _autonomyMorningMultiplier = Math.Clamp(value, 0.1, 2.0); OnPropertyChanged(); }
+        }
+
+        private double _autonomyAfternoonMultiplier = 0.75;
+        /// <summary>
+        /// Intensity multiplier for afternoon hours (12pm-6pm)
+        /// </summary>
+        public double AutonomyAfternoonMultiplier
+        {
+            get => _autonomyAfternoonMultiplier;
+            set { _autonomyAfternoonMultiplier = Math.Clamp(value, 0.1, 2.0); OnPropertyChanged(); }
+        }
+
+        private double _autonomyEveningMultiplier = 1.0;
+        /// <summary>
+        /// Intensity multiplier for evening hours (6pm-10pm)
+        /// </summary>
+        public double AutonomyEveningMultiplier
+        {
+            get => _autonomyEveningMultiplier;
+            set { _autonomyEveningMultiplier = Math.Clamp(value, 0.1, 2.0); OnPropertyChanged(); }
+        }
+
+        private double _autonomyNightMultiplier = 1.25;
+        /// <summary>
+        /// Intensity multiplier for night hours (10pm-6am)
+        /// </summary>
+        public double AutonomyNightMultiplier
+        {
+            get => _autonomyNightMultiplier;
+            set { _autonomyNightMultiplier = Math.Clamp(value, 0.1, 2.0); OnPropertyChanged(); }
+        }
+
+        // Per-behavior toggles
+
+        private bool _autonomyCanTriggerFlash = true;
+        /// <summary>
+        /// Allow autonomous flash image triggers
+        /// </summary>
+        public bool AutonomyCanTriggerFlash
+        {
+            get => _autonomyCanTriggerFlash;
+            set { _autonomyCanTriggerFlash = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyCanTriggerVideo = true;
+        /// <summary>
+        /// Allow autonomous video triggers (NEVER uses strict mode)
+        /// </summary>
+        public bool AutonomyCanTriggerVideo
+        {
+            get => _autonomyCanTriggerVideo;
+            set { _autonomyCanTriggerVideo = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyCanTriggerSubliminal = true;
+        /// <summary>
+        /// Allow autonomous subliminal triggers
+        /// </summary>
+        public bool AutonomyCanTriggerSubliminal
+        {
+            get => _autonomyCanTriggerSubliminal;
+            set { _autonomyCanTriggerSubliminal = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyCanTriggerBrainDrain = true;
+        /// <summary>
+        /// Allow autonomous brain drain blur pulses (requires Lv.70)
+        /// </summary>
+        public bool AutonomyCanTriggerBrainDrain
+        {
+            get => _autonomyCanTriggerBrainDrain;
+            set { _autonomyCanTriggerBrainDrain = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyCanTriggerBubbles = true;
+        /// <summary>
+        /// Allow autonomous bubble minigame starts (requires Lv.20)
+        /// </summary>
+        public bool AutonomyCanTriggerBubbles
+        {
+            get => _autonomyCanTriggerBubbles;
+            set { _autonomyCanTriggerBubbles = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyCanComment = true;
+        /// <summary>
+        /// Allow autonomous AI-generated comments
+        /// </summary>
+        public bool AutonomyCanComment
+        {
+            get => _autonomyCanComment;
+            set { _autonomyCanComment = value; OnPropertyChanged(); }
+        }
+
+        private int _autonomyAnnouncementChance = 50;
+        /// <summary>
+        /// Chance (0-100%) that she announces before triggering an action
+        /// </summary>
+        public int AutonomyAnnouncementChance
+        {
+            get => _autonomyAnnouncementChance;
+            set { _autonomyAnnouncementChance = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Patreon Integration
 
         private int _patreonTier = 0;
