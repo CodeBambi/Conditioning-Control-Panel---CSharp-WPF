@@ -455,7 +455,7 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return false;
 
-            var hasPatreon = settings.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+            var hasPatreon = App.Patreon?.HasPremiumAccess == true;
             return settings.AutonomyModeEnabled &&
                    settings.AutonomyConsentGiven &&
                    hasPatreon;

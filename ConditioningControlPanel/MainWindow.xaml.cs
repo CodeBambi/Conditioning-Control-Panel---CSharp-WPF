@@ -5640,8 +5640,7 @@ namespace ConditioningControlPanel
                 if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level70Unlocked);
 
                 // Bambi Takeover: Requires Patreon (any tier)
-                var hasPatreon = App.Settings.Current.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
-                var autonomyUnlocked = hasPatreon;
+                var autonomyUnlocked = App.Patreon?.HasPremiumAccess == true;
                 if (AutonomyLocked != null) AutonomyLocked.Visibility = autonomyUnlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (AutonomyUnlocked != null) AutonomyUnlocked.Visibility = autonomyUnlocked ? Visibility.Visible : Visibility.Collapsed;
 

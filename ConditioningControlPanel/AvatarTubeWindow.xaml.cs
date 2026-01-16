@@ -4184,8 +4184,8 @@ namespace ConditioningControlPanel
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            // Check Patreon requirement (tier 1+ or whitelisted)
-            if (settings.PatreonTier < 1 && App.Patreon?.IsWhitelisted != true)
+            // Check Patreon requirement
+            if (App.Patreon?.HasPremiumAccess != true)
             {
                 Giggle("This is Patreon only~");
                 return;
@@ -4378,11 +4378,9 @@ namespace ConditioningControlPanel
             MenuItemTriggerMode.Foreground = triggerOn ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
 
             // Bambi Takeover (Patreon only)
-            var hasPatreon = (App.Settings?.Current?.PatreonTier ?? 0) >= 1 || App.Patreon?.IsWhitelisted == true;
+            var takeoverAvailable = App.Patreon?.HasPremiumAccess == true;
             // Just check the setting, not whether service is running
             var takeoverOn = App.Settings?.Current?.AutonomyModeEnabled == true;
-            // Don't require consent here - we auto-grant it when they click
-            var takeoverAvailable = hasPatreon;
             MenuItemBambiTakeover.Header = takeoverOn ? "☑ Bambi Takeover" : "☐ Bambi Takeover";
             MenuItemBambiTakeover.Foreground = takeoverOn ? new SolidColorBrush(Color.FromRgb(255, 105, 180)) : new SolidColorBrush(Colors.White);
             MenuItemBambiTakeover.IsEnabled = takeoverAvailable;
