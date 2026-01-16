@@ -1569,13 +1569,13 @@ namespace ConditioningControlPanel
             if (_isLoading) return;
             var isEnabled = ChkHapticsEnabled.IsChecked == true;
 
-            // Check whitelist access when enabling (haptics is whitelisted-only during beta)
-            if (isEnabled && App.Patreon?.IsWhitelisted != true)
+            // Check Patreon access when enabling
+            if (isEnabled && App.Patreon?.HasPremiumAccess != true)
             {
                 ChkHapticsEnabled.IsChecked = false;
                 MessageBox.Show(
-                    "Haptic feedback is currently in beta testing for whitelisted users only.",
-                    "Beta Feature",
+                    "Haptic feedback is available for Patreon supporters.",
+                    "Patreon Feature",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return;
@@ -1637,12 +1637,12 @@ namespace ConditioningControlPanel
 
         private async void BtnHapticConnect_Click(object sender, RoutedEventArgs e)
         {
-            // Check whitelist access (haptics is whitelisted-only during beta)
-            if (App.Patreon?.IsWhitelisted != true)
+            // Check Patreon access
+            if (App.Patreon?.HasPremiumAccess != true)
             {
                 MessageBox.Show(
-                    "Haptic feedback is currently in beta testing for whitelisted users only.",
-                    "Beta Feature",
+                    "Haptic feedback is available for Patreon supporters.",
+                    "Patreon Feature",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return;
