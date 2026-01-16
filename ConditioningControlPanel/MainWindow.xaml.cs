@@ -116,15 +116,17 @@ namespace ConditioningControlPanel
             {
                 _exitRequested = true;
                 if (_isRunning) StopEngine();
-                
-                // Explicitly stop and dispose overlay to close all blur windows
+
+                // Kill all audio and effects - ensures clean exit with audio unducked
+                App.KillAllAudio();
+
+                // Explicitly dispose overlay
                 try
                 {
-                    App.Overlay?.Stop();
                     App.Overlay?.Dispose();
                 }
                 catch { }
-                
+
                 SaveSettings();
                 Application.Current.Shutdown();
             };
@@ -339,6 +341,9 @@ namespace ConditioningControlPanel
 
                 // IMMEDIATELY kill ALL audio before anything else
                 App.KillAllAudio();
+
+                // Cancel any active autonomy pulses (restore original settings)
+                App.Autonomy?.CancelActivePulses();
 
                 // Track panic press for Relapse achievement (must be before stopping session)
                 App.Achievements?.TrackPanicPressed();
@@ -7255,6 +7260,9 @@ namespace ConditioningControlPanel
             // Only allow actual close if exit was explicitly requested
             if (_exitRequested)
             {
+                // Kill all audio and effects first - ensures clean exit
+                App.KillAllAudio();
+
                 // Actually closing - clean up
                 SaveSettings();
                 _schedulerTimer?.Stop();
@@ -7271,10 +7279,9 @@ namespace ConditioningControlPanel
                 }
                 catch { }
 
-                // Explicitly stop all overlay windows before app exits
+                // Explicitly dispose overlay service
                 try
                 {
-                    App.Overlay?.Stop();
                     App.Overlay?.Dispose();
                 }
                 catch { }

@@ -160,7 +160,8 @@ namespace ConditioningControlPanel
         private static bool _isCheckingForUpdates = false;
 
         /// <summary>
-        /// Immediately kills ALL audio across all services. Used for panic exit.
+        /// Immediately kills ALL audio and visual effects across all services.
+        /// Used for panic exit and application shutdown to ensure clean state.
         /// </summary>
         public static void KillAllAudio()
         {
@@ -169,7 +170,7 @@ namespace ConditioningControlPanel
                 // Stop subliminal whispers
                 Subliminal?.Stop();
 
-                // Stop flash sounds
+                // Stop flash sounds and images
                 Flash?.Stop();
 
                 // Stop mind wipe audio
@@ -181,13 +182,28 @@ namespace ConditioningControlPanel
                 // Stop video audio (closes video windows)
                 Video?.Stop();
 
-                // Stop bubble pop sounds
+                // Stop bubble pop sounds and visuals
                 Bubbles?.Stop();
 
-                // Reset audio ducking
+                // Stop bubble count game
+                BubbleCount?.Stop();
+
+                // Stop bouncing text overlay
+                BouncingText?.Stop();
+
+                // Stop all visual overlays (spiral, pink filter, etc.)
+                Overlay?.Stop();
+
+                // Stop lock card if active
+                LockCard?.Stop();
+
+                // Stop autonomy mode
+                Autonomy?.Stop();
+
+                // Reset audio ducking - CRITICAL for clean exit
                 Audio?.Unduck();
 
-                Logger?.Debug("KillAllAudio: All audio stopped");
+                Logger?.Debug("KillAllAudio: All audio and effects stopped");
             }
             catch (Exception ex)
             {
