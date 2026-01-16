@@ -735,8 +735,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="🩷 v5.0 IS OUT! 🩷"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.0 Major Update - Thanks to 100+ Patreons!"
+                    <Button x:Name="BtnUpdateAvailable" Content="🩷 v5.0.1 IS OUT! 🩷"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.0.1 - Thanks to 100+ Patreons!"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -1480,7 +1480,7 @@
                 </Border.Effect>
                 <Canvas x:Name="MarqueeCanvas" ClipToBounds="True">
                     <TextBlock x:Name="MarqueeText"
-                               Text="v5.0 IS OUT - THANKS TO ALL THE 100+ PATREONS AND TO ALL THE SUPPORTERS/TESTERS 🩷🔒"
+                               Text="v5.0.1 IS OUT - THANKS TO ALL THE 100+ PATREONS AND TO ALL THE SUPPORTERS/TESTERS 🩷🔒"
                                FontFamily="Impact" FontSize="28" FontWeight="Bold"
                                Foreground="#FF69B4" Canvas.Top="8">
                         <TextBlock.Effect>
