@@ -85,8 +85,9 @@ namespace ConditioningControlPanel.Services
             var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
             var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
 
-            // Format context as expected by BambiSprite: [App: X | Title: Y | Duration: Z]
-            var userInput = $"[App: {website} | Title: {tabName} | Duration: 0m]";
+            // Format context with category for accurate reactions
+            // Format: [Category: X | App: Y | Title: Z | Duration: 0m]
+            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: 0m]";
 
             return await GetAiResponseAsync(userInput, prompt);
         }
@@ -110,8 +111,9 @@ namespace ConditioningControlPanel.Services
             else
                 durationText = $"{(int)duration.TotalHours}h";
 
-            // Format context as expected by BambiSprite: [App: X | Title: Y | Duration: Z]
-            var userInput = $"[App: {displayName} | Title: {displayName} | Duration: {durationText}]";
+            // Format context with category for accurate reactions
+            // Format: [Category: X | App: Y | Title: Z | Duration: Nm]
+            var userInput = $"[Category: {category} | App: {displayName} | Title: {displayName} | Duration: {durationText}]";
 
             return await GetAiResponseAsync(userInput, prompt);
         }
