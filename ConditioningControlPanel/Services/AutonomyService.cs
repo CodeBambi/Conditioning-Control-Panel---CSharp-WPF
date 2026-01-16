@@ -541,10 +541,10 @@ namespace ConditioningControlPanel.Services
             else
             {
                 // Normal mode: use settings with variance
-                var baseMinutes = settings.AutonomyRandomIntervalMinutes;
+                var baseSeconds = settings.AutonomyRandomIntervalSeconds;
                 var variance = 0.5 + _random.NextDouble(); // 0.5 to 1.5
-                actualSeconds = baseMinutes * variance * 60;
-                modeInfo = $"base: {baseMinutes}min";
+                actualSeconds = baseSeconds * variance;
+                modeInfo = $"base: {baseSeconds}s";
             }
 
             _randomTimer?.Stop();

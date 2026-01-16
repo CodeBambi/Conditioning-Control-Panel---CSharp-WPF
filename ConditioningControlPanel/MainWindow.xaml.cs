@@ -5031,6 +5031,7 @@ namespace ConditioningControlPanel
             UpdateAutonomyButtonState(s.AutonomyModeEnabled);
             SliderAutonomyIntensity.Value = s.AutonomyIntensity;
             SliderAutonomyCooldown.Value = s.AutonomyCooldownSeconds;
+            SliderAutonomyInterval.Value = s.AutonomyRandomIntervalSeconds;
             ChkAutonomyIdle.IsChecked = s.AutonomyIdleTriggerEnabled;
             ChkAutonomyRandom.IsChecked = s.AutonomyRandomTriggerEnabled;
             ChkAutonomyTimeAware.IsChecked = s.AutonomyTimeAwareEnabled;
@@ -6523,6 +6524,15 @@ namespace ConditioningControlPanel
             if (_isLoading || TxtAutonomyCooldown == null) return;
             TxtAutonomyCooldown.Text = $"{(int)e.NewValue}s";
             App.Settings.Current.AutonomyCooldownSeconds = (int)e.NewValue;
+            App.Settings.Save();
+        }
+
+        private void SliderAutonomyInterval_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtAutonomyInterval == null) return;
+            TxtAutonomyInterval.Text = $"{(int)e.NewValue}s";
+            App.Settings.Current.AutonomyRandomIntervalSeconds = (int)e.NewValue;
+            App.Autonomy?.RefreshRandomTimer();
             App.Settings.Save();
         }
 

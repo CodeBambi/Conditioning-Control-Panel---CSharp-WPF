@@ -241,6 +241,7 @@ namespace ConditioningControlPanel
             _parentWindow.StateChanged += ParentWindow_StateChanged;
             _parentWindow.IsVisibleChanged += ParentWindow_IsVisibleChanged;
             _parentWindow.Activated += ParentWindow_Activated;
+            _parentWindow.PreviewMouseDown += ParentWindow_PreviewMouseDown;
             _parentWindow.Closed += ParentWindow_Closed;
             
             // Get handles when loaded
@@ -1156,18 +1157,35 @@ namespace ConditioningControlPanel
                     if (_isAttached)
                     {
                         // Delay BringToFront to ensure it happens AFTER parent activation completes
-                        // This prevents the speech bubble from going behind the main window
+                        // Use Background priority so all window activation processing finishes first
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
                             if (_isAttached && _tubeHandle != IntPtr.Zero)
                             {
                                 BringToFrontTemporarily();
                             }
-                        }), System.Windows.Threading.DispatcherPriority.Input);
+                        }), System.Windows.Threading.DispatcherPriority.Background);
                     }
                 }
             }
             catch { /* Window may be closing */ }
+        }
+
+        private void ParentWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            // When main window is clicked (even if already active), immediately bring tube to front
+            // This handles the case where Activated event doesn't fire (window already active)
+            if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
+            {
+                // Use Background priority to ensure this happens after the click processing
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
+                    {
+                        BringToFrontTemporarily();
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Background);
+            }
         }
 
         private void ParentWindow_Closed(object? sender, EventArgs e)
@@ -1346,6 +1364,7 @@ namespace ConditioningControlPanel
                     _parentWindow.StateChanged -= ParentWindow_StateChanged;
                     _parentWindow.IsVisibleChanged -= ParentWindow_IsVisibleChanged;
                     _parentWindow.Activated -= ParentWindow_Activated;
+                    _parentWindow.PreviewMouseDown -= ParentWindow_PreviewMouseDown;
                     _parentWindow.Closed -= ParentWindow_Closed;
                 }
             }
@@ -1846,7 +1865,7 @@ namespace ConditioningControlPanel
             SpeechBubble.Visibility = Visibility.Visible;
 
             // Bring tube to front when attached so bubble is visible above main window
-            // Use delayed dispatch to ensure it happens after any pending window activations
+            // Use Background priority to ensure it happens after all window activations complete
             if (_isAttached)
             {
                 Dispatcher.BeginInvoke(new Action(() =>
@@ -1855,7 +1874,7 @@ namespace ConditioningControlPanel
                     {
                         BringToFrontTemporarily();
                     }
-                }), System.Windows.Threading.DispatcherPriority.Input);
+                }), System.Windows.Threading.DispatcherPriority.Background);
 
                 // Start z-order refresh timer to keep bubble on top while visible
                 StartZOrderRefreshTimer();
@@ -2024,9 +2043,9 @@ namespace ConditioningControlPanel
         private void StartZOrderRefreshTimer()
         {
             StopZOrderRefreshTimer();
-            // Use longer interval (1.5s) to reduce flickering with WPF tooltips
-            // The speech bubble only needs occasional z-order refresh, not constant
-            _zOrderRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+            // Use shorter interval (300ms) to keep speech bubble reliably on top
+            // The main issue is when user clicks on already-active main window (no Activated event fires)
+            _zOrderRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             _zOrderRefreshTimer.Tick += (s, e) =>
             {
                 if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
@@ -2396,7 +2415,7 @@ namespace ConditioningControlPanel
                         {
                             BringToFrontTemporarily();
                         }
-                    }), System.Windows.Threading.DispatcherPriority.Input);
+                    }), System.Windows.Threading.DispatcherPriority.Background);
                     StartZOrderRefreshTimer();
                 }
 
@@ -2546,7 +2565,7 @@ namespace ConditioningControlPanel
                     {
                         BringToFrontTemporarily();
                     }
-                }), System.Windows.Threading.DispatcherPriority.Input);
+                }), System.Windows.Threading.DispatcherPriority.Background);
 
                 // Start z-order refresh timer to keep bubble on top while visible
                 StartZOrderRefreshTimer();

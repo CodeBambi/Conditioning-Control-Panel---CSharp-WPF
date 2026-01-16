@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 
@@ -220,7 +221,8 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("AiService: Got reply ({RequestCount}/{Limit} today, {Remaining} remaining)",
                     _dailyRequestCount, DailyLimit, DailyRequestsRemaining);
 
-                return result.Content;
+                // Sanitize response to remove any leaked metadata tags
+                return SanitizeResponse(result.Content);
             }
             catch (TaskCanceledException)
             {
@@ -237,6 +239,38 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Error(ex, "AiService: Failed to get AI reply");
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Sanitizes AI response by removing any leaked internal metadata tags.
+        /// The AI sometimes echoes context tags that should be hidden from users.
+        /// </summary>
+        private static string SanitizeResponse(string? response)
+        {
+            if (string.IsNullOrEmpty(response))
+                return response ?? string.Empty;
+
+            // Remove context metadata tags like [Category: X | App: Y | Title: Z | Duration: Nm]
+            var sanitized = Regex.Replace(response, @"\[Category:[^\]]*\]", "", RegexOptions.IgnoreCase);
+
+            // Remove reaction category tags like [Media/Streaming] or [Gaming/Casual]
+            sanitized = Regex.Replace(sanitized, @"\[[A-Za-z]+/[A-Za-z]+\]", "", RegexOptions.IgnoreCase);
+
+            // Remove any standalone square bracket tags that look like metadata
+            sanitized = Regex.Replace(sanitized, @"\[(?:Category|App|Title|Duration|Context):[^\]]*\]", "", RegexOptions.IgnoreCase);
+
+            // Clean up any resulting double spaces or leading/trailing whitespace
+            sanitized = Regex.Replace(sanitized, @"\s{2,}", " ");
+            sanitized = sanitized.Trim();
+
+            // If sanitization removed everything meaningful, return a fallback
+            if (string.IsNullOrWhiteSpace(sanitized))
+            {
+                App.Logger?.Warning("AiService: Response was entirely metadata, returning fallback");
+                return FallbackResponse;
+            }
+
+            return sanitized;
         }
 
         public void Dispose()

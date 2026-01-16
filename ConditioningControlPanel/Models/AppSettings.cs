@@ -1329,12 +1329,22 @@ namespace ConditioningControlPanel.Models
 
         private int _autonomyRandomIntervalMinutes = 2;
         /// <summary>
-        /// Average minutes between random triggers (2-60)
+        /// Average minutes between random triggers (2-60) - LEGACY, use AutonomyRandomIntervalSeconds
         /// </summary>
         public int AutonomyRandomIntervalMinutes
         {
             get => _autonomyRandomIntervalMinutes;
             set { _autonomyRandomIntervalMinutes = Math.Clamp(value, 2, 60); OnPropertyChanged(); }
+        }
+
+        private int _autonomyRandomIntervalSeconds = 60;
+        /// <summary>
+        /// Average seconds between random triggers (30-300)
+        /// </summary>
+        public int AutonomyRandomIntervalSeconds
+        {
+            get => _autonomyRandomIntervalSeconds;
+            set { _autonomyRandomIntervalSeconds = Math.Clamp(value, 30, 300); OnPropertyChanged(); }
         }
 
         private bool _autonomyContextTriggerEnabled = false;
