@@ -1480,7 +1480,7 @@
                 </Border.Effect>
                 <Canvas x:Name="MarqueeCanvas" ClipToBounds="True">
                     <TextBlock x:Name="MarqueeText"
-                               Text="GOOD GIRLS CONDITION DAILY     ❤️🔒"
+                               Text="v5.0 IS OUT - THANKS TO ALL THE 100+ PATREONS AND TO ALL THE SUPPORTERS/TESTERS 🩷🔒"
                                FontFamily="Impact" FontSize="28" FontWeight="Bold"
                                Foreground="#FF69B4" Canvas.Top="8">
                         <TextBlock.Effect>
