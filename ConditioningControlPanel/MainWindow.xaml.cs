@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -20,6 +21,14 @@ namespace ConditioningControlPanel
 {
     public partial class MainWindow : Window
     {
+        // DWM API for Windows 11 rounded corners
+        [DllImport("dwmapi.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+        private static extern void DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int pvAttribute, int cbAttribute);
+
+        private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+        private const int DWMWCP_ROUND = 2;
+        private const int DWMWCP_ROUNDSMALL = 3;
+
         private bool _isRunning = false;
         private bool _isLoading = true;
         private BrowserService? _browser;
@@ -485,8 +494,20 @@ namespace ConditioningControlPanel
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             // Hook window messages to intercept minimize BEFORE it happens
-            var hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var hwndSource = HwndSource.FromHwnd(hwnd);
             hwndSource?.AddHook(WndProc);
+
+            // Enable Windows 11 rounded corners
+            try
+            {
+                int preference = DWMWCP_ROUND;
+                DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref preference, sizeof(int));
+            }
+            catch
+            {
+                // Silently fail on Windows 10 or earlier - they don't support this API
+            }
 
             // Re-center after load in case DPI wasn't available in constructor
             CenterOnPrimaryScreen();
@@ -6335,15 +6356,37 @@ namespace ConditioningControlPanel
             // Start/stop autonomy service (works independently of engine!)
             // Requires Patreon + Level 100 + Consent
             var hasPatreon = App.Settings.Current.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
-            if (isEnabled && hasPatreon && App.Settings.Current.PlayerLevel >= 100 && App.Settings.Current.AutonomyConsentGiven)
+            var meetsLevel = App.Settings.Current.PlayerLevel >= 100;
+
+            if (isEnabled)
             {
-                App.Autonomy?.Start();
+                if (!hasPatreon)
+                {
+                    App.Logger?.Warning("Autonomy Mode enabled but Patreon access missing - service will not start");
+                    MessageBox.Show(
+                        "Autonomy Mode requires Patreon access (Level 1+).\n\n" +
+                        "The setting has been saved, but the feature will not activate until you have Patreon access.",
+                        "Patreon Required",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    App.Autonomy?.Stop();
+                }
+                else if (!meetsLevel)
+                {
+                    App.Logger?.Warning("Autonomy Mode enabled but level requirement not met (need 100, have {Level})", App.Settings.Current.PlayerLevel);
+                    App.Autonomy?.Stop();
+                }
+                else if (App.Settings.Current.AutonomyConsentGiven)
+                {
+                    App.Autonomy?.Start();
+                }
             }
             else
             {
                 App.Autonomy?.Stop();
             }
-            App.Logger?.Information("Autonomy Mode toggled: {Enabled} (Engine running: {EngineRunning}, Patreon: {Patreon})", isEnabled, _isRunning, hasPatreon);
+            App.Logger?.Information("Autonomy Mode toggled: {Enabled} (Engine running: {EngineRunning}, Patreon: {Patreon}, Level: {Level})",
+                isEnabled, _isRunning, hasPatreon, App.Settings.Current.PlayerLevel);
 
             App.Settings.Save();
 
@@ -6453,6 +6496,11 @@ namespace ConditioningControlPanel
         private void BtnTestAutonomy_Click(object sender, RoutedEventArgs e)
         {
             App.Autonomy?.TestTrigger();
+        }
+
+        private void BtnForceStartAutonomy_Click(object sender, RoutedEventArgs e)
+        {
+            App.Autonomy?.ForceStart();
         }
 
         #endregion
