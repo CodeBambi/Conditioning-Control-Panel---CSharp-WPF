@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haptics Setup | CCP Guide</title>
+    <meta name="description" content="Complete guide to setting up haptic feedback devices with Conditioning Control Panel using Buttplug.io or Lovense Connect.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📳</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+    <style>
+        .step-image {
+            width: 100%;
+            max-width: 700px;
+            border-radius: 12px;
+            border: 2px solid rgba(255, 105, 180, 0.3);
+            margin: 1.5rem 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .step-image:hover {
+            border-color: rgba(255, 105, 180, 0.6);
+            transform: scale(1.02);
+            transition: all 0.3s ease;
+        }
+        .provider-tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .provider-tab {
+            padding: 1rem 2rem;
+            background: rgba(255, 105, 180, 0.1);
+            border: 2px solid rgba(255, 105, 180, 0.3);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: #fff;
+            font-weight: 600;
+        }
+        .provider-tab:hover, .provider-tab.active {
+            background: rgba(255, 105, 180, 0.3);
+            border-color: #FF69B4;
+        }
+        .provider-section {
+            background: rgba(30, 20, 40, 0.6);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(255, 105, 180, 0.2);
+        }
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #FF69B4, #FF1493);
+            border-radius: 50%;
+            font-weight: bold;
+            margin-right: 0.75rem;
+            font-size: 0.9rem;
+        }
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: linear-gradient(135deg, #FF69B4, #FF1493);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            margin: 0.5rem 0;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(255, 105, 180, 0.4);
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+        }
+        .comparison-table th, .comparison-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 105, 180, 0.2);
+        }
+        .comparison-table th {
+            background: rgba(255, 105, 180, 0.1);
+            font-weight: 600;
+        }
+        .comparison-table tr:hover {
+            background: rgba(255, 105, 180, 0.05);
+        }
+        .check { color: #4ade80; }
+        .cross { color: #f87171; }
+    </style>
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Haptics Setup</span>
+            </div>
+            <h1>Haptics Setup Guide</h1>
+            <p>Connect your haptic devices for synchronized feedback during conditioning sessions</p>
+        </div>
+
+        <div class="guide-content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#requirements">Requirements</a></li>
+                    <li><a href="#choosing-provider">Choosing a Provider</a></li>
+                    <li><a href="#buttplug-setup">Buttplug.io Setup</a></li>
+                    <li><a href="#lovense-setup">Lovense Connect Setup</a></li>
+                    <li><a href="#ccp-config">CCP Configuration</a></li>
+                    <li><a href="#troubleshooting">Troubleshooting</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+
+                <p>Conditioning Control Panel supports haptic feedback integration, allowing your toys to vibrate in sync with flash images, subliminal messages, and other conditioning events. This creates a more immersive experience.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>📳</span>
+                        <h5>Flash Sync</h5>
+                        <p>Vibrate on image popups</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>💭</span>
+                        <h5>Subliminal Sync</h5>
+                        <p>Pulse with messages</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🎯</span>
+                        <h5>Trigger Mode</h5>
+                        <p>React to triggers</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🤖</span>
+                        <h5>Autonomy Mode</h5>
+                        <p>AI-controlled patterns</p>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h5>🎁 Patreon Feature</h5>
+                    <p>Haptic integration is available exclusively for Patreon supporters. <a href="https://www.patreon.com/CodeBambi" target="_blank">Support on Patreon</a> to unlock this feature!</p>
+                </div>
+            </section>
+
+            <section id="requirements">
+                <h2>Requirements</h2>
+
+                <ul>
+                    <li><strong>Patreon subscription</strong> - Any tier unlocks haptics</li>
+                    <li><strong>Compatible device</strong> - Lovense, We-Vibe, or other Buttplug-supported toys</li>
+                    <li><strong>Connection software</strong> - Either Intiface Central OR Lovense Connect app</li>
+                    <li><strong>Bluetooth</strong> - For wireless toy connection</li>
+                </ul>
+            </section>
+
+            <section id="choosing-provider">
+                <h2>Choosing a Provider</h2>
+
+                <p>CCP supports two connection methods. Choose based on your device and preferences:</p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>Buttplug.io (Intiface)</th>
+                            <th>Lovense Connect</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Device Support</td>
+                            <td><span class="check">200+ devices</span></td>
+                            <td>Lovense only</td>
+                        </tr>
+                        <tr>
+                            <td>Setup Complexity</td>
+                            <td>Moderate</td>
+                            <td><span class="check">Easy</span></td>
+                        </tr>
+                        <tr>
+                            <td>Latency</td>
+                            <td><span class="check">Lower</span></td>
+                            <td>Slightly higher</td>
+                        </tr>
+                        <tr>
+                            <td>Internet Required</td>
+                            <td><span class="check">No</span></td>
+                            <td>No (local network)</td>
+                        </tr>
+                        <tr>
+                            <td>Best For</td>
+                            <td>Multiple/non-Lovense toys</td>
+                            <td><span class="check">Lovense users</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box success">
+                    <h5>Recommendation</h5>
+                    <p><strong>Lovense users:</strong> Start with Lovense Connect - it's simpler to set up.<br>
+                    <strong>Other devices:</strong> Use Buttplug.io/Intiface Central for the widest compatibility.</p>
+                </div>
+            </section>
+
+            <section id="buttplug-setup">
+                <h2>Buttplug.io Setup (Intiface Central)</h2>
+
+                <div class="provider-section">
+                    <h3><span class="step-number">1</span> Download Intiface Central</h3>
+                    <p>Intiface Central is the official Buttplug.io server application that bridges your toys to CCP.</p>
+
+                    <a href="https://intiface.com/central/" target="_blank" class="download-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Download Intiface Central
+                    </a>
+
+                    <p>Install and launch Intiface Central. You'll see the main interface:</p>
+
+                    <img src="images/haptics/buttplug_step1.png" alt="Intiface Central main screen" class="step-image">
+                </div>
+
+                <div class="provider-section">
+                    <h3><span class="step-number">2</span> Start the Server & Connect Device</h3>
+
+                    <ol>
+                        <li>Click <strong>"Start Server"</strong> in Intiface Central</li>
+                        <li>Make sure your toy is turned on and in pairing mode</li>
+                        <li>Click <strong>"Start Scanning"</strong> to discover devices</li>
+                        <li>Your device should appear in the list once detected</li>
+                    </ol>
+
+                    <img src="images/haptics/buttplug_step2.png" alt="Intiface device connected" class="step-image">
+
+                    <div class="info-box">
+                        <h5>Server Settings</h5>
+                        <p>The default WebSocket address is <code>ws://127.0.0.1:12345</code> - CCP uses this automatically. Keep Intiface running while using CCP.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="lovense-setup">
+                <h2>Lovense Connect Setup</h2>
+
+                <div class="provider-section">
+                    <h3><span class="step-number">1</span> Install Lovense Connect</h3>
+
+                    <p>Download and install the Lovense Connect app on your PC:</p>
+
+                    <a href="https://www.lovense.com/cam-model/guides/pc-download" target="_blank" class="download-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Download Lovense Connect
+                    </a>
+
+                    <p>After installation, pair your Lovense toy via Bluetooth:</p>
+
+                    <img src="images/haptics/lovense_step1.png" alt="Lovense Connect pairing" class="step-image">
+                </div>
+
+                <div class="provider-section">
+                    <h3><span class="step-number">2</span> Enable Local API</h3>
+
+                    <ol>
+                        <li>Open Lovense Connect settings</li>
+                        <li>Enable <strong>"Game Mode"</strong> or <strong>"Enable Local API"</strong></li>
+                        <li>Note the local IP and port (usually <code>127.0.0.1:20010</code>)</li>
+                        <li>Your toy should show as connected</li>
+                    </ol>
+
+                    <img src="images/haptics/lovense_step2.png" alt="Lovense Connect API enabled" class="step-image">
+
+                    <div class="info-box success">
+                        <h5>Ready!</h5>
+                        <p>Once you see your toy connected with a green indicator, you're ready to configure CCP.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="ccp-config">
+                <h2>CCP Configuration</h2>
+
+                <div class="provider-section">
+                    <h3><span class="step-number">1</span> Open Haptics Settings</h3>
+                    <p>In CCP, navigate to the <strong>Settings</strong> tab and find the <strong>Haptics</strong> section.</p>
+                </div>
+
+                <div class="provider-section">
+                    <h3><span class="step-number">2</span> Select Provider</h3>
+                    <p>Choose your connection method from the dropdown:</p>
+                    <ul>
+                        <li><strong>Buttplug.io</strong> - If using Intiface Central</li>
+                        <li><strong>Lovense</strong> - If using Lovense Connect</li>
+                    </ul>
+                </div>
+
+                <div class="provider-section">
+                    <h3><span class="step-number">3</span> Connect</h3>
+                    <ol>
+                        <li>Make sure your provider software is running (Intiface or Lovense Connect)</li>
+                        <li>Click the <strong>"Connect"</strong> button in CCP</li>
+                        <li>Status should change to <strong>"Connected"</strong></li>
+                        <li>Use the <strong>Test</strong> button to verify - your toy should vibrate!</li>
+                    </ol>
+                </div>
+
+                <div class="provider-section">
+                    <h3><span class="step-number">4</span> Configure Intensity</h3>
+                    <p>Adjust the haptic settings to your preference:</p>
+                    <ul>
+                        <li><strong>Intensity</strong> - Base vibration strength (0-100%)</li>
+                        <li><strong>Flash Sync</strong> - Enable vibration on flash images</li>
+                        <li><strong>Subliminal Sync</strong> - Enable vibration on subliminal messages</li>
+                    </ul>
+                </div>
+            </section>
+
+            <section id="troubleshooting">
+                <h2>Troubleshooting</h2>
+
+                <h3>Connection Issues</h3>
+                <div class="info-box warning">
+                    <h5>Can't Connect?</h5>
+                    <ul>
+                        <li>Make sure Intiface/Lovense Connect is running <strong>before</strong> clicking Connect in CCP</li>
+                        <li>Check that your toy is turned on and has battery</li>
+                        <li>Try restarting the connection software</li>
+                        <li>Ensure no other apps are using the toy connection</li>
+                    </ul>
+                </div>
+
+                <h3>Buttplug.io Specific</h3>
+                <ul>
+                    <li><strong>Server won't start:</strong> Check if another instance is running, or if port 12345 is in use</li>
+                    <li><strong>Device not found:</strong> Put your toy in pairing mode and click "Start Scanning" again</li>
+                    <li><strong>Connection drops:</strong> Keep Intiface Central in the foreground, or check Bluetooth range</li>
+                </ul>
+
+                <h3>Lovense Specific</h3>
+                <ul>
+                    <li><strong>API not responding:</strong> Make sure "Game Mode" is enabled in Lovense Connect settings</li>
+                    <li><strong>Wrong port:</strong> Check the port number in Lovense Connect matches CCP settings</li>
+                    <li><strong>Toy not showing:</strong> Re-pair the toy via Bluetooth in Lovense Connect</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>Still Having Issues?</h5>
+                    <p>Join our <a href="https://discord.gg/CKnKEfvDrn" target="_blank">Discord community</a> for help, or check the <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/issues" target="_blank">GitHub issues</a> page.</p>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide.html" class="guide-nav-link prev">
+                    <span class="guide-nav-direction">Back to</span>
+                    <span class="guide-nav-title">All Guides</span>
+                </a>
+                <a href="guide-sessions.html" class="guide-nav-link next">
+                    <span class="guide-nav-direction">Next</span>
+                    <span class="guide-nav-title">AI Sessions</span>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2024-2026 CodeBambi. Made with love for the community.</p>
+            <div class="footer-links">
+                <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a>
+                <a href="https://discord.gg/CKnKEfvDrn" target="_blank">Discord</a>
+                <a href="https://www.patreon.com/CodeBambi" target="_blank">Patreon</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            document.getElementById('mobileMenu').classList.toggle('active');
+        }
+    </script>
+</body>
+</html>
