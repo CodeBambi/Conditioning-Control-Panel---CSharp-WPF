@@ -5028,6 +5028,7 @@ namespace ConditioningControlPanel
 
             // Autonomy Mode
             ChkAutonomyEnabled.IsChecked = s.AutonomyModeEnabled;
+            UpdateAutonomyButtonState(s.AutonomyModeEnabled);
             SliderAutonomyIntensity.Value = s.AutonomyIntensity;
             SliderAutonomyCooldown.Value = s.AutonomyCooldownSeconds;
             ChkAutonomyIdle.IsChecked = s.AutonomyIdleTriggerEnabled;
@@ -5642,7 +5643,6 @@ namespace ConditioningControlPanel
                 var autonomyUnlocked = hasPatreon && level >= 100;
                 if (AutonomyLocked != null) AutonomyLocked.Visibility = autonomyUnlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (AutonomyUnlocked != null) AutonomyUnlocked.Visibility = autonomyUnlocked ? Visibility.Visible : Visibility.Collapsed;
-                if (AutonomyFeatureImage != null) SetFeatureImageBlur(AutonomyFeatureImage, !autonomyUnlocked);
 
                 // Update lock message based on what's missing
                 if (TxtAutonomyLockStatus != null && TxtAutonomyLockMessage != null)
@@ -6399,8 +6399,81 @@ namespace ConditioningControlPanel
             Dispatcher.BeginInvoke(() => _avatarTubeWindow?.UpdateQuickMenuState());
         }
 
+        private void BtnAutonomyStartStop_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            var isCurrentlyEnabled = settings.AutonomyModeEnabled;
+
+            // If starting for the first time, show consent dialog
+            if (!isCurrentlyEnabled && !settings.AutonomyConsentGiven)
+            {
+                var result = MessageBox.Show(
+                    "AUTONOMY MODE\n\n" +
+                    "This feature allows the companion to autonomously trigger effects:\n" +
+                    "• Flash images\n" +
+                    "• Videos (without strict mode)\n" +
+                    "• Subliminal messages\n" +
+                    "• Make comments\n\n" +
+                    "She will act on her own schedule based on your intensity setting.\n" +
+                    "You can stop her at any time by clicking the Stop button.\n\n" +
+                    "Do you consent to enabling Autonomy Mode?",
+                    "Autonomy Mode Consent",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result != MessageBoxResult.Yes)
+                {
+                    return;
+                }
+
+                settings.AutonomyConsentGiven = true;
+            }
+
+            // Toggle the mode
+            settings.AutonomyModeEnabled = !isCurrentlyEnabled;
+            App.Settings.Save();
+
+            // Update button appearance
+            UpdateAutonomyButtonState(!isCurrentlyEnabled);
+
+            // Start/stop autonomy service
+            if (!isCurrentlyEnabled)
+            {
+                App.Autonomy?.Start();
+            }
+            else
+            {
+                App.Autonomy?.Stop();
+            }
+
+            App.Logger?.Information("Autonomy Mode button toggled: {Enabled}", !isCurrentlyEnabled);
+
+            // Sync avatar menu state
+            Dispatcher.BeginInvoke(() => _avatarTubeWindow?.UpdateQuickMenuState());
+        }
+
+        private void UpdateAutonomyButtonState(bool isEnabled)
+        {
+            if (BtnAutonomyStartStop == null) return;
+
+            if (isEnabled)
+            {
+                BtnAutonomyStartStop.Content = "■ Stop";
+                BtnAutonomyStartStop.Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)); // Pink
+            }
+            else
+            {
+                BtnAutonomyStartStop.Content = "▶ Start";
+                BtnAutonomyStartStop.Foreground = new SolidColorBrush(Color.FromRgb(144, 238, 144)); // Light green
+            }
+        }
+
         /// <summary>
-        /// Called from AvatarTubeWindow to sync the checkbox state when toggled from avatar menu
+        /// Called from AvatarTubeWindow to sync the button/checkbox state when toggled from avatar menu
         /// </summary>
         public void SyncAutonomyCheckbox(bool isEnabled)
         {
@@ -6415,17 +6488,20 @@ namespace ConditioningControlPanel
                 {
                     // Re-read the setting inside dispatcher to get the latest value
                     var settingValue = App.Settings?.Current?.AutonomyModeEnabled ?? false;
-                    App.Logger?.Information("MainWindow.SyncAutonomyCheckbox inside Dispatcher, setting={Setting}, ChkAutonomyEnabled null={IsNull}",
-                        settingValue, ChkAutonomyEnabled == null);
+
+                    // Update button state
+                    UpdateAutonomyButtonState(settingValue);
+
+                    // Also update hidden checkbox for backwards compatibility
                     if (ChkAutonomyEnabled != null)
                     {
-                        // Temporarily set _isLoading to prevent the handler from running
                         var wasLoading = _isLoading;
                         _isLoading = true;
                         ChkAutonomyEnabled.IsChecked = settingValue;
                         _isLoading = wasLoading;
-                        App.Logger?.Information("MainWindow.SyncAutonomyCheckbox set checkbox to {Value}", settingValue);
                     }
+
+                    App.Logger?.Information("MainWindow.SyncAutonomyCheckbox synced to {Value}", settingValue);
                 }
                 catch (Exception ex)
                 {
