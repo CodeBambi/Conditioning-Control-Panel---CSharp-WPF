@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scheduler & Intensity Ramp | CCP Guide</title>
+    <meta name="description" content="Configure automatic scheduling and intensity ramping in Conditioning Control Panel.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Scheduler & Intensity Ramp</span>
+            </div>
+            <h1>Scheduler & Intensity Ramp</h1>
+            <p>Automate your conditioning with time-based scheduling and gradual intensity</p>
+        </div>
+
+        <div class="guide-content">
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#scheduler">Scheduler</a></li>
+                    <li><a href="#scheduler-behavior">Scheduler Behavior</a></li>
+                    <li><a href="#intensity-ramp">Intensity Ramp</a></li>
+                    <li><a href="#link-to-ramp">Link to Ramp</a></li>
+                </ul>
+            </div>
+
+            <section id="scheduler">
+                <h2>Scheduler</h2>
+
+                <p>The scheduler automatically starts and stops conditioning sessions based on time of day and selected days.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Enable Scheduler</strong></td>
+                            <td>Master toggle for scheduling</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Start Time</strong></td>
+                            <td>When the session should begin (24h format)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>End Time</strong></td>
+                            <td>When the session should end (24h format)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Active Days</strong></td>
+                            <td>Select which days the scheduler runs</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box">
+                    <h5>🌙 Overnight Schedules</h5>
+                    <p>The scheduler supports schedules that cross midnight. For example, 22:00 → 02:00 will work correctly.</p>
+                </div>
+            </section>
+
+            <section id="scheduler-behavior">
+                <h2>Scheduler Behavior</h2>
+
+                <h3>When App Starts Within Scheduled Time</h3>
+                <ul>
+                    <li>Automatically minimizes to system tray</li>
+                    <li>Engine starts immediately</li>
+                    <li>Shows notification</li>
+                </ul>
+
+                <h3>When Scheduled Time Begins</h3>
+                <ul>
+                    <li>Engine auto-starts</li>
+                    <li>Window minimizes to tray</li>
+                    <li>Shows notification</li>
+                </ul>
+
+                <h3>When Scheduled Time Ends</h3>
+                <ul>
+                    <li>Engine auto-stops</li>
+                    <li>Shows notification</li>
+                </ul>
+
+                <h3>Manual Stop During Schedule</h3>
+                <ul>
+                    <li>If you manually stop the engine during a scheduled time, it won't auto-restart</li>
+                    <li>The scheduler will resume normally at the next scheduled time window</li>
+                </ul>
+            </section>
+
+            <section id="intensity-ramp">
+                <h2>Intensity Ramp</h2>
+
+                <p>Gradually increase intensity over time during a session, creating a building experience.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Range</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Enable Ramp</strong></td>
+                            <td>On/Off</td>
+                            <td>Master toggle for intensity ramping</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Duration</strong></td>
+                            <td>10-180 min</td>
+                            <td>Time to reach maximum intensity</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Multiplier</strong></td>
+                            <td>1.0-3.0x</td>
+                            <td>Maximum intensity multiplier</td>
+                        </tr>
+                        <tr>
+                            <td><strong>End at Ramp Complete</strong></td>
+                            <td>On/Off</td>
+                            <td>Auto-stop when ramp finishes</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>How Intensity Ramp Works</h3>
+                <ol>
+                    <li>Session starts → linked settings begin at their base values</li>
+                    <li>Over the Duration period → values gradually increase</li>
+                    <li>At completion → values reach <code>base × multiplier</code></li>
+                    <li>Sliders visually update in real-time</li>
+                    <li>If "End at Ramp Complete" is enabled → session stops automatically</li>
+                </ol>
+
+                <h3>Example</h3>
+                <div class="code-block">
+                    <pre>Flash Opacity: 50%
+Multiplier: 2.0x
+Duration: 60 min
+
+Result: Opacity goes from 50% → 100% over 60 minutes
+
+Timeline:
+  0 min:  50%
+  15 min: 62.5%
+  30 min: 75%
+  45 min: 87.5%
+  60 min: 100%</pre>
+                </div>
+            </section>
+
+            <section id="link-to-ramp">
+                <h2>Link to Ramp</h2>
+
+                <p>Select which settings scale with the intensity ramp:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Option</th>
+                            <th>What It Controls</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Flash α</strong></td>
+                            <td>Flash image opacity</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Spiral α</strong></td>
+                            <td>Spiral overlay opacity</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Pink α</strong></td>
+                            <td>Pink filter opacity</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Master 🔊</strong></td>
+                            <td>Master volume</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Sub 🔊</strong></td>
+                            <td>Subliminal whisper volume</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box">
+                    <h5>💡 Ramp Strategy</h5>
+                    <p>
+                        <strong>Subtle build:</strong> Link only Flash α with 1.5x multiplier<br>
+                        <strong>Moderate build:</strong> Link Flash α + Spiral α with 2.0x<br>
+                        <strong>Intense build:</strong> Link all settings with 2.5-3.0x multiplier
+                    </p>
+                </div>
+
+                <h3>Combining Scheduler + Ramp</h3>
+                <p>For a fully automated experience:</p>
+                <ol>
+                    <li>Enable Scheduler with your preferred time window</li>
+                    <li>Enable Intensity Ramp with desired duration and multiplier</li>
+                    <li>Enable "End at Ramp Complete" to auto-stop</li>
+                    <li>Set ramp duration ≤ scheduler duration for clean sessions</li>
+                </ol>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-sessions.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Sessions</span>
+                    </div>
+                </a>
+                <a href="guide-avatar.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Companion Avatar</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

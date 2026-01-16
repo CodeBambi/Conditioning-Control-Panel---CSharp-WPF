@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Settings | CCP Guide</title>
+    <meta name="description" content="Configure system settings, audio, browser, and panic key in Conditioning Control Panel.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>System Settings</span>
+            </div>
+            <h1>System Settings</h1>
+            <p>Configure system options, audio, browser, and the panic key</p>
+        </div>
+
+        <div class="guide-content">
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#system-settings">System Settings</a></li>
+                    <li><a href="#panic-key">Panic Key</a></li>
+                    <li><a href="#audio-settings">Audio Settings</a></li>
+                    <li><a href="#browser">Embedded Browser</a></li>
+                    <li><a href="#multi-monitor">Multi-Monitor Setup</a></li>
+                    <li><a href="#presets">Presets</a></li>
+                    <li><a href="#files-data">Files & Data</a></li>
+                </ul>
+            </div>
+
+            <section id="system-settings">
+                <h2>System Settings</h2>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Dual Mon</strong></td>
+                            <td>Enable overlays on all monitors</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Win Start</strong></td>
+                            <td>Launch app when Windows starts</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Vid Launch</strong></td>
+                            <td>Force a video to play on app launch</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Auto Run</strong></td>
+                            <td>Auto-start the engine when app opens</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Start Hidden</strong></td>
+                            <td>Launch minimized to system tray</td>
+                        </tr>
+                        <tr>
+                            <td><strong>No Panic</strong></td>
+                            <td>Disable the panic key completely (dangerous!)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Assets Button</h3>
+                <p>Click <strong>📂 Assets</strong> to open the assets folder in Windows Explorer for easy file management.</p>
+            </section>
+
+            <section id="panic-key">
+                <h2>Panic Key</h2>
+
+                <p>The panic key is your emergency stop button.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Single press</strong></td>
+                            <td>Stop the conditioning engine</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Double-tap</strong> (within 2 seconds)</td>
+                            <td>Force exit the application</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Changing the Panic Key</h3>
+                <ol>
+                    <li>Click the <strong>🔑 Escape</strong> button (shows current key)</li>
+                    <li>Press any key to set it as the new panic key</li>
+                    <li>The button label updates to show the new key</li>
+                </ol>
+
+                <div class="info-box warning">
+                    <h5>⚠️ No Panic Mode</h5>
+                    <p>Enabling "No Panic" completely disables the panic key. Your only options to stop will be waiting for the scheduler to end, or using Task Manager (Ctrl+Shift+Esc).</p>
+                </div>
+            </section>
+
+            <section id="audio-settings">
+                <h2>Audio Settings</h2>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Range</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Master</strong></td>
+                            <td>0-100%</td>
+                            <td>Overall volume level for all app audio</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Audio Duck</strong></td>
+                            <td>On/Off</td>
+                            <td>Lower other apps' audio during video playback</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Duck %</strong></td>
+                            <td>0-100%</td>
+                            <td>How much to reduce other audio</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>How Ducking Works</h3>
+                <ol>
+                    <li>A video starts playing</li>
+                    <li>System volume for other apps reduces by Duck %</li>
+                    <li>Video plays at the Master volume level</li>
+                    <li>When video ends, other audio restores to normal</li>
+                </ol>
+            </section>
+
+            <section id="browser">
+                <h2>Embedded Browser</h2>
+
+                <p>Built-in browser using Microsoft WebView2 for browsing without leaving the app.</p>
+
+                <h3>Navigation</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Button</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>URL Bar</strong></td>
+                            <td>Enter addresses or search terms</td>
+                        </tr>
+                        <tr>
+                            <td><strong>←</strong></td>
+                            <td>Go back</td>
+                        </tr>
+                        <tr>
+                            <td><strong>→</strong></td>
+                            <td>Go forward</td>
+                        </tr>
+                        <tr>
+                            <td><strong>🏠</strong></td>
+                            <td>Go to home page</td>
+                        </tr>
+                        <tr>
+                            <td><strong>🔄</strong></td>
+                            <td>Refresh current page</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Browser Data</h3>
+                <p>Browser cookies, cache, and history are stored in the <code>browser_data/</code> folder. Delete this folder to clear all browser data.</p>
+
+                <div class="info-box">
+                    <h5>🔍 Zoom Level</h5>
+                    <p>The browser defaults to 75% zoom for a compact view. Use <kbd>Ctrl</kbd>+Scroll to adjust zoom level.</p>
+                </div>
+            </section>
+
+            <section id="multi-monitor">
+                <h2>Multi-Monitor Setup</h2>
+
+                <p>Enable <strong>Dual Mon</strong> in System settings to use multiple monitors:</p>
+
+                <ul>
+                    <li><strong>Videos</strong> play on primary monitor only</li>
+                    <li><strong>Flash images</strong> appear on all monitors</li>
+                    <li><strong>Overlays</strong> (spiral, pink filter) cover all monitors</li>
+                    <li><strong>Detached avatar</strong> can be placed on any monitor</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>💡 Gaming Tip</h5>
+                    <p>When gaming, keep your game on one monitor and the avatar/overlays on another for a less intrusive experience.</p>
+                </div>
+            </section>
+
+            <section id="presets">
+                <h2>Presets</h2>
+
+                <p>Save and quickly load different setting configurations.</p>
+
+                <h3>Using Presets</h3>
+                <ol>
+                    <li>Configure your settings as desired</li>
+                    <li>Click <strong>Save Preset</strong> and give it a name</li>
+                    <li>Load presets anytime from the preset dropdown</li>
+                    <li>Delete presets you no longer need</li>
+                </ol>
+
+                <h3>Preset Ideas</h3>
+                <div class="achievement-grid">
+                    <div class="achievement-card">
+                        <h5>🌅 Morning Light</h5>
+                        <p>Low intensity, subtle flashes, gentle settings</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🎮 Gaming Mode</h5>
+                        <p>Background only, no fullscreen interruptions</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🔥 Intense Session</h5>
+                        <p>High frequency, all features enabled</p>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h5>📝 Note</h5>
+                    <p>Presets save all settings including unlockable features, but do <strong>not</strong> affect your XP or level progress.</p>
+                </div>
+            </section>
+
+            <section id="files-data">
+                <h2>Files & Data</h2>
+
+                <h3>File Locations</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>File/Folder</th>
+                            <th>Purpose</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>settings.json</code></td>
+                            <td>All your preferences</td>
+                        </tr>
+                        <tr>
+                            <td><code>logs/</code></td>
+                            <td>Application logs for troubleshooting</td>
+                        </tr>
+                        <tr>
+                            <td><code>browser_data/</code></td>
+                            <td>WebView2 cache and cookies</td>
+                        </tr>
+                        <tr>
+                            <td><code>Resources/sub_audio/</code></td>
+                            <td>Subliminal whisper audio files</td>
+                        </tr>
+                        <tr>
+                            <td><code>Resources/sounds/</code></td>
+                            <td>Avatar giggle sounds</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Resetting Everything</h3>
+                <ol>
+                    <li>Close the application</li>
+                    <li>Delete <code>settings.json</code> (resets to defaults)</li>
+                    <li>Delete <code>browser_data/</code> folder (clears browser)</li>
+                    <li>Restart the application</li>
+                </ol>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-avatar.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Companion Avatar</span>
+                    </div>
+                </a>
+                <a href="guide-patreon.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Patreon Features</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

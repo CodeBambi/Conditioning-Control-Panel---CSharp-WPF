@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Progression & Achievements | CCP Guide</title>
+    <meta name="description" content="Learn about the XP system, level unlocks, and achievements in Conditioning Control Panel.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Progression & Achievements</span>
+            </div>
+            <h1>Progression & Achievements</h1>
+            <p>Earn XP, level up, unlock features, and complete achievements</p>
+        </div>
+
+        <div class="guide-content">
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#xp-system">XP System</a></li>
+                    <li><a href="#level-titles">Level Titles</a></li>
+                    <li><a href="#unlockables">Unlockable Features</a></li>
+                    <li><a href="#achievements">Achievements</a></li>
+                </ul>
+            </div>
+
+            <section id="xp-system">
+                <h2>XP System</h2>
+
+                <p>Earn XP (experience points) through various interactions in the app. XP accumulates to level you up and unlock new features.</p>
+
+                <h3>XP Sources</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>XP Gained</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Clicking flash images</td>
+                            <td>+5 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Popping bubbles</td>
+                            <td>+2 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Completing attention checks</td>
+                            <td>+10 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Watching videos</td>
+                            <td>+20 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Completing Easy session</td>
+                            <td>+400 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Completing Medium session</td>
+                            <td>+800 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Completing Hard session</td>
+                            <td>+1,200 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Completing Extreme session</td>
+                            <td>+2,000 XP</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>XP Formula</h3>
+                <p>Each level requires <code>50 + (level × 20)</code> XP to advance.</p>
+                <div class="code-block">
+                    <pre>Level 1 → 2:   70 XP  (50 + 1×20)
+Level 2 → 3:   90 XP  (50 + 2×20)
+Level 5 → 6:   150 XP (50 + 5×20)
+Level 10 → 11: 250 XP (50 + 10×20)
+Level 50 → 51: 1,050 XP (50 + 50×20)</pre>
+                </div>
+            </section>
+
+            <section id="level-titles">
+                <h2>Level Titles</h2>
+
+                <p>Your title changes as you level up:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Level Range</th>
+                            <th>Title</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1-4</td>
+                            <td>Beginner Bimbo</td>
+                        </tr>
+                        <tr>
+                            <td>5-9</td>
+                            <td>Training Bimbo</td>
+                        </tr>
+                        <tr>
+                            <td>10-19</td>
+                            <td>Eager Bimbo</td>
+                        </tr>
+                        <tr>
+                            <td>20-29</td>
+                            <td>Devoted Bimbo</td>
+                        </tr>
+                        <tr>
+                            <td>30-49</td>
+                            <td>Advanced Bimbo</td>
+                        </tr>
+                        <tr>
+                            <td>50+</td>
+                            <td>Perfect Bimbo</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box">
+                    <h5>🎵 Level Up Sound</h5>
+                    <p>Place a <code>lvlup.mp3</code> file in <code>Resources/</code> or <code>assets/audio/</code> to play a custom sound when leveling up!</p>
+                </div>
+            </section>
+
+            <section id="unlockables">
+                <h2>Unlockable Features</h2>
+
+                <p>New features unlock as you reach certain levels:</p>
+
+                <div class="level-timeline">
+                    <div class="level-item">
+                        <div class="level-badge">10</div>
+                        <div class="level-content">
+                            <h5>🌀 Spiral Overlay + 💗 Pink Filter</h5>
+                            <p>Hypnotic spiral GIF overlay and pink-tinted screen effects</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">20</div>
+                        <div class="level-content">
+                            <h5>🫧 Bubble Pop Mini-game</h5>
+                            <p>Pop floating bubbles for bonus XP and combo streaks</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">35</div>
+                        <div class="level-content">
+                            <h5>🔐 Lock Card Challenge</h5>
+                            <p>Type passphrases correctly to unlock your screen</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">50</div>
+                        <div class="level-content">
+                            <h5>🔢 Bubble Count Challenge</h5>
+                            <p>Count bubbles accurately during video playback</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">60</div>
+                        <div class="level-content">
+                            <h5>📝 Bouncing Text</h5>
+                            <p>DVD-screensaver style bouncing trigger words</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">70</div>
+                        <div class="level-content">
+                            <h5>💧 Brain Drain Overlay</h5>
+                            <p>Progressive blur effect that "drains" your thoughts</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">75</div>
+                        <div class="level-content">
+                            <h5>🧠 Mind Wipe Audio</h5>
+                            <p>Random mind wipe audio effects for deeper immersion</p>
+                        </div>
+                    </div>
+
+                    <div class="level-item">
+                        <div class="level-badge">100</div>
+                        <div class="level-content">
+                            <h5>🎀 Autonomy Mode</h5>
+                            <p>The ultimate surrender - let Bambi take control</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="achievements">
+                <h2>Achievements</h2>
+
+                <p>Unlock achievements for various accomplishments. View all achievements in the Progression tab.</p>
+
+                <h3>Progression Achievements</h3>
+                <div class="achievement-grid">
+                    <div class="achievement-card">
+                        <h5>🎀 Plastic Initiation</h5>
+                        <p>Reach Level 10</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>💄 Dumb Bimbo</h5>
+                        <p>Reach Level 20</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>💎 Fully Synthetic</h5>
+                        <p>Reach Level 50</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>👑 Perfect Plastic Puppet</h5>
+                        <p>Reach Level 100</p>
+                    </div>
+                </div>
+
+                <h3>Time & Sessions Achievements</h3>
+                <div class="achievement-grid">
+                    <div class="achievement-card">
+                        <h5>🌸 Rose-Tinted Reality</h5>
+                        <p>Keep Pink Filter active for 10 cumulative hours</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>💤 Deep Sleep Mode</h5>
+                        <p>Complete a session lasting longer than 3 hours</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>📆 Daily Maintenance</h5>
+                        <p>Launch the app 7 days in a row</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>👁️ Retinal Burn</h5>
+                        <p>Have 5,000 Flash Images displayed</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>☀️ Morning Glory</h5>
+                        <p>Complete Morning Drift between 6-9 AM</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🎮 Player 2 Disconnected</h5>
+                        <p>Complete Gamer Girl without Alt+Tab</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🛋️ Sofa Decor</h5>
+                        <p>Complete The Distant Doll session</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🚫 Look, But Don't Touch</h5>
+                        <p>Complete Good Girls Don't Cum with Strict Lock</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🌀 Spiral Eyes</h5>
+                        <p>Stare at the Spiral Overlay for 20 minutes</p>
+                    </div>
+                </div>
+
+                <h3>Minigames Achievements</h3>
+                <div class="achievement-grid">
+                    <div class="achievement-card">
+                        <h5>🔢 Mathematician's Nightmare</h5>
+                        <p>Guess correct bubble count 5 times in a row</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🫧 Pop Goes The Thought</h5>
+                        <p>Pop 1,000 bubbles total</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>⌨️ Typing Tutor</h5>
+                        <p>Complete Lock Card with 100% accuracy</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>⚡ Obedience Reflex</h5>
+                        <p>Complete Lock Card (3 phrases) in under 15 seconds</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🙏 Mercy Beggar</h5>
+                        <p>Fail the attention check 3 times</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🧹 Clean Slate</h5>
+                        <p>Let Mind Wipers run for 60 seconds</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>📐 Corner Hit</h5>
+                        <p>Watch Bouncing Text hit the exact corner</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>💖 Neon Obsession</h5>
+                        <p>Click on the Avatar 20 times rapidly</p>
+                    </div>
+                </div>
+
+                <h3>Hardcore Achievements</h3>
+                <div class="achievement-grid">
+                    <div class="achievement-card">
+                        <h5>🔴 Panic Button? What Panic Button?</h5>
+                        <p>Complete any session with Disable Panic enabled</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🔄 Relapse</h5>
+                        <p>Press ESC to stop, then restart within 10 seconds</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🔒 Total Lockdown</h5>
+                        <p>Activate Strict Lock, No Panic, and Pink Filter together</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>💥 System Overload</h5>
+                        <p>Have Bubbles, Bouncing Text, and Spiral all active</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-subliminals.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Subliminal Messages</span>
+                    </div>
+                </a>
+                <a href="guide-sessions.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Sessions</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sessions | CCP Guide</title>
+    <meta name="description" content="Learn about pre-built and custom conditioning sessions in Conditioning Control Panel.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Sessions</span>
+            </div>
+            <h1>Sessions</h1>
+            <p>Pre-built and custom conditioning experiences with phases and timelines</p>
+        </div>
+
+        <div class="guide-content">
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#builtin-sessions">Built-in Sessions</a></li>
+                    <li><a href="#starting-session">Starting a Session</a></li>
+                    <li><a href="#custom-sessions">Custom Sessions</a></li>
+                    <li><a href="#xp-bonuses">XP Bonuses</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+                <p>Sessions are pre-configured conditioning experiences with specific settings, timelines, and phases. They provide structured experiences with curated settings optimized for different scenarios.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>📋</span>
+                        <h5>Curated Settings</h5>
+                        <p>Optimized configurations</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>⏱️</span>
+                        <h5>Timeline Phases</h5>
+                        <p>Evolving intensity</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>⭐</span>
+                        <h5>Bonus XP</h5>
+                        <p>Rewards for completion</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🎨</span>
+                        <h5>Custom Creation</h5>
+                        <p>Design your own</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="builtin-sessions">
+                <h2>Built-in Sessions</h2>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Session</th>
+                            <th>Duration</th>
+                            <th>Difficulty</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Morning Drift</strong></td>
+                            <td>30 min</td>
+                            <td>Easy</td>
+                            <td>Gentle passive conditioning for your morning routine</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Gamer Girl</strong></td>
+                            <td>45 min</td>
+                            <td>Medium</td>
+                            <td>Subtle conditioning while gaming (use borderless windowed)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>The Distant Doll</strong></td>
+                            <td>45 min</td>
+                            <td>Easy</td>
+                            <td>Passive couch session for watching videos</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Good Girls Don't Cum</strong></td>
+                            <td>60 min</td>
+                            <td>Hard</td>
+                            <td>Intense denial/edging session with heavy conditioning</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Session Features</h3>
+                <ul>
+                    <li><strong>Timeline Phases</strong> - Sessions progress through different phases with changing intensity</li>
+                    <li><strong>Curated Settings</strong> - Each session has optimized settings for its purpose</li>
+                    <li><strong>Spoiler Protection</strong> - Session details are hidden until you choose to reveal them</li>
+                </ul>
+            </section>
+
+            <section id="starting-session">
+                <h2>Starting a Session</h2>
+
+                <ol>
+                    <li>Click on the <strong>Sessions</strong> tab</li>
+                    <li>Browse available session cards</li>
+                    <li>Click on a session to view its details</li>
+                    <li>Optionally click <strong>Show Spoilers</strong> to see exact settings</li>
+                    <li>Click <strong>Start Session</strong></li>
+                    <li>The session runs for its full duration with all phases</li>
+                </ol>
+
+                <div class="info-box">
+                    <h5>💡 Session Tips</h5>
+                    <p>
+                        • Sessions override your current settings temporarily<br>
+                        • Your original settings restore when the session ends<br>
+                        • Press the panic key to abort a session early (no XP bonus if aborted)
+                    </p>
+                </div>
+
+                <h3>During a Session</h3>
+                <ul>
+                    <li>A timer shows remaining session time</li>
+                    <li>Current phase name is displayed</li>
+                    <li>Settings automatically change as phases progress</li>
+                    <li>Abort with panic key if needed (forfeits XP bonus)</li>
+                </ul>
+            </section>
+
+            <section id="custom-sessions">
+                <h2>Custom Sessions</h2>
+
+                <p>Create your own sessions with the Session Editor:</p>
+
+                <h3>Creating a Custom Session</h3>
+                <ol>
+                    <li>Go to Sessions tab</li>
+                    <li>Click <strong>Create New Session</strong></li>
+                    <li>Set session metadata (name, description, difficulty)</li>
+                    <li>Add phases with specific settings and durations</li>
+                    <li>Save your session</li>
+                </ol>
+
+                <h3>Session File Management</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Import</strong></td>
+                            <td>Drag and drop <code>.session.json</code> files into the app</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Export</strong></td>
+                            <td>Share your sessions with others</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Edit</strong></td>
+                            <td>Modify custom sessions anytime</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Delete</strong></td>
+                            <td>Remove custom sessions you no longer want</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Session File Locations</h3>
+                <div class="code-block">
+                    <pre>Built-in sessions: assets/sessions/
+Custom sessions:   %APPDATA%/ConditioningControlPanel/custom_sessions/</pre>
+                </div>
+            </section>
+
+            <section id="xp-bonuses">
+                <h2>XP Bonuses</h2>
+
+                <p>Completing sessions rewards bonus XP based on difficulty:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Difficulty</th>
+                            <th>Bonus XP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Easy</td>
+                            <td>+400 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Medium</td>
+                            <td>+800 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Hard</td>
+                            <td>+1,200 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Extreme</td>
+                            <td>+2,000 XP</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box warning">
+                    <h5>⚠️ Important</h5>
+                    <p>You only receive the XP bonus if you complete the <strong>entire session</strong>. Aborting early with the panic key forfeits the bonus.</p>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-progression.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Progression & Achievements</span>
+                    </div>
+                </a>
+                <a href="guide-scheduler.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Scheduler & Intensity Ramp</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

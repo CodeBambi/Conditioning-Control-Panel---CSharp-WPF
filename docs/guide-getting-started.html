@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getting Started | CCP Guide</title>
+    <meta name="description" content="Learn how to set up and start using Conditioning Control Panel.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚀</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Getting Started</span>
+            </div>
+            <h1>Getting Started</h1>
+            <p>Everything you need to know to begin using Conditioning Control Panel</p>
+        </div>
+
+        <div class="guide-content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#requirements">System Requirements</a></li>
+                    <li><a href="#installation">Installation</a></li>
+                    <li><a href="#first-launch">First Launch</a></li>
+                    <li><a href="#adding-content">Adding Your Content</a></li>
+                    <li><a href="#interface">Interface Overview</a></li>
+                    <li><a href="#basic-workflow">Basic Workflow</a></li>
+                </ul>
+            </div>
+
+            <section id="requirements">
+                <h2>System Requirements</h2>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>💻</span>
+                        <h5>Windows 10/11</h5>
+                        <p>64-bit required</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>⚙️</span>
+                        <h5>.NET 8.0 Runtime</h5>
+                        <p>Desktop Runtime</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🌐</span>
+                        <h5>WebView2</h5>
+                        <p>Usually pre-installed</p>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h5>📝 Note</h5>
+                    <p>If you don't have .NET 8.0 Desktop Runtime installed, you'll be prompted to download it when first launching the app. WebView2 comes pre-installed on Windows 10/11 in most cases.</p>
+                </div>
+            </section>
+
+            <section id="installation">
+                <h2>Installation</h2>
+
+                <h3>Download</h3>
+                <ol>
+                    <li>Go to the <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest" target="_blank">GitHub Releases page</a></li>
+                    <li>Download the latest <code>ConditioningControlPanel-Setup.exe</code></li>
+                    <li>Run the installer and follow the prompts</li>
+                </ol>
+
+                <h3>Portable Version</h3>
+                <p>Alternatively, download the portable ZIP version:</p>
+                <ol>
+                    <li>Extract the ZIP to any folder</li>
+                    <li>Run <code>ConditioningControlPanel.exe</code></li>
+                </ol>
+
+                <div class="info-box success">
+                    <h5>✅ 100% Safe</h5>
+                    <p>The application is open source and scanned clean on VirusTotal (0/72 detections). Some antivirus software may flag it due to the nature of screen overlays - this is a false positive.</p>
+                </div>
+            </section>
+
+            <section id="first-launch">
+                <h2>First Launch</h2>
+
+                <p>When you first launch the application:</p>
+
+                <ol>
+                    <li><strong>Folder Creation</strong> - The app creates necessary folders in your assets directory:
+                        <ul>
+                            <li><code>images/</code> - for flash images</li>
+                            <li><code>sounds/</code> - for accompanying sounds</li>
+                            <li><code>startle_videos/</code> - for mandatory videos</li>
+                            <li><code>spirals/</code> - for spiral overlay GIFs</li>
+                        </ul>
+                    </li>
+                    <li><strong>Default Settings</strong> - Sensible defaults are loaded</li>
+                    <li><strong>Starting Level</strong> - You begin at Level 1 with 0 XP</li>
+                    <li><strong>Companion Avatar</strong> - The avatar appears attached to the main window</li>
+                </ol>
+
+                <div class="info-box">
+                    <h5>📁 Data Location</h5>
+                    <p>User data is stored in <code>%APPDATA%/ConditioningControlPanel/</code> including settings, progress, and browser data.</p>
+                </div>
+            </section>
+
+            <section id="adding-content">
+                <h2>Adding Your Content</h2>
+
+                <p>Before starting, add your media files to the appropriate folders:</p>
+
+                <div class="code-block">
+                    <pre>assets/
+├── images/
+│   ├── image1.jpg
+│   ├── image2.png
+│   └── animation.gif      # GIFs are fully supported!
+├── sounds/
+│   ├── sound1.mp3
+│   └── sound2.wav
+├── startle_videos/
+│   ├── video1.mp4
+│   └── video2.webm
+└── spirals/
+    └── spiral.gif</pre>
+                </div>
+
+                <h3>Supported Formats</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Formats</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Images</td>
+                            <td>.jpg, .jpeg, .png, .gif</td>
+                            <td>GIFs animate automatically</td>
+                        </tr>
+                        <tr>
+                            <td>Sounds</td>
+                            <td>.mp3, .wav</td>
+                            <td>Play with flash images</td>
+                        </tr>
+                        <tr>
+                            <td>Videos</td>
+                            <td>.mp4, .webm, .avi</td>
+                            <td>MP4 recommended</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box warning">
+                    <h5>⚠️ Performance Tip</h5>
+                    <p>Keep GIF files under 5MB each for smooth animation. Large or numerous GIFs can impact performance.</p>
+                </div>
+
+                <h3>Quick Access</h3>
+                <p>Click the <strong>📂 Assets</strong> button in the app to open the assets folder directly in Windows Explorer.</p>
+            </section>
+
+            <section id="interface">
+                <h2>Interface Overview</h2>
+
+                <p>The main window is organized into several areas:</p>
+
+                <div class="code-block">
+                    <pre>┌─────────────────────────────────────────────────────────┐
+│  💗 Conditioning Dashboard    [Settings] [Progression]  │
+│                               [Companion] [Patreon]     │
+│  ═══════════════════════════════════════════════════   │
+│  ⭐ Beginner Bimbo                           [Lvl 1]   │
+├─────────────────────────────────────────────────────────┤
+│  XP: 0/100 ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   │
+├───────────────┬───────────────┬─────────────────────────┤
+│ LEFT COLUMN   │ MIDDLE COLUMN │ RIGHT COLUMN            │
+│               │               │                         │
+│ ⚡ Flash      │ 🎬 Video      │ 🌐 Browser              │
+│ 👁️ Visuals   │ 💭 Subliminal │                         │
+│ [Logo]        │ ⚙️ System     │ 🔊 Audio                │
+│ [START]       │               │                         │
+│ [Save] [Exit] │               │                         │
+├───────────────┴───────────────┴─────────────────────────┤
+│  ✨ Good girls condition daily ✨                       │
+└─────────────────────────────────────────────────────────┘</pre>
+                </div>
+
+                <h3>Tab Navigation</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Tab</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Settings</td>
+                            <td>Main configuration (default view)</td>
+                        </tr>
+                        <tr>
+                            <td>Progression</td>
+                            <td>Unlockables, Scheduler, Intensity Ramp</td>
+                        </tr>
+                        <tr>
+                            <td>Sessions</td>
+                            <td>Pre-built and custom sessions</td>
+                        </tr>
+                        <tr>
+                            <td>Companion</td>
+                            <td>Avatar settings, Trigger Mode, Quick Controls</td>
+                        </tr>
+                        <tr>
+                            <td>Patreon</td>
+                            <td>Patreon login and exclusive features</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="basic-workflow">
+                <h2>Basic Workflow</h2>
+
+                <h3>Starting a Session</h3>
+                <ol>
+                    <li><strong>Add Content</strong> - Put your images and videos in the assets folders</li>
+                    <li><strong>Configure Settings</strong> - Adjust flash frequency, video settings, etc.</li>
+                    <li><strong>Click START</strong> - The conditioning engine begins</li>
+                    <li><strong>Interact</strong> - Click images, complete attention checks, earn XP</li>
+                    <li><strong>Stop Anytime</strong> - Press the panic key (default: Escape)</li>
+                </ol>
+
+                <h3>The Panic Key</h3>
+                <div class="info-box">
+                    <h5>🔑 Emergency Stop</h5>
+                    <p><strong>Single press</strong>: Stops the conditioning engine<br>
+                    <strong>Double-tap</strong> (within 2 seconds): Force exits the application</p>
+                </div>
+
+                <h3>Recommended First Steps</h3>
+                <ol>
+                    <li>Start with <strong>low frequencies</strong> (2-3 flashes per minute)</li>
+                    <li>Keep <strong>Clickable</strong> enabled so you can dismiss images</li>
+                    <li>Leave the <strong>panic key active</strong> (don't enable No Panic)</li>
+                    <li>Try a <strong>built-in session</strong> like "Morning Drift" to get familiar</li>
+                    <li>Explore the <strong>Companion Avatar</strong> features</li>
+                </ol>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Guide Home</span>
+                    </div>
+                </a>
+                <a href="guide-flash-images.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Flash Images & Visuals</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>
