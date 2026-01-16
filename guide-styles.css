@@ -1,0 +1,779 @@
+/* Guide Pages Shared Styles */
+:root {
+    --bg-dark: #0d0d1a;
+    --bg-primary: #1a1a2e;
+    --bg-secondary: #252542;
+    --bg-card: #1e1e3a;
+    --accent-pink: #ff69b4;
+    --accent-purple: #9b59b6;
+    --accent-gradient: linear-gradient(135deg, #ff69b4 0%, #9b59b6 100%);
+    --text-primary: #ffffff;
+    --text-secondary: #b0b0c0;
+    --text-muted: #707090;
+    --warning-color: #f39c12;
+    --danger-color: #e74c3c;
+    --success-color: #2ecc71;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    line-height: 1.6;
+    overflow-x: hidden;
+}
+
+/* Background Animation */
+.bg-animation {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    background: var(--bg-dark);
+}
+
+.bg-animation::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background:
+        radial-gradient(ellipse at 20% 20%, rgba(155, 89, 182, 0.1) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(255, 105, 180, 0.08) 0%, transparent 50%);
+}
+
+/* Navigation */
+nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 1rem 2rem;
+    background: rgba(13, 13, 26, 0.95);
+    backdrop-filter: blur(10px);
+    z-index: 1000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 105, 180, 0.1);
+}
+
+.logo {
+    font-size: 1.5rem;
+    font-weight: 700;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-decoration: none;
+}
+
+.nav-links {
+    display: flex;
+    gap: 2rem;
+    list-style: none;
+}
+
+.nav-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.3s;
+}
+
+.nav-links a:hover,
+.nav-links a.active {
+    color: var(--accent-pink);
+}
+
+/* Mobile Menu */
+.menu-toggle {
+    display: none;
+    flex-direction: column;
+    gap: 5px;
+    cursor: pointer;
+    padding: 10px;
+    z-index: 1001;
+}
+
+.menu-toggle span {
+    display: block;
+    width: 25px;
+    height: 3px;
+    background: var(--accent-pink);
+    border-radius: 2px;
+    transition: all 0.3s;
+}
+
+.menu-toggle.active span:nth-child(1) {
+    transform: rotate(45deg) translate(5px, 6px);
+}
+
+.menu-toggle.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.menu-toggle.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(5px, -6px);
+}
+
+.mobile-menu {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(13, 13, 26, 0.98);
+    backdrop-filter: blur(20px);
+    z-index: 999;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 2rem;
+}
+
+.mobile-menu.active {
+    display: flex;
+}
+
+.mobile-menu a {
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 1.5rem;
+    font-weight: 500;
+    transition: color 0.3s;
+}
+
+.mobile-menu a:hover {
+    color: var(--accent-pink);
+}
+
+/* Guide Main Content */
+.guide-main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 6rem 2rem 4rem;
+}
+
+.guide-header {
+    text-align: center;
+    margin-bottom: 4rem;
+}
+
+.breadcrumb {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.breadcrumb a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.breadcrumb a:hover {
+    color: var(--accent-pink);
+}
+
+.guide-header h1 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    margin-bottom: 1rem;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.guide-header p {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* Guide Grid (Landing Page) */
+.guide-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 4rem;
+}
+
+.guide-card {
+    background: var(--bg-card);
+    border-radius: 20px;
+    padding: 1.5rem;
+    border: 1px solid rgba(255, 105, 180, 0.1);
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    gap: 1.5rem;
+    transition: all 0.3s;
+}
+
+.guide-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(255, 105, 180, 0.3);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.guide-card-icon {
+    font-size: 2.5rem;
+    flex-shrink: 0;
+}
+
+.guide-card-content h3 {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+}
+
+.guide-card-content p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+}
+
+.guide-card-link {
+    color: var(--accent-pink);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.patreon-card-highlight {
+    border-color: rgba(255, 66, 77, 0.3);
+    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(255, 66, 77, 0.1) 100%);
+}
+
+/* Quick Reference Section */
+.quick-reference {
+    background: var(--bg-primary);
+    border-radius: 24px;
+    padding: 2.5rem;
+    border: 1px solid rgba(255, 105, 180, 0.1);
+}
+
+.quick-reference h2 {
+    text-align: center;
+    margin-bottom: 2rem;
+    font-size: 1.5rem;
+}
+
+.reference-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+}
+
+.reference-card {
+    background: var(--bg-card);
+    border-radius: 16px;
+    padding: 1.5rem;
+}
+
+.reference-card h4 {
+    color: var(--accent-pink);
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+}
+
+.reference-card table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.reference-card td {
+    padding: 0.4rem 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.reference-card td:first-child {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.reference-card pre {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+
+kbd {
+    display: inline-block;
+    padding: 0.15rem 0.4rem;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--text-muted);
+    border-radius: 4px;
+}
+
+/* Guide Content Page Styles */
+.guide-content {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.guide-content section {
+    margin-bottom: 3rem;
+}
+
+.guide-content h2 {
+    font-size: 1.75rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid rgba(255, 105, 180, 0.2);
+}
+
+.guide-content h3 {
+    font-size: 1.25rem;
+    margin: 2rem 0 1rem;
+    color: var(--accent-pink);
+}
+
+.guide-content h4 {
+    font-size: 1rem;
+    margin: 1.5rem 0 0.75rem;
+    color: var(--text-primary);
+}
+
+.guide-content p {
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+.guide-content ul,
+.guide-content ol {
+    color: var(--text-secondary);
+    margin: 1rem 0;
+    padding-left: 2rem;
+}
+
+.guide-content li {
+    margin-bottom: 0.5rem;
+}
+
+.guide-content strong {
+    color: var(--text-primary);
+}
+
+/* Tables */
+.settings-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    background: var(--bg-card);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.settings-table th,
+.settings-table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 105, 180, 0.1);
+}
+
+.settings-table th {
+    background: var(--bg-secondary);
+    color: var(--accent-pink);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.settings-table td {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.settings-table td:first-child {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.settings-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Info Boxes */
+.info-box {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin: 1.5rem 0;
+    border-left: 4px solid var(--accent-pink);
+}
+
+.info-box.warning {
+    border-left-color: var(--warning-color);
+    background: rgba(243, 156, 18, 0.1);
+}
+
+.info-box.danger {
+    border-left-color: var(--danger-color);
+    background: rgba(231, 76, 60, 0.1);
+}
+
+.info-box.success {
+    border-left-color: var(--success-color);
+    background: rgba(46, 204, 113, 0.1);
+}
+
+.info-box h5 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.info-box p {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+/* Code Blocks */
+.code-block {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin: 1.5rem 0;
+    overflow-x: auto;
+}
+
+.code-block pre {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* Feature Cards */
+.feature-highlight {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.feature-item {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+    border: 1px solid rgba(255, 105, 180, 0.1);
+}
+
+.feature-item span {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.feature-item h5 {
+    margin-bottom: 0.25rem;
+}
+
+.feature-item p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* Level Timeline */
+.level-timeline {
+    position: relative;
+    margin: 2rem 0;
+    padding-left: 3rem;
+}
+
+.level-timeline::before {
+    content: '';
+    position: absolute;
+    left: 1rem;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--bg-secondary);
+    border-radius: 2px;
+}
+
+.level-item {
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+
+.level-badge {
+    position: absolute;
+    left: -2.5rem;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--accent-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.level-content {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    border: 1px solid rgba(255, 105, 180, 0.1);
+}
+
+.level-content h5 {
+    margin-bottom: 0.25rem;
+}
+
+.level-content p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* Achievement Grid */
+.achievement-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.achievement-card {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    border: 1px solid rgba(255, 105, 180, 0.1);
+}
+
+.achievement-card h5 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.achievement-card p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* Navigation Buttons */
+.guide-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(255, 105, 180, 0.1);
+}
+
+.guide-nav a {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background: var(--bg-card);
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 105, 180, 0.1);
+    transition: all 0.3s;
+    max-width: 45%;
+}
+
+.guide-nav a:hover {
+    border-color: var(--accent-pink);
+    transform: translateY(-2px);
+}
+
+.guide-nav a.prev {
+    margin-right: auto;
+}
+
+.guide-nav a.next {
+    margin-left: auto;
+    text-align: right;
+    flex-direction: row-reverse;
+}
+
+.guide-nav .nav-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: block;
+}
+
+.guide-nav .nav-title {
+    font-weight: 500;
+}
+
+/* Table of Contents (Sidebar) */
+.toc {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border: 1px solid rgba(255, 105, 180, 0.1);
+}
+
+.toc h4 {
+    color: var(--accent-pink);
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.toc ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.toc li {
+    margin-bottom: 0.5rem;
+}
+
+.toc a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.3s;
+}
+
+.toc a:hover {
+    color: var(--accent-pink);
+}
+
+/* Footer */
+footer {
+    padding: 3rem 2rem;
+    background: var(--bg-dark);
+    border-top: 1px solid rgba(255, 105, 180, 0.1);
+    text-align: center;
+}
+
+.footer-links {
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.footer-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.footer-links a:hover {
+    color: var(--accent-pink);
+}
+
+.footer-tagline {
+    color: var(--accent-pink);
+    font-weight: 500;
+    font-size: 1.1rem;
+}
+
+.footer-copy {
+    color: var(--text-muted);
+    margin-top: 1rem;
+    font-size: 0.85rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    nav {
+        padding: 1rem;
+    }
+
+    .nav-links {
+        display: none;
+    }
+
+    .menu-toggle {
+        display: flex;
+    }
+
+    .guide-main {
+        padding: 5rem 1rem 2rem;
+    }
+
+    .guide-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .guide-card {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+
+    .guide-nav {
+        flex-direction: column;
+    }
+
+    .guide-nav a {
+        max-width: 100%;
+    }
+
+    .guide-nav a.next {
+        flex-direction: row;
+        text-align: left;
+    }
+
+    .settings-table {
+        display: block;
+        overflow-x: auto;
+    }
+
+    .reference-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--accent-purple);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-pink);
+}

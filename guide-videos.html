@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mandatory Videos | CCP Guide</title>
+    <meta name="description" content="Configure fullscreen video playback, strict lock mode, and attention checks in Conditioning Control Panel.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Mandatory Videos</span>
+            </div>
+            <h1>Mandatory Videos</h1>
+            <p>Fullscreen video playback with attention checks and strict lock mode</p>
+        </div>
+
+        <div class="guide-content">
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#video-settings">Video Settings</a></li>
+                    <li><a href="#strict-lock">Strict Lock Mode</a></li>
+                    <li><a href="#attention-checks">Attention Checks</a></li>
+                    <li><a href="#audio-ducking">Audio Ducking</a></li>
+                    <li><a href="#tips">Tips & Troubleshooting</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+                <p>Mandatory videos play fullscreen on a schedule, demanding your complete attention. The video window cannot be minimized or moved while playing, ensuring you watch the entire content.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>📺</span>
+                        <h5>Fullscreen</h5>
+                        <p>Videos take over your screen</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🔒</span>
+                        <h5>Strict Lock</h5>
+                        <p>Cannot skip or close</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>👁️</span>
+                        <h5>Attention Checks</h5>
+                        <p>Prove you're watching</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>📳</span>
+                        <h5>Haptic Sync</h5>
+                        <p>Device integration</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="video-settings">
+                <h2>Video Settings</h2>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Range</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Enable</strong></td>
+                            <td>On/Off</td>
+                            <td>Master toggle for mandatory videos</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Strict Lock</strong></td>
+                            <td>On/Off</td>
+                            <td>Cannot close or skip video (dangerous)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Per Hour</strong></td>
+                            <td>1-20</td>
+                            <td>Number of videos played per hour</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Video Playback Behavior</h3>
+                <ul>
+                    <li>Videos play <strong>fullscreen on your primary monitor</strong></li>
+                    <li>Audio from other applications is <strong>ducked</strong> (lowered) during playback</li>
+                    <li>The video window <strong>cannot be moved or minimized</strong> during playback</li>
+                    <li>Press the <strong>panic key</strong> to stop (unless Strict Lock is enabled)</li>
+                    <li>Watching a video earns <strong>+20 XP</strong></li>
+                </ul>
+            </section>
+
+            <section id="strict-lock">
+                <h2>Strict Lock Mode</h2>
+
+                <div class="info-box danger">
+                    <h5>⚠️ Dangerous Feature</h5>
+                    <p>With Strict Lock enabled, you <strong>cannot close, minimize, or skip</strong> the video. You are forced to watch until completion. Only the panic key can stop it (unless No Panic is also enabled).</p>
+                </div>
+
+                <h3>Enabling Strict Lock</h3>
+                <p>A confirmation dialog requires you to:</p>
+                <ol>
+                    <li>Read the warning message</li>
+                    <li>Check "I understand the risks"</li>
+                    <li>Click "Enable Anyway"</li>
+                </ol>
+
+                <h3>Emergency Exit Options</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Scenario</th>
+                            <th>Solution</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Strict Lock ON, No Panic OFF</td>
+                            <td>Press panic key (default: Escape)</td>
+                        </tr>
+                        <tr>
+                            <td>Strict Lock ON, No Panic ON</td>
+                            <td>Wait for video to end, or use Task Manager</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="attention-checks">
+                <h2>Attention Checks (Mini-Game)</h2>
+
+                <p>The attention check mini-game requires you to click targets during video playback to prove you're paying attention.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Range</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Enable</strong></td>
+                            <td>On/Off</td>
+                            <td>Toggle attention checks</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Targets</strong></td>
+                            <td>1-10</td>
+                            <td>Number of clicks required per video</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Duration</strong></td>
+                            <td>1-15 sec</td>
+                            <td>How long each target appears</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Size</strong></td>
+                            <td>30-150 px</td>
+                            <td>Target button size</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>How It Works</h3>
+                <ol>
+                    <li>During video playback, a button appears at a random position</li>
+                    <li>The button displays a phrase (e.g., "Good Girl", "I Obey")</li>
+                    <li>You must click the button before the timer expires</li>
+                    <li>Each successful click earns <strong>+10 XP</strong></li>
+                    <li>Missing targets may trigger consequences (depending on settings)</li>
+                </ol>
+
+                <h3>Managing Phrases</h3>
+                <p>Click the <strong>Manage</strong> button to edit the phrases shown on target buttons. You can customize these to match your preferred conditioning phrases.</p>
+
+                <div class="info-box">
+                    <h5>🏆 Achievement Tip</h5>
+                    <p>Failing the attention check 3 times unlocks the "Mercy Beggar" achievement!</p>
+                </div>
+            </section>
+
+            <section id="audio-ducking">
+                <h2>Audio Ducking</h2>
+
+                <p>When a video plays, other application audio is automatically reduced to ensure you can hear the video clearly.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Audio Duck</strong></td>
+                            <td>On/Off - Enable ducking of other apps</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Duck %</strong></td>
+                            <td>How much to reduce other audio (0-100%)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>How Ducking Works</h3>
+                <ol>
+                    <li>Video starts playing</li>
+                    <li>System volume for other apps reduces by the Duck % setting</li>
+                    <li>Video plays at your configured Master volume</li>
+                    <li>When video ends, other audio restores to normal</li>
+                </ol>
+            </section>
+
+            <section id="tips">
+                <h2>Tips & Troubleshooting</h2>
+
+                <h3>Recommended Video Formats</h3>
+                <ul>
+                    <li><strong>MP4 (H.264)</strong> - Best compatibility</li>
+                    <li><strong>WebM</strong> - Good alternative</li>
+                    <li><strong>AVI</strong> - Works but larger file sizes</li>
+                </ul>
+
+                <h3>Common Issues</h3>
+                <div class="achievement-grid">
+                    <div class="achievement-card">
+                        <h5>Video won't play</h5>
+                        <p>Ensure video format is supported and codecs are installed</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Audio out of sync</h5>
+                        <p>Re-encode the video with a tool like HandBrake</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>Can't exit video</h5>
+                        <p>Press panic key, or Ctrl+Shift+Esc for Task Manager</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-flash-images.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Flash Images & Visuals</span>
+                    </div>
+                </a>
+                <a href="guide-subliminals.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Subliminal Messages</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

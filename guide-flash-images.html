@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flash Images & Visuals | CCP Guide</title>
+    <meta name="description" content="Configure flash image popups, GIF support, and visual settings in Conditioning Control Panel.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖼️</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Flash Images & Visuals</span>
+            </div>
+            <h1>Flash Images & Visuals</h1>
+            <p>Configure image popups, GIF animations, and visual effects</p>
+        </div>
+
+        <div class="guide-content">
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#flash-settings">Flash Settings</a></li>
+                    <li><a href="#how-it-works">How It Works</a></li>
+                    <li><a href="#corruption-mode">Corruption Mode</a></li>
+                    <li><a href="#visual-settings">Visual Settings</a></li>
+                    <li><a href="#multi-monitor">Multi-Monitor Support</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+                <p>Flash images appear randomly on your screen based on your configured settings. They support both static images (JPG, PNG) and animated GIFs. You can make them clickable for interaction, or enable Corruption mode for an overwhelming experience.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>🖼️</span>
+                        <h5>Random Popups</h5>
+                        <p>Images appear at random positions</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🎞️</span>
+                        <h5>GIF Support</h5>
+                        <p>Full animation support</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>👆</span>
+                        <h5>Clickable</h5>
+                        <p>Dismiss or interact</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🦠</span>
+                        <h5>Corruption</h5>
+                        <p>Hydra multiplication</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="flash-settings">
+                <h2>Flash Settings</h2>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Range</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Enable</strong></td>
+                            <td>On/Off</td>
+                            <td>Master toggle for flash images</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Clickable</strong></td>
+                            <td>On/Off</td>
+                            <td>Allow clicking to dismiss images</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Corruption</strong></td>
+                            <td>On/Off</td>
+                            <td>Clicking spawns MORE images (hydra mode)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Per Min</strong></td>
+                            <td>1-10</td>
+                            <td>Flash events per minute</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Images</strong></td>
+                            <td>1-15</td>
+                            <td>Images shown per flash event</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Max On Screen</strong></td>
+                            <td>5-20</td>
+                            <td>Hard limit on simultaneous images</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="how-it-works">
+                <h2>How It Works</h2>
+
+                <ol>
+                    <li><strong>Timer Trigger</strong> - Every <code>60 / Per Min</code> seconds, a flash event triggers</li>
+                    <li><strong>Image Selection</strong> - The specified number of random images are selected from your <code>images/</code> folder</li>
+                    <li><strong>Random Placement</strong> - Each image appears at a random position on screen</li>
+                    <li><strong>Interaction</strong>:
+                        <ul>
+                            <li>If <strong>Clickable</strong> is ON: clicking dismisses the image (+5 XP)</li>
+                            <li>If <strong>Corruption</strong> is ON: clicking spawns 2 more images instead!</li>
+                        </ul>
+                    </li>
+                    <li><strong>Limit Enforcement</strong> - <code>Max On Screen</code> prevents screen flooding</li>
+                </ol>
+
+                <div class="info-box">
+                    <h5>💡 XP Tip</h5>
+                    <p>Each image click earns you <strong>+5 XP</strong>. With Corruption mode, you can farm more clicks (and XP) from a single flash event!</p>
+                </div>
+            </section>
+
+            <section id="corruption-mode">
+                <h2>Corruption Mode</h2>
+
+                <p>Corruption mode creates a "hydra effect" where clicking an image spawns two more in its place. This creates an overwhelming cascade of images that requires strategy to manage.</p>
+
+                <div class="info-box warning">
+                    <h5>⚠️ Intense Feature</h5>
+                    <p>Corruption mode can quickly fill your screen with images. The <strong>Max On Screen</strong> limit prevents total screen takeover, but it can still be quite overwhelming!</p>
+                </div>
+
+                <h3>Strategy Tips</h3>
+                <ul>
+                    <li>Don't click images if you want them to stay manageable</li>
+                    <li>Let the timer clear images naturally</li>
+                    <li>Lower the <strong>Max On Screen</strong> value if it gets too intense</li>
+                    <li>Use the panic key to stop everything if needed</li>
+                </ul>
+            </section>
+
+            <section id="visual-settings">
+                <h2>Visual Settings</h2>
+
+                <p>The Visuals section controls how images appear on screen:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Range</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Size</strong></td>
+                            <td>50-250%</td>
+                            <td>Image scale (100% = original size)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Opacity</strong></td>
+                            <td>10-100%</td>
+                            <td>Image transparency</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Fade</strong></td>
+                            <td>0-100%</td>
+                            <td>Fade in/out animation duration</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Recommended Configurations</h3>
+
+                <div class="achievement-grid">
+                    <div class="achievement-card">
+                        <h5>🌫️ Subtle Background</h5>
+                        <p>Opacity: 30-50%, Size: 100%, Fade: 70%<br>For passive ambient presence</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>💥 Impactful Flashes</h5>
+                        <p>Opacity: 100%, Size: 150-200%, Fade: 20%<br>For attention-grabbing popups</p>
+                    </div>
+                    <div class="achievement-card">
+                        <h5>🎭 Smooth Transitions</h5>
+                        <p>Opacity: 80%, Size: 120%, Fade: 80%<br>Gentle fade in and out</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="multi-monitor">
+                <h2>Multi-Monitor Support</h2>
+
+                <p>With <strong>Dual Mon</strong> enabled in System settings, flash images appear across all connected monitors randomly.</p>
+
+                <div class="info-box">
+                    <h5>🖥️ Multi-Monitor Tips</h5>
+                    <p>
+                        • Images can appear on any connected display<br>
+                        • The <strong>Max On Screen</strong> limit applies globally across all monitors<br>
+                        • Consider increasing the limit when using multiple monitors
+                    </p>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-getting-started.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Getting Started</span>
+                    </div>
+                </a>
+                <a href="guide-videos.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Mandatory Videos</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

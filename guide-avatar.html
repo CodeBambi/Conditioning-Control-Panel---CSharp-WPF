@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Companion Avatar | CCP Guide</title>
+    <meta name="description" content="Learn about the interactive companion avatar in Conditioning Control Panel.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Companion Avatar</span>
+            </div>
+            <h1>Companion Avatar</h1>
+            <p>Your interactive animated companion with speech bubbles, triggers, and AI features</p>
+        </div>
+
+        <div class="guide-content">
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#avatar-features">Avatar Features</a></li>
+                    <li><a href="#context-menu">Context Menu</a></li>
+                    <li><a href="#trigger-mode">Trigger Mode</a></li>
+                    <li><a href="#interactions">Avatar Interactions</a></li>
+                    <li><a href="#companion-settings">Companion Settings</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+                <p>The Companion Avatar is an animated character that provides interactive feedback, displays speech bubbles, and can react to your activities. It can be attached to the main window or float freely on your screen.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>💬</span>
+                        <h5>Speech Bubbles</h5>
+                        <p>Interactive messages</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🔄</span>
+                        <h5>Detachable</h5>
+                        <p>Float freely anywhere</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>⚡</span>
+                        <h5>Trigger Mode</h5>
+                        <p>Random trigger phrases</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🤖</span>
+                        <h5>AI Chat</h5>
+                        <p>Patreon feature</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="avatar-features">
+                <h2>Avatar Features</h2>
+
+                <h3>Detachable Sprite</h3>
+                <p>The avatar can be detached from the main window to float freely:</p>
+                <ul>
+                    <li><strong>Right-click</strong> the avatar to access the context menu</li>
+                    <li>Select <strong>Detach</strong> to make it float freely</li>
+                    <li><strong>Drag</strong> the detached avatar to any position on any monitor</li>
+                    <li>Select <strong>Attach</strong> to reattach it to the main window</li>
+                </ul>
+
+                <h3>Speech Bubbles</h3>
+                <p>The avatar displays speech bubbles in response to various events:</p>
+                <ul>
+                    <li><strong>Idle chatter</strong> - When you've been away</li>
+                    <li><strong>Activity reactions</strong> - Context-aware with Window Awareness (Patreon)</li>
+                    <li><strong>Trigger phrases</strong> - In Trigger Mode</li>
+                    <li><strong>AI responses</strong> - When chatting (Patreon)</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>💡 Dismissing Bubbles</h5>
+                    <p>Click on any speech bubble to dismiss it immediately.</p>
+                </div>
+            </section>
+
+            <section id="context-menu">
+                <h2>Context Menu</h2>
+
+                <p>Right-click the avatar to access quick options:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Option</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Detach/Attach</strong></td>
+                            <td>Toggle floating mode</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Trigger Mode</strong></td>
+                            <td>Enable random trigger phrases</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Random Bubble</strong></td>
+                            <td>Enable random floating bubbles</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Slut Mode</strong></td>
+                            <td>Enable explicit AI responses (Patreon)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Mute Avatar</strong></td>
+                            <td>Silence speech and sounds</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Mute Whispers</strong></td>
+                            <td>Mute subliminal audio</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Pause Browser</strong></td>
+                            <td>Pause browser audio/video</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Chat with Bambi</strong></td>
+                            <td>Open AI chat (Patreon)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Dismiss Avatar</strong></td>
+                            <td>Hide the avatar</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="trigger-mode">
+                <h2>Trigger Mode</h2>
+
+                <p>Trigger Mode displays random conditioning phrases at set intervals.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Enable Trigger Mode</strong></td>
+                            <td>Show random trigger phrases</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Trigger Interval</strong></td>
+                            <td>Seconds between triggers (10-600s)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Edit Triggers</strong></td>
+                            <td>Customize trigger phrases</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>How It Works</h3>
+                <ol>
+                    <li>Avatar displays random trigger phrases from your list</li>
+                    <li>If Audio Whispers is enabled, matching audio clips play</li>
+                    <li>Audio files should be in <code>Resources/sub_audio/</code> named to match triggers</li>
+                </ol>
+
+                <div class="info-box">
+                    <h5>🎯 Trigger + Audio</h5>
+                    <p>For the trigger "Good Girl" to play audio, place a file named <code>GOOD GIRL.mp3</code> in <code>Resources/sub_audio/</code></p>
+                </div>
+            </section>
+
+            <section id="interactions">
+                <h2>Avatar Interactions</h2>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Result</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Single Click</strong></td>
+                            <td>Dismiss speech bubble</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Double Click</strong></td>
+                            <td>Open AI Chat (if enabled, Patreon)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Right Click</strong></td>
+                            <td>Open context menu</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Drag (detached)</strong></td>
+                            <td>Reposition avatar</td>
+                        </tr>
+                        <tr>
+                            <td><strong>20 Rapid Clicks</strong></td>
+                            <td>Unlock "Neon Obsession" achievement!</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="companion-settings">
+                <h2>Companion Settings</h2>
+
+                <p>Access the <strong>Companion</strong> tab for detailed settings:</p>
+
+                <h3>Companion Settings</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Show Companion</strong></td>
+                            <td>Toggle avatar visibility</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Detach</strong></td>
+                            <td>Float avatar freely on screen</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Idle Giggle Interval</strong></td>
+                            <td>Seconds between idle messages (60-600s)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Quick Controls</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Control</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Mute Avatar</strong></td>
+                            <td>Silence avatar speech and sounds</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Mute Whispers</strong></td>
+                            <td>Toggle subliminal audio on/off</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Pause Browser</strong></td>
+                            <td>Pause all browser audio/video</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-scheduler.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Scheduler & Intensity Ramp</span>
+                    </div>
+                </a>
+                <a href="guide-settings.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">System Settings</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

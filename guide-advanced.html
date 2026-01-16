@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced & FAQ | CCP Guide</title>
+    <meta name="description" content="Advanced features, dangerous settings, tips, and FAQ for Conditioning Control Panel.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚠️</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Advanced & FAQ</span>
+            </div>
+            <h1>Advanced & FAQ</h1>
+            <p>Dangerous features, performance tips, troubleshooting, and frequently asked questions</p>
+        </div>
+
+        <div class="guide-content">
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#dangerous-features">Dangerous Features</a></li>
+                    <li><a href="#performance">Performance Tips</a></li>
+                    <li><a href="#troubleshooting">Troubleshooting</a></li>
+                    <li><a href="#keyboard-shortcuts">Keyboard Shortcuts</a></li>
+                    <li><a href="#faq">FAQ</a></li>
+                </ul>
+            </div>
+
+            <section id="dangerous-features">
+                <h2>Dangerous Features</h2>
+
+                <div class="info-box danger">
+                    <h5>⚠️ Use With Extreme Caution</h5>
+                    <p>These features can lock you into sessions with limited escape options. Only use them if you fully understand the implications.</p>
+                </div>
+
+                <h3>Strict Lock</h3>
+                <p><strong>What it does:</strong> Cannot close, minimize, or skip videos.</p>
+                <ul>
+                    <li>You will be <strong>forced to watch the entire video</strong></li>
+                    <li>Only the panic key can stop it (unless No Panic is also enabled)</li>
+                    <li>A confirmation dialog requires you to acknowledge the risks</li>
+                </ul>
+
+                <h3>No Panic</h3>
+                <p><strong>What it does:</strong> Completely disables the panic key.</p>
+                <ul>
+                    <li>There will be <strong>NO way to stop</strong> the engine except:</li>
+                    <li>Wait for scheduler to end the session</li>
+                    <li>Force-close via Task Manager (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd>)</li>
+                    <li>A double-confirmation dialog is required</li>
+                </ul>
+
+                <h3>Combining Both</h3>
+                <div class="info-box danger">
+                    <h5>🔒 Total Lockdown</h5>
+                    <p>If both Strict Lock AND No Panic are enabled:</p>
+                    <ul style="margin-top: 0.5rem; margin-bottom: 0;">
+                        <li>Videos cannot be skipped</li>
+                        <li>Panic key doesn't work</li>
+                        <li>Only options: wait for video to end, or Task Manager</li>
+                    </ul>
+                </div>
+            </section>
+
+            <section id="performance">
+                <h2>Performance Tips</h2>
+
+                <div class="info-box warning">
+                    <h5>⚠️ Performance Warning</h5>
+                    <p>Running many features simultaneously, especially with high frequencies, multiple images, or high-resolution videos/GIFs, can be resource-intensive. If you experience performance issues, reduce the number of active features or their intensity.</p>
+                </div>
+
+                <h3>Recommendations</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Area</th>
+                            <th>Tip</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>GIF Files</strong></td>
+                            <td>Keep under 5MB each for smooth animation</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Max On Screen</strong></td>
+                            <td>Keep at 15 or below for stability</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Video Format</strong></td>
+                            <td>Use MP4 (H.264) for best compatibility</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Background Apps</strong></td>
+                            <td>Close other heavy applications</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Multi-Monitor</strong></td>
+                            <td>More monitors = more resources needed</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="troubleshooting">
+                <h2>Troubleshooting</h2>
+
+                <h3>Session Issues</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Problem</th>
+                            <th>Solution</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Too intense</td>
+                            <td>Press panic key once to stop</td>
+                        </tr>
+                        <tr>
+                            <td>Need to exit urgently</td>
+                            <td>Double-tap panic key to force exit</td>
+                        </tr>
+                        <tr>
+                            <td>Completely stuck</td>
+                            <td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd> → End Task</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Video Issues</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Problem</th>
+                            <th>Solution</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Video won't play</td>
+                            <td>Check video format (use MP4), install codecs</td>
+                        </tr>
+                        <tr>
+                            <td>Audio out of sync</td>
+                            <td>Re-encode with HandBrake</td>
+                        </tr>
+                        <tr>
+                            <td>Can't exit video</td>
+                            <td>Press panic key, or use Task Manager</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>GIF Issues</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Problem</th>
+                            <th>Solution</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>GIFs don't animate</td>
+                            <td>Keep files under 5MB</td>
+                        </tr>
+                        <tr>
+                            <td>GIFs stutter</td>
+                            <td>Reduce Max On Screen, close other apps</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Crash Logs</h3>
+                <p>If the app crashes, check the <code>logs/crash.log</code> file for diagnostic information. Include this when reporting issues on GitHub.</p>
+            </section>
+
+            <section id="keyboard-shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Shortcut</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Panic Key (default: <kbd>Esc</kbd>)</td>
+                            <td>Stop engine</td>
+                        </tr>
+                        <tr>
+                            <td>Double-tap Panic Key</td>
+                            <td>Force exit application</td>
+                        </tr>
+                        <tr>
+                            <td>Click tray icon</td>
+                            <td>Show window</td>
+                        </tr>
+                        <tr>
+                            <td>X button</td>
+                            <td>Minimize to tray</td>
+                        </tr>
+                        <tr>
+                            <td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd></td>
+                            <td>Open Task Manager (emergency exit)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="faq">
+                <h2>Frequently Asked Questions</h2>
+
+                <div class="achievement-card" style="margin-bottom: 1rem;">
+                    <h5>Why don't my GIFs animate?</h5>
+                    <p>Ensure GIFs are under 5MB. Very large GIFs may not animate smoothly due to memory constraints.</p>
+                </div>
+
+                <div class="achievement-card" style="margin-bottom: 1rem;">
+                    <h5>Can I use this on multiple monitors?</h5>
+                    <p>Yes! Enable "Dual Mon" in System settings. Flash images and overlays appear on all monitors. Videos play on the primary monitor. The detached avatar can be placed on any monitor.</p>
+                </div>
+
+                <div class="achievement-card" style="margin-bottom: 1rem;">
+                    <h5>How do I completely exit the app?</h5>
+                    <p>Double-tap the panic key, or right-click the tray icon → Exit, or use the Exit button in the app.</p>
+                </div>
+
+                <div class="achievement-card" style="margin-bottom: 1rem;">
+                    <h5>Where do I put my files?</h5>
+                    <p>In the <code>assets/</code> subfolders: <code>images/</code>, <code>sounds/</code>, <code>startle_videos/</code>. Click the 📂 Assets button to open the folder.</p>
+                </div>
+
+                <div class="achievement-card" style="margin-bottom: 1rem;">
+                    <h5>Is my data sent anywhere?</h5>
+                    <p>The app is mostly local. Patreon features (AI Chat, Window Awareness) send data to our secure proxy server for processing, but no data is stored permanently. See the Privacy Notice in the Patreon tab.</p>
+                </div>
+
+                <div class="achievement-card" style="margin-bottom: 1rem;">
+                    <h5>Can I use this while gaming?</h5>
+                    <p>Yes, but overlays may interfere with fullscreen games. Use borderless/windowed mode for best results. The "Gamer Girl" session is designed for gaming scenarios.</p>
+                </div>
+
+                <div class="achievement-card" style="margin-bottom: 1rem;">
+                    <h5>How do I add trigger audio?</h5>
+                    <p>Place audio files in <code>Resources/sub_audio/</code> with names matching your triggers (e.g., <code>GOOD GIRL.mp3</code> for the "GOOD GIRL" trigger). Files are matched case-insensitively.</p>
+                </div>
+
+                <div class="achievement-card" style="margin-bottom: 1rem;">
+                    <h5>What does Window Awareness track?</h5>
+                    <p>It reads the active window name and browser tab title to provide contextual AI responses. See the Privacy Notice in the Patreon tab for full details.</p>
+                </div>
+
+                <div class="achievement-card" style="margin-bottom: 1rem;">
+                    <h5>How do I reset all settings?</h5>
+                    <p>Close the app, delete <code>settings.json</code> from the app folder, and restart. This resets everything to defaults (but keeps your XP/level progress).</p>
+                </div>
+
+                <div class="achievement-card" style="margin-bottom: 1rem;">
+                    <h5>Why does my antivirus flag the app?</h5>
+                    <p>Some antivirus software flags the app due to screen overlay functionality. This is a false positive. The app is <a href="https://www.virustotal.com/gui/file/187927f88cbcafbcb470b75c794f0d0095e2fcf84f3fc134f5137228c46ef334/detection" target="_blank">verified clean on VirusTotal</a> and is fully open source.</p>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-patreon.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Patreon Features</span>
+                    </div>
+                </a>
+                <a href="guide.html" class="next">
+                    <div>
+                        <span class="nav-label">Back to</span>
+                        <span class="nav-title">Guide Home</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

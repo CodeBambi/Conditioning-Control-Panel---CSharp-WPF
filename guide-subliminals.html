@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subliminal Messages | CCP Guide</title>
+    <meta name="description" content="Configure subliminal text messages and audio whispers in Conditioning Control Panel.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💭</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Subliminal Messages</span>
+            </div>
+            <h1>Subliminal Messages</h1>
+            <p>Brief text flashes and audio whispers for conditioning reinforcement</p>
+        </div>
+
+        <div class="guide-content">
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#text-settings">Text Settings</a></li>
+                    <li><a href="#audio-whispers">Audio Whispers</a></li>
+                    <li><a href="#managing-messages">Managing Messages</a></li>
+                    <li><a href="#adding-audio">Adding Audio Files</a></li>
+                    <li><a href="#haptic-sync">Haptic Synchronization</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+                <p>Subliminal messages are brief text flashes that appear on screen, optionally accompanied by whispered audio. They reinforce conditioning phrases at a pace fast enough to register subconsciously.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>💬</span>
+                        <h5>Text Flashes</h5>
+                        <p>Quick phrase display</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🔊</span>
+                        <h5>Audio Whispers</h5>
+                        <p>Matching voice clips</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>⚡</span>
+                        <h5>Customizable</h5>
+                        <p>Add your own phrases</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>📳</span>
+                        <h5>Haptic Sync</h5>
+                        <p>Device vibration</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="text-settings">
+                <h2>Text Settings</h2>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Range</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Enable</strong></td>
+                            <td>On/Off</td>
+                            <td>Master toggle for subliminal messages</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Per Min</strong></td>
+                            <td>1-30</td>
+                            <td>Messages displayed per minute</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Frames</strong></td>
+                            <td>1-10</td>
+                            <td>Display duration (lower = faster flash)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Opacity</strong></td>
+                            <td>10-100%</td>
+                            <td>Text visibility/transparency</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Display Behavior</h3>
+                <ul>
+                    <li>Messages appear <strong>centered on screen</strong></li>
+                    <li>Text is styled with a <strong>glowing pink/purple effect</strong></li>
+                    <li>Lower <strong>Frames</strong> value = shorter, more "subliminal" flash</li>
+                    <li>Higher <strong>Frames</strong> value = longer, more readable display</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>💡 Intensity Tips</h5>
+                    <p>
+                        <strong>Subtle:</strong> Opacity 30-50%, Frames 2-3<br>
+                        <strong>Noticeable:</strong> Opacity 70-90%, Frames 5-7<br>
+                        <strong>Obvious:</strong> Opacity 100%, Frames 8-10
+                    </p>
+                </div>
+            </section>
+
+            <section id="audio-whispers">
+                <h2>Audio Whispers</h2>
+
+                <p>Audio whispers play accompanying voice clips when subliminal messages appear.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Enable Whispers</strong></td>
+                            <td>Toggle whispered audio playback</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Volume</strong></td>
+                            <td>Whisper volume (0-100%)</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>How It Works</h3>
+                <ol>
+                    <li>A subliminal message triggers (e.g., "Good Girl")</li>
+                    <li>The app looks for a matching audio file (e.g., <code>GOOD GIRL.mp3</code>)</li>
+                    <li>If found, the audio plays at the configured volume</li>
+                    <li>If not found, only the text displays</li>
+                </ol>
+            </section>
+
+            <section id="managing-messages">
+                <h2>Managing Messages</h2>
+
+                <p>Click the <strong>📝 Messages</strong> button to open the message editor.</p>
+
+                <h3>Default Messages</h3>
+                <p>The app comes with default messages including:</p>
+                <ul>
+                    <li>Good Girl</li>
+                    <li>Obey</li>
+                    <li>Submit</li>
+                    <li>Listen</li>
+                    <li>Drop</li>
+                    <li>Relax</li>
+                    <li>And more...</li>
+                </ul>
+
+                <h3>Customizing Messages</h3>
+                <ul>
+                    <li><strong>Add</strong> - Create new custom messages</li>
+                    <li><strong>Edit</strong> - Modify existing messages</li>
+                    <li><strong>Enable/Disable</strong> - Toggle individual messages without deleting</li>
+                    <li><strong>Delete</strong> - Remove messages you don't want</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>🎯 Best Practices</h5>
+                    <p>
+                        • Keep messages <strong>short</strong> (1-3 words work best)<br>
+                        • Use <strong>consistent</strong> messaging themes<br>
+                        • Match messages to any <strong>audio files</strong> you have
+                    </p>
+                </div>
+            </section>
+
+            <section id="adding-audio">
+                <h2>Adding Audio Files</h2>
+
+                <p>Audio whisper files should be placed in the <code>Resources/sub_audio/</code> folder.</p>
+
+                <h3>File Naming</h3>
+                <p>Files must be named to match the trigger phrase exactly:</p>
+
+                <div class="code-block">
+                    <pre>Resources/sub_audio/
+├── GOOD GIRL.mp3       # Plays for "Good Girl" message
+├── OBEY.mp3            # Plays for "Obey" message
+├── SUBMIT.mp3          # Plays for "Submit" message
+└── LISTEN.mp3          # Plays for "Listen" message</pre>
+                </div>
+
+                <div class="info-box">
+                    <h5>📝 Matching Rules</h5>
+                    <p>
+                        • File matching is <strong>case-insensitive</strong><br>
+                        • Supported formats: <strong>.mp3, .wav</strong><br>
+                        • Keep files <strong>short</strong> (1-3 seconds recommended)
+                    </p>
+                </div>
+
+                <h3>Creating Whisper Audio</h3>
+                <p>You can create your own whisper audio using:</p>
+                <ul>
+                    <li><strong>Text-to-Speech</strong> - Services like ElevenLabs, Azure TTS</li>
+                    <li><strong>Recording</strong> - Record your own voice whispers</li>
+                    <li><strong>Audio Processing</strong> - Apply whisper effects to existing audio</li>
+                </ul>
+            </section>
+
+            <section id="haptic-sync">
+                <h2>Haptic Synchronization</h2>
+
+                <p>Subliminal messages can trigger haptic feedback on connected devices.</p>
+
+                <div class="info-box">
+                    <h5>📳 Supported Devices</h5>
+                    <p>Haptic integration works with <strong>Lovense</strong> devices and any device compatible with <strong>Buttplug.io</strong>. Configure haptic settings in the Settings tab.</p>
+                </div>
+
+                <h3>How It Works</h3>
+                <ul>
+                    <li>When a subliminal message displays, a brief vibration pulse triggers</li>
+                    <li>Pulse intensity and duration are configurable</li>
+                    <li>Creates a physical association with the conditioning phrases</li>
+                </ul>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-videos.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Mandatory Videos</span>
+                    </div>
+                </a>
+                <a href="guide-progression.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Progression & Achievements</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>
