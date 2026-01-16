@@ -2685,151 +2685,6 @@
                         </Grid>
                     </Border>
 
-                    <!-- Autonomy Mode - Lvl 100 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
-                            ToolTip="Let the companion act on her own!&#x0a;She can trigger effects autonomously.&#x0a;Unlocks at Level 100.">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <Grid Grid.Column="0">
-                            <!-- Locked State -->
-                            <StackPanel x:Name="AutonomyLocked" Visibility="Visible">
-                                <Grid>
-                                    <TextBlock Text="🤖 Autonomy Mode" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                    <TextBlock Text="🔒 Lvl 100" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
-                                </Grid>
-                                <TextBlock Text="Reach Level 100 to Unlock" Foreground="{StaticResource PinkBrush}"
-                                           FontSize="12" Margin="0,8,0,0"/>
-                            </StackPanel>
-
-                            <!-- Unlocked State -->
-                            <StackPanel x:Name="AutonomyUnlocked" Visibility="Collapsed">
-                                <Grid>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="🤖 Autonomy Mode" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
-                                        <TextBlock Text="✔ Lvl 100" Foreground="{StaticResource PinkBrush}" Margin="8,0,0,0"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkAutonomyEnabled" Style="{StaticResource ToggleStyle}"
-                                              HorizontalAlignment="Right"
-                                              Checked="ChkAutonomyEnabled_Changed" Unchecked="ChkAutonomyEnabled_Changed"/>
-                                </Grid>
-
-                                <StackPanel x:Name="AutonomySettings" Margin="0,10,0,0">
-                                    <!-- Intensity -->
-                                    <Grid Margin="0,3,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Intensity"
-                                                   ToolTip="How aggressive her autonomous behavior is (1-10)"/>
-                                        <TextBlock x:Name="TxtAutonomyIntensity" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="5"/>
-                                    </Grid>
-                                    <Slider x:Name="SliderAutonomyIntensity" Minimum="1" Maximum="10" Value="5"
-                                            Margin="0,1" ValueChanged="SliderAutonomyIntensity_Changed"
-                                            ToolTip="Intensity level (1 = subtle, 10 = very active)"/>
-
-                                    <!-- Cooldown -->
-                                    <Grid Margin="0,8,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Cooldown"
-                                                   ToolTip="Minimum seconds between autonomous actions"/>
-                                        <TextBlock x:Name="TxtAutonomyCooldown" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="30s"/>
-                                    </Grid>
-                                    <Slider x:Name="SliderAutonomyCooldown" Minimum="10" Maximum="300" Value="30"
-                                            Margin="0,1" ValueChanged="SliderAutonomyCooldown_Changed"
-                                            ToolTip="Cooldown between actions (10-300 seconds)"/>
-
-                                    <!-- Trigger Sources -->
-                                    <TextBlock Text="Trigger Sources" Foreground="White" FontWeight="Bold" Margin="0,12,0,5" FontSize="12"/>
-
-                                    <Grid Margin="0,3,0,0">
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Idle Timeout"
-                                                   ToolTip="Trigger when you've been inactive"/>
-                                        <CheckBox x:Name="ChkAutonomyIdle" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right"
-                                                  Checked="ChkAutonomyIdle_Changed" Unchecked="ChkAutonomyIdle_Changed"/>
-                                    </Grid>
-
-                                    <Grid Margin="0,3,0,0">
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Random Intervals"
-                                                   ToolTip="Trigger at unpredictable random times"/>
-                                        <CheckBox x:Name="ChkAutonomyRandom" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right"
-                                                  Checked="ChkAutonomyRandom_Changed" Unchecked="ChkAutonomyRandom_Changed"/>
-                                    </Grid>
-
-                                    <Grid Margin="0,3,0,0">
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Time-of-Day Aware"
-                                                   ToolTip="More active at night, gentler in the morning"/>
-                                        <CheckBox x:Name="ChkAutonomyTimeAware" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right"
-                                                  Checked="ChkAutonomyTimeAware_Changed" Unchecked="ChkAutonomyTimeAware_Changed"/>
-                                    </Grid>
-
-                                    <!-- What She Can Do -->
-                                    <TextBlock Text="What She Can Do" Foreground="White" FontWeight="Bold" Margin="0,12,0,5" FontSize="12"/>
-
-                                    <Grid Margin="0,3,0,0">
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Trigger Flashes"/>
-                                        <CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right"
-                                                  Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
-                                    </Grid>
-
-                                    <Grid Margin="0,3,0,0">
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Trigger Videos"
-                                                   ToolTip="Never uses strict mode"/>
-                                        <CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right"
-                                                  Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
-                                    </Grid>
-
-                                    <Grid Margin="0,3,0,0">
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Trigger Subliminals"/>
-                                        <CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right"
-                                                  Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
-                                    </Grid>
-
-                                    <Grid Margin="0,3,0,0">
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Make Comments"/>
-                                        <CheckBox x:Name="ChkAutonomyComment" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right"
-                                                  Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
-                                    </Grid>
-
-                                    <!-- Announcement Chance -->
-                                    <Grid Margin="0,10,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Style="{StaticResource SettingLabel}" Text="Announce Chance"
-                                                   ToolTip="Chance she warns you before triggering"/>
-                                        <TextBlock x:Name="TxtAutonomyAnnounce" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="50%"/>
-                                    </Grid>
-                                    <Slider x:Name="SliderAutonomyAnnounce" Minimum="0" Maximum="100" Value="50"
-                                            Margin="0,1" ValueChanged="SliderAutonomyAnnounce_Changed"
-                                            ToolTip="Announcement chance (0% = pure surprise, 100% = always warns)"/>
-                                </StackPanel>
-                            </StackPanel>
-                            </Grid>
-
-                            <!-- Feature Image -->
-                            <Rectangle x:Name="AutonomyFeatureImage" Grid.Column="1" Style="{StaticResource RoundedFeatureImage}">
-                                <Rectangle.Fill>
-                                    <ImageBrush ImageSource="pack://application:,,,/Resources/features/bambi takeover.png" Stretch="UniformToFill"/>
-                                </Rectangle.Fill>
-                            </Rectangle>
-                        </Grid>
-                    </Border>
                 </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -3902,13 +3757,233 @@
                             </Border>
                         </Grid>
 
+                        <!-- Bambi Takeover - Patreon + Level 100 -->
+                        <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,15,0,0"
+                                ToolTip="Let the companion act on her own!&#x0a;She can trigger effects autonomously.&#x0a;Requires Patreon + Level 100.">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Grid Grid.Column="0">
+                                <!-- Locked State -->
+                                <StackPanel x:Name="AutonomyLocked" Visibility="Visible">
+                                    <Grid>
+                                        <TextBlock Text="🤖 Bambi Takeover" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                        <TextBlock x:Name="TxtAutonomyLockStatus" Text="🔒 Patreon + Lvl 100" Foreground="#9B59B6" HorizontalAlignment="Right" FontSize="12"/>
+                                    </Grid>
+                                    <TextBlock x:Name="TxtAutonomyLockMessage" Text="Patreon exclusive feature" Foreground="{StaticResource PinkBrush}"
+                                               FontSize="12" Margin="0,8,0,0"/>
+                                </StackPanel>
+
+                                <!-- Unlocked State -->
+                                <StackPanel x:Name="AutonomyUnlocked" Visibility="Collapsed">
+                                    <Grid>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🤖 Bambi Takeover" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
+                                            <TextBlock Text="✔ Unlocked" Foreground="#00E676" Margin="8,0,0,0"/>
+                                            <Border Background="#352545" CornerRadius="10" Padding="6,2" Margin="8,0,0,0" Cursor="Help"
+                                                    ToolTip="BAMBI TAKEOVER MODE&#x0a;&#x0a;Let Bambi act on her own! When enabled, she can&#x0a;autonomously trigger effects based on your settings:&#x0a;&#x0a;• Idle Timeout - triggers when you're inactive&#x0a;• Random Intervals - surprises at unpredictable times&#x0a;• Time-of-Day Aware - more active at night&#x0a;&#x0a;She can trigger flashes, videos, subliminals,&#x0a;spirals, pink filter, and more!&#x0a;&#x0a;Works even when the engine is stopped!">
+                                                <TextBlock Text="?" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="12"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <CheckBox x:Name="ChkAutonomyEnabled" Style="{StaticResource ToggleStyle}"
+                                                  HorizontalAlignment="Right"
+                                                  Checked="ChkAutonomyEnabled_Changed" Unchecked="ChkAutonomyEnabled_Changed"/>
+                                    </Grid>
+
+                                    <StackPanel x:Name="AutonomySettings" Margin="0,10,0,0">
+                                        <!-- Intensity -->
+                                        <Grid Margin="0,3,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Style="{StaticResource SettingLabel}" Text="Intensity"
+                                                       ToolTip="How aggressive her autonomous behavior is (1-10)"/>
+                                            <TextBlock x:Name="TxtAutonomyIntensity" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="5"/>
+                                        </Grid>
+                                        <Slider x:Name="SliderAutonomyIntensity" Minimum="1" Maximum="10" Value="5"
+                                                Margin="0,1" ValueChanged="SliderAutonomyIntensity_Changed"
+                                                ToolTip="Intensity level (1 = subtle, 10 = very active)"/>
+
+                                        <!-- Cooldown -->
+                                        <Grid Margin="0,8,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Style="{StaticResource SettingLabel}" Text="Cooldown"
+                                                       ToolTip="Minimum seconds between autonomous actions"/>
+                                            <TextBlock x:Name="TxtAutonomyCooldown" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="30s"/>
+                                        </Grid>
+                                        <Slider x:Name="SliderAutonomyCooldown" Minimum="10" Maximum="300" Value="30"
+                                                Margin="0,1" ValueChanged="SliderAutonomyCooldown_Changed"
+                                                ToolTip="Cooldown between actions (10-300 seconds)"/>
+
+                                        <!-- Three-column layout for options -->
+                                        <Grid Margin="0,12,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="10"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="10"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Column 1: Trigger Sources -->
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="Trigger Sources" Foreground="#FF69B4" FontWeight="Bold" Margin="0,0,0,6" FontSize="11"/>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Idle Timeout" FontSize="11"
+                                                               ToolTip="Trigger when you've been inactive"/>
+                                                    <CheckBox x:Name="ChkAutonomyIdle" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyIdle_Changed" Unchecked="ChkAutonomyIdle_Changed"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Random Intervals" FontSize="11"
+                                                               ToolTip="Trigger at unpredictable random times"/>
+                                                    <CheckBox x:Name="ChkAutonomyRandom" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyRandom_Changed" Unchecked="ChkAutonomyRandom_Changed"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Time-of-Day Aware" FontSize="11"
+                                                               ToolTip="More active at night, gentler in the morning"/>
+                                                    <CheckBox x:Name="ChkAutonomyTimeAware" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyTimeAware_Changed" Unchecked="ChkAutonomyTimeAware_Changed"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <!-- Column 2: What She Can Do (Part 1) -->
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="Actions (Basic)" Foreground="#FF69B4" FontWeight="Bold" Margin="0,0,0,6" FontSize="11"/>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Flashes" FontSize="11"/>
+                                                    <CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Videos" FontSize="11"
+                                                               ToolTip="Never uses strict mode"/>
+                                                    <CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Subliminals" FontSize="11"/>
+                                                    <CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Bubbles" FontSize="11" ToolTip="Level 20+"/>
+                                                    <CheckBox x:Name="ChkAutonomyBubbles" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Comments" FontSize="11"/>
+                                                    <CheckBox x:Name="ChkAutonomyComment" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Spiral" FontSize="11" ToolTip="Level 10+"/>
+                                                    <CheckBox x:Name="ChkAutonomySpiral" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                </Grid>
+                                            </StackPanel>
+
+                                            <!-- Column 3: What She Can Do (Part 2) -->
+                                            <StackPanel Grid.Column="4">
+                                                <TextBlock Text="Actions (Advanced)" Foreground="#FF69B4" FontWeight="Bold" Margin="0,0,0,6" FontSize="11"/>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Pink Filter" FontSize="11" ToolTip="Level 10+"/>
+                                                    <CheckBox x:Name="ChkAutonomyPinkFilter" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Lock Cards" FontSize="11" ToolTip="Level 35+"/>
+                                                    <CheckBox x:Name="ChkAutonomyLockCard" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Bubble Count" FontSize="11" ToolTip="Level 50+"/>
+                                                    <CheckBox x:Name="ChkAutonomyBubbleCount" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Bouncing Text" FontSize="11" ToolTip="Level 60+"/>
+                                                    <CheckBox x:Name="ChkAutonomyBouncingText" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                </Grid>
+                                                <Grid Margin="0,4,0,0">
+                                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Mindwipe" FontSize="11" ToolTip="Level 80+"/>
+                                                    <CheckBox x:Name="ChkAutonomyMindWipe" Style="{StaticResource ToggleStyle}"
+                                                              HorizontalAlignment="Right"
+                                                              Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- Announcement Chance -->
+                                        <Grid Margin="0,10,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Style="{StaticResource SettingLabel}" Text="Announce Chance"
+                                                       ToolTip="Chance she warns you before triggering"/>
+                                            <TextBlock x:Name="TxtAutonomyAnnounce" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="50%"/>
+                                        </Grid>
+                                        <Slider x:Name="SliderAutonomyAnnounce" Minimum="0" Maximum="100" Value="50"
+                                                Margin="0,1" ValueChanged="SliderAutonomyAnnounce_Changed"
+                                                ToolTip="Announcement chance (0% = pure surprise, 100% = always warns)"/>
+
+                                        <!-- Test Button -->
+                                        <Button Content="Test Autonomy Now" Margin="0,10,0,0"
+                                                Background="#FF69B4" Foreground="White" FontWeight="Bold"
+                                                Padding="10,5" Click="BtnTestAutonomy_Click"
+                                                ToolTip="Immediately trigger an autonomous action for testing"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                </Grid>
+
+                                <!-- Feature Image with Info Box -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Top" Margin="15,0,0,0">
+                                    <!-- Info box: Works without engine -->
+                                    <Border Background="#2A1A3A" CornerRadius="6" Padding="8,6" Margin="0,0,0,8" BorderBrush="#FF69B4" BorderThickness="1">
+                                        <TextBlock Text="Works even when&#x0a;engine is stopped!"
+                                                   Foreground="#FF69B4" FontSize="11" FontWeight="SemiBold"
+                                                   TextAlignment="Center" LineHeight="14"/>
+                                    </Border>
+                                    <!-- Feature Image -->
+                                    <Rectangle x:Name="AutonomyFeatureImage" Style="{StaticResource RoundedFeatureImage}">
+                                        <Rectangle.Fill>
+                                            <ImageBrush ImageSource="pack://application:,,,/Resources/features/bambi takeover.png" Stretch="UniformToFill"/>
+                                        </Rectangle.Fill>
+                                    </Rectangle>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
                         <!-- Patreon Info Box -->
                         <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0"
                                 BorderBrush="#9B59B6" BorderThickness="1">
                             <StackPanel>
                                 <TextBlock Text="Support Development" Foreground="#9B59B6" FontSize="14" FontWeight="Bold"/>
                                 <TextBlock TextWrapping="Wrap" Foreground="#808080" FontSize="12" Margin="0,8,0,0">
-                                    <Run Text="Patreon unlocks:"/> <Run Text="AI Chat, Window Awareness, Slut Mode" Foreground="White"/>
+                                    <Run Text="Patreon unlocks:"/> <Run Text="AI Chat, Window Awareness, Slut Mode, Bambi Takeover" Foreground="White"/>
                                 </TextBlock>
                                 <Button x:Name="BtnVisitPatreon" Content="Visit Patreon"
                                         Background="#9B59B6" Foreground="White"

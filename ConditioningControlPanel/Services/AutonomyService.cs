@@ -17,7 +17,13 @@ namespace ConditioningControlPanel.Services
         Subliminal,
         BrainDrainPulse,
         StartBubbles,
-        Comment
+        Comment,
+        MindWipe,
+        LockCard,
+        SpiralPulse,
+        PinkFilterPulse,
+        BouncingText,
+        BubbleCount
     }
 
     /// <summary>
@@ -81,6 +87,13 @@ namespace ConditioningControlPanel.Services
         private bool _disposed = false;
         private readonly Random _random = new();
 
+        // Pulse state tracking - prevent overlapping pulses
+        private bool _spiralPulseActive = false;
+        private bool _pinkFilterPulseActive = false;
+        private bool _bubblesPulseActive = false;
+        private bool _bouncingTextPulseActive = false;
+        private int _pulseGeneration = 0; // Increment on each pulse to track stale callbacks
+
         // Mood system
         private AutonomyMood _currentMood = AutonomyMood.Playful;
 
@@ -128,10 +141,63 @@ namespace ConditioningControlPanel.Services
                 "*giggles*",
                 "Teehee~",
                 "Just thinking about you~"
+            }},
+            { AutonomyActionType.MindWipe, new[] {
+                "Let me wipe your thoughts~",
+                "Shhh... empty mind~",
+                "No more thinking~",
+                "Time to forget~"
+            }},
+            { AutonomyActionType.LockCard, new[] {
+                "Time to earn a reward~",
+                "Complete this for me~",
+                "Show me how good you are~",
+                "Task time~"
+            }},
+            { AutonomyActionType.SpiralPulse, new[] {
+                "Watch the pretty spiral~",
+                "Spirals are so pretty...",
+                "Look at the swirls~",
+                "Round and round~"
+            }},
+            { AutonomyActionType.PinkFilterPulse, new[] {
+                "Everything looks better in pink~",
+                "Pink is your color~",
+                "So pretty and pink~",
+                "Pink thoughts~"
+            }},
+            { AutonomyActionType.BouncingText, new[] {
+                "Read the pretty words~",
+                "Follow the bouncing text~",
+                "Words to remember~",
+                "Let them sink in~"
+            }},
+            { AutonomyActionType.BubbleCount, new[] {
+                "Count with me~",
+                "How many bubbles?",
+                "Test your focus~",
+                "Counting game time~"
             }}
         };
 
         public bool IsEnabled => _isEnabled;
+
+        /// <summary>
+        /// Manually trigger an autonomous action for testing
+        /// </summary>
+        public void TestTrigger()
+        {
+            App.Logger?.Information("AutonomyService: TEST TRIGGER called manually!");
+
+            if (!_isEnabled)
+            {
+                App.Logger?.Warning("AutonomyService: Test failed - service not enabled. Enable Autonomy Mode first!");
+                System.Windows.MessageBox.Show("Autonomy Mode is not enabled!\n\nEnable the toggle first.", "Test Failed");
+                return;
+            }
+
+            ExecuteAutonomousAction(AutonomyTriggerSource.Random, "Manual test trigger");
+        }
 
         public AutonomyService()
         {
@@ -143,9 +209,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void Start()
         {
+            var settings = App.Settings?.Current;
+            App.Logger?.Information("AutonomyService: Start() called - Enabled: {Enabled}, Consent: {Consent}, Level: {Level}",
+                settings?.AutonomyModeEnabled, settings?.AutonomyConsentGiven, settings?.PlayerLevel);
+
             if (!CanStart())
             {
-                App.Logger?.Debug("AutonomyService: Cannot start - requirements not met");
+                App.Logger?.Warning("AutonomyService: Cannot start - requirements not met (need Level 100+, consent, and enabled)");
                 return;
             }
 
@@ -158,8 +228,10 @@ namespace ConditioningControlPanel.Services
             StartRandomTimer();
             UpdateMood();
 
-            App.Logger?.Information("AutonomyService: Started (Intensity: {Intensity})",
-                App.Settings?.Current?.AutonomyIntensity ?? 5);
+            App.Logger?.Information("AutonomyService: Started successfully! (Intensity: {Intensity}, IdleEnabled: {Idle}, RandomEnabled: {Random})",
+                settings?.AutonomyIntensity ?? 5,
+                settings?.AutonomyIdleTriggerEnabled,
+                settings?.AutonomyRandomTriggerEnabled);
         }
 
         /// <summary>
@@ -169,6 +241,14 @@ namespace ConditioningControlPanel.Services
         {
             _isEnabled = false;
             StopAllTimers();
+
+            // Reset all pulse flags to prevent stale callbacks from running
+            _spiralPulseActive = false;
+            _pinkFilterPulseActive = false;
+            _bubblesPulseActive = false;
+            _bouncingTextPulseActive = false;
+            _pulseGeneration++; // Invalidate any pending callbacks
+
             App.Logger?.Information("AutonomyService: Stopped");
         }
 
@@ -264,6 +344,46 @@ namespace ConditioningControlPanel.Services
             _cooldownTimer = null;
         }
 
+        /// <summary>
+        /// Refresh idle timer when settings change
+        /// </summary>
+        public void RefreshIdleTimer()
+        {
+            if (!_isEnabled) return;
+
+            _idleTimer?.Stop();
+            _idleTimer = null;
+
+            if (App.Settings?.Current?.AutonomyIdleTriggerEnabled == true)
+            {
+                StartIdleTimer();
+            }
+            else
+            {
+                App.Logger?.Debug("AutonomyService: Idle timer disabled");
+            }
+        }
+
+        /// <summary>
+        /// Refresh random timer when settings change
+        /// </summary>
+        public void RefreshRandomTimer()
+        {
+            if (!_isEnabled) return;
+
+            _randomTimer?.Stop();
+            _randomTimer = null;
+
+            if (App.Settings?.Current?.AutonomyRandomTriggerEnabled == true)
+            {
+                StartRandomTimer();
+            }
+            else
+            {
+                App.Logger?.Debug("AutonomyService: Random timer disabled");
+            }
+        }
+
         private void OnIdleTick(object? sender, EventArgs e)
         {
             if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
@@ -280,18 +400,32 @@ namespace ConditioningControlPanel.Services
 
         private void OnRandomTick(object? sender, EventArgs e)
         {
+            App.Logger?.Information("AutonomyService: Random timer FIRED!");
+
             if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
-            if (!_isEnabled) return;
+            if (!_isEnabled)
+            {
+                App.Logger?.Warning("AutonomyService: Random tick ignored - not enabled");
+                return;
+            }
 
             var settings = App.Settings?.Current;
-            if (settings == null || !settings.AutonomyRandomTriggerEnabled) return;
+            if (settings == null || !settings.AutonomyRandomTriggerEnabled)
+            {
+                App.Logger?.Warning("AutonomyService: Random tick ignored - random trigger disabled");
+                return;
+            }
 
             // Schedule next tick regardless of whether we take action
             ScheduleNextRandomTick();
 
-            if (!CanTakeAction()) return;
+            if (!CanTakeAction())
+            {
+                App.Logger?.Warning("AutonomyService: Random tick - cannot take action (cooldown or busy)");
+                return;
+            }
 
-            App.Logger?.Debug("AutonomyService: Random interval triggered");
+            App.Logger?.Information("AutonomyService: Random interval triggered - executing action!");
             ExecuteAutonomousAction(AutonomyTriggerSource.Random);
         }
 
@@ -325,12 +459,16 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                App.Logger?.Information("AutonomyService: ExecuteAutonomousAction called (Source: {Source})", source);
+
                 var actionType = SelectAction(source, context);
                 if (actionType == null)
                 {
-                    App.Logger?.Debug("AutonomyService: No valid action available");
+                    App.Logger?.Warning("AutonomyService: No valid action available - check if any actions are enabled!");
                     return;
                 }
+
+                App.Logger?.Information("AutonomyService: Selected action: {Action}", actionType);
 
                 var shouldAnnounce = ShouldAnnounce();
 
@@ -376,23 +514,42 @@ namespace ConditioningControlPanel.Services
             var candidates = new List<(AutonomyActionType type, int weight)>();
 
             // Build weighted list of enabled actions
-            if (settings.AutonomyCanTriggerFlash && settings.FlashEnabled)
+            // Note: Autonomy works independently of engine - only checks Autonomy-specific settings
+            if (settings.AutonomyCanTriggerFlash)
                 candidates.Add((AutonomyActionType.Flash, 30));
 
-            if (settings.AutonomyCanTriggerVideo && settings.MandatoryVideosEnabled)
+            if (settings.AutonomyCanTriggerVideo)
                 candidates.Add((AutonomyActionType.Video, 15)); // Lower weight - more disruptive
 
-            if (settings.AutonomyCanTriggerSubliminal && settings.SubliminalEnabled)
+            if (settings.AutonomyCanTriggerSubliminal)
                 candidates.Add((AutonomyActionType.Subliminal, 25));
 
-            if (settings.AutonomyCanTriggerBrainDrain && settings.BrainDrainEnabled && settings.PlayerLevel >= 70)
+            if (settings.AutonomyCanTriggerBrainDrain && settings.PlayerLevel >= 70)
                 candidates.Add((AutonomyActionType.BrainDrainPulse, 10));
 
-            if (settings.AutonomyCanTriggerBubbles && settings.BubblesEnabled && settings.PlayerLevel >= 20)
+            if (settings.AutonomyCanTriggerBubbles && settings.PlayerLevel >= 20)
                 candidates.Add((AutonomyActionType.StartBubbles, 15));
 
-            if (settings.AutonomyCanComment && settings.AiChatEnabled)
+            if (settings.AutonomyCanComment)
                 candidates.Add((AutonomyActionType.Comment, 20));
+
+            // New progression features
+            if (settings.AutonomyCanTriggerMindWipe && settings.PlayerLevel >= 80)
+                candidates.Add((AutonomyActionType.MindWipe, 15));
+
+            if (settings.AutonomyCanTriggerLockCard && settings.PlayerLevel >= 35)
+                candidates.Add((AutonomyActionType.LockCard, 10)); // Lower weight - very disruptive
+
+            if (settings.AutonomyCanTriggerSpiral && settings.PlayerLevel >= 10)
+                candidates.Add((AutonomyActionType.SpiralPulse, 20));
+
+            if (settings.AutonomyCanTriggerPinkFilter && settings.PlayerLevel >= 10)
+                candidates.Add((AutonomyActionType.PinkFilterPulse, 20));
+
+            if (settings.AutonomyCanTriggerBouncingText && settings.PlayerLevel >= 60)
+                candidates.Add((AutonomyActionType.BouncingText, 15));
+
+            // Note: BubbleCount removed from autonomy - too disruptive and unreliable
 
             if (candidates.Count == 0) return null;
 
@@ -499,7 +656,7 @@ namespace ConditioningControlPanel.Services
                     switch (actionType)
                     {
                         case AutonomyActionType.Flash:
-                            App.Flash?.TriggerFlash();
+                            App.Flash?.TriggerFlashOnce();
                             break;
 
                         case AutonomyActionType.Video:
@@ -515,12 +672,75 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case AutonomyActionType.StartBubbles:
-                            if (App.Bubbles?.IsRunning != true)
-                                App.Bubbles?.Start();
+                            if (!_bubblesPulseActive && App.Bubbles?.IsRunning != true)
+                            {
+                                _bubblesPulseActive = true;
+                                App.Bubbles?.Start(bypassLevelCheck: true);
+                                // Stop bubbles after 30 seconds
+                                Task.Delay(30000).ContinueWith(_ =>
+                                {
+                                    if (Application.Current?.Dispatcher == null) return;
+                                    Application.Current.Dispatcher.BeginInvoke(() =>
+                                    {
+                                        if (_bubblesPulseActive)
+                                        {
+                                            _bubblesPulseActive = false;
+                                            App.Bubbles?.Stop();
+                                            App.Logger?.Debug("AutonomyService: Bubbles auto-stopped after 30 seconds");
+                                        }
+                                    });
+                                });
+                            }
                             break;
 
                         case AutonomyActionType.Comment:
                             MakeComment(context);
+                            break;
+
+                        case AutonomyActionType.MindWipe:
+                            App.MindWipe?.TriggerOnce();
+                            break;
+
+                        case AutonomyActionType.LockCard:
+                            // Use ShowLockCard() directly to trigger a single lock card
+                            // without requiring the continuous service to be enabled
+                            App.LockCard?.ShowLockCard();
+                            break;
+
+                        case AutonomyActionType.SpiralPulse:
+                            PulseSpiralOverlay();
+                            break;
+
+                        case AutonomyActionType.PinkFilterPulse:
+                            PulsePinkFilter();
+                            break;
+
+                        case AutonomyActionType.BouncingText:
+                            if (!_bouncingTextPulseActive && App.BouncingText?.IsRunning != true)
+                            {
+                                _bouncingTextPulseActive = true;
+                                App.BouncingText?.Start(bypassLevelCheck: true);
+                                // Stop after 30 seconds
+                                Task.Delay(30000).ContinueWith(_ =>
+                                {
+                                    if (Application.Current?.Dispatcher == null) return;
+                                    Application.Current.Dispatcher.BeginInvoke(() =>
+                                    {
+                                        if (_bouncingTextPulseActive)
+                                        {
+                                            _bouncingTextPulseActive = false;
+                                            App.BouncingText?.Stop();
+                                            App.Logger?.Debug("AutonomyService: Bouncing text auto-stopped after 30 seconds");
+                                        }
+                                    });
+                                });
+                            }
+                            break;
+
+                        case AutonomyActionType.BubbleCount:
+                            // Use TriggerGame directly to show a single game
+                            // forceTest: true bypasses running/level checks
+                            App.BubbleCount?.TriggerGame(forceTest: true);
                             break;
                     }
 
@@ -585,6 +805,153 @@ namespace ConditioningControlPanel.Services
                 Application.Current.Dispatcher.BeginInvoke(() =>
                 {
                     App.Overlay?.UpdateBrainDrainBlurOpacity(baseIntensity);
+                });
+            });
+        }
+
+        /// <summary>
+        /// Temporarily pulse spiral overlay on then off
+        /// </summary>
+        private void PulseSpiralOverlay()
+        {
+            // Prevent overlapping spiral pulses
+            if (_spiralPulseActive)
+            {
+                App.Logger?.Debug("AutonomyService: Spiral pulse skipped - already active");
+                return;
+            }
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            _spiralPulseActive = true;
+            var currentGeneration = ++_pulseGeneration;
+
+            // Save current state
+            var wasEnabled = settings.SpiralEnabled;
+            var baseOpacity = settings.SpiralOpacity;
+            var wasPinkEnabled = settings.PinkFilterEnabled;
+
+            // Enable spiral with higher opacity
+            settings.SpiralEnabled = true;
+            settings.SpiralOpacity = Math.Min(100, Math.Max(30, baseOpacity + 20));
+
+            // Temporarily disable pink filter so only spiral shows during this pulse
+            settings.PinkFilterEnabled = false;
+
+            // Start overlay service if needed
+            if (App.Overlay?.IsRunning != true)
+            {
+                App.Overlay?.Start();
+            }
+            App.Overlay?.RefreshOverlays();
+
+            App.Logger?.Debug("AutonomyService: Spiral pulse started (gen {Gen})", currentGeneration);
+
+            // Return to original state after 30 seconds
+            Task.Delay(30000).ContinueWith(_ =>
+            {
+                if (Application.Current?.Dispatcher == null) return;
+                Application.Current.Dispatcher.BeginInvoke(() =>
+                {
+                    // Only restore if this is still the active pulse
+                    if (!_spiralPulseActive)
+                    {
+                        App.Logger?.Debug("AutonomyService: Spiral restore skipped - no longer active");
+                        return;
+                    }
+
+                    _spiralPulseActive = false;
+
+                    if (App.Settings?.Current != null)
+                    {
+                        // Restore all settings
+                        App.Settings.Current.SpiralEnabled = wasEnabled;
+                        App.Settings.Current.SpiralOpacity = baseOpacity;
+                        App.Settings.Current.PinkFilterEnabled = wasPinkEnabled;
+                        App.Overlay?.RefreshOverlays();
+
+                        // Stop overlay if nothing needs it
+                        if (!wasEnabled && !wasPinkEnabled && !App.Settings.Current.BrainDrainEnabled)
+                        {
+                            App.Overlay?.Stop();
+                        }
+                    }
+                    App.Logger?.Debug("AutonomyService: Spiral pulse ended (gen {Gen})", currentGeneration);
+                });
+            });
+        }
+
+        /// <summary>
+        /// Temporarily pulse pink filter on then off
+        /// </summary>
+        private void PulsePinkFilter()
+        {
+            // Prevent overlapping pink filter pulses
+            if (_pinkFilterPulseActive)
+            {
+                App.Logger?.Debug("AutonomyService: Pink filter pulse skipped - already active");
+                return;
+            }
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            _pinkFilterPulseActive = true;
+            var currentGeneration = ++_pulseGeneration;
+
+            // Save current state
+            var wasEnabled = settings.PinkFilterEnabled;
+            var baseOpacity = settings.PinkFilterOpacity;
+            var wasSpiralEnabled = settings.SpiralEnabled;
+
+            // Enable pink filter with higher opacity
+            settings.PinkFilterEnabled = true;
+            settings.PinkFilterOpacity = Math.Max(30, baseOpacity + 15);
+
+            // Temporarily disable spiral so only pink filter shows during this pulse
+            settings.SpiralEnabled = false;
+
+            // Start overlay service if needed
+            if (App.Overlay?.IsRunning != true)
+            {
+                App.Overlay?.Start();
+            }
+            App.Overlay?.RefreshOverlays();
+
+            App.Logger?.Debug("AutonomyService: Pink filter pulse started (gen {Gen}), opacity={Opacity}",
+                currentGeneration, settings.PinkFilterOpacity);
+
+            // Return to original state after 30 seconds
+            Task.Delay(30000).ContinueWith(_ =>
+            {
+                if (Application.Current?.Dispatcher == null) return;
+                Application.Current.Dispatcher.BeginInvoke(() =>
+                {
+                    // Only restore if this is still the active pulse
+                    if (!_pinkFilterPulseActive)
+                    {
+                        App.Logger?.Debug("AutonomyService: Pink filter restore skipped - no longer active");
+                        return;
+                    }
+
+                    _pinkFilterPulseActive = false;
+
+                    if (App.Settings?.Current != null)
+                    {
+                        // Restore all settings
+                        App.Settings.Current.PinkFilterEnabled = wasEnabled;
+                        App.Settings.Current.PinkFilterOpacity = baseOpacity;
+                        App.Settings.Current.SpiralEnabled = wasSpiralEnabled;
+                        App.Overlay?.RefreshOverlays();
+
+                        // Stop overlay if nothing needs it
+                        if (!wasEnabled && !wasSpiralEnabled && !App.Settings.Current.BrainDrainEnabled)
+                        {
+                            App.Overlay?.Stop();
+                        }
+                    }
+                    App.Logger?.Debug("AutonomyService: Pink filter pulse ended (gen {Gen})", currentGeneration);
                 });
             });
         }

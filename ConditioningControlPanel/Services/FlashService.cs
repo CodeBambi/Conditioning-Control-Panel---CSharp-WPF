@@ -44,6 +44,7 @@ namespace ConditioningControlPanel.Services
         
         private bool _isRunning;
         private bool _isBusy;
+        private bool _oneShotActive; // For TriggerFlashOnce when service not running
         private DateTime _virtualEndTime = DateTime.MinValue;
         private bool _cleanupInProgress;
         
@@ -143,9 +144,39 @@ namespace ConditioningControlPanel.Services
         public void TriggerFlash()
         {
             if (!_isRunning || _isBusy) return;
-            
+
             _isBusy = true;
             _soundPlayingForCurrentFlash = false; // Reset for new flash event
+            Task.Run(() => LoadAndShowImages());
+        }
+
+        /// <summary>
+        /// Trigger a one-shot flash that works even when service is not running.
+        /// Used by Autonomy Mode to trigger flashes independently of engine state.
+        /// </summary>
+        public void TriggerFlashOnce()
+        {
+            if (_isBusy)
+            {
+                App.Logger?.Debug("FlashService: TriggerFlashOnce skipped - busy");
+                return;
+            }
+
+            // Ensure path is set (in case constructor didn't run or path changed)
+            if (string.IsNullOrEmpty(_imagesPath))
+            {
+                RefreshImagesPath();
+            }
+
+            App.Logger?.Information("FlashService: TriggerFlashOnce called (path: {Path})", _imagesPath);
+
+            _isBusy = true;
+            _oneShotActive = true; // Enable one-shot mode to bypass _isRunning checks
+            _soundPlayingForCurrentFlash = false;
+
+            // Start heartbeat timer for animation and fade management
+            _heartbeatTimer?.Start();
+
             Task.Run(() => LoadAndShowImages());
         }
 
@@ -456,7 +487,7 @@ namespace ConditioningControlPanel.Services
 
         private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication)
         {
-            if (!_isRunning)
+            if (!_isRunning && !_oneShotActive)
             {
                 if (!isMultiplication) _isBusy = false;
                 return;
@@ -531,7 +562,7 @@ namespace ConditioningControlPanel.Services
                     {
                         System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
                         {
-                            if (_isRunning)
+                            if (_isRunning || _oneShotActive)
                                 SpawnFlashWindow(capturedData, settings);
                         });
                     });
@@ -548,7 +579,7 @@ namespace ConditioningControlPanel.Services
 
         private void SpawnFlashWindow(LoadedImageData imageData, AppSettings settings)
         {
-            if (!_isRunning) return;
+            if (!_isRunning && !_oneShotActive) return;
 
             var geom = imageData.Geometry;
             
@@ -659,7 +690,7 @@ namespace ConditioningControlPanel.Services
 
         private async void TriggerMultiplication(int maxHydra, int currentCount)
         {
-            if (!_isRunning) return;
+            if (!_isRunning && !_oneShotActive) return;
 
             var spaceAvailable = maxHydra - currentCount;
             var numToSpawn = Math.Min(2, spaceAvailable);
@@ -703,7 +734,7 @@ namespace ConditioningControlPanel.Services
 
         private void Heartbeat_Tick(object? sender, EventArgs e)
         {
-            if (!_isRunning) return;
+            if (!_isRunning && !_oneShotActive) return;
 
             var settings = App.Settings.Current;
             var maxAlpha = Math.Min(1.0, Math.Max(0.0, settings.FlashOpacity / 100.0));
@@ -787,16 +818,28 @@ namespace ConditioningControlPanel.Services
 
         private void ForceFlashCleanup()
         {
-            if (!_isRunning) return;
-            
+            if (!_isRunning && !_oneShotActive) return;
+
             _virtualEndTime = DateTime.Now;
             _cleanupInProgress = true;
             _soundPlayingForCurrentFlash = false; // Reset for next flash
-            
+
             // Re-enable after windows fade out
             Task.Delay(2000).ContinueWith(_ =>
             {
                 _cleanupInProgress = false;
+
+                // If this was a one-shot flash, stop heartbeat and reset flag
+                if (_oneShotActive && !_isRunning)
+                {
+                    if (System.Windows.Application.Current?.Dispatcher == null) return;
+                    System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
+                    {
+                        _oneShotActive = false;
+                        _heartbeatTimer?.Stop();
+                        App.Logger?.Debug("FlashService: One-shot flash completed");
+                    });
+                }
             });
         }
 

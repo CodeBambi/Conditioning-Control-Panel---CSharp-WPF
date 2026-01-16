@@ -1327,7 +1327,7 @@ namespace ConditioningControlPanel.Models
             set { _autonomyRandomTriggerEnabled = value; OnPropertyChanged(); }
         }
 
-        private int _autonomyRandomIntervalMinutes = 10;
+        private int _autonomyRandomIntervalMinutes = 2;
         /// <summary>
         /// Average minutes between random triggers (2-60)
         /// </summary>
@@ -1440,7 +1440,7 @@ namespace ConditioningControlPanel.Models
             set { _autonomyCanTriggerBrainDrain = value; OnPropertyChanged(); }
         }
 
-        private bool _autonomyCanTriggerBubbles = true;
+        private bool _autonomyCanTriggerBubbles = false;
         /// <summary>
         /// Allow autonomous bubble minigame starts (requires Lv.20)
         /// </summary>
@@ -1458,6 +1458,66 @@ namespace ConditioningControlPanel.Models
         {
             get => _autonomyCanComment;
             set { _autonomyCanComment = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyCanTriggerMindWipe = true;
+        /// <summary>
+        /// Allow autonomous mindwipe audio triggers
+        /// </summary>
+        public bool AutonomyCanTriggerMindWipe
+        {
+            get => _autonomyCanTriggerMindWipe;
+            set { _autonomyCanTriggerMindWipe = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyCanTriggerLockCard = true;
+        /// <summary>
+        /// Allow autonomous lock card triggers (Level 35+)
+        /// </summary>
+        public bool AutonomyCanTriggerLockCard
+        {
+            get => _autonomyCanTriggerLockCard;
+            set { _autonomyCanTriggerLockCard = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyCanTriggerSpiral = true;
+        /// <summary>
+        /// Allow autonomous spiral overlay pulses
+        /// </summary>
+        public bool AutonomyCanTriggerSpiral
+        {
+            get => _autonomyCanTriggerSpiral;
+            set { _autonomyCanTriggerSpiral = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyCanTriggerPinkFilter = true;
+        /// <summary>
+        /// Allow autonomous pink filter pulses
+        /// </summary>
+        public bool AutonomyCanTriggerPinkFilter
+        {
+            get => _autonomyCanTriggerPinkFilter;
+            set { _autonomyCanTriggerPinkFilter = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyCanTriggerBouncingText = true;
+        /// <summary>
+        /// Allow autonomous bouncing text (Level 60+)
+        /// </summary>
+        public bool AutonomyCanTriggerBouncingText
+        {
+            get => _autonomyCanTriggerBouncingText;
+            set { _autonomyCanTriggerBouncingText = value; OnPropertyChanged(); }
+        }
+
+        private bool _autonomyCanTriggerBubbleCount = true;
+        /// <summary>
+        /// Allow autonomous bubble count minigame (Level 50+)
+        /// </summary>
+        public bool AutonomyCanTriggerBubbleCount
+        {
+            get => _autonomyCanTriggerBubbleCount;
+            set { _autonomyCanTriggerBubbleCount = value; OnPropertyChanged(); }
         }
 
         private int _autonomyAnnouncementChance = 50;

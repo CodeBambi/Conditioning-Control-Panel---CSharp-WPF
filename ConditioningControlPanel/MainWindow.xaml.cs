@@ -50,6 +50,12 @@ namespace ConditioningControlPanel
         private AvatarTubeWindow? _avatarTubeWindow;
         private bool _avatarWasAttachedBeforeMaximize = false;
 
+        // Auto-pause state when minimized with attached avatar
+        private bool _autonomyWasPausedOnMinimize = false;
+        private bool _avatarWasMutedOnMinimize = false;
+        private bool _wasAutonomyRunningBeforeMinimize = false;
+        private bool _wasAvatarUnmutedBeforeMinimize = false;
+
         // Achievement tracking
         private Dictionary<string, Image> _achievementImages = new();
         
@@ -1353,6 +1359,7 @@ namespace ConditioningControlPanel
             var value = (int)(slider?.Value ?? 120);
             TxtIdleIntervalCompanion.Text = $"{value}s";
             App.Settings.Current.IdleGiggleIntervalSeconds = value;
+            App.Settings.Save();
         }
 
         // ============================================================
@@ -1526,6 +1533,7 @@ namespace ConditioningControlPanel
             var value = (int)SliderAwarenessCooldown.Value;
             TxtAwarenessCooldown.Text = $"{value}s";
             App.Settings.Current.AwarenessReactionCooldownSeconds = value;
+            App.Settings.Save();
         }
 
         #region Haptics Handlers
@@ -4421,8 +4429,9 @@ namespace ConditioningControlPanel
                 App.BrainDrain.Start();
             }
 
-            // Start autonomy service (requires level 100)
-            if (settings.PlayerLevel >= 100 && settings.AutonomyModeEnabled && settings.AutonomyConsentGiven)
+            // Start autonomy service (requires Patreon + level 100)
+            var hasPatreonAccess = settings.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+            if (hasPatreonAccess && settings.PlayerLevel >= 100 && settings.AutonomyModeEnabled && settings.AutonomyConsentGiven)
             {
                 App.Autonomy?.Start();
             }
@@ -5001,7 +5010,14 @@ namespace ConditioningControlPanel
             ChkAutonomyFlash.IsChecked = s.AutonomyCanTriggerFlash;
             ChkAutonomyVideo.IsChecked = s.AutonomyCanTriggerVideo;
             ChkAutonomySubliminal.IsChecked = s.AutonomyCanTriggerSubliminal;
+            ChkAutonomyBubbles.IsChecked = s.AutonomyCanTriggerBubbles;
             ChkAutonomyComment.IsChecked = s.AutonomyCanComment;
+            ChkAutonomyMindWipe.IsChecked = s.AutonomyCanTriggerMindWipe;
+            ChkAutonomyLockCard.IsChecked = s.AutonomyCanTriggerLockCard;
+            ChkAutonomySpiral.IsChecked = s.AutonomyCanTriggerSpiral;
+            ChkAutonomyPinkFilter.IsChecked = s.AutonomyCanTriggerPinkFilter;
+            ChkAutonomyBouncingText.IsChecked = s.AutonomyCanTriggerBouncingText;
+            ChkAutonomyBubbleCount.IsChecked = s.AutonomyCanTriggerBubbleCount;
             SliderAutonomyAnnounce.Value = s.AutonomyAnnouncementChance;
 
             // Bouncing Text Size (add if not already loaded above)
@@ -5096,6 +5112,14 @@ namespace ConditioningControlPanel
 
             // Update all slider text displays
             UpdateSliderTexts();
+
+            // Start autonomy service if it was enabled (works independently of engine)
+            var hasPatreonAccess = s.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+            if (hasPatreonAccess && s.PlayerLevel >= 100 && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
+            {
+                App.Autonomy?.Start();
+                App.Logger?.Debug("MainWindow: Started autonomy service on settings load");
+            }
         }
 
         /// <summary>
@@ -5587,11 +5611,32 @@ namespace ConditioningControlPanel
                 if (BrainDrainUnlocked != null) BrainDrainUnlocked.Visibility = level70Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level70Unlocked);
 
-                // Level 100 unlocks: Autonomy Mode
-                var level100Unlocked = level >= 100;
-                if (AutonomyLocked != null) AutonomyLocked.Visibility = level100Unlocked ? Visibility.Collapsed : Visibility.Visible;
-                if (AutonomyUnlocked != null) AutonomyUnlocked.Visibility = level100Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                if (AutonomyFeatureImage != null) SetFeatureImageBlur(AutonomyFeatureImage, !level100Unlocked);
+                // Bambi Takeover: Requires Patreon + Level 100
+                var hasPatreon = App.Settings.Current.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+                var autonomyUnlocked = hasPatreon && level >= 100;
+                if (AutonomyLocked != null) AutonomyLocked.Visibility = autonomyUnlocked ? Visibility.Collapsed : Visibility.Visible;
+                if (AutonomyUnlocked != null) AutonomyUnlocked.Visibility = autonomyUnlocked ? Visibility.Visible : Visibility.Collapsed;
+                if (AutonomyFeatureImage != null) SetFeatureImageBlur(AutonomyFeatureImage, !autonomyUnlocked);
+
+                // Update lock message based on what's missing
+                if (TxtAutonomyLockStatus != null && TxtAutonomyLockMessage != null)
+                {
+                    if (!hasPatreon && level < 100)
+                    {
+                        TxtAutonomyLockStatus.Text = $"🔒 Patreon + Lvl {level}/100";
+                        TxtAutonomyLockMessage.Text = "Support on Patreon and reach Level 100";
+                    }
+                    else if (!hasPatreon)
+                    {
+                        TxtAutonomyLockStatus.Text = "🔒 Patreon Only";
+                        TxtAutonomyLockMessage.Text = "Support on Patreon to unlock";
+                    }
+                    else
+                    {
+                        TxtAutonomyLockStatus.Text = $"🔒 Lvl {level}/100";
+                        TxtAutonomyLockMessage.Text = "Reach Level 100 to unlock";
+                    }
+                }
 
                 App.Logger?.Debug("UpdateUnlockablesVisibility: Completed successfully.");
             }
@@ -5845,7 +5890,14 @@ namespace ConditioningControlPanel
         {
             if (_isLoading || TxtBubbleFreq == null) return;
             TxtBubbleFreq.Text = ((int)e.NewValue).ToString();
-            ApplySettingsLive();
+            App.Settings.Current.BubblesFrequency = (int)e.NewValue;
+
+            if (_isRunning)
+            {
+                App.Bubbles.RefreshFrequency();
+            }
+
+            App.Settings.Save();
         }
 
         private void ChkSpiralEnabled_Changed(object sender, RoutedEventArgs e)
@@ -5934,14 +5986,16 @@ namespace ConditioningControlPanel
         {
             if (_isLoading || TxtLockCardFreq == null) return;
             TxtLockCardFreq.Text = ((int)e.NewValue).ToString();
-            ApplySettingsLive();
+            App.Settings.Current.LockCardFrequency = (int)e.NewValue;
+            App.Settings.Save();
         }
 
         private void SliderLockCardRepeats_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading || TxtLockCardRepeats == null) return;
             TxtLockCardRepeats.Text = $"{(int)e.NewValue}x";
-            ApplySettingsLive();
+            App.Settings.Current.LockCardRepeats = (int)e.NewValue;
+            App.Settings.Save();
         }
 
         #region Bubble Count (Level 50)
@@ -6278,21 +6332,58 @@ namespace ConditioningControlPanel
 
             App.Settings.Current.AutonomyModeEnabled = isEnabled;
 
-            // Start/stop autonomy service if engine is running
-            if (_isRunning)
+            // Start/stop autonomy service (works independently of engine!)
+            // Requires Patreon + Level 100 + Consent
+            var hasPatreon = App.Settings.Current.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+            if (isEnabled && hasPatreon && App.Settings.Current.PlayerLevel >= 100 && App.Settings.Current.AutonomyConsentGiven)
             {
-                if (isEnabled && App.Settings.Current.PlayerLevel >= 100 && App.Settings.Current.AutonomyConsentGiven)
-                {
-                    App.Autonomy?.Start();
-                }
-                else
-                {
-                    App.Autonomy?.Stop();
-                }
-                App.Logger?.Information("Autonomy Mode toggled: {Enabled}", isEnabled);
+                App.Autonomy?.Start();
             }
+            else
+            {
+                App.Autonomy?.Stop();
+            }
+            App.Logger?.Information("Autonomy Mode toggled: {Enabled} (Engine running: {EngineRunning}, Patreon: {Patreon})", isEnabled, _isRunning, hasPatreon);
 
             App.Settings.Save();
+
+            // Sync avatar menu state
+            Dispatcher.BeginInvoke(() => _avatarTubeWindow?.UpdateQuickMenuState());
+        }
+
+        /// <summary>
+        /// Called from AvatarTubeWindow to sync the checkbox state when toggled from avatar menu
+        /// </summary>
+        public void SyncAutonomyCheckbox(bool isEnabled)
+        {
+            // Read the actual setting value to ensure consistency
+            var actualValue = App.Settings?.Current?.AutonomyModeEnabled ?? false;
+            App.Logger?.Information("MainWindow.SyncAutonomyCheckbox called with isEnabled={IsEnabled}, actualSetting={Actual}", isEnabled, actualValue);
+
+            // Use BeginInvoke to ensure UI update happens after current operation completes
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
+            {
+                try
+                {
+                    // Re-read the setting inside dispatcher to get the latest value
+                    var settingValue = App.Settings?.Current?.AutonomyModeEnabled ?? false;
+                    App.Logger?.Information("MainWindow.SyncAutonomyCheckbox inside Dispatcher, setting={Setting}, ChkAutonomyEnabled null={IsNull}",
+                        settingValue, ChkAutonomyEnabled == null);
+                    if (ChkAutonomyEnabled != null)
+                    {
+                        // Temporarily set _isLoading to prevent the handler from running
+                        var wasLoading = _isLoading;
+                        _isLoading = true;
+                        ChkAutonomyEnabled.IsChecked = settingValue;
+                        _isLoading = wasLoading;
+                        App.Logger?.Information("MainWindow.SyncAutonomyCheckbox set checkbox to {Value}", settingValue);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "MainWindow.SyncAutonomyCheckbox failed");
+                }
+            }));
         }
 
         private void SliderAutonomyIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -6315,6 +6406,7 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             App.Settings.Current.AutonomyIdleTriggerEnabled = ChkAutonomyIdle.IsChecked ?? false;
+            App.Autonomy?.RefreshIdleTimer();
             App.Settings.Save();
         }
 
@@ -6322,6 +6414,7 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             App.Settings.Current.AutonomyRandomTriggerEnabled = ChkAutonomyRandom.IsChecked ?? false;
+            App.Autonomy?.RefreshRandomTimer();
             App.Settings.Save();
         }
 
@@ -6338,7 +6431,14 @@ namespace ConditioningControlPanel
             App.Settings.Current.AutonomyCanTriggerFlash = ChkAutonomyFlash.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerVideo = ChkAutonomyVideo.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerSubliminal = ChkAutonomySubliminal.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerBubbles = ChkAutonomyBubbles.IsChecked ?? false;
             App.Settings.Current.AutonomyCanComment = ChkAutonomyComment.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerMindWipe = ChkAutonomyMindWipe.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerLockCard = ChkAutonomyLockCard.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerSpiral = ChkAutonomySpiral.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerPinkFilter = ChkAutonomyPinkFilter.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerBouncingText = ChkAutonomyBouncingText.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerBubbleCount = ChkAutonomyBubbleCount.IsChecked ?? false;
             App.Settings.Save();
         }
 
@@ -6348,6 +6448,11 @@ namespace ConditioningControlPanel
             TxtAutonomyAnnounce.Text = $"{(int)e.NewValue}%";
             App.Settings.Current.AutonomyAnnouncementChance = (int)e.NewValue;
             App.Settings.Save();
+        }
+
+        private void BtnTestAutonomy_Click(object sender, RoutedEventArgs e)
+        {
+            App.Autonomy?.TestTrigger();
         }
 
         #endregion
@@ -7152,6 +7257,23 @@ namespace ConditioningControlPanel
                     _avatarWasAttachedBeforeMaximize = false;
                 }
 
+                // Restore autonomy and avatar mute state if we paused them on minimize
+                if (_autonomyWasPausedOnMinimize && _wasAutonomyRunningBeforeMinimize)
+                {
+                    App.Autonomy?.Start();
+                    _autonomyWasPausedOnMinimize = false;
+                    _wasAutonomyRunningBeforeMinimize = false;
+                    App.Logger?.Debug("MainWindow: Restored autonomy mode after restore from minimize");
+                }
+
+                if (_avatarWasMutedOnMinimize && _wasAvatarUnmutedBeforeMinimize)
+                {
+                    _avatarTubeWindow?.SetMuteAvatar(false);
+                    _avatarWasMutedOnMinimize = false;
+                    _wasAvatarUnmutedBeforeMinimize = false;
+                    App.Logger?.Debug("MainWindow: Restored avatar unmuted state after restore from minimize");
+                }
+
                 // Update maximize button icon
                 BtnMaximize.Content = "☐";
             }
@@ -7168,6 +7290,31 @@ namespace ConditioningControlPanel
 
                 // Update maximize button icon
                 BtnMaximize.Content = "❐";
+            }
+            else if (WindowState == WindowState.Minimized)
+            {
+                // Auto-pause autonomy and mute avatar when minimized with attached avatar
+                // (no point running effects when user can't see them)
+                if (_avatarTubeWindow != null && !_avatarTubeWindow.IsDetached)
+                {
+                    // Pause autonomy if it's running
+                    if (App.Autonomy?.IsEnabled == true)
+                    {
+                        _wasAutonomyRunningBeforeMinimize = true;
+                        _autonomyWasPausedOnMinimize = true;
+                        App.Autonomy.Stop();
+                        App.Logger?.Debug("MainWindow: Auto-paused autonomy mode on minimize (attached avatar)");
+                    }
+
+                    // Mute avatar if it's not already muted
+                    if (_avatarTubeWindow.IsMuted == false)
+                    {
+                        _wasAvatarUnmutedBeforeMinimize = true;
+                        _avatarWasMutedOnMinimize = true;
+                        _avatarTubeWindow.SetMuteAvatar(true);
+                        App.Logger?.Debug("MainWindow: Auto-muted avatar on minimize (attached avatar)");
+                    }
+                }
             }
         }
 

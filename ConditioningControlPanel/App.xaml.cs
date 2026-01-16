@@ -424,6 +424,19 @@ namespace ConditioningControlPanel
                     Logger?.Information("Patreon authenticated, loading cloud profile...");
                     await ProfileSync.LoadProfileAsync();
                 }
+
+                // Start autonomy service if it should be enabled
+                // (might have been skipped during LoadSettings if whitelist wasn't loaded yet)
+                var s = Settings?.Current;
+                if (s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven && s.PlayerLevel >= 100)
+                {
+                    var hasPatreonAccess = s.PatreonTier >= 1 || Patreon?.IsWhitelisted == true;
+                    if (hasPatreonAccess && Autonomy?.IsEnabled != true)
+                    {
+                        Autonomy?.Start();
+                        Logger?.Information("Started autonomy service after Patreon validation");
+                    }
+                }
             }
             catch (Exception ex)
             {

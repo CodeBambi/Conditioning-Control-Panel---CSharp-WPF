@@ -184,7 +184,7 @@
                         <Separator Background="#FF69B4"/>
                         <MenuItem x:Name="MenuItemEngine" Header="▶ Start Engine" Click="MenuItemEngine_Click" Foreground="#90EE90"/>
                         <MenuItem x:Name="MenuItemTriggerMode" Header="☐ Trigger Mode" Click="MenuItemTriggerMode_Click" Foreground="White"/>
-                        <MenuItem x:Name="MenuItemRandomBubble" Header="☐ Random Bubble" Click="MenuItemRandomBubble_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemBambiTakeover" Header="☐ Bambi Takeover" Click="MenuItemBambiTakeover_Click" Foreground="White"/>
                         <MenuItem x:Name="MenuItemSlutMode" Header="☐ Slut Mode" Click="MenuItemSlutMode_Click" Foreground="White"/>
                         <MenuItem x:Name="MenuItemMute" Header="☐ Mute Avatar" Click="MenuItemMute_Click" Foreground="White"/>
                         <Separator Background="#FF69B4"/>

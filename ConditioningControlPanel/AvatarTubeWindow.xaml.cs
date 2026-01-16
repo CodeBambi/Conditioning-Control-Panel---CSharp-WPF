@@ -4160,18 +4160,62 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void MenuItemRandomBubble_Click(object sender, RoutedEventArgs e)
+        private void MenuItemBambiTakeover_Click(object sender, RoutedEventArgs e)
         {
-            var current = App.Settings?.Current?.RandomBubbleEnabled ?? false;
-            if (App.Settings?.Current != null)
-            {
-                App.Settings.Current.RandomBubbleEnabled = !current;
-                App.Settings.Save();
-                RestartRandomBubbleTimer();
-                UpdateQuickMenuState();
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
 
-                Giggle(!current ? "Random bubbles ON~" : "Random bubbles off~");
+            // Check Patreon requirement (tier 1+ or whitelisted)
+            if (settings.PatreonTier < 1 && App.Patreon?.IsWhitelisted != true)
+            {
+                Giggle("This is Patreon only~");
+                return;
             }
+
+            // Check level requirement (Level 100+)
+            if (settings.PlayerLevel < 100)
+            {
+                Giggle($"You need Level 100~ You're {settings.PlayerLevel}!");
+                return;
+            }
+
+            // Auto-grant consent when enabling from avatar menu
+            // (user is explicitly choosing to enable, so consent is implied)
+            if (!settings.AutonomyConsentGiven)
+            {
+                settings.AutonomyConsentGiven = true;
+            }
+
+            var current = settings.AutonomyModeEnabled;
+            settings.AutonomyModeEnabled = !current;
+            App.Settings.Save();
+
+            // Start/stop autonomy service
+            if (!current)
+            {
+                App.Autonomy?.Start();
+                Giggle("Bambi takes over~ *giggles*");
+            }
+            else
+            {
+                App.Autonomy?.Stop();
+                Giggle("Takeover mode off~");
+            }
+
+            // Sync main window checkbox
+            App.Logger?.Information("AvatarTubeWindow: Syncing checkbox, _parentWindow type={Type}, !current={NewValue}",
+                _parentWindow?.GetType().Name ?? "null", !current);
+            if (_parentWindow is MainWindow mainWindow)
+            {
+                App.Logger?.Information("AvatarTubeWindow: Calling SyncAutonomyCheckbox({NewValue})", !current);
+                mainWindow.SyncAutonomyCheckbox(!current);
+            }
+            else
+            {
+                App.Logger?.Warning("AvatarTubeWindow: _parentWindow is not MainWindow!");
+            }
+
+            UpdateQuickMenuState();
         }
 
         private void MenuItemTalkToBambi_Click(object sender, RoutedEventArgs e)
@@ -4321,10 +4365,26 @@ namespace ConditioningControlPanel
             MenuItemTriggerMode.Header = triggerOn ? "☑ Trigger Mode" : "☐ Trigger Mode";
             MenuItemTriggerMode.Foreground = triggerOn ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
 
-            // Random bubble
-            var randomBubbleOn = App.Settings?.Current?.RandomBubbleEnabled == true;
-            MenuItemRandomBubble.Header = randomBubbleOn ? "☑ Random Bubble" : "☐ Random Bubble";
-            MenuItemRandomBubble.Foreground = randomBubbleOn ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
+            // Bambi Takeover (Patreon + Level 100+)
+            var hasPatreon = (App.Settings?.Current?.PatreonTier ?? 0) >= 1 || App.Patreon?.IsWhitelisted == true;
+            var level = App.Settings?.Current?.PlayerLevel ?? 0;
+            // Just check the setting, not whether service is running
+            var takeoverOn = App.Settings?.Current?.AutonomyModeEnabled == true;
+            // Don't require consent here - we auto-grant it when they click
+            var takeoverAvailable = hasPatreon && level >= 100;
+            MenuItemBambiTakeover.Header = takeoverOn ? "☑ Bambi Takeover" : "☐ Bambi Takeover";
+            MenuItemBambiTakeover.Foreground = takeoverOn ? new SolidColorBrush(Color.FromRgb(255, 105, 180)) : new SolidColorBrush(Colors.White);
+            MenuItemBambiTakeover.IsEnabled = takeoverAvailable;
+            if (!takeoverAvailable)
+            {
+                if (!hasPatreon && level < 100)
+                    MenuItemBambiTakeover.Header = $"🔒 Bambi Takeover (Patreon + Lv{level}/100)";
+                else if (!hasPatreon)
+                    MenuItemBambiTakeover.Header = "🔒 Bambi Takeover (Patreon)";
+                else
+                    MenuItemBambiTakeover.Header = $"🔒 Bambi Takeover (Lv{level}/100)";
+                MenuItemBambiTakeover.Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 128)); // Gray for locked
+            }
 
             // Slut mode (Patreon only)
             var slutOn = App.Settings?.Current?.SlutModeEnabled == true;
@@ -4351,6 +4411,11 @@ namespace ConditioningControlPanel
             MenuItemPauseBrowser.Header = _isBrowserPaused ? "▶ Resume Browser" : "⏸ Pause Browser";
             MenuItemPauseBrowser.Foreground = _isBrowserPaused ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
         }
+
+        /// <summary>
+        /// Gets whether the avatar is currently muted
+        /// </summary>
+        public bool IsMuted => _isMuted;
 
         /// <summary>
         /// Set mute avatar state from MainWindow
