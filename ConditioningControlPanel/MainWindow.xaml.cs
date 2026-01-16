@@ -1114,17 +1114,17 @@ namespace ConditioningControlPanel
             SlutModeLocked.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
             ChkSlutMode.IsEnabled = hasPremiumAccess;
 
-            // Haptics - unlock for whitelisted testers only (testing feature)
-            var isWhitelistedTester = App.Patreon?.IsWhitelisted == true;
-            HapticsContentGrid.Opacity = isWhitelistedTester ? 1.0 : 0.3;
-            HapticsContentGrid.IsHitTestVisible = isWhitelistedTester;
-            HapticsConnectionLock.Visibility = isWhitelistedTester ? Visibility.Collapsed : Visibility.Visible;
-            HapticsFeatureLock.Visibility = isWhitelistedTester ? Visibility.Collapsed : Visibility.Visible;
-            HapticsConnectionBox.IsEnabled = isWhitelistedTester;
-            HapticsFeatureBox.IsEnabled = isWhitelistedTester;
+            // Haptics - unlock for all Patreon supporters
+            var hasHapticsAccess = hasPremiumAccess;
+            HapticsContentGrid.Opacity = hasHapticsAccess ? 1.0 : 0.3;
+            HapticsContentGrid.IsHitTestVisible = hasHapticsAccess;
+            HapticsConnectionLock.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
+            HapticsFeatureLock.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
+            HapticsConnectionBox.IsEnabled = hasHapticsAccess;
+            HapticsFeatureBox.IsEnabled = hasHapticsAccess;
 
-            // Hide "Coming Soon" overlay for whitelisted testers only
-            HapticsComingSoonOverlay.Visibility = isWhitelistedTester ? Visibility.Collapsed : Visibility.Visible;
+            // Hide "Coming Soon" overlay for Patreon supporters
+            HapticsComingSoonOverlay.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
 
             // Update connection status
             if (TxtAiStatus != null)
@@ -5639,30 +5639,17 @@ namespace ConditioningControlPanel
                 if (BrainDrainUnlocked != null) BrainDrainUnlocked.Visibility = level70Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level70Unlocked);
 
-                // Bambi Takeover: Requires Patreon + Level 100
+                // Bambi Takeover: Requires Patreon (any tier)
                 var hasPatreon = App.Settings.Current.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
-                var autonomyUnlocked = hasPatreon && level >= 100;
+                var autonomyUnlocked = hasPatreon;
                 if (AutonomyLocked != null) AutonomyLocked.Visibility = autonomyUnlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (AutonomyUnlocked != null) AutonomyUnlocked.Visibility = autonomyUnlocked ? Visibility.Visible : Visibility.Collapsed;
 
-                // Update lock message based on what's missing
+                // Update lock message
                 if (TxtAutonomyLockStatus != null && TxtAutonomyLockMessage != null)
                 {
-                    if (!hasPatreon && level < 100)
-                    {
-                        TxtAutonomyLockStatus.Text = $"🔒 Patreon + Lvl {level}/100";
-                        TxtAutonomyLockMessage.Text = "Support on Patreon and reach Level 100";
-                    }
-                    else if (!hasPatreon)
-                    {
-                        TxtAutonomyLockStatus.Text = "🔒 Patreon Only";
-                        TxtAutonomyLockMessage.Text = "Support on Patreon to unlock";
-                    }
-                    else
-                    {
-                        TxtAutonomyLockStatus.Text = $"🔒 Lvl {level}/100";
-                        TxtAutonomyLockMessage.Text = "Reach Level 100 to unlock";
-                    }
+                    TxtAutonomyLockStatus.Text = "🔒 Patreon Only";
+                    TxtAutonomyLockMessage.Text = "Support on Patreon to unlock";
                 }
 
                 App.Logger?.Debug("UpdateUnlockablesVisibility: Completed successfully.");
@@ -6360,9 +6347,8 @@ namespace ConditioningControlPanel
             App.Settings.Current.AutonomyModeEnabled = isEnabled;
 
             // Start/stop autonomy service (works independently of engine!)
-            // Requires Patreon + Level 100 + Consent
+            // Requires Patreon + Consent
             var hasPatreon = App.Settings.Current.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
-            var meetsLevel = App.Settings.Current.PlayerLevel >= 100;
 
             if (isEnabled)
             {
@@ -6370,16 +6356,11 @@ namespace ConditioningControlPanel
                 {
                     App.Logger?.Warning("Autonomy Mode enabled but Patreon access missing - service will not start");
                     MessageBox.Show(
-                        "Autonomy Mode requires Patreon access (Level 1+).\n\n" +
+                        "Autonomy Mode requires Patreon access.\n\n" +
                         "The setting has been saved, but the feature will not activate until you have Patreon access.",
                         "Patreon Required",
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
-                    App.Autonomy?.Stop();
-                }
-                else if (!meetsLevel)
-                {
-                    App.Logger?.Warning("Autonomy Mode enabled but level requirement not met (need 100, have {Level})", App.Settings.Current.PlayerLevel);
                     App.Autonomy?.Stop();
                 }
                 else if (App.Settings.Current.AutonomyConsentGiven)
@@ -6391,8 +6372,8 @@ namespace ConditioningControlPanel
             {
                 App.Autonomy?.Stop();
             }
-            App.Logger?.Information("Autonomy Mode toggled: {Enabled} (Engine running: {EngineRunning}, Patreon: {Patreon}, Level: {Level})",
-                isEnabled, _isRunning, hasPatreon, App.Settings.Current.PlayerLevel);
+            App.Logger?.Information("Autonomy Mode toggled: {Enabled} (Engine running: {EngineRunning}, Patreon: {Patreon})",
+                isEnabled, _isRunning, hasPatreon);
 
             App.Settings.Save();
 

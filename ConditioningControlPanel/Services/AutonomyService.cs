@@ -314,7 +314,7 @@ namespace ConditioningControlPanel.Services
 
             if (!CanStart())
             {
-                App.Logger?.Warning("AutonomyService: Cannot start - requirements not met (need Level 100+, consent, and enabled)");
+                App.Logger?.Warning("AutonomyService: Cannot start - requirements not met (need Patreon, consent, and enabled)");
                 return;
             }
 
@@ -448,16 +448,17 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Check if autonomy can start
+        /// Check if autonomy can start (requires Patreon + consent)
         /// </summary>
         private bool CanStart()
         {
             var settings = App.Settings?.Current;
             if (settings == null) return false;
 
+            var hasPatreon = settings.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
             return settings.AutonomyModeEnabled &&
                    settings.AutonomyConsentGiven &&
-                   settings.PlayerLevel >= LEVEL_REQUIREMENT;
+                   hasPatreon;
         }
 
         /// <summary>

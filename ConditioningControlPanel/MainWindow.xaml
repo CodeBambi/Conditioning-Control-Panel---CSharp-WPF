@@ -3773,9 +3773,9 @@
                                         <StackPanel x:Name="AutonomyLocked" Visibility="Visible">
                                             <Grid>
                                                 <TextBlock Text="🤖 Bambi Takeover" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                                <TextBlock x:Name="TxtAutonomyLockStatus" Text="🔒 Patreon + Lvl 100" Foreground="#9B59B6" HorizontalAlignment="Right" FontSize="11"/>
+                                                <TextBlock x:Name="TxtAutonomyLockStatus" Text="🔒 Patreon Only" Foreground="#9B59B6" HorizontalAlignment="Right" FontSize="11"/>
                                             </Grid>
-                                            <TextBlock x:Name="TxtAutonomyLockMessage" Text="Patreon exclusive feature" Foreground="{StaticResource PinkBrush}" FontSize="11" Margin="0,4,0,0"/>
+                                            <TextBlock x:Name="TxtAutonomyLockMessage" Text="Support on Patreon to unlock" Foreground="{StaticResource PinkBrush}" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
 
                                         <!-- Unlocked State -->

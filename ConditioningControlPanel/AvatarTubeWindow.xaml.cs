@@ -4191,13 +4191,6 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // Check level requirement (Level 100+)
-            if (settings.PlayerLevel < 100)
-            {
-                Giggle($"You need Level 100~ You're {settings.PlayerLevel}!");
-                return;
-            }
-
             // Auto-grant consent when enabling from avatar menu
             // (user is explicitly choosing to enable, so consent is implied)
             if (!settings.AutonomyConsentGiven)
@@ -4384,25 +4377,19 @@ namespace ConditioningControlPanel
             MenuItemTriggerMode.Header = triggerOn ? "☑ Trigger Mode" : "☐ Trigger Mode";
             MenuItemTriggerMode.Foreground = triggerOn ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
 
-            // Bambi Takeover (Patreon + Level 100+)
+            // Bambi Takeover (Patreon only)
             var hasPatreon = (App.Settings?.Current?.PatreonTier ?? 0) >= 1 || App.Patreon?.IsWhitelisted == true;
-            var level = App.Settings?.Current?.PlayerLevel ?? 0;
             // Just check the setting, not whether service is running
             var takeoverOn = App.Settings?.Current?.AutonomyModeEnabled == true;
             // Don't require consent here - we auto-grant it when they click
-            var takeoverAvailable = hasPatreon && level >= 100;
+            var takeoverAvailable = hasPatreon;
             MenuItemBambiTakeover.Header = takeoverOn ? "☑ Bambi Takeover" : "☐ Bambi Takeover";
             MenuItemBambiTakeover.Foreground = takeoverOn ? new SolidColorBrush(Color.FromRgb(255, 105, 180)) : new SolidColorBrush(Colors.White);
             MenuItemBambiTakeover.IsEnabled = takeoverAvailable;
             if (!takeoverAvailable)
             {
-                if (!hasPatreon && level < 100)
-                    MenuItemBambiTakeover.Header = $"🔒 Bambi Takeover (Patreon + Lv{level}/100)";
-                else if (!hasPatreon)
-                    MenuItemBambiTakeover.Header = "🔒 Bambi Takeover (Patreon)";
-                else
-                    MenuItemBambiTakeover.Header = $"🔒 Bambi Takeover (Lv{level}/100)";
-                MenuItemBambiTakeover.Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 128)); // Gray for locked
+                MenuItemBambiTakeover.Header = "🔒 Bambi Takeover (Patreon)";
+                MenuItemBambiTakeover.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
             }
 
             // Slut mode (Patreon only)
