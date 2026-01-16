@@ -3757,114 +3757,146 @@
                             </Border>
                         </Grid>
 
-                        <!-- Bambi Takeover - Patreon + Level 100 (Half-width compact) -->
-                        <Border Background="#1E1E3A" CornerRadius="8" Padding="10" Margin="0,15,0,0"
-                                HorizontalAlignment="Left" Width="340"
-                                ToolTip="Let the companion act on her own!&#x0a;She can trigger effects autonomously.&#x0a;Requires Patreon + Level 100.">
-                            <Grid>
-                                <!-- Locked State -->
-                                <StackPanel x:Name="AutonomyLocked" Visibility="Visible">
+                        <!-- Bambi Takeover - Two Side-by-Side Boxes (like Haptics) -->
+                        <Grid Margin="0,15,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Left Box: Controls -->
+                            <Grid Grid.Column="0">
+                                <Border Background="#1E1E3A" CornerRadius="8" Padding="12" BorderBrush="#FF69B4" BorderThickness="1">
                                     <Grid>
-                                        <TextBlock Text="🤖 Bambi Takeover" Foreground="#666666" FontWeight="Bold" FontSize="12"/>
-                                        <TextBlock x:Name="TxtAutonomyLockStatus" Text="🔒 Patreon + Lvl 100" Foreground="#9B59B6" HorizontalAlignment="Right" FontSize="10"/>
-                                    </Grid>
-                                    <TextBlock x:Name="TxtAutonomyLockMessage" Text="Patreon exclusive feature" Foreground="{StaticResource PinkBrush}" FontSize="10" Margin="0,2,0,0"/>
-                                </StackPanel>
-
-                                <!-- Unlocked State -->
-                                <StackPanel x:Name="AutonomyUnlocked" Visibility="Collapsed">
-                                    <!-- Header row: Title + Start button -->
-                                    <Grid Margin="0,0,0,4">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="🤖 Bambi Takeover" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
-                                            <Border Background="#2A1A3A" CornerRadius="4" Padding="4,1" Margin="6,0,0,0" BorderBrush="#FF69B4" BorderThickness="1" VerticalAlignment="Center">
-                                                <TextBlock Text="No engine needed" Foreground="#FF69B4" FontSize="8"/>
-                                            </Border>
+                                        <!-- Locked State -->
+                                        <StackPanel x:Name="AutonomyLocked" Visibility="Visible">
+                                            <Grid>
+                                                <TextBlock Text="🤖 Bambi Takeover" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                                <TextBlock x:Name="TxtAutonomyLockStatus" Text="🔒 Patreon + Lvl 100" Foreground="#9B59B6" HorizontalAlignment="Right" FontSize="11"/>
+                                            </Grid>
+                                            <TextBlock x:Name="TxtAutonomyLockMessage" Text="Patreon exclusive feature" Foreground="{StaticResource PinkBrush}" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                            <Button x:Name="BtnAutonomyStartStop" Content="▶ Start" Background="#2A1A3A" Foreground="#90EE90"
-                                                    FontWeight="Bold" FontSize="10" Padding="8,2"
-                                                    Click="BtnAutonomyStartStop_Click" ToolTip="Start/Stop Bambi Takeover"/>
-                                            <Button Content="Test" Background="#FF69B4" Foreground="White" FontWeight="Bold" FontSize="9"
-                                                    Padding="6,2" Margin="4,0,0,0" Click="BtnTestAutonomy_Click" ToolTip="Test action"/>
+
+                                        <!-- Unlocked State -->
+                                        <StackPanel x:Name="AutonomyUnlocked" Visibility="Collapsed">
+                                            <!-- Header -->
+                                            <Grid>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="🤖 Bambi Takeover" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
+                                                    <Border Background="#2A1A3A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" BorderBrush="#FF69B4" BorderThickness="1">
+                                                        <TextBlock Text="No engine needed" Foreground="#FF69B4" FontSize="9"/>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <StackPanel x:Name="AutonomySettings" Margin="0,8,0,0">
+                                                <!-- Sliders: 2x2 grid -->
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="8"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="6"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <StackPanel Grid.Row="0" Grid.Column="0">
+                                                        <Grid><TextBlock Text="Interval" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyInterval" Text="60s" Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                                        <Slider x:Name="SliderAutonomyInterval" Minimum="30" Maximum="300" Value="60" Height="18" ValueChanged="SliderAutonomyInterval_Changed"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="0" Grid.Column="2">
+                                                        <Grid><TextBlock Text="Cooldown" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyCooldown" Text="30s" Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                                        <Slider x:Name="SliderAutonomyCooldown" Minimum="10" Maximum="300" Value="30" Height="18" ValueChanged="SliderAutonomyCooldown_Changed"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="2" Grid.Column="0">
+                                                        <Grid><TextBlock Text="Intensity" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyIntensity" Text="5" Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                                        <Slider x:Name="SliderAutonomyIntensity" Minimum="1" Maximum="10" Value="5" Height="18" ValueChanged="SliderAutonomyIntensity_Changed"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="2" Grid.Column="2">
+                                                        <Grid><TextBlock Text="Announce" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyAnnounce" Text="50%" Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                                        <Slider x:Name="SliderAutonomyAnnounce" Minimum="0" Maximum="100" Value="50" Height="18" ValueChanged="SliderAutonomyAnnounce_Changed"/>
+                                                    </StackPanel>
+                                                </Grid>
+
+                                                <!-- Checkboxes: 3 columns -->
+                                                <Grid Margin="0,10,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="8"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="8"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <!-- Triggers -->
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="Triggers" Foreground="#FF69B4" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
+                                                        <Grid Margin="0,1"><TextBlock Text="Idle" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyIdle" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyIdle_Changed" Unchecked="ChkAutonomyIdle_Changed"/></Grid>
+                                                        <Grid Margin="0,1"><TextBlock Text="Random" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyRandom" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyRandom_Changed" Unchecked="ChkAutonomyRandom_Changed"/></Grid>
+                                                        <Grid Margin="0,1"><TextBlock Text="Time-Aware" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyTimeAware" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyTimeAware_Changed" Unchecked="ChkAutonomyTimeAware_Changed"/></Grid>
+                                                    </StackPanel>
+                                                    <!-- Basic -->
+                                                    <StackPanel Grid.Column="2">
+                                                        <TextBlock Text="Basic" Foreground="#FF69B4" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
+                                                        <Grid Margin="0,1"><TextBlock Text="Flashes" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                        <Grid Margin="0,1"><TextBlock Text="Videos" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                        <Grid Margin="0,1"><TextBlock Text="Subliminals" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                        <Grid Margin="0,1"><TextBlock Text="Comments" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyComment" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                    </StackPanel>
+                                                    <!-- Advanced -->
+                                                    <StackPanel Grid.Column="4">
+                                                        <TextBlock Text="Advanced" Foreground="#FF69B4" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
+                                                        <Grid Margin="0,1"><TextBlock Text="Bubbles" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBubbles" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                        <Grid Margin="0,1"><TextBlock Text="Pink Filter" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyPinkFilter" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                        <Grid Margin="0,1"><TextBlock Text="Lock Cards" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyLockCard" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                        <Grid Margin="0,1"><TextBlock Text="Bouncing" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBouncingText" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                        <Grid Margin="0,1"><TextBlock Text="Mindwipe" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyMindWipe" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                    </StackPanel>
+                                                </Grid>
+
+                                                <!-- Buttons -->
+                                                <Grid Margin="0,10,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="8"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Button x:Name="BtnAutonomyStartStop" Grid.Column="0" Content="▶ Start" Background="#2A1A3A" Foreground="#90EE90"
+                                                            FontWeight="Bold" FontSize="12" Padding="12,6"
+                                                            Click="BtnAutonomyStartStop_Click" ToolTip="Start/Stop Bambi Takeover"/>
+                                                    <Button Grid.Column="2" Content="Test" Background="#FF69B4" Foreground="White" FontWeight="Bold" FontSize="11"
+                                                            Padding="12,6" Click="BtnTestAutonomy_Click" ToolTip="Test action"/>
+                                                </Grid>
+
+                                                <!-- Hidden elements -->
+                                                <CheckBox x:Name="ChkAutonomySpiral" Visibility="Collapsed" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                <CheckBox x:Name="ChkAutonomyBubbleCount" Visibility="Collapsed" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                                                <Button x:Name="BtnForceStartAutonomy" Visibility="Collapsed" Click="BtnForceStartAutonomy_Click"/>
+                                                <CheckBox x:Name="ChkAutonomyEnabled" Visibility="Collapsed" Checked="ChkAutonomyEnabled_Changed" Unchecked="ChkAutonomyEnabled_Changed"/>
+                                            </StackPanel>
                                         </StackPanel>
                                     </Grid>
-
-                                    <StackPanel x:Name="AutonomySettings">
-                                        <!-- Two sliders side by side -->
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="6"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="6"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0">
-                                                <Grid><TextBlock Text="Intensity" Foreground="#AAA" FontSize="9"/><TextBlock x:Name="TxtAutonomyIntensity" Text="5" Foreground="#FF69B4" FontSize="9" HorizontalAlignment="Right"/></Grid>
-                                                <Slider x:Name="SliderAutonomyIntensity" Minimum="1" Maximum="10" Value="5" Height="16" ValueChanged="SliderAutonomyIntensity_Changed"/>
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="2">
-                                                <Grid><TextBlock Text="Cooldown" Foreground="#AAA" FontSize="9"/><TextBlock x:Name="TxtAutonomyCooldown" Text="30s" Foreground="#FF69B4" FontSize="9" HorizontalAlignment="Right"/></Grid>
-                                                <Slider x:Name="SliderAutonomyCooldown" Minimum="10" Maximum="300" Value="30" Height="16" ValueChanged="SliderAutonomyCooldown_Changed"/>
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="4">
-                                                <Grid><TextBlock Text="Announce" Foreground="#AAA" FontSize="9"/><TextBlock x:Name="TxtAutonomyAnnounce" Text="50%" Foreground="#FF69B4" FontSize="9" HorizontalAlignment="Right"/></Grid>
-                                                <Slider x:Name="SliderAutonomyAnnounce" Minimum="0" Maximum="100" Value="50" Height="16" ValueChanged="SliderAutonomyAnnounce_Changed"/>
-                                            </StackPanel>
-                                        </Grid>
-
-                                        <!-- Compact checkbox grid: 4 columns -->
-                                        <Grid Margin="0,4,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                            </Grid.RowDefinitions>
-                                            <!-- Row 0: Headers -->
-                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Triggers" Foreground="#FF69B4" FontWeight="Bold" FontSize="8" Margin="0,0,0,1"/>
-                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="Basic" Foreground="#FF69B4" FontWeight="Bold" FontSize="8" Margin="0,0,0,1"/>
-                                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Effects" Foreground="#FF69B4" FontWeight="Bold" FontSize="8" Margin="0,0,0,1"/>
-                                            <TextBlock Grid.Row="0" Grid.Column="3" Text="Advanced" Foreground="#FF69B4" FontWeight="Bold" FontSize="8" Margin="0,0,0,1"/>
-                                            <!-- Row 1 -->
-                                            <Grid Grid.Row="1" Grid.Column="0"><TextBlock Text="Idle" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyIdle" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyIdle_Changed" Unchecked="ChkAutonomyIdle_Changed"/></Grid>
-                                            <Grid Grid.Row="1" Grid.Column="1"><TextBlock Text="Flash" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                            <Grid Grid.Row="1" Grid.Column="2"><TextBlock Text="Bubbles" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBubbles" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                            <Grid Grid.Row="1" Grid.Column="3"><TextBlock Text="LockCard" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyLockCard" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                            <!-- Row 2 -->
-                                            <Grid Grid.Row="2" Grid.Column="0"><TextBlock Text="Random" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyRandom" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyRandom_Changed" Unchecked="ChkAutonomyRandom_Changed"/></Grid>
-                                            <Grid Grid.Row="2" Grid.Column="1"><TextBlock Text="Video" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                            <Grid Grid.Row="2" Grid.Column="2"><TextBlock Text="Pink" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyPinkFilter" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                            <Grid Grid.Row="2" Grid.Column="3"><TextBlock Text="Bounce" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBouncingText" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                        </Grid>
-                                        <!-- Bottom row: remaining options -->
-                                        <Grid Margin="0,2,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Grid Grid.Column="0"><TextBlock Text="Time" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyTimeAware" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyTimeAware_Changed" Unchecked="ChkAutonomyTimeAware_Changed"/></Grid>
-                                            <Grid Grid.Column="1"><TextBlock Text="Subs" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                            <Grid Grid.Column="2"><TextBlock Text="Comment" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyComment" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                            <Grid Grid.Column="3"><TextBlock Text="Wipe" FontSize="8" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyMindWipe" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                        </Grid>
-                                        <!-- Hidden elements -->
-                                        <CheckBox x:Name="ChkAutonomySpiral" Visibility="Collapsed" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
-                                        <CheckBox x:Name="ChkAutonomyBubbleCount" Visibility="Collapsed" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
-                                        <Button x:Name="BtnForceStartAutonomy" Visibility="Collapsed" Click="BtnForceStartAutonomy_Click"/>
-                                        <CheckBox x:Name="ChkAutonomyEnabled" Visibility="Collapsed" Checked="ChkAutonomyEnabled_Changed" Unchecked="ChkAutonomyEnabled_Changed"/>
-                                    </StackPanel>
-                                </StackPanel>
+                                </Border>
                             </Grid>
-                        </Border>
+
+                            <!-- Right Box: Feature Image -->
+                            <Grid Grid.Column="2">
+                                <Border Background="#1E1E3A" CornerRadius="8" Padding="12" BorderBrush="#FF69B4" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="Let Her Take Control" Foreground="{StaticResource PinkBrush}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="She will autonomously trigger effects based on your settings"
+                                                   Foreground="#808080" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,12"/>
+                                        <Border Background="#151528" CornerRadius="8" Padding="8">
+                                            <Image Source="pack://application:,,,/Resources/features/bambi takeover.png"
+                                                   Stretch="Uniform" MaxHeight="200"
+                                                   ToolTip="Bambi Takeover - Let her take control~"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Grid>
 
                         <!-- Patreon Info Box -->
                         <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0"
