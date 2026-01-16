@@ -329,6 +329,15 @@
             font-size: 0.95rem;
         }
 
+        .feature-card img {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            border-radius: 16px;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(255, 105, 180, 0.2);
+        }
+
         /* Progression Section */
         .progression {
             padding: 6rem 2rem;
@@ -693,6 +702,59 @@
             border-radius: 4px;
         }
 
+        /* Logo in navbar */
+        .logo-img {
+            height: 40px;
+            width: auto;
+            border-radius: 8px;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+
+        .logo-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Avatar Banners */
+        .avatar-banner {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 200px;
+            height: 600px;
+            z-index: 100;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .avatar-banner.left {
+            left: 20px;
+        }
+
+        .avatar-banner.right {
+            right: 20px;
+        }
+
+        .avatar-banner img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 0;
+            filter: drop-shadow(0 0 20px rgba(255, 105, 180, 0.3));
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        /* Hide banners on smaller screens */
+        @media (max-width: 1400px) {
+            .avatar-banner {
+                display: none;
+            }
+        }
+
         /* Video Preview */
         .hero-video-container {
             margin-top: 3rem;
@@ -726,6 +788,14 @@
     </style>
 </head>
 <body>
+    <!-- Avatar Banners -->
+    <div class="avatar-banner left">
+        <img id="avatar-left" src="images/avatar_pose1.png" alt="Avatar">
+    </div>
+    <div class="avatar-banner right">
+        <img id="avatar-right" src="images/avatar2_pose1.png" alt="Avatar">
+    </div>
+
     <div class="bg-animation"></div>
     <div class="particles">
         <div class="particle" style="left: 10%; animation-delay: 0s;"></div>
@@ -740,7 +810,10 @@
     </div>
 
     <nav>
-        <div class="logo">CCP</div>
+        <div class="logo-wrapper">
+            <img src="images/logo.png" alt="CCP Logo" class="logo-img">
+            <span class="logo">CCP</span>
+        </div>
         <ul class="nav-links">
             <li><a href="#features">Features</a></li>
             <li><a href="#progression">Progression</a></li>
@@ -821,57 +894,75 @@
 
         <div class="features-grid">
             <div class="feature-card">
-                <div class="feature-icon">🖼️</div>
+                <img src="images/features/flash.png" alt="Flash Images">
                 <h3>Flash Images</h3>
                 <p>Random image popups with GIF support, clickable interactions, and optional "Corruption" mode with hydra effect.</p>
             </div>
 
             <div class="feature-card">
-                <div class="feature-icon">🎬</div>
+                <img src="images/features/mandatory_videos.png" alt="Mandatory Videos">
                 <h3>Mandatory Videos</h3>
                 <p>Fullscreen video playback with Strict Lock mode, attention check mini-games, and haptic feedback integration.</p>
             </div>
 
             <div class="feature-card">
-                <div class="feature-icon">💭</div>
+                <img src="images/features/subliminal.png" alt="Subliminal Messages">
                 <h3>Subliminal Messages</h3>
                 <p>Customizable text flashes with audio whisper support and haptic synchronization.</p>
             </div>
 
             <div class="feature-card">
-                <div class="feature-icon">🤖</div>
+                <img src="images/features/4new.png" alt="AI Companion">
                 <h3>AI Companion</h3>
                 <p>Interactive animated avatar with speech bubbles, trigger mode, and AI chat capabilities.</p>
             </div>
 
             <div class="feature-card">
-                <div class="feature-icon">🏆</div>
-                <h3>Achievements</h3>
-                <p>20+ achievements to unlock across progression, time, minigames, and hardcore categories.</p>
+                <img src="images/features/Bubble_pop.png" alt="Bubble Pop">
+                <h3>Bubble Pop Mini-game</h3>
+                <p>Pop floating bubbles for bonus XP and combo streaks. Unlocks at level 20.</p>
             </div>
 
             <div class="feature-card">
-                <div class="feature-icon">📅</div>
-                <h3>Smart Scheduler</h3>
-                <p>Auto-start/stop with intensity ramp, day selection, and linked parameter control.</p>
+                <img src="images/features/brain_drain.png" alt="Brain Drain">
+                <h3>Brain Drain Overlay</h3>
+                <p>Progressive blur effect during conditioning with customizable intensity.</p>
             </div>
 
             <div class="feature-card">
-                <div class="feature-icon">🎮</div>
-                <h3>Sessions</h3>
-                <p>Pre-built conditioning sessions with phases, plus custom session creation and sharing.</p>
+                <img src="images/features/spiral_overlay.png" alt="Spiral Overlay">
+                <h3>Spiral Overlay</h3>
+                <p>Hypnotic spiral overlay effect to enhance immersion. Unlocks at level 10.</p>
             </div>
 
             <div class="feature-card">
-                <div class="feature-icon">📳</div>
-                <h3>Haptic Feedback</h3>
-                <p>Integration with Lovense and Buttplug.io devices for synchronized physical feedback.</p>
+                <img src="images/features/Pink_filter.png" alt="Pink Filter">
+                <h3>Pink Filter</h3>
+                <p>Pink-tinted screen effect with adjustable opacity for aesthetic conditioning.</p>
             </div>
 
             <div class="feature-card">
-                <div class="feature-icon">🌐</div>
-                <h3>Embedded Browser</h3>
-                <p>Built-in WebView2 browser with quick access buttons and audio controls.</p>
+                <img src="images/features/Phrase_Lock.png" alt="Phrase Lock">
+                <h3>Phrase Lock</h3>
+                <p>Type the passphrase correctly to unlock your screen. Unlocks at level 35.</p>
+            </div>
+
+            <div class="feature-card">
+                <img src="images/features/bouncing_text.png" alt="Bouncing Text">
+                <h3>Bouncing Text</h3>
+                <p>Trigger words bounce around your screen like a DVD screensaver. Unlocks at level 60.</p>
+            </div>
+
+            <div class="feature-card">
+                <img src="images/features/Mind_Wipers.png" alt="Mind Wipers">
+                <h3>Mind Wipe Audio</h3>
+                <p>Periodic audio effects for deeper immersion. Unlocks at level 75.</p>
+            </div>
+
+            <div class="feature-card">
+                <img src="images/features/corner_gif.png" alt="Corner GIF">
+                <h3>Corner GIF</h3>
+                <p>Small animated GIF in the corner of your screen as a constant reminder.</p>
             </div>
         </div>
     </section>
@@ -1074,6 +1165,69 @@
             particle.style.animationDuration = (10 + Math.random() * 10) + 's';
             particlesContainer.appendChild(particle);
         }
+
+        // Avatar pose animation
+        const avatarSets = [
+            { prefix: 'avatar', poses: 4 },
+            { prefix: 'avatar2', poses: 4 },
+            { prefix: 'avatar3', poses: 4 },
+            { prefix: 'avatar4', poses: 4 },
+            { prefix: 'avatar5', poses: 4 },
+            { prefix: 'avatar6', poses: 4 }
+        ];
+
+        let leftAvatarSet = 0;
+        let rightAvatarSet = 1;
+        let leftPose = 1;
+        let rightPose = 1;
+
+        function changeAvatarPose(avatarId, setIndex, pose) {
+            const avatar = document.getElementById(avatarId);
+            if (avatar) {
+                const set = avatarSets[setIndex];
+                avatar.style.opacity = '0';
+                setTimeout(() => {
+                    avatar.src = `images/${set.prefix}_pose${pose}.png`;
+                    avatar.style.opacity = '1';
+                }, 150);
+            }
+        }
+
+        // Change poses every 2-4 seconds randomly
+        function animateLeftAvatar() {
+            leftPose = (leftPose % 4) + 1;
+            changeAvatarPose('avatar-left', leftAvatarSet, leftPose);
+            setTimeout(animateLeftAvatar, 2000 + Math.random() * 2000);
+        }
+
+        function animateRightAvatar() {
+            rightPose = (rightPose % 4) + 1;
+            changeAvatarPose('avatar-right', rightAvatarSet, rightPose);
+            setTimeout(animateRightAvatar, 2000 + Math.random() * 2000);
+        }
+
+        // Change avatar character every 15-30 seconds
+        function changeLeftAvatarSet() {
+            leftAvatarSet = (leftAvatarSet + 2) % avatarSets.length; // Skip to different avatar
+            if (leftAvatarSet === rightAvatarSet) leftAvatarSet = (leftAvatarSet + 1) % avatarSets.length;
+            leftPose = 1;
+            changeAvatarPose('avatar-left', leftAvatarSet, leftPose);
+            setTimeout(changeLeftAvatarSet, 15000 + Math.random() * 15000);
+        }
+
+        function changeRightAvatarSet() {
+            rightAvatarSet = (rightAvatarSet + 2) % avatarSets.length;
+            if (rightAvatarSet === leftAvatarSet) rightAvatarSet = (rightAvatarSet + 1) % avatarSets.length;
+            rightPose = 1;
+            changeAvatarPose('avatar-right', rightAvatarSet, rightPose);
+            setTimeout(changeRightAvatarSet, 15000 + Math.random() * 15000);
+        }
+
+        // Start avatar animations
+        setTimeout(animateLeftAvatar, 1000);
+        setTimeout(animateRightAvatar, 1500);
+        setTimeout(changeLeftAvatarSet, 20000);
+        setTimeout(changeRightAvatarSet, 25000);
     </script>
 </body>
 </html>
