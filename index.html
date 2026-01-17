@@ -142,6 +142,21 @@
             color: var(--accent-pink);
         }
 
+        .nav-links .discord-link {
+            background: #5865F2;
+            color: white !important;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .nav-links .discord-link:hover {
+            background: #4752C4;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.4);
+        }
+
         /* Hero Section */
         .hero {
             min-height: 100vh;
@@ -820,6 +835,7 @@
             <li><a href="guide.html">Guide</a></li>
             <li><a href="#patreon">Patreon</a></li>
             <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases" target="_blank">Releases</a></li>
+            <li><a href="https://discord.gg/xHAYaBPbqr" target="_blank" class="discord-link">Discord</a></li>
         </ul>
         <div class="menu-toggle" onclick="toggleMenu()">
             <span></span>
@@ -834,6 +850,7 @@
         <a href="guide.html" onclick="toggleMenu()">Guide</a>
         <a href="#patreon" onclick="toggleMenu()">Patreon</a>
         <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases" target="_blank" onclick="toggleMenu()">Releases</a>
+        <a href="https://discord.gg/xHAYaBPbqr" target="_blank" onclick="toggleMenu()" style="background: #5865F2; padding: 0.75rem 1.5rem; border-radius: 25px;">Discord</a>
         <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/download/v5.0.1/ConditioningControlPanel-5.0.1-full.zip" class="btn btn-primary" onclick="toggleMenu()">Download v5.0.2</a>
         <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest" class="btn btn-secondary" onclick="toggleMenu()">Basic Asset Pack</a>
     </div>
@@ -1109,6 +1126,7 @@
             <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
             <a href="guide.html">Guide</a>
             <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+            <a href="https://discord.gg/xHAYaBPbqr">Discord</a>
             <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/issues">Report Issue</a>
         </div>
         <p class="footer-tagline">Good girls condition daily</p>
