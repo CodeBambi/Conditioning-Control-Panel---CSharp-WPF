@@ -547,8 +547,9 @@ namespace ConditioningControlPanel
             // Initialize Avatar Tube Window
             InitializeAvatarTube();
 
-            // Initialize Discord Rich Presence checkbox
+            // Initialize Discord Rich Presence checkboxes (both locations)
             ChkDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
+            ChkQuickDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
 
             // Initialize scrolling marquee banner
             InitializeMarqueeBanner();
@@ -722,7 +723,14 @@ namespace ConditioningControlPanel
 
         private void ChkDiscordRichPresence_Changed(object sender, RoutedEventArgs e)
         {
-            var isEnabled = ChkDiscordRichPresence.IsChecked == true;
+            // Get the state from whichever checkbox was clicked
+            var checkbox = sender as CheckBox;
+            var isEnabled = checkbox?.IsChecked == true;
+
+            // Sync both checkboxes
+            ChkDiscordRichPresence.IsChecked = isEnabled;
+            ChkQuickDiscordRichPresence.IsChecked = isEnabled;
+
             App.Settings.Current.DiscordRichPresenceEnabled = isEnabled;
 
             if (App.DiscordRpc != null)
@@ -1090,12 +1098,14 @@ namespace ConditioningControlPanel
                     _ => isActivePatron ? "Patron - Thank you for your support!" : "Connected - Subscribe to unlock features"
                 };
                 BtnPatreonLogin.Content = "Logout";
+                BtnQuickPatreonLogin.Content = "🔓 Logout";
             }
             else
             {
                 TxtPatreonStatus.Text = "Not Connected";
                 TxtPatreonTier.Text = "Login to unlock exclusive features";
                 BtnPatreonLogin.Content = "Login with Patreon";
+                BtnQuickPatreonLogin.Content = "🔐 Login with Patreon";
             }
 
             // Update feature lockboxes
@@ -1164,6 +1174,8 @@ namespace ConditioningControlPanel
                 // Start OAuth flow
                 BtnPatreonLogin.IsEnabled = false;
                 BtnPatreonLogin.Content = "Connecting...";
+                BtnQuickPatreonLogin.IsEnabled = false;
+                BtnQuickPatreonLogin.Content = "⏳ Connecting...";
 
                 try
                 {
@@ -1246,6 +1258,7 @@ namespace ConditioningControlPanel
                 finally
                 {
                     BtnPatreonLogin.IsEnabled = true;
+                    BtnQuickPatreonLogin.IsEnabled = true;
                     UpdatePatreonUI();
                 }
             }

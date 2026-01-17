@@ -935,8 +935,8 @@
         <Grid x:Name="SettingsTab" Grid.Row="4" Margin="10,5,10,2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="330"/>
+                <ColumnDefinition Width="360"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="320"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
@@ -1399,76 +1399,177 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Audio Section -->
-                <Border x:Name="AudioSection" Grid.Row="1" Style="{StaticResource SectionPanel}" Margin="0,5,0,0" VerticalAlignment="Top">
-                    <StackPanel>
-                        <Grid>
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="📊 Audio"
-                                       ToolTip="Audio volume and ducking settings"/>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <TextBlock Text="Duck" Foreground="#808090" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <CheckBox x:Name="ChkAudioDuck" Style="{StaticResource ToggleStyle}"
-                                          IsChecked="True"
-                                          Checked="ChkAudioDuck_Changed" Unchecked="ChkAudioDuck_Changed"
-                                          ToolTip="Automatically reduce other app volumes during videos"/>
-                            </StackPanel>
-                        </Grid>
-                        
-                        <!-- Master Volume -->
-                        <Grid Margin="0,5,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="60"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="40"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="Master"
-                                       ToolTip="Master volume for all audio"/>
-                            <Slider Grid.Column="1" x:Name="SliderMaster" Minimum="0" Maximum="100" Value="50"
-                                    Margin="10,0" ValueChanged="SliderMaster_Changed"
-                                    ToolTip="Overall audio volume level"/>
-                            <TextBlock x:Name="TxtMaster" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="50%"/>
-                        </Grid>
+                <!-- Audio Section + Quick Actions -->
+                <Grid Grid.Row="1" Margin="0,5,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                        <!-- Video Volume -->
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="60"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="40"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="Video"
-                                       ToolTip="Volume for mandatory videos"/>
-                            <Slider Grid.Column="1" x:Name="SliderVideoVolume" Minimum="0" Maximum="100" Value="50"
-                                    Margin="10,0" ValueChanged="SliderVideoVolume_Changed"
-                                    ToolTip="Separate volume control for videos"/>
-                            <TextBlock x:Name="TxtVideoVolume" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="50%"/>
-                        </Grid>
+                    <!-- Audio Section (left half) -->
+                    <Border x:Name="AudioSection" Grid.Column="0" Style="{StaticResource SectionPanel}" VerticalAlignment="Stretch">
+                        <StackPanel>
+                            <Grid>
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="📊 Audio" FontSize="12"
+                                           ToolTip="Audio volume and ducking settings"/>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <TextBlock Text="Duck" Foreground="#808090" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <CheckBox x:Name="ChkAudioDuck" Style="{StaticResource ToggleStyle}"
+                                              IsChecked="True"
+                                              Checked="ChkAudioDuck_Changed" Unchecked="ChkAudioDuck_Changed"
+                                              ToolTip="Automatically reduce other app volumes during videos"/>
+                                </StackPanel>
+                            </Grid>
 
-                        <!-- Duck % -->
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="60"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="40"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SettingLabel}" Text="Duck %"
-                                       ToolTip="How much to reduce other audio"/>
-                            <Slider Grid.Column="1" x:Name="SliderDuck" Minimum="0" Maximum="100" Value="80"
-                                    Margin="10,0" ValueChanged="SliderDuck_Changed"
-                                    ToolTip="Ducking percentage (80% = reduce other audio to 20%)"/>
-                            <TextBlock x:Name="TxtDuck" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="80%"/>
-                        </Grid>
+                            <!-- Master Volume -->
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="45"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="32"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Master" FontSize="10"
+                                           ToolTip="Master volume for all audio"/>
+                                <Slider Grid.Column="1" x:Name="SliderMaster" Minimum="0" Maximum="100" Value="50"
+                                        Margin="4,0" ValueChanged="SliderMaster_Changed"
+                                        ToolTip="Overall audio volume level"/>
+                                <TextBlock x:Name="TxtMaster" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="50%" FontSize="10"/>
+                            </Grid>
 
-                        <!-- Exclude BambiCloud from ducking -->
-                        <CheckBox x:Name="ChkExcludeBambiCloudDucking" Margin="0,8,0,0"
-                                  Content="Don't duck BambiCloud audio"
-                                  IsChecked="True"
-                                  Checked="ChkExcludeBambiCloudDucking_Changed"
-                                  Unchecked="ChkExcludeBambiCloudDucking_Changed"
-                                  ToolTip="When enabled, audio from the integrated BambiCloud browser won't be reduced during ducking"
-                                  Foreground="#FFB6C1" FontSize="11"/>
-                    </StackPanel>
-                </Border>
+                            <!-- Video Volume -->
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="45"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="32"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Video" FontSize="10"
+                                           ToolTip="Volume for mandatory videos"/>
+                                <Slider Grid.Column="1" x:Name="SliderVideoVolume" Minimum="0" Maximum="100" Value="50"
+                                        Margin="4,0" ValueChanged="SliderVideoVolume_Changed"
+                                        ToolTip="Separate volume control for videos"/>
+                                <TextBlock x:Name="TxtVideoVolume" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="50%" FontSize="10"/>
+                            </Grid>
+
+                            <!-- Duck % -->
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="45"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="32"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="Duck" FontSize="10"
+                                           ToolTip="How much to reduce other audio"/>
+                                <Slider Grid.Column="1" x:Name="SliderDuck" Minimum="0" Maximum="100" Value="80"
+                                        Margin="4,0" ValueChanged="SliderDuck_Changed"
+                                        ToolTip="Ducking percentage (80% = reduce other audio to 20%)"/>
+                                <TextBlock x:Name="TxtDuck" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="80%" FontSize="10"/>
+                            </Grid>
+
+                            <!-- Exclude BambiCloud from ducking -->
+                            <CheckBox x:Name="ChkExcludeBambiCloudDucking" Margin="0,4,0,0"
+                                      Content="Don't duck browser"
+                                      IsChecked="True"
+                                      Checked="ChkExcludeBambiCloudDucking_Changed"
+                                      Unchecked="ChkExcludeBambiCloudDucking_Changed"
+                                      ToolTip="When enabled, audio from the integrated BambiCloud browser won't be reduced during ducking"
+                                      Foreground="#FFB6C1" FontSize="9"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Quick Actions (right half) -->
+                    <Border Grid.Column="2" Style="{StaticResource SectionPanel}" VerticalAlignment="Stretch">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="🔗 Quick Links" FontSize="12" Margin="0,0,0,6"/>
+
+                            <!-- Patreon Login Button -->
+                            <Button x:Name="BtnQuickPatreonLogin" Content="🔐 Login with Patreon"
+                                    Click="BtnPatreonLogin_Click"
+                                    Padding="8,10" Margin="0,0,0,6"
+                                    ToolTip="Login with Patreon to unlock exclusive features">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="#FF424D"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                        <Setter Property="FontSize" Value="11"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Cursor" Value="Hand"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#FF5A65"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsPressed" Value="True">
+                                                            <Setter Property="Background" Value="#E03A45"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+
+                            <!-- Discord Button with Rich Presence checkbox -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Button x:Name="BtnQuickDiscord" Content="💬 Discord"
+                                        Click="BtnDiscord_Click"
+                                        Padding="8,10"
+                                        ToolTip="Join the Discord community">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#5865F2"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                            <Setter Property="FontSize" Value="11"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Cursor" Value="Hand"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}"
+                                                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="Background" Value="#6D79F7"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsPressed" Value="True">
+                                                                <Setter Property="Background" Value="#4752C4"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+
+                                <!-- Rich Presence Toggle -->
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0"
+                                            ToolTip="Show your activity on Discord">
+                                    <CheckBox x:Name="ChkQuickDiscordRichPresence" Style="{StaticResource ToggleStyle}"
+                                              Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="Rich Presence" Foreground="#808090" FontSize="9" HorizontalAlignment="Right" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Grid>
 
             <!-- Scrolling Marquee Banner - spans left and middle columns -->
@@ -4015,7 +4116,7 @@
                                 <GridViewColumn Header="Rank" Width="80" DisplayMemberBinding="{Binding Rank}"/>
                                 <GridViewColumn Header="Name" Width="280" DisplayMemberBinding="{Binding DisplayName}"/>
                                 <GridViewColumn Header="Level" Width="100" DisplayMemberBinding="{Binding Level}"/>
-                                <GridViewColumn Header="XP" Width="120" DisplayMemberBinding="{Binding Xp}"/>
+                                <GridViewColumn Header="XP" Width="100" DisplayMemberBinding="{Binding XpDisplay}"/>
                                 <GridViewColumn Header="Bubbles" Width="120" DisplayMemberBinding="{Binding BubblesPopped}"/>
                                 <GridViewColumn Header="GIFs" Width="110" DisplayMemberBinding="{Binding GifsSpawned}"/>
                                 <GridViewColumn Header="Video Min" Width="120">

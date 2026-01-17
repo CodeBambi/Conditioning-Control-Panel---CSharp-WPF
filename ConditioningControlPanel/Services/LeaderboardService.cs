@@ -175,6 +175,21 @@ public class LeaderboardEntry
     [JsonProperty("xp")]
     public int Xp { get; set; }
 
+    /// <summary>
+    /// Formatted XP display (e.g., "100.3k" or "1.2M")
+    /// </summary>
+    public string XpDisplay
+    {
+        get
+        {
+            if (Xp >= 1_000_000)
+                return $"{Xp / 1_000_000.0:F1}M";
+            if (Xp >= 1_000)
+                return $"{Xp / 1_000.0:F1}k";
+            return Xp.ToString();
+        }
+    }
+
     [JsonProperty("total_bubbles_popped")]
     public int BubblesPopped { get; set; }
 

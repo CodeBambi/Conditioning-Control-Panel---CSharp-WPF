@@ -440,52 +440,30 @@ namespace ConditioningControlPanel.Services
             // Duration in frames * ~16.6ms per frame, minimum 100ms
             var durationMs = Math.Max(100, App.Settings.Current.SubliminalDuration * 17);
             var targetOpacity = App.Settings.Current.SubliminalOpacity / 100.0;
-            
+
             // Colors from settings
             var bgColor = ParseColor(App.Settings.Current.SubBackgroundColor, Colors.Black);
             var textColor = ParseColor(App.Settings.Current.SubTextColor, Color.FromRgb(255, 0, 255)); // Magenta
             var borderColor = ParseColor(App.Settings.Current.SubBorderColor, Colors.White);
             var bgTransparent = App.Settings.Current.SubBackgroundTransparent;
-            
+
             // Get all monitors and create windows for all at once
             var screens = App.GetAllScreensCached();
             var windows = new List<Window>();
-            
+            var stealsFocus = App.Settings.Current.SubliminalStealsFocus;
+
             // Create all windows first (don't show yet)
+            // SourceInitialized handler will apply click-through styles BEFORE window is rendered
             foreach (var screen in screens)
             {
-                var win = CreateSubliminalWindow(screen, text, targetOpacity, 
-                    bgColor, textColor, borderColor, bgTransparent);
+                var win = CreateSubliminalWindow(screen, text, targetOpacity,
+                    bgColor, textColor, borderColor, bgTransparent, stealsFocus);
                 windows.Add(win);
             }
-            
+
             // Show all windows simultaneously
-            var stealsFocus = App.Settings.Current.SubliminalStealsFocus;
             foreach (var win in windows)
             {
-                // CRITICAL: Create handle and apply click-through styles BEFORE showing
-                // This prevents the brief moment where the window can steal clicks
-                var helper = new System.Windows.Interop.WindowInteropHelper(win);
-                helper.EnsureHandle();
-                var hwnd = helper.Handle;
-                if (hwnd != IntPtr.Zero)
-                {
-                    var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                    // If SubliminalStealsFocus is enabled, don't add WS_EX_NOACTIVATE so focus is stolen
-                    if (stealsFocus)
-                    {
-                        SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_LAYERED);
-                    }
-                    else
-                    {
-                        SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
-                    }
-
-                    // Also add the WM_NCHITTEST hook immediately
-                    var source = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
-                    source?.AddHook(WndProc);
-                }
-
                 win.Show();
 
                 // If stealing focus is enabled, activate the window to force keyboard focus
@@ -495,10 +473,8 @@ namespace ConditioningControlPanel.Services
                 }
 
                 _activeWindows.Add(win);
-                // Note: Don't call ForceTopmost - subliminals are click-through and should NOT
-                // appear above attention targets during mandatory videos. WPF Topmost=true is sufficient.
             }
-            
+
             // Animate all windows simultaneously
             foreach (var win in windows)
             {
@@ -506,43 +482,11 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        /// <summary>
-        /// Force window to stay on top even over fullscreen apps
-        /// </summary>
-        private void ForceTopmost(Window window)
-        {
-            try
-            {
-                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
-                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            }
-            catch { }
-        }
-
-        /// <summary>
-        /// Make window click-through so mouse clicks pass through to apps underneath
-        /// Also prevents focus stealing from other windows
-        /// </summary>
-        private void MakeClickThrough(Window window)
-        {
-            try
-            {
-                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
-                var extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                // WS_EX_TRANSPARENT: clicks pass through
-                // WS_EX_LAYERED: required for click-through on transparent windows
-                // WS_EX_NOACTIVATE: window never takes focus
-                // WS_EX_TOOLWINDOW: not shown in taskbar/alt-tab
-                SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
-            }
-            catch { }
-        }
-
         private const int WS_EX_LAYERED = 0x00080000;
 
         private Window CreateSubliminalWindow(System.Windows.Forms.Screen screen, string text,
             double targetOpacity, Color bgColor, Color textColor,
-            Color borderColor, bool bgTransparent)
+            Color borderColor, bool bgTransparent, bool stealsFocus)
         {
             // Use EXACTLY the same approach as OverlayService.GetWpfScreenBounds
             // which works correctly for multi-monitor DPI setups
@@ -560,6 +504,9 @@ namespace ConditioningControlPanel.Services
 
             App.Logger?.Debug("Subliminal window for {Screen}: Bounds=({BX},{BY},{BW}x{BH}), PrimaryDPI={PDPI}, PrimaryScale={PS}, WPF=({WL},{WT},{WW}x{WH})",
                 screen.DeviceName, bounds.X, bounds.Y, bounds.Width, bounds.Height, primaryDpi, primaryScale, left, top, width, height);
+
+            // Capture screen bounds for use in SourceInitialized handler
+            var targetBounds = bounds;
 
             var win = new Window
             {
@@ -634,10 +581,36 @@ namespace ConditioningControlPanel.Services
             grid.Children.Add(textCanvas);
             win.Content = grid;
 
-            // Position text and re-apply click-through when window is loaded
+            // CRITICAL: Apply click-through styles in SourceInitialized (BEFORE window is rendered)
+            // This is the same pattern OverlayService uses and prevents focus stealing during Show()
+            win.SourceInitialized += (s, e) =>
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                    if (stealsFocus)
+                    {
+                        // Only mouse click-through, but allow focus steal
+                        SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT | WS_EX_LAYERED);
+                    }
+                    else
+                    {
+                        // Full click-through: mouse passes through AND no focus stealing
+                        SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
+                    }
+
+                    // Position window using SetWindowPos with SWP_NOACTIVATE for robust no-focus behavior
+                    // Use physical pixel coordinates to bypass WPF DPI virtualization
+                    SetWindowPos(hwnd, HWND_TOPMOST,
+                        targetBounds.X, targetBounds.Y, targetBounds.Width, targetBounds.Height,
+                        SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                }
+            };
+
+            // Position text when window is loaded (we now know actual size)
             win.Loaded += (s, e) =>
             {
-                // Position text at center of actual window size
                 var centerX = win.ActualWidth / 2.0;
                 var centerY = win.ActualHeight / 2.0;
 
@@ -649,18 +622,6 @@ namespace ConditioningControlPanel.Services
                         Canvas.SetLeft(tb, centerX - tb.DesiredSize.Width / 2 + ox);
                         Canvas.SetTop(tb, centerY - tb.DesiredSize.Height / 2 + oy);
                     }
-                }
-
-                // Re-apply click-through styles (belt and suspenders)
-                var hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle;
-                if (hwnd != IntPtr.Zero)
-                {
-                    var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                    SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
-
-                    // Re-add WM_NCHITTEST hook
-                    var source = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
-                    source?.AddHook(WndProc);
                 }
             };
 
@@ -803,27 +764,7 @@ namespace ConditioningControlPanel.Services
         private const int WS_EX_TRANSPARENT = 0x00000020;
         private const uint SWP_NOACTIVATE = 0x0010;
         private const uint SWP_SHOWWINDOW = 0x0040;
-        private const uint SWP_NOMOVE = 0x0002;
-        private const uint SWP_NOSIZE = 0x0001;
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-
-        // For click-through via WM_NCHITTEST
-        private const int WM_NCHITTEST = 0x0084;
-        private static readonly IntPtr HTTRANSPARENT = new IntPtr(-1);
-
-        /// <summary>
-        /// Window procedure hook that makes the window click-through by returning HTTRANSPARENT
-        /// for all WM_NCHITTEST messages. This is the most reliable method for WPF.
-        /// </summary>
-        private static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            if (msg == WM_NCHITTEST)
-            {
-                handled = true;
-                return HTTRANSPARENT;
-            }
-            return IntPtr.Zero;
-        }
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern int GetWindowLong(IntPtr hwnd, int index);

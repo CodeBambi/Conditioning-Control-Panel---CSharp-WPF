@@ -538,13 +538,16 @@ public class OverlayService : IDisposable
                 mediaElement.Play();
             };
 
-            // Use a Viewbox to ensure proper centering and scaling on all monitors
-            var viewbox = new Viewbox
+            // Use a Grid container for proper centering on all monitors
+            // Grid respects HorizontalAlignment/VerticalAlignment of children
+            // UniformToFill on MediaElement will scale to fill while cropping edges, keeping center visible
+            var container = new Grid
             {
-                Stretch = Stretch.UniformToFill,
-                StretchDirection = StretchDirection.Both,
-                Child = mediaElement
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                ClipToBounds = true
             };
+            container.Children.Add(mediaElement);
 
             // Create window - initial position is approximate, will be corrected via SetWindowPos
             var window = new Window
@@ -562,7 +565,7 @@ public class OverlayService : IDisposable
                 Top = wpfBounds.Top,
                 Width = wpfBounds.Width,
                 Height = wpfBounds.Height,
-                Content = viewbox
+                Content = container
             };
 
             // Capture screen reference for use in handler
