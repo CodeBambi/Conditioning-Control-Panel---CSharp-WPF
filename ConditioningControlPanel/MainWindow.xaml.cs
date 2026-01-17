@@ -34,6 +34,7 @@ namespace ConditioningControlPanel
         private BrowserService? _browser;
         private bool _browserInitialized = false;
         private List<Window> _browserFullscreenWindows = new();
+        private Window? _browserPopoutWindow = null;
         private bool _isDualMonitorPlaybackActive = false;
         private TrayIconService? _trayIcon;
         private GlobalKeyboardHook? _keyboardHook;
@@ -1165,6 +1166,7 @@ namespace ConditioningControlPanel
             if (App.Patreon.IsAuthenticated)
             {
                 // Logout
+                App.ProfileSync?.StopHeartbeat();
                 App.Patreon.Logout();
                 UpdatePatreonUI();
                 UpdateBannerWelcomeMessage();
@@ -1180,6 +1182,9 @@ namespace ConditioningControlPanel
                 try
                 {
                     await App.Patreon.StartOAuthFlowAsync();
+
+                    // Start heartbeat to keep user showing as online
+                    App.ProfileSync?.StartHeartbeat();
 
                     // Check if we need to migrate an existing local name to server
                     if (App.Patreon.NeedsDisplayNameMigration)
@@ -4203,6 +4208,90 @@ namespace ConditioningControlPanel
                 isBambiCloud ? "BambiCloud" : "HypnoTube");
         }
 
+        private void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
+        {
+            if (_browser?.WebView == null) return;
+
+            // If already popped out, bring the window to front
+            if (_browserPopoutWindow != null)
+            {
+                _browserPopoutWindow.Activate();
+                return;
+            }
+
+            try
+            {
+                // Remove WebView from embedded container
+                if (BrowserContainer.Children.Contains(_browser.WebView))
+                {
+                    BrowserContainer.Children.Remove(_browser.WebView);
+                }
+
+                // Show placeholder in the embedded container
+                BrowserLoadingText.Text = "🌐 Browser popped out\nClick ⧉ to focus window";
+                BrowserLoadingText.Visibility = Visibility.Visible;
+
+                // Create popup window
+                _browserPopoutWindow = new Window
+                {
+                    Title = "Conditioning Control Panel - Browser",
+                    Width = 1024,
+                    Height = 768,
+                    MinWidth = 400,
+                    MinHeight = 300,
+                    WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1A, 0x1A, 0x2E)),
+                    Content = _browser.WebView
+                };
+
+                // Handle window CLOSING (before close) - detach WebView to prevent parent/child errors
+                _browserPopoutWindow.Closing += (s, args) =>
+                {
+                    if (_browserPopoutWindow != null)
+                    {
+                        // CRITICAL: Remove WebView from window content BEFORE closing
+                        // This prevents "window is a parent/child of another" errors
+                        _browserPopoutWindow.Content = null;
+                    }
+                };
+
+                // Handle window CLOSED (after close) - return browser to embedded container
+                _browserPopoutWindow.Closed += (s, args) =>
+                {
+                    if (_browser?.WebView != null)
+                    {
+                        // Add back to embedded container
+                        if (!BrowserContainer.Children.Contains(_browser.WebView))
+                        {
+                            BrowserContainer.Children.Add(_browser.WebView);
+                        }
+                        BrowserLoadingText.Visibility = Visibility.Collapsed;
+                    }
+                    _browserPopoutWindow = null;
+                    BtnPopOutBrowser.Content = "⧉ Pop Out";
+                    BtnPopOutBrowser.ToolTip = "Pop out browser to resizable window";
+                };
+
+                // Update button to show it's popped out
+                BtnPopOutBrowser.Content = "◱ Focus";
+                BtnPopOutBrowser.ToolTip = "Browser is popped out - click to focus";
+
+                _browserPopoutWindow.Show();
+                App.Logger?.Information("Browser popped out to separate window");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to pop out browser");
+                // Try to restore browser to container
+                if (_browser?.WebView != null && !BrowserContainer.Children.Contains(_browser.WebView))
+                {
+                    BrowserContainer.Children.Add(_browser.WebView);
+                    BrowserLoadingText.Visibility = Visibility.Collapsed;
+                }
+                _browserPopoutWindow = null;
+            }
+        }
+
         private void HandleBrowserFullscreenChanged(bool isFullscreen)
         {
             if (_browser?.WebView == null) return;
@@ -4254,10 +4343,14 @@ namespace ConditioningControlPanel
 
                 var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
 
-                // Remove WebView from its container
+                // Remove WebView from its current container (could be embedded or popup)
                 if (BrowserContainer.Children.Contains(_browser.WebView))
                 {
                     BrowserContainer.Children.Remove(_browser.WebView);
+                }
+                else if (_browserPopoutWindow != null && _browserPopoutWindow.Content == _browser.WebView)
+                {
+                    _browserPopoutWindow.Content = null;
                 }
 
                 // Create primary fullscreen window with WebView
@@ -4320,13 +4413,26 @@ namespace ConditioningControlPanel
                 }
                 _browserFullscreenWindows.Clear();
 
-                // Restore WebView to original container
-                if (_browser?.WebView != null && !BrowserContainer.Children.Contains(_browser.WebView))
+                // Restore WebView to correct container (popup if popped out, otherwise embedded)
+                if (_browser?.WebView != null)
                 {
-                    BrowserContainer.Children.Add(_browser.WebView);
-
-                    // Restore zoom to 50%
-                    _browser.ZoomFactor = 0.5;
+                    if (_browserPopoutWindow != null)
+                    {
+                        // Browser was popped out - return to popup window
+                        if (_browserPopoutWindow.Content != _browser.WebView)
+                        {
+                            _browserPopoutWindow.Content = _browser.WebView;
+                        }
+                        // Restore zoom to 50%
+                        _browser.ZoomFactor = 0.5;
+                    }
+                    else if (!BrowserContainer.Children.Contains(_browser.WebView))
+                    {
+                        // Return to embedded container
+                        BrowserContainer.Children.Add(_browser.WebView);
+                        // Restore zoom to 50%
+                        _browser.ZoomFactor = 0.5;
+                    }
                 }
 
                 App.Logger?.Information("Browser exited fullscreen");

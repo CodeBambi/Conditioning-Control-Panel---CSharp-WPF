@@ -22,23 +22,26 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.0.1";
+        public const string AppVersion = "5.0.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v4.4.9:
+        public const string CurrentPatchNotes = @"v5.0.2:
 
-📖 HAPTICS SETUP GUIDE
-• New 'Need help setting up?' button in haptics section
-• Step-by-step tutorial with screenshots for Lovense and Buttplug.io
-• Color-coded slides walk you through connection setup
+🎨 UI IMPROVEMENTS
+• Compacted browser section header for more screen space
+• Haptics section now clearly shows 'Patreon Only' instead of 'Coming Soon'
 
-🔧 BUTTPLUG.IO TIMING FIX
-• Fixed subliminal haptics being ~1.3 seconds late
-• Haptics now trigger earlier to sync with visual
-• Longer vibration durations for better feel";
+🌐 BROWSER ENHANCEMENTS
+• Added built-in ad blocker for cleaner browsing
+• Pop-out browser button for resizable window
+
+🔧 BUG FIXES
+• Fixed mandatory video and bubble count video playing simultaneously
+• Fixed browser returning to wrong location after fullscreen
+• Improved online status accuracy with 1-minute heartbeat";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

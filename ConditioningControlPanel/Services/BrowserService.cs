@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -17,9 +19,56 @@ namespace ConditioningControlPanel.Services
         private WebView2? _webView;
         private bool _isInitialized;
         private bool _disposed;
-        
+
         private readonly string _userDataFolder;
         private readonly string _defaultUrl;
+
+        /// <summary>
+        /// Known ad/tracking domains to block. This is a basic list -
+        /// covers common ad networks and trackers.
+        /// </summary>
+        private static readonly HashSet<string> _blockedDomains = new(StringComparer.OrdinalIgnoreCase)
+        {
+            // Major ad networks
+            "doubleclick.net", "googlesyndication.com", "googleadservices.com",
+            "google-analytics.com", "googletagmanager.com", "googletagservices.com",
+            "adservice.google.com", "pagead2.googlesyndication.com",
+            "adsense.google.com", "adnxs.com", "adsrvr.org",
+
+            // Common ad/tracking domains
+            "facebook.net", "fbcdn.net", "connect.facebook.net",
+            "ads.twitter.com", "analytics.twitter.com",
+            "advertising.com", "adform.net", "adroll.com",
+            "criteo.com", "criteo.net", "outbrain.com", "taboola.com",
+            "amazon-adsystem.com", "aax.amazon.com",
+            "moatads.com", "adsafeprotected.com", "doubleverify.com",
+
+            // Tracking pixels and analytics
+            "quantserve.com", "scorecardresearch.com", "imrworldwide.com",
+            "mixpanel.com", "segment.io", "segment.com", "amplitude.com",
+            "hotjar.com", "fullstory.com", "mouseflow.com", "crazyegg.com",
+
+            // Pop-up/pop-under networks
+            "popads.net", "popcash.net", "propellerads.com", "exoclick.com",
+            "trafficjunky.com", "trafficfactory.biz", "juicyads.com",
+            "plugrush.com", "clickadu.com", "adsterra.com",
+            "hilltopads.net", "pushame.com", "pushnami.com",
+
+            // Adult ad networks (common on hypnotube etc)
+            "exosrv.com", "realsrv.com", "tsyndicate.com", "syndication.exoclick.com",
+            "a.realsrv.com", "syndication.realsrv.com", "mc.yandex.ru",
+            "static.exoclick.com", "ads.exoclick.com",
+            "ero-advertising.com", "eroads.com", "traffichaus.com",
+            "awempire.com", "aweptjmp.com", "contentabc.com",
+
+            // Malware/sketchy domains
+            "malware-site.com", "adexchangegate.com", "adexchangetracker.com",
+
+            // More tracking
+            "newrelic.com", "nr-data.net", "onetrust.com",
+            "cookielaw.org", "trustarc.com", "evidon.com",
+            "bounceexchange.com", "bouncex.net"
+        };
 
         public event EventHandler? BrowserReady;
         public event EventHandler<string>? NavigationCompleted;
@@ -161,7 +210,7 @@ namespace ConditioningControlPanel.Services
             if (_webView?.CoreWebView2?.Settings == null) return;
 
             var settings = _webView.CoreWebView2.Settings;
-            
+
             // Enable/disable features as needed
             settings.IsStatusBarEnabled = false;
             settings.AreDefaultContextMenusEnabled = true;
@@ -170,10 +219,21 @@ namespace ConditioningControlPanel.Services
             settings.AreHostObjectsAllowed = true;
             settings.IsWebMessageEnabled = true;
             settings.AreBrowserAcceleratorKeysEnabled = true;
-            
+
+            // Set up ad blocking
+            SetupAdBlocking();
+
             // Block popups - handle them internally
             _webView.CoreWebView2.NewWindowRequested += (s, e) =>
             {
+                // Check if it's an ad popup (no user gesture or suspicious URL)
+                if (IsAdUrl(e.Uri))
+                {
+                    App.Logger?.Debug("Blocked ad popup: {Url}", e.Uri);
+                    e.Handled = true;
+                    return;
+                }
+
                 // Open in same window instead of popup
                 e.Handled = true;
                 _webView.CoreWebView2.Navigate(e.Uri);
@@ -186,6 +246,157 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("Browser fullscreen changed: {IsFullscreen}", IsFullscreen);
                 FullscreenChanged?.Invoke(this, IsFullscreen);
             };
+        }
+
+        /// <summary>
+        /// Set up ad blocking using request filtering
+        /// </summary>
+        private void SetupAdBlocking()
+        {
+            if (_webView?.CoreWebView2 == null) return;
+
+            try
+            {
+                // Filter all requests so we can block ads
+                _webView.CoreWebView2.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+
+                _webView.CoreWebView2.WebResourceRequested += (s, e) =>
+                {
+                    try
+                    {
+                        var uri = new Uri(e.Request.Uri);
+                        var host = uri.Host.ToLowerInvariant();
+
+                        // Check if this is an ad domain
+                        if (IsBlockedDomain(host))
+                        {
+                            // Block by returning empty response
+                            e.Response = _webView.CoreWebView2.Environment.CreateWebResourceResponse(
+                                null, 204, "No Content", "");
+                            App.Logger?.Debug("Blocked ad request: {Host}", host);
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore parsing errors
+                    }
+                };
+
+                // Inject CSS to hide common ad elements after page loads
+                _webView.CoreWebView2.NavigationCompleted += async (s, e) =>
+                {
+                    if (e.IsSuccess)
+                    {
+                        await InjectAdBlockingCssAsync();
+                    }
+                };
+
+                App.Logger?.Information("Ad blocking enabled - blocking {Count} known ad domains", _blockedDomains.Count);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to set up ad blocking");
+            }
+        }
+
+        /// <summary>
+        /// Check if a host matches any blocked domain
+        /// </summary>
+        private static bool IsBlockedDomain(string host)
+        {
+            // Direct match
+            if (_blockedDomains.Contains(host))
+                return true;
+
+            // Check if it's a subdomain of a blocked domain
+            foreach (var blocked in _blockedDomains)
+            {
+                if (host.EndsWith("." + blocked, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Check if a URL looks like an ad
+        /// </summary>
+        private static bool IsAdUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return false;
+
+            try
+            {
+                var uri = new Uri(url);
+                if (IsBlockedDomain(uri.Host.ToLowerInvariant()))
+                    return true;
+
+                // Check for common ad URL patterns
+                var lowerUrl = url.ToLowerInvariant();
+                return lowerUrl.Contains("/ads/") ||
+                       lowerUrl.Contains("/ad/") ||
+                       lowerUrl.Contains("doubleclick") ||
+                       lowerUrl.Contains("googlesyndication") ||
+                       lowerUrl.Contains("/popup") ||
+                       lowerUrl.Contains("clicktrack") ||
+                       lowerUrl.Contains("adserver");
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Inject CSS to hide common ad elements
+        /// </summary>
+        private async Task InjectAdBlockingCssAsync()
+        {
+            if (_webView?.CoreWebView2 == null) return;
+
+            try
+            {
+                // CSS to hide common ad elements
+                var css = @"
+                    /* Hide common ad containers */
+                    [class*='ad-'], [class*='ads-'], [class*='advert'],
+                    [id*='ad-'], [id*='ads-'], [id*='advert'],
+                    [class*='banner'], [id*='banner'],
+                    [class*='sponsor'], [id*='sponsor'],
+                    .advertisement, .ad-container, .ad-wrapper,
+                    iframe[src*='doubleclick'], iframe[src*='googlesyndication'],
+                    iframe[src*='ads'], iframe[src*='adserver'],
+                    [data-ad], [data-ads], [data-ad-slot],
+                    div[aria-label*='Advertisement'],
+                    /* Popup overlays */
+                    .popup-ad, .pop-up, .modal-ad,
+                    /* Specific to adult sites */
+                    .exo-ad, .exoclick, .trafficjunky,
+                    [class*='exo_'], [id*='exo_']
+                    {
+                        display: none !important;
+                        visibility: hidden !important;
+                        height: 0 !important;
+                        width: 0 !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                    }
+                ";
+
+                var script = $@"
+                    (function() {{
+                        var style = document.createElement('style');
+                        style.textContent = `{css.Replace("`", "\\`")}`;
+                        document.head.appendChild(style);
+                    }})();
+                ";
+
+                await _webView.CoreWebView2.ExecuteScriptAsync(script);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to inject ad-blocking CSS: {Error}", ex.Message);
+            }
         }
 
         /// <summary>

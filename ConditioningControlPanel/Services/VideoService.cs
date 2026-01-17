@@ -251,20 +251,39 @@ namespace ConditioningControlPanel.Services
 
         public void TriggerVideo()
         {
+            // Check if another fullscreen interaction is active (bubble count, lock card)
+            // If so, queue this video for later
+            if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
+            {
+                App.InteractionQueue.TryStart(
+                    InteractionQueueService.InteractionType.Video,
+                    () => TriggerVideo(),
+                    queue: true);
+                return;
+            }
+
+            // Notify queue we're starting
+            App.InteractionQueue?.TryStart(
+                InteractionQueueService.InteractionType.Video,
+                () => { }, // Already executing
+                queue: false);
+
             // Force close any stuck/existing video windows first
             if (_videoPlaying || _windows.Count > 0)
             {
                 App.Logger?.Warning("VideoService: Forcing cleanup of existing video before triggering new one");
                 ForceCleanup();
             }
-            
+
             var path = GetNextVideo();
             if (string.IsNullOrEmpty(path))
             {
+                // No video to play - release the queue lock
+                App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
                 System.Windows.MessageBox.Show($"No videos in:\n{_videosPath}", "No Videos");
                 return;
             }
-            
+
             // Trigger Bambi Freeze subliminal+audio BEFORE video, but only if:
             // - No minigame is active
             // - Attention checks are NOT enabled (user needs to be alert to click targets)
@@ -310,6 +329,23 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Warning("VideoService: Specific video not found: {Path}", videoPath);
                 return;
             }
+
+            // Check if another fullscreen interaction is active
+            // If so, queue this video for later
+            if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
+            {
+                App.InteractionQueue.TryStart(
+                    InteractionQueueService.InteractionType.Video,
+                    () => PlaySpecificVideo(videoPath, strictMode),
+                    queue: true);
+                return;
+            }
+
+            // Notify queue we're starting
+            App.InteractionQueue?.TryStart(
+                InteractionQueueService.InteractionType.Video,
+                () => { }, // Already executing
+                queue: false);
 
             // Force close any stuck/existing video windows first
             if (_videoPlaying || _windows.Count > 0)

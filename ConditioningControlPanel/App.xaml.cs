@@ -434,11 +434,12 @@ namespace ConditioningControlPanel
                 // Initialize Patreon authentication
                 await Patreon.InitializeAsync();
 
-                // If authenticated, load cloud profile
+                // If authenticated, load cloud profile and start heartbeat
                 if (Patreon.IsAuthenticated)
                 {
                     Logger?.Information("Patreon authenticated, loading cloud profile...");
                     await ProfileSync.LoadProfileAsync();
+                    ProfileSync.StartHeartbeat();
                 }
 
                 // Start autonomy service if it should be enabled

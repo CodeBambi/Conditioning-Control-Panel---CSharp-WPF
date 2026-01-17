@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 using Newtonsoft.Json;
 
 namespace ConditioningControlPanel.Services
@@ -16,8 +17,10 @@ namespace ConditioningControlPanel.Services
     public class ProfileSyncService : IDisposable
     {
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
+        private const int HeartbeatIntervalSeconds = 45; // Send heartbeat every 45 seconds
 
         private readonly HttpClient _httpClient;
+        private DispatcherTimer? _heartbeatTimer;
         private bool _disposed;
         private bool _syncEnabled = true;
 
@@ -49,6 +52,77 @@ namespace ConditioningControlPanel.Services
                 Timeout = TimeSpan.FromSeconds(30)
             };
         }
+
+        #region Heartbeat
+
+        /// <summary>
+        /// Start the heartbeat timer to keep user showing as online.
+        /// Call this after successful Patreon authentication.
+        /// </summary>
+        public void StartHeartbeat()
+        {
+            if (_heartbeatTimer != null) return;
+
+            _heartbeatTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(HeartbeatIntervalSeconds)
+            };
+            _heartbeatTimer.Tick += async (s, e) => await SendHeartbeatAsync();
+            _heartbeatTimer.Start();
+
+            // Send initial heartbeat immediately
+            _ = SendHeartbeatAsync();
+
+            App.Logger?.Information("Heartbeat started (every {Seconds}s)", HeartbeatIntervalSeconds);
+        }
+
+        /// <summary>
+        /// Stop the heartbeat timer.
+        /// Call this on logout or app shutdown.
+        /// </summary>
+        public void StopHeartbeat()
+        {
+            _heartbeatTimer?.Stop();
+            _heartbeatTimer = null;
+            App.Logger?.Debug("Heartbeat stopped");
+        }
+
+        /// <summary>
+        /// Send a lightweight heartbeat to keep user showing as online.
+        /// Only updates last_seen timestamp, doesn't sync full profile.
+        /// </summary>
+        private async Task SendHeartbeatAsync()
+        {
+            if (!IsSyncEnabled) return;
+
+            try
+            {
+                var accessToken = App.Patreon?.GetAccessToken();
+                if (string.IsNullOrEmpty(accessToken)) return;
+
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/user/heartbeat");
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.SendAsync(request);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    App.Logger?.Debug("Heartbeat sent successfully");
+                }
+                else
+                {
+                    App.Logger?.Debug("Heartbeat failed: {Status}", response.StatusCode);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Silently fail - heartbeat is not critical
+                App.Logger?.Debug("Heartbeat error: {Error}", ex.Message);
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// Load profile from cloud and merge with local data.
@@ -320,6 +394,7 @@ namespace ConditioningControlPanel.Services
         {
             if (_disposed) return;
             _disposed = true;
+            StopHeartbeat();
             _httpClient.Dispose();
         }
 

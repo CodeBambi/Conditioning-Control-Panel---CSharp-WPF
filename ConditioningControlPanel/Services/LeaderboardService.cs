@@ -23,7 +23,7 @@ public class LeaderboardService : IDisposable
     /// <summary>Total number of users on the leaderboard</summary>
     public int TotalUsers { get; private set; }
 
-    /// <summary>Number of users currently online (active in last 2 minutes)</summary>
+    /// <summary>Number of users currently online (active in last minute)</summary>
     public int OnlineUsers { get; private set; }
 
     /// <summary>Current sort field</summary>

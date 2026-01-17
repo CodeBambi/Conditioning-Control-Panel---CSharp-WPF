@@ -735,8 +735,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="🩷 v5.0.1 IS OUT! 🩷"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.0.1 - Thanks to 100+ Patreons!"
+                    <Button x:Name="BtnUpdateAvailable" Content="🩷 v5.0.2 IS OUT! 🩷"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.0.2 - Thanks to 100+ Patreons!"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -1080,18 +1080,18 @@
                 <StackPanel>
                     
                     <!-- Mandatory Video Section -->
-                    <Border x:Name="VideoSection" Style="{StaticResource SectionPanel}" Padding="10,8"
+                    <Border x:Name="VideoSection" Style="{StaticResource SectionPanel}" Padding="10,10"
                             ToolTip="Fullscreen videos that play periodically.&#x0a;Add videos to assets/videos folder.&#x0a;Supports MP4, WebM, AVI formats.">
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="🎬 Mandatory Video"/>
-                                <Button x:Name="BtnTestVideo" Content="▶ Test" Style="{StaticResource OutlineButton}" 
+                                <Button x:Name="BtnTestVideo" Content="▶ Test" Style="{StaticResource OutlineButton}"
                                         HorizontalAlignment="Right" Padding="10,4" Click="BtnTestVideo_Click"
                                         ToolTip="Play a random video now to test"/>
                             </Grid>
-                            
+
                             <!-- Enable + Strict + Per Hour -->
-                            <Grid Margin="0,6,0,0">
+                            <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
@@ -1113,40 +1113,40 @@
                             </Grid>
 
                             <!-- Mini-Game Sub-Section -->
-                            <Border Background="#1E1E3A" CornerRadius="6" Padding="12,10" Margin="0,12,0,0"
+                            <Border Background="#1E1E3A" CornerRadius="6" Padding="10,10" Margin="0,10,0,0"
                                     ToolTip="Attention check during videos.&#x0a;Click targets that appear to prove you're watching.&#x0a;Failing in Strict mode restarts the video!">
                                 <StackPanel>
                                     <Grid>
-                                        <TextBlock Text="🎯 Mini-Game" Foreground="{StaticResource PinkBrush}" FontSize="13" FontWeight="Bold"/>
+                                        <TextBlock Text="🎯 Mini-Game" Foreground="{StaticResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
                                         <CheckBox x:Name="ChkMiniGameEnabled" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right"
                                                   ToolTip="Enable attention check targets"/>
                                     </Grid>
-                                    
+
                                     <!-- Targets / Duration / Size -->
-                                    <Grid Margin="0,10,0,0">
+                                    <Grid Margin="0,8,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" Margin="0,0,6,0" ToolTip="Number of targets to click per video">
-                                            <Grid><TextBlock Text="Targets" FontSize="12" Foreground="#A0A0B0"/><TextBlock x:Name="TxtTargets" Text="3" FontSize="12" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
-                                            <Slider x:Name="SliderTargets" Minimum="1" Maximum="10" Value="3" Margin="0,5,0,0" ValueChanged="SliderTargets_Changed"/>
+                                            <Grid><TextBlock Text="Targets" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtTargets" Text="3" FontSize="11" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
+                                            <Slider x:Name="SliderTargets" Minimum="1" Maximum="10" Value="3" Margin="0,3,0,0" ValueChanged="SliderTargets_Changed"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Margin="3,0" ToolTip="Seconds each target stays visible">
-                                            <Grid><TextBlock Text="Duration" FontSize="12" Foreground="#A0A0B0"/><TextBlock x:Name="TxtDuration" Text="5" FontSize="12" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
-                                            <Slider x:Name="SliderDuration" Minimum="1" Maximum="15" Value="5" Margin="0,5,0,0" ValueChanged="SliderDuration_Changed"/>
+                                            <Grid><TextBlock Text="Duration" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtDuration" Text="5" FontSize="11" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
+                                            <Slider x:Name="SliderDuration" Minimum="1" Maximum="15" Value="5" Margin="0,3,0,0" ValueChanged="SliderDuration_Changed"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="2" Margin="6,0,0,0" ToolTip="Target button size in pixels">
-                                            <Grid><TextBlock Text="Size" FontSize="12" Foreground="#A0A0B0"/><TextBlock x:Name="TxtTargetSize" Text="70" FontSize="12" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
-                                            <Slider x:Name="SliderTargetSize" Minimum="30" Maximum="150" Value="70" Margin="0,5,0,0" ValueChanged="SliderTargetSize_Changed"/>
+                                            <Grid><TextBlock Text="Size" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtTargetSize" Text="70" FontSize="11" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
+                                            <Slider x:Name="SliderTargetSize" Minimum="30" Maximum="150" Value="70" Margin="0,3,0,0" ValueChanged="SliderTargetSize_Changed"/>
                                         </StackPanel>
                                     </Grid>
-                                    
-                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                                        <Button Content="📝 Phrases" Style="{StaticResource PinkButton}" Padding="10,8" Click="BtnManageAttention_Click"
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                        <Button Content="📝 Phrases" Style="{StaticResource PinkButton}" Padding="8,5" Click="BtnManageAttention_Click"
                                                 ToolTip="Edit attention check phrases"/>
-                                        <Button Content="🎨 Style" Style="{StaticResource OutlineButton}" Margin="8,0,0,0" Padding="10,8" Click="BtnAttentionStyle_Click"
+                                        <Button Content="🎨 Style" Style="{StaticResource OutlineButton}" Margin="8,0,0,0" Padding="8,5" Click="BtnAttentionStyle_Click"
                                                 ToolTip="Customize target appearance (colors, border, font)"/>
                                     </StackPanel>
                                 </StackPanel>
@@ -1155,7 +1155,7 @@
                     </Border>
 
                     <!-- Subliminals Section -->
-                    <Border x:Name="SubliminalSection" Style="{StaticResource SectionPanel}" Padding="12,10"
+                    <Border x:Name="SubliminalSection" Style="{StaticResource SectionPanel}" Padding="10,10"
                             ToolTip="Brief text messages that flash on screen.&#x0a;Customize messages in the Messages editor.&#x0a;Can be paired with whispered audio.">
                         <StackPanel>
                             <Grid>
@@ -1169,7 +1169,7 @@
                                               ToolTip="Enable/disable subliminal messages"/>
                                 </StackPanel>
                             </Grid>
-                            
+
                             <!-- Per Min / Frames / Opacity in 3 columns -->
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
@@ -1178,21 +1178,21 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,6,0" ToolTip="Messages shown per minute">
-                                    <Grid><TextBlock Text="Per Min" FontSize="12" Foreground="#A0A0B0"/><TextBlock x:Name="TxtSubPerMin" Text="5" FontSize="12" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
-                                    <Slider x:Name="SliderSubPerMin" Minimum="1" Maximum="30" Value="5" Margin="0,5,0,0" ValueChanged="SliderSubPerMin_Changed"/>
+                                    <Grid><TextBlock Text="Per Min" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtSubPerMin" Text="5" FontSize="11" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
+                                    <Slider x:Name="SliderSubPerMin" Minimum="1" Maximum="30" Value="5" Margin="0,3,0,0" ValueChanged="SliderSubPerMin_Changed"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Margin="3,0" ToolTip="Display duration in frames.&#x0a;Lower = faster flash, harder to read.">
-                                    <Grid><TextBlock Text="Frames" FontSize="12" Foreground="#A0A0B0"/><TextBlock x:Name="TxtFrames" Text="2" FontSize="12" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
-                                    <Slider x:Name="SliderFrames" Minimum="1" Maximum="10" Value="2" Margin="0,5,0,0" ValueChanged="SliderFrames_Changed"/>
+                                    <Grid><TextBlock Text="Frames" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtFrames" Text="2" FontSize="11" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
+                                    <Slider x:Name="SliderFrames" Minimum="1" Maximum="10" Value="2" Margin="0,3,0,0" ValueChanged="SliderFrames_Changed"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Margin="6,0,0,0" ToolTip="Text visibility. Lower = more subtle.">
-                                    <Grid><TextBlock Text="Opacity" FontSize="12" Foreground="#A0A0B0"/><TextBlock x:Name="TxtSubOpacity" Text="80%" FontSize="12" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
-                                    <Slider x:Name="SliderSubOpacity" Minimum="10" Maximum="100" Value="80" Margin="0,5,0,0" ValueChanged="SliderSubOpacity_Changed"/>
+                                    <Grid><TextBlock Text="Opacity" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtSubOpacity" Text="80%" FontSize="11" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
+                                    <Slider x:Name="SliderSubOpacity" Minimum="10" Maximum="100" Value="80" Margin="0,3,0,0" ValueChanged="SliderSubOpacity_Changed"/>
                                 </StackPanel>
                             </Grid>
 
                             <!-- Audio Whispers -->
-                            <Grid Margin="0,12,0,0" ToolTip="Play whispered audio when subliminal messages appear.">
+                            <Grid Margin="0,10,0,0" ToolTip="Play whispered audio when subliminal messages appear.">
                                 <StackPanel Orientation="Horizontal">
                                     <CheckBox x:Name="ChkAudioWhispers" Style="{StaticResource ToggleStyle}"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="📊 Audio Whispers" Margin="6,0,0,0"/>
@@ -1206,22 +1206,22 @@
                     </Border>
 
                     <!-- System Section -->
-                    <Border x:Name="SystemSection" Style="{StaticResource SectionPanel}" Padding="10,8"
+                    <Border x:Name="SystemSection" Style="{StaticResource SectionPanel}" Padding="10,10"
                             ToolTip="Application behavior and startup settings.">
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="⚙ System"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button Content="📁" Style="{StaticResource OutlineButton}"
-                                            Padding="6,4" Click="BtnPickAssetsFolder_Click" Margin="0,0,4,0"
+                                            Padding="6,3" Click="BtnPickAssetsFolder_Click" Margin="0,0,4,0"
                                             ToolTip="Set custom assets folder"/>
                                     <Button Content="📚 Assets" Style="{StaticResource OutlineButton}"
-                                            Padding="10,4" Click="BtnOpenAssets_Click"
+                                            Padding="8,3" Click="BtnOpenAssets_Click"
                                             ToolTip="Open assets folder (images, videos, sounds)"/>
                                 </StackPanel>
                             </Grid>
-                            
-                            <Grid Margin="0,6,0,0">
+
+                            <Grid Margin="0,4,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
@@ -1244,7 +1244,7 @@
                                     <CheckBox x:Name="ChkWinStart" Style="{StaticResource ToggleStyle}" Click="ChkWinStart_Click"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Win Start" Margin="6,0,0,0"/>
                                 </StackPanel>
-                                
+
                                 <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
                                             ToolTip="Play a mandatory video when app opens">
                                     <CheckBox x:Name="ChkVidLaunch" Style="{StaticResource ToggleStyle}"/>
@@ -1255,7 +1255,7 @@
                                     <CheckBox x:Name="ChkAutoRun" Style="{StaticResource ToggleStyle}"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Auto Run" Margin="6,0,0,0"/>
                                 </StackPanel>
-                                
+
                                 <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
                                             ToolTip="Start minimized to system tray">
                                     <CheckBox x:Name="ChkStartHidden" Style="{StaticResource ToggleStyle}" Click="ChkStartHidden_Click"/>
@@ -1278,14 +1278,14 @@
                             <!-- Startup Video Selection -->
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
                                         ToolTip="Select a specific video to play on startup (when Vid Launch is enabled)">
-                                <TextBlock Text="Startup Video:" Foreground="#B0B0B0" FontSize="11" VerticalAlignment="Center" Width="80"/>
-                                <TextBlock x:Name="TxtStartupVideo" Text="(Random)" Foreground="#E0E0E0" FontSize="11"
-                                           VerticalAlignment="Center" Width="100" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="Startup Video:" Foreground="#B0B0B0" FontSize="10" VerticalAlignment="Center" Width="75"/>
+                                <TextBlock x:Name="TxtStartupVideo" Text="(Random)" Foreground="#E0E0E0" FontSize="10"
+                                           VerticalAlignment="Center" Width="90" TextTrimming="CharacterEllipsis"/>
                                 <Button Content="📁" Background="#40FFFFFF" Foreground="White" BorderThickness="0"
-                                        Padding="6,2" Margin="4,0,0,0" Cursor="Hand" Click="BtnSelectStartupVideo_Click"
+                                        Padding="5,1" Margin="4,0,0,0" Cursor="Hand" Click="BtnSelectStartupVideo_Click"
                                         ToolTip="Browse for startup video"/>
                                 <Button Content="✕" Background="#40FF6B6B" Foreground="White" BorderThickness="0"
-                                        Padding="6,2" Margin="4,0,0,0" Cursor="Hand" Click="BtnClearStartupVideo_Click"
+                                        Padding="5,1" Margin="4,0,0,0" Cursor="Hand" Click="BtnClearStartupVideo_Click"
                                         ToolTip="Clear selection (use random)"/>
                             </StackPanel>
 
@@ -1302,8 +1302,8 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- RIGHT COLUMN - spans both rows so audio box extends into banner area -->
-            <Grid Grid.Column="2" Grid.Row="0" Grid.RowSpan="2" Margin="5">
+            <!-- RIGHT COLUMN -->
+            <Grid Grid.Column="2" Grid.Row="0" Margin="5">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -1312,35 +1312,33 @@
                 <!-- Browser Section -->
                 <Border Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="0,0,0,5">
                     <StackPanel>
-                        <!-- Browser Header -->
+                        <!-- Browser Header - single row with title, tabs, status, pop out -->
                         <Grid Margin="0,0,0,4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="🌐 Browser" Margin="0"/>
-                            <TextBlock x:Name="TxtBrowserStatus" Grid.Column="1" Text="● Loading..."
-                                       Foreground="{StaticResource PinkBrush}" FontSize="11"
-                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                        </Grid>
-
-                        <!-- Site Toggle - under title -->
-                        <Border HorizontalAlignment="Left" Background="#252545" CornerRadius="12" Padding="3" Margin="0,0,0,8">
-                            <StackPanel Orientation="Horizontal">
-                                <RadioButton x:Name="RbBambiCloud" Content="BambiCloud" GroupName="BrowserSite"
-                                             IsChecked="True" Checked="BrowserSiteToggle_Changed"
-                                             Foreground="#E0E0E0" FontSize="11" Cursor="Hand" Margin="4,2">
-                                    <RadioButton.Template>
-                                        <ControlTemplate TargetType="RadioButton">
-                                            <Border x:Name="border" Background="Transparent" CornerRadius="10" Padding="10,5">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsChecked" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="#FF69B4"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                    <Setter Property="FontWeight" Value="SemiBold"/>
-                                                </Trigger>
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="🌐 Browser" Margin="0" VerticalAlignment="Center"/>
+                            <!-- Site Toggle - inline -->
+                            <Border Grid.Column="1" Background="#252545" CornerRadius="10" Padding="2" Margin="10,0,0,0" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="RbBambiCloud" Content="BambiCloud" GroupName="BrowserSite"
+                                                 IsChecked="True" Checked="BrowserSiteToggle_Changed"
+                                                 Foreground="#E0E0E0" FontSize="10" Cursor="Hand" Margin="2,1">
+                                        <RadioButton.Template>
+                                            <ControlTemplate TargetType="RadioButton">
+                                                <Border x:Name="border" Background="Transparent" CornerRadius="8" Padding="8,3">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsChecked" Value="True">
+                                                        <Setter TargetName="border" Property="Background" Value="#FF69B4"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                                    </Trigger>
                                                 <Trigger Property="IsMouseOver" Value="True">
                                                     <Setter TargetName="border" Property="Background" Value="#353565"/>
                                                 </Trigger>
@@ -1357,10 +1355,10 @@
                                 </RadioButton>
                                 <RadioButton x:Name="RbHypnoTube" Content="HypnoTube" GroupName="BrowserSite"
                                              Checked="BrowserSiteToggle_Changed"
-                                             Foreground="#E0E0E0" FontSize="11" Cursor="Hand" Margin="4,2">
+                                             Foreground="#E0E0E0" FontSize="10" Cursor="Hand" Margin="2,1">
                                     <RadioButton.Template>
                                         <ControlTemplate TargetType="RadioButton">
-                                            <Border x:Name="border" Background="Transparent" CornerRadius="10" Padding="10,5">
+                                            <Border x:Name="border" Background="Transparent" CornerRadius="8" Padding="8,3">
                                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
                                             <ControlTemplate.Triggers>
@@ -1383,8 +1381,46 @@
                                         </ControlTemplate>
                                     </RadioButton.Template>
                                 </RadioButton>
-                            </StackPanel>
-                        </Border>
+                                </StackPanel>
+                            </Border>
+                            <!-- Status indicator -->
+                            <TextBlock Grid.Column="3" x:Name="TxtBrowserStatus" Text="● Loading..."
+                                       Foreground="{StaticResource PinkBrush}" FontSize="10"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <!-- Pop Out button -->
+                            <Button Grid.Column="4" x:Name="BtnPopOutBrowser" Content="⧉ Pop Out"
+                                    Click="BtnPopOutBrowser_Click"
+                                    ToolTip="Pop out browser to resizable window"
+                                    FontSize="9" Padding="6,3" VerticalAlignment="Center">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="#FF69B4"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Cursor" Value="Hand"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#FF85C1"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsPressed" Value="True">
+                                                            <Setter Property="Background" Value="#E05A9E"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </Grid>
 
                         <!-- Browser Container -->
                         <Border Background="#1E1E3A" CornerRadius="6" ClipToBounds="True" Height="395">
@@ -1572,16 +1608,16 @@
                 </Grid>
             </Grid>
 
-            <!-- Scrolling Marquee Banner - spans left and middle columns -->
-            <Border x:Name="MarqueeBanner" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+            <!-- Scrolling Marquee Banner - spans all columns -->
+            <Border x:Name="MarqueeBanner" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
                     Background="#1A0A1A" BorderBrush="#FF1493" BorderThickness="2"
-                    CornerRadius="8" Height="48" Margin="5,5,0,0" ClipToBounds="True">
+                    CornerRadius="8" Height="48" Margin="5,5,5,0" ClipToBounds="True">
                 <Border.Effect>
                     <DropShadowEffect Color="#FF1493" BlurRadius="15" ShadowDepth="0" Opacity="0.5"/>
                 </Border.Effect>
                 <Canvas x:Name="MarqueeCanvas" ClipToBounds="True">
                     <TextBlock x:Name="MarqueeText"
-                               Text="v5.0.1 IS OUT - THANKS TO ALL THE 100+ PATREONS AND TO ALL THE SUPPORTERS/TESTERS 🩷🔒"
+                               Text="v5.0.2 IS OUT - THANKS TO ALL THE 100+ PATREONS AND TO ALL THE SUPPORTERS/TESTERS 🩷🔒"
                                FontFamily="Impact" FontSize="28" FontWeight="Bold"
                                Foreground="#FF69B4" Canvas.Top="8">
                         <TextBlock.Effect>
@@ -3842,15 +3878,15 @@
                             </Grid>
                             </Grid>
 
-                            <!-- Coming Soon Overlay (hidden for whitelisted testers) -->
+                            <!-- Patreon Only Overlay (hidden for Patreon supporters) -->
                             <Border x:Name="HapticsComingSoonOverlay" Background="#CC1A1A2E" CornerRadius="8">
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock Text="Coming Soon" Foreground="#FF69B4" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center">
+                                    <TextBlock Text="Patreon Only" Foreground="#FF69B4" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center">
                                         <TextBlock.Effect>
                                             <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
                                         </TextBlock.Effect>
                                     </TextBlock>
-                                    <TextBlock Text="Haptic feedback integration is in development"
+                                    <TextBlock Text="Unlock haptic feedback by supporting on Patreon"
                                                Foreground="#AAAAAA" FontSize="13" HorizontalAlignment="Center" Margin="0,8,0,0"/>
                                     <TextBlock Text="Lovense &amp; Buttplug.io support"
                                                Foreground="#9B59B6" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
