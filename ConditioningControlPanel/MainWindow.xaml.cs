@@ -7422,15 +7422,17 @@ namespace ConditioningControlPanel
 
         private void UpdatePackCardUI(ContentPack pack, Button installButton, Border installedBadge, ProgressBar progressBar)
         {
+            var sizeLabel = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
+
             if (pack.IsDownloaded)
             {
                 installedBadge.Visibility = Visibility.Visible;
-                installButton.Content = pack.IsActive ? "Deactivate" : "Activate";
+                installButton.Content = "Uninstall";
             }
             else
             {
                 installedBadge.Visibility = Visibility.Collapsed;
-                installButton.Content = "Install";
+                installButton.Content = $"Install{sizeLabel}";
             }
 
             progressBar.Visibility = pack.IsDownloading ? Visibility.Visible : Visibility.Collapsed;
@@ -7466,14 +7468,14 @@ namespace ConditioningControlPanel
                 {
                     Pack1Progress.Visibility = Visibility.Collapsed;
                     Pack1InstalledBadge.Visibility = Visibility.Visible;
-                    BtnPack1Install.Content = "Activate";
+                    BtnPack1Install.Content = "Uninstall";
                     BtnPack1Install.IsEnabled = true;
                 }
                 else if (pack.Id == "enhanced-bimbodoll-video")
                 {
                     Pack2Progress.Visibility = Visibility.Collapsed;
                     Pack2InstalledBadge.Visibility = Visibility.Visible;
-                    BtnPack2Install.Content = "Activate";
+                    BtnPack2Install.Content = "Uninstall";
                     BtnPack2Install.IsEnabled = true;
                 }
             });
@@ -8063,27 +8065,45 @@ namespace ConditioningControlPanel
             {
                 if (pack.IsDownloaded)
                 {
-                    // Toggle activation
+                    // Ask for confirmation to uninstall
+                    var sizeStr = pack.SizeBytes > 0 ? $"{pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB" : "";
+                    var result = MessageBox.Show(
+                        $"Uninstall '{pack.Name}'?\n\nThis will delete {sizeStr} of downloaded content from your computer.\n\nYou can reinstall it later if needed.",
+                        "Uninstall Content Pack",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result != MessageBoxResult.Yes)
+                        return;
+
                     try
                     {
-                        if (pack.IsActive)
+                        // Uninstall pack (deactivate + delete files)
+                        App.ContentPacks?.UninstallPack(pack.Id);
+                        pack.IsDownloaded = false;
+                        pack.IsActive = false;
+
+                        // Update UI to show uninstalled state
+                        var sizeLabel = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
+                        btn.Content = $"Install{sizeLabel}";
+
+                        // Hide installed badge
+                        if (pack.Id == "basic-bimbo-starter")
                         {
-                            App.ContentPacks?.DeactivatePack(pack.Id);
-                            pack.IsActive = false;
+                            Pack1InstalledBadge.Visibility = Visibility.Collapsed;
                         }
-                        else
+                        else if (pack.Id == "enhanced-bimbodoll-video")
                         {
-                            App.ContentPacks?.ActivatePack(pack.Id);
-                            pack.IsActive = true;
+                            Pack2InstalledBadge.Visibility = Visibility.Collapsed;
                         }
 
-                        // Update button text based on new state
-                        btn.Content = pack.IsActive ? "Deactivate" : "Activate";
                         RefreshAssetTree();
+                        MessageBox.Show($"'{pack.Name}' has been uninstalled.", "Uninstalled", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show($"Failed to toggle pack: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        App.Logger?.Error(ex, "Failed to uninstall pack: {Name}", pack.Name);
+                        MessageBox.Show($"Failed to uninstall pack: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                 }
                 else
@@ -8112,7 +8132,7 @@ namespace ConditioningControlPanel
                         pack.IsActive = true;
 
                         // Update UI to show installed state
-                        btn.Content = "Deactivate";
+                        btn.Content = "Uninstall";
                         if (pack.Id == "basic-bimbo-starter")
                         {
                             Pack1InstalledBadge.Visibility = Visibility.Visible;
@@ -8125,12 +8145,13 @@ namespace ConditioningControlPanel
                         }
 
                         RefreshAssetTree();
-                        MessageBox.Show($"'{pack.Name}' installed and activated successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                        MessageBox.Show($"'{pack.Name}' installed successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (Exception ex)
                     {
                         App.Logger?.Error(ex, "Failed to install pack: {Name}", pack.Name);
-                        btn.Content = "Install";
+                        var sizeLabel = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
+                        btn.Content = $"Install{sizeLabel}";
                         MessageBox.Show($"Installation failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                     finally
