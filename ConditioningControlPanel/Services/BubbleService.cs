@@ -78,6 +78,9 @@ public class BubbleService : IDisposable
         // Spawn first bubble immediately
         SpawnBubble();
 
+        // Update Discord presence
+        App.DiscordRpc?.SetBubbleActivity();
+
         App.Logger?.Information("BubbleService started - {Freq} bubbles/min", settings.BubblesFrequency);
     }
 
@@ -105,6 +108,9 @@ public class BubbleService : IDisposable
 
         // Pop all remaining bubbles
         PopAllBubbles();
+
+        // Update Discord presence back to idle (unless another activity takes over)
+        App.DiscordRpc?.SetIdleActivity();
 
         App.Logger?.Information("BubbleService stopped");
     }

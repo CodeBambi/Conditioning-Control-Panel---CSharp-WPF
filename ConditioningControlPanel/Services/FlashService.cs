@@ -118,12 +118,15 @@ namespace ConditioningControlPanel.Services
         public void Start()
         {
             if (_isRunning) return;
-            
+
             _isRunning = true;
             _cancellationSource = new CancellationTokenSource();
             _heartbeatTimer?.Start();
 
             ScheduleNextFlash();
+
+            // Update Discord presence
+            App.DiscordRpc?.SetFlashActivity();
 
             App.Logger.Information("FlashService started, images path: {Path}", _imagesPath);
         }
@@ -134,10 +137,13 @@ namespace ConditioningControlPanel.Services
             _cancellationSource?.Cancel();
             _heartbeatTimer?.Stop();
             _schedulerTimer?.Stop();
-            
+
             StopCurrentSound();
             CloseAllWindows();
-            
+
+            // Update Discord presence back to idle
+            App.DiscordRpc?.SetIdleActivity();
+
             App.Logger.Information("FlashService stopped");
         }
 

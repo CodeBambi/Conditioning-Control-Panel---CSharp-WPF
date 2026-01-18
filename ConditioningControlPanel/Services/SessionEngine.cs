@@ -164,16 +164,19 @@ namespace ConditioningControlPanel.Services
             
             // Fire started event
             SessionStarted?.Invoke(this, EventArgs.Empty);
-            
+
+            // Update Discord presence with session name
+            App.DiscordRpc?.SetSessionActivity(session.Name);
+
             // Track session start for achievements (e.g., Relapse)
             App.Achievements?.TrackSessionStart();
-            
+
             // Announce first phase
             if (session.Phases.Count > 0)
             {
                 PhaseChanged?.Invoke(this, new SessionPhaseChangedEventArgs(session.Phases[0], 0));
             }
-            
+
             App.Logger?.Information("Session started: {Name}", session.Name);
         }
         
@@ -218,7 +221,10 @@ namespace ConditioningControlPanel.Services
             
             // Fire events
             SessionStopped?.Invoke(this, EventArgs.Empty);
-            
+
+            // Update Discord presence back to idle
+            App.DiscordRpc?.SetIdleActivity();
+
             if (completed && _currentSession != null)
             {
                 // Calculate XP with pause penalty (100 XP per pause)

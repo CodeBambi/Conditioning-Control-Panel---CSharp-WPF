@@ -120,20 +120,26 @@ namespace ConditioningControlPanel.Services
 
             _timer.Start();
 
+            // Update Discord presence
+            App.DiscordRpc?.SetBrainDrainActivity();
+
             var mode = App.Settings.Current.BrainDrainHighRefresh ? "High Refresh (500ms)" : "Normal (5s)";
             App.Logger?.Information("BrainDrain started at intensity {Intensity}%, mode: {Mode}", _intensity, mode);
         }
-        
+
         public void Stop()
         {
             if (!_isRunning) return;
-            
+
             _isRunning = false;
             _timer.Stop();
             _cts?.Cancel();
-            
+
             StopCurrentAudio();
-            
+
+            // Update Discord presence back to idle
+            App.DiscordRpc?.SetIdleActivity();
+
             App.Logger?.Information("BrainDrain stopped");
         }
         

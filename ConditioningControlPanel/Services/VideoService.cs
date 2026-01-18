@@ -540,6 +540,9 @@ namespace ConditioningControlPanel.Services
             _hits = _total = 0;
             _spawnTimes.Clear();
 
+            // Update Discord presence
+            App.DiscordRpc?.SetVideoActivity();
+
             // Fire pre-announcement event 1.3s before video starts
             VideoAboutToStart?.Invoke(this, EventArgs.Empty);
 
@@ -1428,7 +1431,16 @@ namespace ConditioningControlPanel.Services
             VideoEnded?.Invoke(this, EventArgs.Empty);
 
             if (_isRunning && App.Settings.Current.FlashEnabled)
+            {
                 App.Flash?.Start();
+                // Discord presence will be updated by FlashService.Start()
+            }
+            else
+            {
+                // Update Discord presence back to idle
+                App.DiscordRpc?.SetIdleActivity();
+            }
+
             if (_isRunning)
                 ScheduleNext();
         }

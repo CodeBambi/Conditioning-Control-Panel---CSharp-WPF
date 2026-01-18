@@ -162,41 +162,50 @@ namespace ConditioningControlPanel.Services
             _cts = new CancellationTokenSource();
             
             _timer.Start();
-            
-            App.Logger?.Information("MindWipe: Started (frequency: {Freq}/hour, volume: {Vol}%, files: {Count})", 
+
+            // Update Discord presence
+            App.DiscordRpc?.SetMindWipeActivity();
+
+            App.Logger?.Information("MindWipe: Started (frequency: {Freq}/hour, volume: {Vol}%, files: {Count})",
                 frequencyPerHour, volume * 100, _audioFiles?.Length ?? 0);
         }
-        
+
         /// <summary>
         /// Start in session mode with escalating frequency
         /// </summary>
         public void StartSession(int baseFrequencyMultiplier)
         {
             if (_isRunning) return;
-            
+
             _sessionMode = true;
             _sessionBaseFrequency = baseFrequencyMultiplier;
             _sessionStartTime = DateTime.Now;
             _isRunning = true;
             _cts = new CancellationTokenSource();
-            
+
             _timer.Start();
-            
-            App.Logger?.Information("MindWipe: Started in session mode (base multiplier: {Base})", 
+
+            // Update Discord presence
+            App.DiscordRpc?.SetMindWipeActivity();
+
+            App.Logger?.Information("MindWipe: Started in session mode (base multiplier: {Base})",
                 baseFrequencyMultiplier);
         }
-        
+
         public void Stop()
         {
             if (!_isRunning) return;
-            
+
             _isRunning = false;
             _timer.Stop();
             _cts?.Cancel();
-            
+
             StopCurrentAudio();
             StopLoop();
-            
+
+            // Update Discord presence back to idle
+            App.DiscordRpc?.SetIdleActivity();
+
             App.Logger?.Information("MindWipe: Stopped");
         }
         

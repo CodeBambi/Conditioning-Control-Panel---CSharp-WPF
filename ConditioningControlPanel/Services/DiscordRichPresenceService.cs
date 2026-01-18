@@ -178,10 +178,150 @@ public class DiscordRichPresenceService : IDisposable
     /// <summary>
     /// Set activity for flash/conditioning
     /// </summary>
-    public void SetFlashActivity()
+    public void SetFlashActivity(int? imageCount = null)
     {
         _currentState = "Conditioning";
-        _currentDetails = "Flash training";
+        _currentDetails = imageCount.HasValue ? $"Flash training ({imageCount} images)" : "Flash training";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for popping bubbles
+    /// </summary>
+    public void SetBubbleActivity()
+    {
+        _currentState = "Playing";
+        _currentDetails = "Popping bubbles";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for bubble count video minigame
+    /// </summary>
+    public void SetBubbleCountActivity()
+    {
+        _currentState = "Playing";
+        _currentDetails = "Bubble counting challenge";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for subliminal messages
+    /// </summary>
+    public void SetSubliminalActivity()
+    {
+        _currentState = "Conditioning";
+        _currentDetails = "Subliminal training";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for brain drain overlay
+    /// </summary>
+    public void SetBrainDrainActivity()
+    {
+        _currentState = "Deep conditioning";
+        _currentDetails = "Brain drain active";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for mind wipe
+    /// </summary>
+    public void SetMindWipeActivity()
+    {
+        _currentState = "Deep conditioning";
+        _currentDetails = "Mind wipe in progress";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for lock card
+    /// </summary>
+    public void SetLockCardActivity()
+    {
+        _currentState = "Locked";
+        _currentDetails = "In chastity lock";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for browsing Hypnotube
+    /// </summary>
+    public void SetHypnotubeActivity()
+    {
+        _currentState = "Browsing";
+        _currentDetails = "Exploring Hypnotube";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for AI companion interaction
+    /// </summary>
+    public void SetCompanionActivity(string? companionName = null)
+    {
+        _currentState = "Chatting";
+        _currentDetails = companionName != null ? $"Talking with {companionName}" : "Chatting with companion";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity with level info
+    /// </summary>
+    public void SetLevelActivity(int level)
+    {
+        _currentState = $"Level {level}";
+        _currentDetails = "Progressing";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for viewing achievements
+    /// </summary>
+    public void SetAchievementsActivity(int unlocked, int total)
+    {
+        _currentState = "Viewing achievements";
+        _currentDetails = $"{unlocked}/{total} unlocked";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for leaderboard
+    /// </summary>
+    public void SetLeaderboardActivity(int? rank = null)
+    {
+        _currentState = "Leaderboard";
+        _currentDetails = rank.HasValue ? $"Ranked #{rank}" : "Checking rankings";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for settings/configuration
+    /// </summary>
+    public void SetSettingsActivity()
+    {
+        _currentState = "Configuring";
+        _currentDetails = "Adjusting settings";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for spiral watching
+    /// </summary>
+    public void SetSpiralActivity()
+    {
+        _currentState = "Mesmerized";
+        _currentDetails = "Watching spirals";
+        UpdatePresence();
+    }
+
+    /// <summary>
+    /// Set activity for dual monitor video
+    /// </summary>
+    public void SetDualMonitorActivity()
+    {
+        _currentState = "Immersed";
+        _currentDetails = "Dual monitor experience";
         UpdatePresence();
     }
 
