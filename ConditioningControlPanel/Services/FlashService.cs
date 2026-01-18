@@ -1006,19 +1006,25 @@ namespace ConditioningControlPanel.Services
         {
             lock (_lockObj)
             {
+                var files = GetMediaFiles(_imagesPath, new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" });
+                if (files.Count == 0) return new List<string>();
+
+                // Refill queue if empty
                 if (_imageQueue.Count == 0)
                 {
-                    var files = GetMediaFiles(_imagesPath, new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" });
-                    if (files.Count == 0) return new List<string>();
-
                     // Performance: Shuffle and enqueue all at once
                     _imageQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
                 }
 
                 var result = new List<string>(count);
-                for (int i = 0; i < count && _imageQueue.Count > 0; i++)
+                for (int i = 0; i < count; i++)
                 {
-                    result.Add(_imageQueue.Dequeue()); // Performance: O(1) instead of O(n)
+                    // Refill queue if we run out (allows reusing images when pool is small)
+                    if (_imageQueue.Count == 0)
+                    {
+                        _imageQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
+                    }
+                    result.Add(_imageQueue.Dequeue());
                 }
                 return result;
             }
@@ -1090,6 +1096,17 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
+            // Filter out disabled assets (blacklist approach)
+            if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
+            {
+                var basePath = App.EffectiveAssetsPath;
+                files = files.Where(f =>
+                {
+                    var relativePath = Path.GetRelativePath(basePath, f);
+                    return !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
+                }).ToList();
+            }
+
             // Update cache
             lock (_cacheLock)
             {
@@ -1100,9 +1117,9 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Clear the file list cache (called when assets are reloaded)
+        /// Clear the file list cache (called when assets are reloaded or selection changes)
         /// </summary>
-        private void ClearFileCache()
+        public void ClearFileCache()
         {
             lock (_cacheLock)
             {

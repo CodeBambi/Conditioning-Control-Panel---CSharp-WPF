@@ -463,6 +463,69 @@ namespace ConditioningControlPanel.Models
             set { _customAssetsPath = value ?? ""; OnPropertyChanged(); }
         }
 
+        #region Active Assets
+
+        private HashSet<string> _activeAssetPaths = new();
+        /// <summary>
+        /// Set of relative paths to active assets. If empty and UseAssetWhitelist is false, all assets are active.
+        /// Paths are relative to EffectiveAssetsPath.
+        /// LEGACY: Kept for backward compatibility, use DisabledAssetPaths instead.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public HashSet<string> ActiveAssetPaths
+        {
+            get => _activeAssetPaths;
+            set { _activeAssetPaths = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private HashSet<string> _disabledAssetPaths = new();
+        /// <summary>
+        /// Set of relative paths to DISABLED assets. Items NOT in this set are active.
+        /// This is the inverse of a whitelist - items are active by default.
+        /// Paths are relative to EffectiveAssetsPath.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public HashSet<string> DisabledAssetPaths
+        {
+            get => _disabledAssetPaths;
+            set { _disabledAssetPaths = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private bool _useAssetWhitelist = false;
+        /// <summary>
+        /// When true, files in DisabledAssetPaths are excluded from use.
+        /// When false, all files are active (default behavior).
+        /// </summary>
+        public bool UseAssetWhitelist
+        {
+            get => _useAssetWhitelist;
+            set { _useAssetWhitelist = value; OnPropertyChanged(); }
+        }
+
+        private List<string> _installedPackIds = new();
+        /// <summary>
+        /// IDs of installed content packs.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> InstalledPackIds
+        {
+            get => _installedPackIds;
+            set { _installedPackIds = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private List<string> _activePackIds = new();
+        /// <summary>
+        /// IDs of active content packs (subset of InstalledPackIds).
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> ActivePackIds
+        {
+            get => _activePackIds;
+            set { _activePackIds = value ?? new(); OnPropertyChanged(); }
+        }
+
+        #endregion
+
         private string _marqueeMessage = "GOOD GIRLS CONDITION DAILY     ❤️🔒";
         /// <summary>
         /// Custom scrolling marquee banner message displayed in the UI.

@@ -1,0 +1,446 @@
+; Conditioning Control Panel - Inno Setup Installer Script
+; This creates a proper Windows installer with install path selection
+;
+; Requirements:
+; 1. Install Inno Setup from https://jrsoftware.org/isinfo.php
+; 2. Build the app first: dotnet publish -c Release
+; 3. Compile this script with Inno Setup Compiler
+;
+; The installer will:
+; - Allow users to choose installation directory
+; - Create Start Menu and Desktop shortcuts
+; - Register uninstaller
+; - Store install path in registry for Velopack updates
+
+#define MyAppName "Conditioning Control Panel"
+#define MyAppVersion "5.0.3"
+#define MyAppPublisher "CodeBambi"
+#define MyAppURL "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF"
+#define MyAppExeName "ConditioningControlPanel.exe"
+#define MyAppDescription "A professional visual conditioning application with gamification features"
+
+; Path to the published output (adjust if needed)
+#define PublishDir "ConditioningControlPanel\bin\Release\net8.0-windows\win-x64\publish"
+
+[Setup]
+; Application identity
+AppId={{A7B9C3D1-E5F2-4A8B-9C1D-2E3F4A5B6C7D}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}/issues
+AppUpdatesURL={#MyAppURL}/releases
+
+; Default installation directory (user can change)
+DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+
+; Allow user to change install directory
+DisableDirPage=no
+DirExistsWarning=auto
+
+; Output settings
+OutputDir=.\installer-output
+OutputBaseFilename=ConditioningControlPanel-{#MyAppVersion}-Setup
+SetupIconFile=ConditioningControlPanel\Resources\app.ico
+
+; Compression
+Compression=lzma2/ultra64
+SolidCompression=yes
+LZMAUseSeparateProcess=yes
+
+; Privileges - allow per-user or admin install
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+
+; Appearance
+WizardStyle=modern
+WizardSizePercent=120
+
+; Uninstaller
+UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayName={#MyAppName}
+
+; Other settings
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+DisableProgramGroupPage=yes
+AllowNoIcons=yes
+ShowLanguageDialog=auto
+
+; License and info pages (optional - create these files if desired)
+; LicenseFile=LICENSE.txt
+; InfoBeforeFile=INSTALL_INFO.txt
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "startmenuicon"; Description: "Create a Start Menu shortcut"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
+
+[Files]
+; Main executable
+Source: "{#PublishDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+
+; All other files from publish directory
+Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb"
+
+; NOTE: Don't include user data files - those go to %APPDATA%
+
+[Icons]
+; Start Menu shortcut
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon
+Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
+
+; Desktop shortcut
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Registry]
+; Store install path for the application and Velopack to find
+Root: HKCU; Subkey: "Software\{#MyAppPublisher}\{#MyAppName}"; ValueType: string; ValueName: "InstallPath"; ValueData: "{app}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\{#MyAppPublisher}\{#MyAppName}"; ValueType: string; ValueName: "Version"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletekey
+; Assets path will be written by [Code] section during install
+
+[Run]
+; Option to launch app after installation
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+; Ensure app is closed before uninstall
+Filename: "taskkill"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden; RunOnceId: "KillApp"
+
+[UninstallDelete]
+; Clean up any generated files (optional)
+Type: filesandordirs; Name: "{app}\logs"
+
+[Code]
+// Pascal Script for custom installer logic
+
+var
+  VelopackPath: String;
+  HasOldVelopackInstall: Boolean;
+  HasExistingAssets: Boolean;
+  AssetsPath: String;
+  ImageCount, VideoCount: Integer;
+
+  // Custom page for assets confirmation
+  AssetsPage: TWizardPage;
+  AssetsPathLabel: TNewStaticText;
+  AssetsPathEdit: TNewEdit;
+  AssetsBrowseButton: TNewButton;
+  AssetsInfoLabel: TNewStaticText;
+  AssetsPreserveLabel: TNewStaticText;
+
+// Count files in a directory with specific extensions
+function CountFilesInDir(const Dir: String; const Extensions: String): Integer;
+var
+  FindRec: TFindRec;
+  Ext: String;
+begin
+  Result := 0;
+  if FindFirst(Dir + '\*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
+        begin
+          Ext := LowerCase(ExtractFileExt(FindRec.Name));
+          if Pos(Ext, Extensions) > 0 then
+            Result := Result + 1;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+// Check if old Velopack installation exists
+function CheckForVelopackInstall(): Boolean;
+var
+  CurrentPath: String;
+begin
+  VelopackPath := ExpandConstant('{localappdata}\ConditioningControlPanel');
+  CurrentPath := VelopackPath + '\current';
+
+  // Velopack installs to a 'current' subfolder
+  Result := DirExists(CurrentPath) and FileExists(CurrentPath + '\{#MyAppExeName}');
+end;
+
+// Check for existing assets and count them
+procedure DetectExistingAssets();
+var
+  DefaultAssetsPath, ImagesPath, VideosPath: String;
+begin
+  DefaultAssetsPath := ExpandConstant('{localappdata}\ConditioningControlPanel\assets');
+
+  // Check if assets folder exists
+  if DirExists(DefaultAssetsPath) then
+  begin
+    AssetsPath := DefaultAssetsPath;
+    HasExistingAssets := True;
+
+    // Count images
+    ImagesPath := AssetsPath + '\images';
+    if DirExists(ImagesPath) then
+      ImageCount := CountFilesInDir(ImagesPath, '.png.jpg.jpeg.gif.webp.bmp')
+    else
+      ImageCount := 0;
+
+    // Count videos
+    VideosPath := AssetsPath + '\videos';
+    if DirExists(VideosPath) then
+      VideoCount := CountFilesInDir(VideosPath, '.mp4.webm.mkv.avi.mov.wmv')
+    else
+      VideoCount := 0;
+  end
+  else
+  begin
+    AssetsPath := DefaultAssetsPath;
+    HasExistingAssets := False;
+    ImageCount := 0;
+    VideoCount := 0;
+  end;
+end;
+
+// Browse button click handler
+procedure AssetsBrowseButtonClick(Sender: TObject);
+var
+  Dir: String;
+begin
+  Dir := AssetsPathEdit.Text;
+  if BrowseForFolder('Select your assets folder:', Dir, False) then
+  begin
+    AssetsPathEdit.Text := Dir;
+    // Recount files in new location
+    if DirExists(Dir + '\images') then
+      ImageCount := CountFilesInDir(Dir + '\images', '.png.jpg.jpeg.gif.webp.bmp')
+    else
+      ImageCount := 0;
+    if DirExists(Dir + '\videos') then
+      VideoCount := CountFilesInDir(Dir + '\videos', '.mp4.webm.mkv.avi.mov.wmv')
+    else
+      VideoCount := 0;
+    AssetsInfoLabel.Caption := 'Found: ' + IntToStr(ImageCount) + ' images, ' + IntToStr(VideoCount) + ' videos';
+  end;
+end;
+
+// Clean up old Velopack installation (preserves user data)
+procedure CleanupVelopackInstall();
+var
+  CurrentPath, PackagesPath, UpdatePath: String;
+begin
+  CurrentPath := VelopackPath + '\current';
+  PackagesPath := VelopackPath + '\packages';
+  UpdatePath := VelopackPath + '\Update.exe';
+
+  // Remove Velopack-specific folders only (NOT user data like assets, settings.json, logs)
+  if DirExists(CurrentPath) then
+    DelTree(CurrentPath, True, True, True);
+
+  if DirExists(PackagesPath) then
+    DelTree(PackagesPath, True, True, True);
+
+  // Remove Velopack's Update.exe if it exists
+  if FileExists(UpdatePath) then
+    DeleteFile(UpdatePath);
+
+  // Remove any .velopack files
+  DelTree(VelopackPath + '\*.velopack', False, True, False);
+end;
+
+// Prompt to close app if running
+function InitializeSetup(): Boolean;
+var
+  ErrorCode: Integer;
+begin
+  Result := True;
+
+  // Check for old Velopack install
+  HasOldVelopackInstall := CheckForVelopackInstall();
+
+  // Detect existing assets
+  DetectExistingAssets();
+
+  // Check if already running
+  if CheckForMutexes('{#MyAppName}_Mutex') then
+  begin
+    if MsgBox('{#MyAppName} is currently running.' + #13#10 + #13#10 +
+              'Please close it before continuing installation.' + #13#10 + #13#10 +
+              'Click OK to attempt to close it automatically, or Cancel to exit setup.',
+              mbConfirmation, MB_OKCANCEL) = IDOK then
+    begin
+      // Try to close gracefully first
+      ShellExec('', 'taskkill', '/IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ErrorCode);
+      Sleep(2000);
+
+      // Force kill if still running
+      if CheckForMutexes('{#MyAppName}_Mutex') then
+      begin
+        ShellExec('', 'taskkill', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ErrorCode);
+        Sleep(1000);
+      end;
+    end
+    else
+    begin
+      Result := False;
+    end;
+  end;
+end;
+
+// Determine if assets page should be shown
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := False;
+  // Only show assets page if there are existing assets
+  if (PageID = AssetsPage.ID) and (not HasExistingAssets) then
+    Result := True;
+end;
+
+// Called after installation completes successfully
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  SelectedAssetsPath: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    // Save the selected assets path to registry (read by app on startup)
+    if HasExistingAssets then
+    begin
+      SelectedAssetsPath := AssetsPathEdit.Text;
+      RegWriteStringValue(HKEY_CURRENT_USER, 'Software\{#MyAppPublisher}\{#MyAppName}',
+        'AssetsPath', SelectedAssetsPath);
+    end;
+
+    // Offer to clean up old Velopack installation
+    if HasOldVelopackInstall then
+    begin
+      if MsgBox('A previous installation (via auto-updater) was detected.' + #13#10 + #13#10 +
+                'Location: ' + VelopackPath + '\current' + #13#10 + #13#10 +
+                'Would you like to remove the old installation?' + #13#10 +
+                '(Your settings, assets, and progress will be preserved)',
+                mbConfirmation, MB_YESNO) = IDYES then
+      begin
+        CleanupVelopackInstall();
+        MsgBox('Old installation removed successfully!' + #13#10 + #13#10 +
+               'Your user data has been preserved in:' + #13#10 +
+               VelopackPath,
+               mbInformation, MB_OK);
+      end;
+    end;
+  end;
+end;
+
+// Clean uninstall - prompt to remove user data
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  UserDataPath: String;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    UserDataPath := ExpandConstant('{localappdata}\ConditioningControlPanel');
+
+    if DirExists(UserDataPath) then
+    begin
+      if MsgBox('Do you want to remove your user data (settings, progress, logs)?' + #13#10 + #13#10 +
+                'Location: ' + UserDataPath + #13#10 + #13#10 +
+                'Click Yes to remove all data, or No to keep it.',
+                mbConfirmation, MB_YESNO) = IDYES then
+      begin
+        DelTree(UserDataPath, True, True, True);
+      end;
+    end;
+  end;
+end;
+
+// Create the assets confirmation page
+procedure CreateAssetsPage();
+begin
+  // Create custom page after the directory selection page
+  AssetsPage := CreateCustomPage(wpSelectDir,
+    'Your Assets',
+    'Confirm your assets folder location');
+
+  // Description label
+  AssetsPathLabel := TNewStaticText.Create(AssetsPage);
+  AssetsPathLabel.Parent := AssetsPage.Surface;
+  AssetsPathLabel.Caption := 'Your images and videos are stored in the folder below.' + #13#10 +
+                             'This folder will NOT be modified during installation.';
+  AssetsPathLabel.Left := 0;
+  AssetsPathLabel.Top := 0;
+  AssetsPathLabel.Width := AssetsPage.SurfaceWidth;
+  AssetsPathLabel.Height := 40;
+  AssetsPathLabel.AutoSize := False;
+  AssetsPathLabel.WordWrap := True;
+
+  // Path edit box
+  AssetsPathEdit := TNewEdit.Create(AssetsPage);
+  AssetsPathEdit.Parent := AssetsPage.Surface;
+  AssetsPathEdit.Left := 0;
+  AssetsPathEdit.Top := 50;
+  AssetsPathEdit.Width := AssetsPage.SurfaceWidth - 100;
+  AssetsPathEdit.Text := AssetsPath;
+  AssetsPathEdit.ReadOnly := True;
+
+  // Browse button
+  AssetsBrowseButton := TNewButton.Create(AssetsPage);
+  AssetsBrowseButton.Parent := AssetsPage.Surface;
+  AssetsBrowseButton.Left := AssetsPage.SurfaceWidth - 90;
+  AssetsBrowseButton.Top := 48;
+  AssetsBrowseButton.Width := 90;
+  AssetsBrowseButton.Height := 25;
+  AssetsBrowseButton.Caption := 'Browse...';
+  AssetsBrowseButton.OnClick := @AssetsBrowseButtonClick;
+
+  // Assets count info
+  AssetsInfoLabel := TNewStaticText.Create(AssetsPage);
+  AssetsInfoLabel.Parent := AssetsPage.Surface;
+  AssetsInfoLabel.Left := 0;
+  AssetsInfoLabel.Top := 85;
+  AssetsInfoLabel.Width := AssetsPage.SurfaceWidth;
+  AssetsInfoLabel.Height := 20;
+  AssetsInfoLabel.Caption := 'Found: ' + IntToStr(ImageCount) + ' images, ' + IntToStr(VideoCount) + ' videos';
+  AssetsInfoLabel.Font.Style := [fsBold];
+
+  // Preservation notice
+  AssetsPreserveLabel := TNewStaticText.Create(AssetsPage);
+  AssetsPreserveLabel.Parent := AssetsPage.Surface;
+  AssetsPreserveLabel.Left := 0;
+  AssetsPreserveLabel.Top := 120;
+  AssetsPreserveLabel.Width := AssetsPage.SurfaceWidth;
+  AssetsPreserveLabel.Height := 80;
+  AssetsPreserveLabel.AutoSize := False;
+  AssetsPreserveLabel.WordWrap := True;
+  AssetsPreserveLabel.Caption :=
+    'Your assets will be preserved:' + #13#10 +
+    '  - All your images will remain intact' + #13#10 +
+    '  - All your videos will remain intact' + #13#10 +
+    '  - Your settings and progress will be kept' + #13#10 + #13#10 +
+    'The installation only updates the application files, not your personal content.';
+  AssetsPreserveLabel.Font.Color := clGreen;
+end;
+
+// Custom welcome text with upgrade notice
+procedure InitializeWizard();
+var
+  WelcomeText: String;
+begin
+  // Create the assets confirmation page
+  CreateAssetsPage();
+
+  // Set welcome text
+  WelcomeText := 'This will install {#MyAppName} version {#MyAppVersion} on your computer.' + #13#10 + #13#10 +
+                 '{#MyAppDescription}' + #13#10 + #13#10 +
+                 'You will be able to choose where to install the application.' + #13#10 + #13#10;
+
+  if HasOldVelopackInstall or HasExistingAssets then
+    WelcomeText := WelcomeText +
+                   'NOTE: A previous installation was detected. Your settings and assets will be preserved.' + #13#10 + #13#10;
+
+  WelcomeText := WelcomeText + 'Click Next to continue, or Cancel to exit Setup.';
+
+  WizardForm.WelcomeLabel2.Caption := WelcomeText;
+end;

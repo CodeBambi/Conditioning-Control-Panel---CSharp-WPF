@@ -4,6 +4,7 @@ using System.Media;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using Microsoft.Win32;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Serilog;
@@ -96,6 +97,7 @@ namespace ConditioningControlPanel
         public static ScreenMirrorService ScreenMirror { get; private set; } = null!;
         public static AutonomyService Autonomy { get; private set; } = null!;
         public static InteractionQueueService InteractionQueue { get; private set; } = null!;
+        public static ContentPackService ContentPacks { get; private set; } = null!;
 
         /// <summary>
         /// Reference to the avatar companion window (set by MainWindow)
@@ -328,6 +330,9 @@ namespace ConditioningControlPanel
             // Initialize services
             Settings = new SettingsService();
 
+            // Check if installer set an assets path in registry
+            ApplyInstallerAssetsPath();
+
             splash.SetProgress(0.3, "Initializing audio...");
             Audio = new AudioService();
 
@@ -374,6 +379,9 @@ namespace ConditioningControlPanel
 
             // Initialize autonomy service (companion autonomous behavior - Level 100+)
             Autonomy = new AutonomyService();
+
+            // Initialize content packs service
+            ContentPacks = new ContentPackService();
 
             // Initialize Patreon (validate subscription in background)
             // Then load cloud profile if authenticated
@@ -977,6 +985,49 @@ Application State:
             return migratedCount;
         }
 
+        /// <summary>
+        /// Check if the installer set a custom assets path in the registry and apply it.
+        /// This allows users to confirm/change their assets folder during installation.
+        /// </summary>
+        private static void ApplyInstallerAssetsPath()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\CodeBambi\Conditioning Control Panel", writable: true);
+                if (key == null) return;
+
+                var installerAssetsPath = key.GetValue("AssetsPath") as string;
+                if (string.IsNullOrWhiteSpace(installerAssetsPath)) return;
+
+                // Check if this path differs from default and exists
+                if (Directory.Exists(installerAssetsPath))
+                {
+                    var defaultPath = UserAssetsPath;
+
+                    // If the installer-selected path is different from default, apply it
+                    // But only if settings don't already have a custom path set
+                    if (!string.Equals(installerAssetsPath, defaultPath, StringComparison.OrdinalIgnoreCase) &&
+                        string.IsNullOrWhiteSpace(Settings?.Current?.CustomAssetsPath))
+                    {
+                        if (Settings?.Current != null)
+                        {
+                            Settings.Current.CustomAssetsPath = installerAssetsPath;
+                            Settings.Save();
+                            Logger?.Information("Applied installer assets path: {Path}", installerAssetsPath);
+                        }
+                    }
+                }
+
+                // Remove the registry value after processing (one-time operation)
+                key.DeleteValue("AssetsPath", throwOnMissingValue: false);
+                Logger?.Debug("Cleared installer AssetsPath registry value");
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Failed to apply installer assets path from registry");
+            }
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
             Logger?.Information("Application shutting down...");
@@ -1016,6 +1067,7 @@ Application State:
             DualMonitorVideo?.Dispose();
             ScreenMirror?.Dispose();
             Autonomy?.Dispose();
+            ContentPacks?.Dispose();
             Audio?.Dispose();
             Settings?.Save();
 

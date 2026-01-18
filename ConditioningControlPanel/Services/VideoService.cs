@@ -1469,6 +1469,17 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
+                // Filter out disabled assets (blacklist approach)
+                if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
+                {
+                    var basePath = App.EffectiveAssetsPath;
+                    files = files.Where(f =>
+                    {
+                        var relativePath = Path.GetRelativePath(basePath, f);
+                        return !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
+                    }).ToList();
+                }
+
                 if (files.Count == 0) return null;
 
                 // Performance: Shuffle and enqueue all at once

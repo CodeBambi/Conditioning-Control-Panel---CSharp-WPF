@@ -855,8 +855,8 @@
                             <TextBlock Text="Companion" FontSize="10"/>
                         </StackPanel>
                     </Button>
-                    <Button Grid.Column="3" x:Name="BtnOpenAssets" Style="{StaticResource TabButton}"
-                            Margin="2,0" Click="BtnOpenAssets_Click" ToolTip="Open Assets Folder">
+                    <Button Grid.Column="3" x:Name="BtnOpenAssets" Tag="Assets" Style="{StaticResource TabButton}"
+                            Margin="2,0" Click="BtnAssets_Click" ToolTip="Assets &amp; Content Packs">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="📁" FontSize="11" Margin="0,0,3,0"/>
                             <TextBlock Text="Assets" FontSize="10"/>
@@ -1216,7 +1216,7 @@
                                             Padding="6,3" Click="BtnPickAssetsFolder_Click" Margin="0,0,4,0"
                                             ToolTip="Set custom assets folder"/>
                                     <Button Content="📚 Assets" Style="{StaticResource OutlineButton}"
-                                            Padding="8,3" Click="BtnOpenAssets_Click"
+                                            Padding="8,3" Click="BtnOpenAssetsFolder_Click"
                                             ToolTip="Open assets folder (images, videos, sounds)"/>
                                 </StackPanel>
                             </Grid>
@@ -4216,6 +4216,363 @@
                             </Style>
                         </ListView.ItemContainerStyle>
                     </ListView>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Assets & Packs Tab -->
+        <Grid x:Name="AssetsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
+            <Grid.Resources>
+                <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+            </Grid.Resources>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto" MaxHeight="280"/>
+                <RowDefinition Height="5"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header with title and actions -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <TextBlock Text="📦 Assets &amp; Content Packs" Style="{StaticResource SectionHeader}"
+                           FontSize="18" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="BtnRefreshPacks" Content="🔄 Refresh"
+                            Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
+                            Click="BtnRefreshPacks_Click" ToolTip="Refresh available packs"/>
+                    <Button x:Name="BtnOpenAssetsFolder" Content="📂 Open Folder"
+                            Style="{StaticResource OutlineButton}" Padding="12,6"
+                            Click="BtnOpenAssetsFolder_Click" ToolTip="Open assets folder in Explorer"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- TOP: Content Packs Section -->
+            <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Padding="12">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="🎁 Community Content Packs"
+                               Style="{StaticResource SectionHeader}" Margin="0,0,0,10"/>
+
+                    <!-- Horizontal scrolling pack cards -->
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled">
+                        <StackPanel Orientation="Horizontal">
+                            <!-- Pack 1: Placeholder -->
+                            <Border Width="200" Margin="0,0,12,0" CornerRadius="8"
+                                    Background="#252542" BorderBrush="#404060" BorderThickness="1">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="100"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Preview Image Placeholder -->
+                                    <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True" Background="#1A1A2E">
+                                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                            <TextBlock Text="📦" FontSize="32" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Pack 1" FontSize="10" Foreground="#606080" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Info section -->
+                                    <StackPanel Grid.Row="1" Margin="10,8,10,10">
+                                        <TextBlock Text="Starter Pack" FontWeight="Bold"
+                                                   Foreground="{StaticResource TextLightBrush}" FontSize="12"/>
+                                        <TextBlock Text="Basic content pack with essential images and videos"
+                                                   Foreground="{StaticResource TextMutedBrush}" FontSize="10"
+                                                   TextWrapping="Wrap" MaxHeight="30" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="9" Margin="0,4,0,6">
+                                            50 images, 10 videos
+                                        </TextBlock>
+
+                                        <!-- Buttons -->
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button Grid.Column="0" Content="Install"
+                                                    Style="{StaticResource SmallPinkButton}"
+                                                    Padding="8,4" IsEnabled="False" Opacity="0.6"/>
+                                            <Button Grid.Column="1" Content="⬆"
+                                                    Style="{StaticResource OutlineButton}"
+                                                    ToolTip="Upgrade Pack" Margin="4,0,0,0"
+                                                    Padding="6,4" FontSize="10" IsEnabled="False" Opacity="0.6"/>
+                                            <Button Grid.Column="2" Content="P"
+                                                    Style="{StaticResource ExpandableIconButtonPatreon}"
+                                                    ToolTip="Support on Patreon" Margin="4,0,0,0"
+                                                    Padding="6,4" FontSize="10" MinWidth="24" Height="24" IsEnabled="False" Opacity="0.6"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <!-- Pack 2: Placeholder -->
+                            <Border Width="200" Margin="0,0,12,0" CornerRadius="8"
+                                    Background="#252542" BorderBrush="#404060" BorderThickness="1">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="100"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Preview Image Placeholder -->
+                                    <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True" Background="#1A1A2E">
+                                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                            <TextBlock Text="🎨" FontSize="32" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Pack 2" FontSize="10" Foreground="#606080" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Info section -->
+                                    <StackPanel Grid.Row="1" Margin="10,8,10,10">
+                                        <TextBlock Text="Premium Pack" FontWeight="Bold"
+                                                   Foreground="{StaticResource TextLightBrush}" FontSize="12"/>
+                                        <TextBlock Text="High quality curated content from community creators"
+                                                   Foreground="{StaticResource TextMutedBrush}" FontSize="10"
+                                                   TextWrapping="Wrap" MaxHeight="30" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="9" Margin="0,4,0,6">
+                                            120 images, 25 videos
+                                        </TextBlock>
+
+                                        <!-- Buttons -->
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button Grid.Column="0" Content="Install"
+                                                    Style="{StaticResource SmallPinkButton}"
+                                                    Padding="8,4" IsEnabled="False" Opacity="0.6"/>
+                                            <Button Grid.Column="1" Content="⬆"
+                                                    Style="{StaticResource OutlineButton}"
+                                                    ToolTip="Upgrade Pack" Margin="4,0,0,0"
+                                                    Padding="6,4" FontSize="10" IsEnabled="False" Opacity="0.6"/>
+                                            <Button Grid.Column="2" Content="P"
+                                                    Style="{StaticResource ExpandableIconButtonPatreon}"
+                                                    ToolTip="Support on Patreon" Margin="4,0,0,0"
+                                                    Padding="6,4" FontSize="10" MinWidth="24" Height="24" IsEnabled="False" Opacity="0.6"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <!-- Pack 3: Placeholder -->
+                            <Border Width="200" Margin="0,0,12,0" CornerRadius="8"
+                                    Background="#252542" BorderBrush="#404060" BorderThickness="1">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="100"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Preview Image Placeholder -->
+                                    <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True" Background="#1A1A2E">
+                                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                            <TextBlock Text="✨" FontSize="32" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Pack 3" FontSize="10" Foreground="#606080" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Info section -->
+                                    <StackPanel Grid.Row="1" Margin="10,8,10,10">
+                                        <TextBlock Text="Deluxe Pack" FontWeight="Bold"
+                                                   Foreground="{StaticResource TextLightBrush}" FontSize="12"/>
+                                        <TextBlock Text="Extended collection with exclusive content"
+                                                   Foreground="{StaticResource TextMutedBrush}" FontSize="10"
+                                                   TextWrapping="Wrap" MaxHeight="30" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="9" Margin="0,4,0,6">
+                                            200 images, 50 videos
+                                        </TextBlock>
+
+                                        <!-- Buttons -->
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button Grid.Column="0" Content="Install"
+                                                    Style="{StaticResource SmallPinkButton}"
+                                                    Padding="8,4" IsEnabled="False" Opacity="0.6"/>
+                                            <Button Grid.Column="1" Content="⬆"
+                                                    Style="{StaticResource OutlineButton}"
+                                                    ToolTip="Upgrade Pack" Margin="4,0,0,0"
+                                                    Padding="6,4" FontSize="10" IsEnabled="False" Opacity="0.6"/>
+                                            <Button Grid.Column="2" Content="P"
+                                                    Style="{StaticResource ExpandableIconButtonPatreon}"
+                                                    ToolTip="Support on Patreon" Margin="4,0,0,0"
+                                                    Padding="6,4" FontSize="10" MinWidth="24" Height="24" IsEnabled="False" Opacity="0.6"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- Splitter -->
+            <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch"
+                          Background="Transparent" Cursor="SizeNS"/>
+
+            <!-- BOTTOM: Interactive File Browser -->
+            <Border Grid.Row="3" Style="{StaticResource SectionPanel}" Padding="12">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Header -->
+                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <TextBlock Text="📂 Asset Browser" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock x:Name="TxtAssetCounts" Text="0 images, 0 videos"
+                                   Foreground="{StaticResource TextMutedBrush}" FontSize="12"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Action bar -->
+                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Select All" Style="{StaticResource OutlineButton}"
+                                    Padding="10,4" FontSize="11" Margin="0,0,6,0" Click="BtnSelectAllAssets_Click"/>
+                            <Button Content="Deselect All" Style="{StaticResource OutlineButton}"
+                                    Padding="10,4" FontSize="11" Margin="0,0,6,0" Click="BtnDeselectAllAssets_Click"/>
+                            <Button Content="💾 Save Selection" Style="{StaticResource SmallPinkButton}"
+                                    Padding="10,4" FontSize="11"
+                                    Click="BtnSaveAssetSelection_Click"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Split view: TreeView on left, Thumbnails on right -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220"/>
+                            <ColumnDefinition Width="5"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- LEFT: Folder TreeView -->
+                        <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="6" Padding="4">
+                            <TreeView x:Name="AssetTreeView" Background="Transparent" BorderThickness="0"
+                                      SelectedItemChanged="AssetTreeView_SelectedItemChanged"
+                                      VirtualizingPanel.IsVirtualizing="True">
+                                <TreeView.Resources>
+                                    <Style TargetType="TreeViewItem">
+                                        <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="Padding" Value="2"/>
+                                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter Property="Background" Value="#40FF69B4"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#20FF69B4"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TreeView.Resources>
+                                <TreeView.ItemTemplate>
+                                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                        <StackPanel Orientation="Horizontal" Margin="2">
+                                            <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                      IsThreeState="True"
+                                                      Checked="FolderCheckBox_Changed"
+                                                      Unchecked="FolderCheckBox_Changed"
+                                                      VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBlock Text="📁" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding FileCountDisplay}"
+                                                       Foreground="{StaticResource TextMutedBrush}"
+                                                       FontSize="10" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </HierarchicalDataTemplate>
+                                </TreeView.ItemTemplate>
+                            </TreeView>
+                        </Border>
+
+                        <!-- Splitter -->
+                        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                                      Background="Transparent" Cursor="SizeWE"/>
+
+                        <!-- RIGHT: Thumbnail Preview Grid -->
+                        <Border Grid.Column="2" Background="#1A1A2E" CornerRadius="6" Padding="4">
+                            <Grid>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl x:Name="ThumbnailsItemsControl">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Width="100" Height="120" Margin="4" CornerRadius="6"
+                                                        Background="#252542" BorderBrush="#404060" BorderThickness="2" Cursor="Hand"
+                                                        MouseLeftButtonDown="ThumbnailItem_Click">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="*"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+
+                                                        <!-- Thumbnail image -->
+                                                        <Border Grid.Row="0" CornerRadius="6,6,0,0" ClipToBounds="True" Background="#1A1A2E">
+                                                            <Grid>
+                                                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
+                                                                <!-- Video badge (small corner indicator) -->
+                                                                <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                                        Background="#80000000" CornerRadius="4,0,0,0" Padding="4,2"
+                                                                        Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                                                    <TextBlock Text="▶" FontSize="10" Foreground="White"/>
+                                                                </Border>
+                                                                <!-- Loading indicator -->
+                                                                <TextBlock Text="⏳" FontSize="14"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                           Visibility="{Binding IsLoadingThumbnail, Converter={StaticResource BoolToVisibility}}"/>
+                                                            </Grid>
+                                                        </Border>
+
+                                                        <!-- Checkbox overlay -->
+                                                        <CheckBox Grid.Row="0" IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                                  HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                                  Margin="4" Checked="ThumbnailCheckBox_Changed"
+                                                                  Unchecked="ThumbnailCheckBox_Changed"/>
+
+                                                        <!-- Filename -->
+                                                        <Border Grid.Row="1" Background="#303050" Padding="4,2">
+                                                            <TextBlock Text="{Binding Name}" FontSize="9"
+                                                                       Foreground="{StaticResource TextLightBrush}"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       ToolTip="{Binding Name}"/>
+                                                        </Border>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+
+                                <!-- Empty state -->
+                                <TextBlock x:Name="TxtThumbnailsEmpty"
+                                           Text="Select a folder to view its contents"
+                                           Foreground="{StaticResource TextMutedBrush}" FontSize="13"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>

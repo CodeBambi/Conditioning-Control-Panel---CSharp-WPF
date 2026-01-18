@@ -91,6 +91,45 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool IsInstalled => _updateManager.IsInstalled;
 
+        /// <summary>
+        /// Gets the install path from registry (set by the installer).
+        /// Returns null if not installed via installer or registry key not found.
+        /// </summary>
+        public static string? GetInstalledPath()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\CodeBambi\Conditioning Control Panel");
+                return key?.GetValue("InstallPath") as string;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Gets the installed version from registry (set by the installer).
+        /// Returns null if not installed via installer or registry key not found.
+        /// </summary>
+        public static string? GetInstalledVersion()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\CodeBambi\Conditioning Control Panel");
+                return key?.GetValue("Version") as string;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Whether the app was installed via the installer (has registry entry)
+        /// </summary>
+        public static bool IsInstalledViaInstaller => GetInstalledPath() != null;
+
         public UpdateService()
         {
             // Configure GitHub as update source

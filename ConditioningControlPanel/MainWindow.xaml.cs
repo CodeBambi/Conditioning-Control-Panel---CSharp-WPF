@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -837,6 +838,7 @@ namespace ConditioningControlPanel
             CompanionTab.Visibility = Visibility.Collapsed;
             PatreonTab.Visibility = Visibility.Collapsed;
             LeaderboardTab.Visibility = Visibility.Collapsed;
+            AssetsTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive
             var inactiveStyle = FindResource("TabButton") as Style;
@@ -900,6 +902,13 @@ namespace ConditioningControlPanel
                     LeaderboardTab.Visibility = Visibility.Visible;
                     BtnLeaderboard.Style = activeStyle;
                     _ = RefreshLeaderboardAsync(); // Load on first view
+                    break;
+
+                case "assets":
+                    AssetsTab.Visibility = Visibility.Visible;
+                    BtnOpenAssets.Style = activeStyle;
+                    RefreshAssetTree();
+                    _ = RefreshPacksAsync();
                     break;
             }
         }
@@ -7355,13 +7364,464 @@ namespace ConditioningControlPanel
             // Image carousel navigation
         }
 
-        private void BtnOpenAssets_Click(object sender, RoutedEventArgs e)
+        #region Assets & Packs Tab
+
+        private ObservableCollection<ContentPack> _availablePacks = new();
+        private ObservableCollection<AssetTreeItem> _assetTree = new();
+        private ObservableCollection<AssetFileItem> _currentFolderFiles = new();
+        private AssetTreeItem? _selectedFolder;
+
+        private void BtnAssets_Click(object sender, RoutedEventArgs e) => ShowTab("assets");
+
+        private void BtnOpenAssetsFolder_Click(object sender, RoutedEventArgs e)
         {
             var assetsPath = App.EffectiveAssetsPath;
             Directory.CreateDirectory(Path.Combine(assetsPath, "images"));
             Directory.CreateDirectory(Path.Combine(assetsPath, "videos"));
             Process.Start("explorer.exe", assetsPath);
         }
+
+        private async Task RefreshPacksAsync()
+        {
+            // Placeholder: Content packs are currently static UI placeholders
+            // This will be implemented when the pack system is ready
+            await Task.CompletedTask;
+        }
+
+        private void BtnRefreshPacks_Click(object sender, RoutedEventArgs e) => _ = RefreshPacksAsync();
+
+        private void RefreshAssetTree()
+        {
+            _assetTree.Clear();
+            var assetsPath = App.EffectiveAssetsPath;
+
+            // Build tree for images folder
+            var imagesFolder = Path.Combine(assetsPath, "images");
+            if (Directory.Exists(imagesFolder))
+            {
+                var imagesNode = BuildFolderTree(imagesFolder, "images");
+                imagesNode.IsExpanded = true;
+                _assetTree.Add(imagesNode);
+            }
+
+            // Build tree for videos folder
+            var videosFolder = Path.Combine(assetsPath, "videos");
+            if (Directory.Exists(videosFolder))
+            {
+                var videosNode = BuildFolderTree(videosFolder, "videos");
+                videosNode.IsExpanded = true;
+                _assetTree.Add(videosNode);
+            }
+
+            AssetTreeView.ItemsSource = _assetTree;
+            UpdateAssetCounts();
+        }
+
+        private AssetTreeItem BuildFolderTree(string path, string name)
+        {
+            var node = new AssetTreeItem
+            {
+                Name = name,
+                FullPath = path,
+                IsChecked = null
+            };
+
+            // Count files in this folder
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+            var files = Directory.GetFiles(path)
+                .Where(f => validExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .ToList();
+            node.FileCount = files.Count;
+
+            // Count checked files based on settings
+            if (App.Settings.Current.UseAssetWhitelist && App.Settings.Current.ActiveAssetPaths.Count > 0)
+            {
+                var basePath = App.EffectiveAssetsPath;
+                node.CheckedFileCount = files.Count(f =>
+                {
+                    var relativePath = Path.GetRelativePath(basePath, f);
+                    return App.Settings.Current.ActiveAssetPaths.Contains(relativePath);
+                });
+            }
+            else
+            {
+                node.CheckedFileCount = files.Count; // All active by default
+            }
+
+            // Add subfolders
+            foreach (var dir in Directory.GetDirectories(path))
+            {
+                var child = BuildFolderTree(dir, Path.GetFileName(dir));
+                child.Parent = node;
+                node.Children.Add(child);
+            }
+
+            // Update check state based on children and files
+            node.UpdateCheckState();
+
+            return node;
+        }
+
+        private void AssetTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (e.NewValue is AssetTreeItem folder)
+            {
+                _selectedFolder = folder;
+                LoadFolderThumbnails(folder.FullPath);
+            }
+        }
+
+        private void LoadFolderThumbnails(string folderPath)
+        {
+            _currentFolderFiles.Clear();
+            TxtThumbnailsEmpty.Visibility = Visibility.Collapsed;
+
+            if (!Directory.Exists(folderPath))
+            {
+                TxtThumbnailsEmpty.Visibility = Visibility.Visible;
+                return;
+            }
+
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+            var files = Directory.GetFiles(folderPath)
+                .Where(f => validExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .OrderBy(f => Path.GetFileName(f))
+                .ToList();
+
+            if (files.Count == 0)
+            {
+                TxtThumbnailsEmpty.Text = "No media files in this folder";
+                TxtThumbnailsEmpty.Visibility = Visibility.Visible;
+                return;
+            }
+
+            var basePath = App.EffectiveAssetsPath;
+
+            foreach (var file in files)
+            {
+                var relativePath = Path.GetRelativePath(basePath, file);
+                // Item is checked if NOT in DisabledAssetPaths (blacklist approach)
+                var isActive = !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
+
+                var item = new AssetFileItem
+                {
+                    FullPath = file,
+                    RelativePath = relativePath,
+                    IsChecked = isActive
+                };
+
+                // Get file size
+                try { item.SizeBytes = new FileInfo(file).Length; } catch { }
+
+                _currentFolderFiles.Add(item);
+
+                // Load thumbnail asynchronously
+                _ = LoadThumbnailAsync(item);
+            }
+
+            ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
+        }
+
+        private async Task LoadThumbnailAsync(AssetFileItem item)
+        {
+            item.IsLoadingThumbnail = true;
+            try
+            {
+                await Task.Run(() =>
+                {
+                    try
+                    {
+                        // Use Windows Shell API for thumbnails - works for both images and videos
+                        // This gives us the same thumbnails Windows Explorer shows
+                        var thumbnail = Helpers.ShellThumbnailHelper.GetThumbnail(item.FullPath, 100, 100);
+
+                        if (thumbnail != null)
+                        {
+                            Dispatcher.Invoke(() => item.Thumbnail = thumbnail);
+                        }
+                        else if (!item.IsVideo)
+                        {
+                            // Fallback for images: load directly
+                            var bitmap = new BitmapImage();
+                            bitmap.BeginInit();
+                            bitmap.UriSource = new Uri(item.FullPath, UriKind.Absolute);
+                            bitmap.DecodePixelWidth = 100;
+                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                            bitmap.EndInit();
+                            bitmap.Freeze();
+                            Dispatcher.Invoke(() => item.Thumbnail = bitmap);
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore thumbnail load errors
+                    }
+                });
+            }
+            finally
+            {
+                item.IsLoadingThumbnail = false;
+            }
+        }
+
+        private void FolderCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox cb && cb.DataContext is AssetTreeItem folder)
+            {
+                // If the checkbox has a definite value, propagate to children
+                if (folder.IsChecked.HasValue)
+                {
+                    folder.SetCheckedRecursive(folder.IsChecked.Value);
+
+                    // Also update file items in this folder
+                    UpdateFolderFilesCheckState(folder, folder.IsChecked.Value);
+                }
+
+                // Update parent states
+                folder.Parent?.UpdateCheckState();
+                UpdateAssetCounts();
+            }
+        }
+
+        private void UpdateFolderFilesCheckState(AssetTreeItem folder, bool isChecked)
+        {
+            var basePath = App.EffectiveAssetsPath;
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+
+            if (Directory.Exists(folder.FullPath))
+            {
+                var files = Directory.GetFiles(folder.FullPath)
+                    .Where(f => validExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()));
+
+                foreach (var file in files)
+                {
+                    var relativePath = Path.GetRelativePath(basePath, file);
+                    // Use DisabledAssetPaths (blacklist): unchecked items are in the set
+                    if (isChecked)
+                    {
+                        App.Settings.Current.DisabledAssetPaths.Remove(relativePath);
+                    }
+                    else
+                    {
+                        App.Settings.Current.DisabledAssetPaths.Add(relativePath);
+                    }
+                }
+            }
+
+            // Recurse into subfolders
+            foreach (var child in folder.Children)
+            {
+                UpdateFolderFilesCheckState(child, isChecked);
+            }
+
+            folder.CheckedFileCount = isChecked ? folder.FileCount : 0;
+        }
+
+        private void ThumbnailCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox cb && cb.DataContext is AssetFileItem file)
+            {
+                // Use DisabledAssetPaths (blacklist): unchecked items are in the set
+                if (file.IsChecked)
+                {
+                    App.Settings.Current.DisabledAssetPaths.Remove(file.RelativePath);
+                }
+                else
+                {
+                    App.Settings.Current.DisabledAssetPaths.Add(file.RelativePath);
+                }
+
+                // Update parent folder state
+                UpdateParentFolderCheckState();
+                UpdateAssetCounts();
+            }
+        }
+
+        private void ThumbnailItem_Click(object sender, MouseButtonEventArgs e)
+        {
+            // Toggle selection on click
+            if (sender is Border border && border.DataContext is AssetFileItem file)
+            {
+                file.IsChecked = !file.IsChecked;
+                ThumbnailCheckBox_Changed(sender, e);
+            }
+        }
+
+        private void UpdateParentFolderCheckState()
+        {
+            if (_selectedFolder == null) return;
+
+            // Count checked files
+            var checkedCount = _currentFolderFiles.Count(f => f.IsChecked);
+            _selectedFolder.CheckedFileCount = checkedCount;
+            _selectedFolder.UpdateCheckState();
+        }
+
+        private void BtnSelectAllAssets_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var folder in _assetTree)
+            {
+                folder.SetCheckedRecursive(true);
+                UpdateFolderFilesCheckState(folder, true);
+            }
+
+            foreach (var file in _currentFolderFiles)
+            {
+                file.IsChecked = true;
+            }
+
+            UpdateAssetCounts();
+        }
+
+        private void BtnDeselectAllAssets_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var folder in _assetTree)
+            {
+                folder.SetCheckedRecursive(false);
+                UpdateFolderFilesCheckState(folder, false);
+            }
+
+            foreach (var file in _currentFolderFiles)
+            {
+                file.IsChecked = false;
+            }
+
+            UpdateAssetCounts();
+        }
+
+        private void BtnSaveAssetSelection_Click(object sender, RoutedEventArgs e)
+        {
+            App.Settings.Save();
+
+            // Clear caches so services pick up new selection
+            App.Flash?.ClearFileCache();
+            App.Video?.RefreshVideosPath();
+
+            var disabledCount = App.Settings.Current.DisabledAssetPaths.Count;
+            var message = disabledCount > 0
+                ? $"Selection saved!\n\n{disabledCount} assets are disabled.\n\nThe changes will take effect on the next flash/video."
+                : "Selection saved!\n\nAll assets are active.\n\nThe changes will take effect on the next flash/video.";
+            MessageBox.Show(
+                message,
+                "Selection Saved",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        private void UpdateAssetCounts()
+        {
+            var totalImages = 0;
+            var totalVideos = 0;
+            var activeImages = 0;
+            var activeVideos = 0;
+
+            CountAssetsRecursive(_assetTree, ref totalImages, ref totalVideos, ref activeImages, ref activeVideos);
+
+            var displayImages = App.Settings.Current.UseAssetWhitelist ? activeImages : totalImages;
+            var displayVideos = App.Settings.Current.UseAssetWhitelist ? activeVideos : totalVideos;
+
+            TxtAssetCounts.Text = $"{displayImages} images, {displayVideos} videos active";
+        }
+
+        private void CountAssetsRecursive(IEnumerable<AssetTreeItem> items, ref int totalImages, ref int totalVideos, ref int activeImages, ref int activeVideos)
+        {
+            var imageExts = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" };
+            var videoExts = new[] { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+
+            foreach (var folder in items)
+            {
+                if (Directory.Exists(folder.FullPath))
+                {
+                    var files = Directory.GetFiles(folder.FullPath);
+                    var basePath = App.EffectiveAssetsPath;
+
+                    foreach (var file in files)
+                    {
+                        var ext = Path.GetExtension(file).ToLowerInvariant();
+                        var isImage = imageExts.Contains(ext);
+                        var isVideo = videoExts.Contains(ext);
+
+                        if (isImage) totalImages++;
+                        if (isVideo) totalVideos++;
+
+                        var relativePath = Path.GetRelativePath(basePath, file);
+                        var isActive = App.Settings.Current.ActiveAssetPaths.Contains(relativePath);
+
+                        if (isActive && isImage) activeImages++;
+                        if (isActive && isVideo) activeVideos++;
+                    }
+                }
+
+                CountAssetsRecursive(folder.Children, ref totalImages, ref totalVideos, ref activeImages, ref activeVideos);
+            }
+        }
+
+        private async void BtnPackDownload_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is ContentPack pack)
+            {
+                if (pack.IsDownloaded)
+                {
+                    // Toggle activation
+                    try
+                    {
+                        if (pack.IsActive)
+                        {
+                            App.ContentPacks?.DeactivatePack(pack);
+                        }
+                        else
+                        {
+                            App.ContentPacks?.ActivatePack(pack);
+                        }
+                        App.Settings.Save();
+                        RefreshAssetTree();
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Failed to toggle pack: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+                else
+                {
+                    // Download
+                    pack.IsDownloading = true;
+                    try
+                    {
+                        await App.ContentPacks!.DownloadPackAsync(pack, new Progress<int>(p => pack.DownloadProgress = p));
+                        App.ContentPacks.ActivatePack(pack);
+                        App.Settings.Save();
+                        RefreshAssetTree();
+                        MessageBox.Show($"Pack '{pack.Name}' installed and activated!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Download failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                    finally
+                    {
+                        pack.IsDownloading = false;
+                    }
+                }
+            }
+        }
+
+        private void BtnPackUpgrade_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is ContentPack pack && !string.IsNullOrEmpty(pack.UpgradeUrl))
+            {
+                Process.Start(new ProcessStartInfo(pack.UpgradeUrl) { UseShellExecute = true });
+            }
+        }
+
+        private void BtnPackPatreon_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is ContentPack pack && !string.IsNullOrEmpty(pack.PatreonUrl))
+            {
+                Process.Start(new ProcessStartInfo(pack.PatreonUrl) { UseShellExecute = true });
+            }
+        }
+
+        #endregion
 
         private void BtnPickAssetsFolder_Click(object sender, RoutedEventArgs e)
         {
