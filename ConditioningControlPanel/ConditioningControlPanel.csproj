@@ -118,6 +118,10 @@
     <Resource Include="Resources\speechbubble2.png" />
     <Resource Include="Resources\discord.png" />
     <Resource Include="Resources\spiral.gif" />
+
+    <!-- Content Pack preview images -->
+    <Resource Include="Resources\pack1.png" />
+    <Resource Include="Resources\pack2.png" />
     
     <!-- Avatar Tube images - MUST be Resource for pack:// URIs to work -->
     <Resource Include="Resources\tube.png" />

@@ -4273,9 +4273,8 @@
                                     <!-- Preview Image -->
                                     <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True" Background="#1A1A2E">
                                         <Grid>
-                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                <TextBlock Text="🎀" FontSize="36" HorizontalAlignment="Center"/>
-                                            </StackPanel>
+                                            <Image Source="pack://application:,,,/Resources/pack1.png"
+                                                   Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                             <!-- Size badge -->
                                             <Border Background="#FF69B4" CornerRadius="4" Padding="8,3"
                                                     HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
@@ -4332,9 +4331,8 @@
                                     <!-- Preview Image -->
                                     <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True" Background="#1A1A2E">
                                         <Grid>
-                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                                <TextBlock Text="💎" FontSize="36" HorizontalAlignment="Center"/>
-                                            </StackPanel>
+                                            <Image Source="pack://application:,,,/Resources/pack2.png"
+                                                   Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                                             <!-- Size badge - larger file warning -->
                                             <Border Background="#FF6B35" CornerRadius="4" Padding="8,3"
                                                     HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
