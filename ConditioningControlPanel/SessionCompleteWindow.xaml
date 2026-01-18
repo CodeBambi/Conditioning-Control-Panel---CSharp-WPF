@@ -2,14 +2,14 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Session Complete"
-        Width="500" Height="400"
+        Width="500" Height="520"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
         Topmost="True"
         ShowInTaskbar="False">
-    
+
     <Border Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="3" CornerRadius="20" Padding="30">
         <Grid>
             <Grid.RowDefinitions>
@@ -18,9 +18,17 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            
-            <!-- Celebration Icon -->
-            <TextBlock Grid.Row="0" Text="🎉" FontSize="60" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+
+            <!-- Card Image -->
+            <Border Grid.Row="0" CornerRadius="12" Margin="0,0,0,15" HorizontalAlignment="Center"
+                    Background="#252540" Padding="5">
+                <Image x:Name="ImgCard" Width="200" Height="140" Stretch="UniformToFill"
+                       RenderOptions.BitmapScalingMode="HighQuality">
+                    <Image.Clip>
+                        <RectangleGeometry Rect="0,0,200,140" RadiusX="8" RadiusY="8"/>
+                    </Image.Clip>
+                </Image>
+            </Border>
             
             <!-- Main Message -->
             <StackPanel Grid.Row="1" HorizontalAlignment="Center">

@@ -1,16 +1,30 @@
 using System;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel
 {
     public partial class SessionCompleteWindow : Window
     {
+        private static readonly Random _random = new();
+
+        // Available card images
+        private static readonly string[] CardImages = new[]
+        {
+            "pack://application:,,,/Resources/Cards/fireworks.png",
+            "pack://application:,,,/Resources/Cards/hearth.png",
+            "pack://application:,,,/Resources/Cards/spotlight.png"
+        };
+
         public SessionCompleteWindow(Session session, TimeSpan duration, int xpEarned)
         {
             InitializeComponent();
-            
+
+            // Load random card image
+            LoadRandomCard();
+
             // Set custom message based on session
             if (session.Id == "gamer_girl")
             {
@@ -20,12 +34,12 @@ namespace ConditioningControlPanel
             {
                 TxtMainMessage.Text = "Good Girl!";
             }
-            
+
             TxtSubMessage.Text = $"{session.Icon} {session.Name} Complete";
             TxtSessionName.Text = session.Name;
             TxtDuration.Text = $"{duration.Minutes:D2}:{duration.Seconds:D2}";
             TxtXP.Text = $"+{xpEarned}";
-            
+
             // Color XP based on difficulty
             TxtXP.Foreground = session.Difficulty switch
             {
@@ -35,9 +49,25 @@ namespace ConditioningControlPanel
                 SessionDifficulty.Extreme => new SolidColorBrush(Color.FromRgb(255, 99, 71)), // Tomato
                 _ => new SolidColorBrush(Color.FromRgb(144, 238, 144))
             };
-            
+
             // Play level up sound
             PlayCompletionSound();
+        }
+
+        private void LoadRandomCard()
+        {
+            try
+            {
+                var cardUri = CardImages[_random.Next(CardImages.Length)];
+                var bitmap = new BitmapImage(new Uri(cardUri, UriKind.Absolute));
+                ImgCard.Source = bitmap;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to load session completion card");
+                // Hide the image border if loading fails
+                ImgCard.Visibility = Visibility.Collapsed;
+            }
         }
         
         private void PlayCompletionSound()

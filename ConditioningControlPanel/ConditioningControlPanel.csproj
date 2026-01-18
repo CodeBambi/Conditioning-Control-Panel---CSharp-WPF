@@ -181,6 +181,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Session completion card images -->
+    <Resource Include="Resources\Cards\*.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Sound files - must be copied to output and publish for file system access -->
     <Content Include="Resources\sounds\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
