@@ -5,139 +5,171 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
 
 namespace ConditioningControlPanel.Services
 {
     /// <summary>
-    /// Manages downloading, installing, and activating community content packs.
+    /// Manages downloading, installing, and activating encrypted content packs.
+    /// Packs are stored in a hidden folder with encrypted files to deter piracy.
     /// </summary>
     public class ContentPackService : IDisposable
     {
         private readonly HttpClient _httpClient;
         private readonly string _packsFolder;
         private readonly string _manifestCachePath;
-        private List<ContentPack> _cachedPacks = new();
+        private List<ContentPack> _availablePacks = new();
+        private Dictionary<string, InstalledPackManifest> _installedManifests = new();
         private bool _disposed;
 
-        // Remote packs manifest URL - can be configured
-        private const string DefaultManifestUrl = "https://raw.githubusercontent.com/ConditioningControlPanel/packs/main/manifest.json";
+        // GitHub releases URL for pack downloads
+        private const string PacksManifestUrl = "https://raw.githubusercontent.com/CodeBambi/ccp-packs/main/manifest.json";
+
+        // Built-in packs definition (shown even if manifest fetch fails)
+        private static readonly List<ContentPack> BuiltInPacks = new()
+        {
+            new ContentPack
+            {
+                Id = "basic-bimbo-starter",
+                Name = "Basic Bimbo Starter Pack",
+                Description = "Essential images and videos to begin your journey. Perfect for newcomers!",
+                Author = "CodeBambi",
+                Version = "1.0.0",
+                ImageCount = 50,
+                VideoCount = 5,
+                SizeBytes = 350_000_000, // ~350 MB
+                DownloadUrl = "https://github.com/CodeBambi/ccp-packs/releases/download/v1.0/basic-bimbo-starter.zip",
+                PreviewImageUrl = "https://raw.githubusercontent.com/CodeBambi/ccp-packs/main/previews/basic-bimbo-starter.jpg",
+                PatreonUrl = "",
+                UpgradeUrl = ""
+            },
+            new ContentPack
+            {
+                Id = "enhanced-bimbodoll-expansion",
+                Name = "Enhanced Bimbodoll Expansion",
+                Description = "Advanced content for experienced users. Includes premium videos and exclusive images.",
+                Author = "CodeBambi",
+                Version = "1.0.0",
+                ImageCount = 150,
+                VideoCount = 15,
+                SizeBytes = 500_000_000, // ~500 MB
+                DownloadUrl = "https://github.com/CodeBambi/ccp-packs/releases/download/v1.0/enhanced-bimbodoll-expansion.zip",
+                PreviewImageUrl = "https://raw.githubusercontent.com/CodeBambi/ccp-packs/main/previews/enhanced-bimbodoll-expansion.jpg",
+                PatreonUrl = "https://patreon.com/CodeBambi",
+                UpgradeUrl = ""
+            }
+        };
 
         public event EventHandler<ContentPack>? PackDownloadStarted;
         public event EventHandler<ContentPack>? PackDownloadCompleted;
         public event EventHandler<(ContentPack Pack, int Progress)>? PackDownloadProgress;
+        public event EventHandler<ContentPack>? PackInstallFailed;
 
         public ContentPackService()
         {
             _httpClient = new HttpClient();
-            _httpClient.Timeout = TimeSpan.FromMinutes(10); // Allow long downloads
-            _packsFolder = Path.Combine(App.UserDataPath, "packs");
-            _manifestCachePath = Path.Combine(_packsFolder, "manifest_cache.json");
-            Directory.CreateDirectory(_packsFolder);
+            _httpClient.Timeout = TimeSpan.FromMinutes(30); // Allow long downloads for large packs
+
+            // Use hidden folder with dot prefix
+            _packsFolder = Path.Combine(App.UserDataPath, ".packs");
+            _manifestCachePath = Path.Combine(_packsFolder, ".manifest_cache.enc");
+
+            // Create hidden directory
+            if (!Directory.Exists(_packsFolder))
+            {
+                var di = Directory.CreateDirectory(_packsFolder);
+                di.Attributes |= FileAttributes.Hidden;
+            }
+
+            // Load installed pack manifests
+            LoadInstalledManifests();
         }
 
         /// <summary>
-        /// Fetches available content packs from the remote manifest.
-        /// Returns cached data if fetch fails.
+        /// Gets the list of available packs (from remote or built-in).
         /// </summary>
-        public async Task<List<ContentPack>> FetchAvailablePacksAsync()
+        public async Task<List<ContentPack>> GetAvailablePacksAsync()
         {
             try
             {
-                var manifestUrl = App.Settings?.Current?.BambiCloudUrl ?? DefaultManifestUrl;
-                // Use a specific endpoint for packs if cloud URL is set
-                if (!manifestUrl.Contains("manifest.json"))
-                {
-                    manifestUrl = manifestUrl.TrimEnd('/') + "/packs/manifest.json";
-                }
-
-                App.Logger?.Debug("Fetching content packs manifest from {Url}", manifestUrl);
-
-                var response = await _httpClient.GetStringAsync(manifestUrl);
+                // Try to fetch remote manifest
+                var response = await _httpClient.GetStringAsync(PacksManifestUrl);
                 var manifest = JsonConvert.DeserializeObject<PacksManifest>(response);
 
-                if (manifest?.Packs != null)
+                if (manifest?.Packs?.Count > 0)
                 {
-                    _cachedPacks = manifest.Packs;
-
-                    // Update download/active status from settings
-                    foreach (var pack in _cachedPacks)
-                    {
-                        pack.IsDownloaded = App.Settings.Current.InstalledPackIds.Contains(pack.Id);
-                        pack.IsActive = App.Settings.Current.ActivePackIds.Contains(pack.Id);
-                        pack.LocalPath = Path.Combine(_packsFolder, pack.Id);
-                    }
-
-                    // Cache the manifest locally
-                    await File.WriteAllTextAsync(_manifestCachePath, response);
-
-                    App.Logger?.Information("Fetched {Count} content packs", _cachedPacks.Count);
-                    return _cachedPacks;
+                    _availablePacks = manifest.Packs;
+                    App.Logger?.Information("Fetched {Count} packs from remote manifest", _availablePacks.Count);
+                }
+                else
+                {
+                    _availablePacks = new List<ContentPack>(BuiltInPacks);
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to fetch content packs manifest, using cache");
-
-                // Try to load from cache
-                if (File.Exists(_manifestCachePath))
-                {
-                    try
-                    {
-                        var cached = await File.ReadAllTextAsync(_manifestCachePath);
-                        var manifest = JsonConvert.DeserializeObject<PacksManifest>(cached);
-                        if (manifest?.Packs != null)
-                        {
-                            _cachedPacks = manifest.Packs;
-                            foreach (var pack in _cachedPacks)
-                            {
-                                pack.IsDownloaded = App.Settings.Current.InstalledPackIds.Contains(pack.Id);
-                                pack.IsActive = App.Settings.Current.ActivePackIds.Contains(pack.Id);
-                                pack.LocalPath = Path.Combine(_packsFolder, pack.Id);
-                            }
-                            return _cachedPacks;
-                        }
-                    }
-                    catch
-                    {
-                        // Ignore cache errors
-                    }
-                }
+                App.Logger?.Debug("Could not fetch remote packs manifest: {Error}, using built-in", ex.Message);
+                _availablePacks = new List<ContentPack>(BuiltInPacks);
             }
 
-            return _cachedPacks;
+            // Update installed/active status
+            foreach (var pack in _availablePacks)
+            {
+                pack.IsDownloaded = IsPackInstalled(pack.Id);
+                pack.IsActive = IsPackActive(pack.Id);
+            }
+
+            return _availablePacks;
         }
 
         /// <summary>
-        /// Downloads and extracts a content pack.
+        /// Gets built-in packs without network request.
         /// </summary>
-        public async Task DownloadPackAsync(ContentPack pack, IProgress<int>? progress = null)
+        public List<ContentPack> GetBuiltInPacks()
+        {
+            var packs = new List<ContentPack>(BuiltInPacks);
+            foreach (var pack in packs)
+            {
+                pack.IsDownloaded = IsPackInstalled(pack.Id);
+                pack.IsActive = IsPackActive(pack.Id);
+            }
+            return packs;
+        }
+
+        /// <summary>
+        /// Downloads, encrypts, and installs a content pack.
+        /// </summary>
+        public async Task InstallPackAsync(ContentPack pack, IProgress<int>? progress = null)
         {
             if (string.IsNullOrEmpty(pack.DownloadUrl))
             {
                 throw new InvalidOperationException("Pack has no download URL");
             }
 
-            var packFolder = Path.Combine(_packsFolder, pack.Id);
-            var tempZipPath = Path.Combine(_packsFolder, $"{pack.Id}_temp.zip");
+            // Generate unique folder name (GUID for obfuscation)
+            var packGuid = Guid.NewGuid().ToString("N");
+            var packFolder = Path.Combine(_packsFolder, packGuid);
+            var tempZipPath = Path.Combine(_packsFolder, $".{packGuid}_temp.zip");
 
             try
             {
+                pack.IsDownloading = true;
                 PackDownloadStarted?.Invoke(this, pack);
                 App.Logger?.Information("Starting download of pack: {Name}", pack.Name);
 
-                // Download with progress
+                // Download ZIP file
                 using var response = await _httpClient.GetAsync(pack.DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
                 response.EnsureSuccessStatusCode();
 
-                var totalBytes = response.Content.Headers.ContentLength ?? -1;
+                var totalBytes = response.Content.Headers.ContentLength ?? pack.SizeBytes;
                 var downloadedBytes = 0L;
 
                 using (var contentStream = await response.Content.ReadAsStreamAsync())
                 using (var fileStream = new FileStream(tempZipPath, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
-                    var buffer = new byte[8192];
+                    var buffer = new byte[81920]; // 80KB buffer for faster downloads
                     int bytesRead;
 
                     while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
@@ -155,18 +187,52 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
-                App.Logger?.Debug("Download complete, extracting to {Folder}", packFolder);
+                App.Logger?.Debug("Download complete ({Bytes} bytes), extracting and encrypting...", downloadedBytes);
 
-                // Extract the ZIP
-                if (Directory.Exists(packFolder))
+                // Extract to temp folder first
+                var tempExtractPath = Path.Combine(_packsFolder, $".{packGuid}_extract");
+                ZipFile.ExtractToDirectory(tempZipPath, tempExtractPath);
+
+                // Create encrypted pack structure
+                Directory.CreateDirectory(packFolder);
+                var contentFolder = Path.Combine(packFolder, "content");
+                Directory.CreateDirectory(contentFolder);
+
+                // Process and encrypt files, building manifest
+                var manifest = new InstalledPackManifest
                 {
-                    Directory.Delete(packFolder, true);
+                    PackId = pack.Id,
+                    PackGuid = packGuid,
+                    PackName = pack.Name,
+                    InstalledDate = DateTime.UtcNow,
+                    Files = new List<PackFileEntry>()
+                };
+
+                // Process images
+                var imagesPath = Path.Combine(tempExtractPath, "images");
+                if (Directory.Exists(imagesPath))
+                {
+                    await ProcessAndEncryptFilesAsync(imagesPath, contentFolder, "image", manifest);
                 }
 
-                ZipFile.ExtractToDirectory(tempZipPath, packFolder);
+                // Process videos
+                var videosPath = Path.Combine(tempExtractPath, "videos");
+                if (Directory.Exists(videosPath))
+                {
+                    await ProcessAndEncryptFilesAsync(videosPath, contentFolder, "video", manifest);
+                }
 
-                // Clean up temp file
+                // Save encrypted manifest
+                var manifestJson = JsonConvert.SerializeObject(manifest, Formatting.Indented);
+                var manifestPath = Path.Combine(packFolder, ".manifest.enc");
+                PackEncryptionService.SaveEncryptedManifest(manifestJson, manifestPath);
+
+                // Clean up temp files
                 File.Delete(tempZipPath);
+                Directory.Delete(tempExtractPath, true);
+
+                // Hide the pack folder
+                new DirectoryInfo(packFolder).Attributes |= FileAttributes.Hidden;
 
                 // Update settings
                 if (!App.Settings.Current.InstalledPackIds.Contains(pack.Id))
@@ -174,123 +240,247 @@ namespace ConditioningControlPanel.Services
                     App.Settings.Current.InstalledPackIds.Add(pack.Id);
                 }
 
-                pack.IsDownloaded = true;
-                pack.LocalPath = packFolder;
+                // Store GUID mapping
+                App.Settings.Current.PackGuidMap ??= new Dictionary<string, string>();
+                App.Settings.Current.PackGuidMap[pack.Id] = packGuid;
+                App.Settings.Save();
 
-                App.Logger?.Information("Pack installed successfully: {Name}", pack.Name);
+                // Cache manifest
+                _installedManifests[pack.Id] = manifest;
+
+                pack.IsDownloaded = true;
+                pack.IsDownloading = false;
+                pack.DownloadProgress = 100;
+
+                App.Logger?.Information("Pack installed successfully: {Name} ({FileCount} files encrypted)",
+                    pack.Name, manifest.Files.Count);
                 PackDownloadCompleted?.Invoke(this, pack);
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to download pack: {Name}", pack.Name);
+                App.Logger?.Error(ex, "Failed to install pack: {Name}", pack.Name);
+                pack.IsDownloading = false;
+                pack.DownloadProgress = 0;
 
                 // Clean up on failure
-                if (File.Exists(tempZipPath))
-                {
-                    try { File.Delete(tempZipPath); } catch { }
-                }
+                CleanupFailedInstall(tempZipPath, packFolder);
 
+                PackInstallFailed?.Invoke(this, pack);
                 throw;
             }
         }
 
         /// <summary>
-        /// Activates a pack by copying its assets to the main assets folder.
+        /// Processes files from a folder, encrypts them, and adds to manifest.
         /// </summary>
-        public void ActivatePack(ContentPack pack)
+        private async Task ProcessAndEncryptFilesAsync(string sourceFolder, string destFolder,
+            string fileType, InstalledPackManifest manifest)
         {
-            if (!pack.IsDownloaded || string.IsNullOrEmpty(pack.LocalPath))
+            var extensions = fileType == "image"
+                ? new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" }
+                : new[] { ".mp4", ".webm", ".mkv", ".avi", ".mov", ".wmv" };
+
+            var files = Directory.GetFiles(sourceFolder)
+                .Where(f => extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .ToList();
+
+            foreach (var file in files)
             {
-                throw new InvalidOperationException("Pack is not downloaded");
+                var originalName = Path.GetFileName(file);
+                var obfuscatedName = PackEncryptionService.GenerateObfuscatedFilename() + ".enc";
+                var destPath = Path.Combine(destFolder, obfuscatedName);
+
+                // Encrypt file
+                await Task.Run(() => PackEncryptionService.EncryptFile(file, destPath));
+
+                // Add to manifest
+                manifest.Files.Add(new PackFileEntry
+                {
+                    OriginalName = originalName,
+                    ObfuscatedName = obfuscatedName,
+                    FileType = fileType,
+                    Extension = Path.GetExtension(file).ToLowerInvariant()
+                });
             }
-
-            var assetsPath = App.EffectiveAssetsPath;
-            var packImagesPath = Path.Combine(pack.LocalPath, "images");
-            var packVideosPath = Path.Combine(pack.LocalPath, "videos");
-
-            // Copy images
-            if (Directory.Exists(packImagesPath))
-            {
-                var destImagesPath = Path.Combine(assetsPath, "images", $"pack_{pack.Id}");
-                CopyDirectory(packImagesPath, destImagesPath);
-            }
-
-            // Copy videos
-            if (Directory.Exists(packVideosPath))
-            {
-                var destVideosPath = Path.Combine(assetsPath, "videos", $"pack_{pack.Id}");
-                CopyDirectory(packVideosPath, destVideosPath);
-            }
-
-            // Update settings
-            if (!App.Settings.Current.ActivePackIds.Contains(pack.Id))
-            {
-                App.Settings.Current.ActivePackIds.Add(pack.Id);
-            }
-
-            pack.IsActive = true;
-            App.Logger?.Information("Pack activated: {Name}", pack.Name);
         }
 
         /// <summary>
-        /// Deactivates a pack by removing its assets from the main assets folder.
+        /// Activates a pack (adds to active list so files appear in TreeView).
         /// </summary>
-        public void DeactivatePack(ContentPack pack)
+        public void ActivatePack(string packId)
         {
-            var assetsPath = App.EffectiveAssetsPath;
-            var packImagesPath = Path.Combine(assetsPath, "images", $"pack_{pack.Id}");
-            var packVideosPath = Path.Combine(assetsPath, "videos", $"pack_{pack.Id}");
-
-            // Remove images
-            if (Directory.Exists(packImagesPath))
+            if (!App.Settings.Current.ActivePackIds.Contains(packId))
             {
-                Directory.Delete(packImagesPath, true);
+                App.Settings.Current.ActivePackIds.Add(packId);
+                App.Settings.Save();
             }
 
-            // Remove videos
-            if (Directory.Exists(packVideosPath))
+            var pack = _availablePacks.FirstOrDefault(p => p.Id == packId);
+            if (pack != null)
             {
-                Directory.Delete(packVideosPath, true);
+                pack.IsActive = true;
             }
 
-            // Update settings
-            App.Settings.Current.ActivePackIds.Remove(pack.Id);
-
-            pack.IsActive = false;
-            App.Logger?.Information("Pack deactivated: {Name}", pack.Name);
+            App.Logger?.Information("Pack activated: {Id}", packId);
         }
 
         /// <summary>
-        /// Deletes a downloaded pack completely.
+        /// Deactivates a pack (removes from active list).
         /// </summary>
-        public void DeletePack(ContentPack pack)
+        public void DeactivatePack(string packId)
         {
-            // First deactivate
-            if (pack.IsActive)
+            App.Settings.Current.ActivePackIds.Remove(packId);
+            App.Settings.Save();
+
+            var pack = _availablePacks.FirstOrDefault(p => p.Id == packId);
+            if (pack != null)
             {
-                DeactivatePack(pack);
+                pack.IsActive = false;
             }
 
-            // Delete the pack folder
-            if (!string.IsNullOrEmpty(pack.LocalPath) && Directory.Exists(pack.LocalPath))
-            {
-                Directory.Delete(pack.LocalPath, true);
-            }
-
-            // Update settings
-            App.Settings.Current.InstalledPackIds.Remove(pack.Id);
-
-            pack.IsDownloaded = false;
-            pack.LocalPath = "";
-            App.Logger?.Information("Pack deleted: {Name}", pack.Name);
+            App.Logger?.Information("Pack deactivated: {Id}", packId);
         }
 
         /// <summary>
-        /// Gets list of installed packs.
+        /// Completely removes an installed pack.
         /// </summary>
-        public List<ContentPack> GetInstalledPacks()
+        public void UninstallPack(string packId)
         {
-            return _cachedPacks.Where(p => p.IsDownloaded).ToList();
+            // Deactivate first
+            DeactivatePack(packId);
+
+            // Get GUID and delete folder
+            if (App.Settings.Current.PackGuidMap?.TryGetValue(packId, out var guid) == true)
+            {
+                var packFolder = Path.Combine(_packsFolder, guid);
+                if (Directory.Exists(packFolder))
+                {
+                    Directory.Delete(packFolder, true);
+                }
+
+                App.Settings.Current.PackGuidMap.Remove(packId);
+            }
+
+            App.Settings.Current.InstalledPackIds.Remove(packId);
+            App.Settings.Save();
+
+            _installedManifests.Remove(packId);
+
+            var pack = _availablePacks.FirstOrDefault(p => p.Id == packId);
+            if (pack != null)
+            {
+                pack.IsDownloaded = false;
+            }
+
+            App.Logger?.Information("Pack uninstalled: {Id}", packId);
+        }
+
+        /// <summary>
+        /// Gets files from an installed pack for display in TreeView.
+        /// </summary>
+        public List<PackFileEntry> GetPackFiles(string packId, string? fileType = null)
+        {
+            if (!_installedManifests.TryGetValue(packId, out var manifest))
+            {
+                LoadPackManifest(packId);
+                _installedManifests.TryGetValue(packId, out manifest);
+            }
+
+            if (manifest == null) return new List<PackFileEntry>();
+
+            var files = manifest.Files.AsEnumerable();
+            if (!string.IsNullOrEmpty(fileType))
+            {
+                files = files.Where(f => f.FileType == fileType);
+            }
+
+            return files.ToList();
+        }
+
+        /// <summary>
+        /// Decrypts and returns a thumbnail for a pack file.
+        /// </summary>
+        public BitmapImage? GetPackFileThumbnail(string packId, PackFileEntry file, int width = 100, int height = 100)
+        {
+            try
+            {
+                var guidMap = App.Settings.Current.PackGuidMap;
+                if (guidMap == null || !guidMap.TryGetValue(packId, out var guid))
+                    return null;
+
+                var filePath = Path.Combine(_packsFolder, guid, "content", file.ObfuscatedName);
+                if (!File.Exists(filePath)) return null;
+
+                using var decryptedStream = PackEncryptionService.DecryptFileToStream(filePath);
+
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.DecodePixelWidth = width;
+                bitmap.DecodePixelHeight = height;
+                bitmap.StreamSource = decryptedStream;
+                bitmap.EndInit();
+                bitmap.Freeze();
+
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to get pack file thumbnail: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Decrypts a pack file to a memory stream (for playback/display).
+        /// </summary>
+        public MemoryStream? GetPackFileStream(string packId, PackFileEntry file)
+        {
+            try
+            {
+                var guidMap = App.Settings.Current.PackGuidMap;
+                if (guidMap == null || !guidMap.TryGetValue(packId, out var guid))
+                    return null;
+
+                var filePath = Path.Combine(_packsFolder, guid, "content", file.ObfuscatedName);
+                if (!File.Exists(filePath)) return null;
+
+                return PackEncryptionService.DecryptFileToStream(filePath);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to decrypt pack file: {Name}", file.OriginalName);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Gets a decrypted file path for temporary use (creates temp file).
+        /// Used for video playback which requires file path.
+        /// </summary>
+        public string? GetPackFileTempPath(string packId, PackFileEntry file)
+        {
+            try
+            {
+                var guidMap = App.Settings.Current.PackGuidMap;
+                if (guidMap == null || !guidMap.TryGetValue(packId, out var guid))
+                    return null;
+
+                var encryptedPath = Path.Combine(_packsFolder, guid, "content", file.ObfuscatedName);
+                if (!File.Exists(encryptedPath)) return null;
+
+                // Create temp file with correct extension (for codec detection)
+                var tempPath = Path.Combine(Path.GetTempPath(), $"ccp_temp_{Guid.NewGuid():N}{file.Extension}");
+                var decrypted = PackEncryptionService.DecryptFile(encryptedPath);
+                File.WriteAllBytes(tempPath, decrypted);
+
+                return tempPath;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to create temp file for pack: {Name}", file.OriginalName);
+                return null;
+            }
         }
 
         /// <summary>
@@ -298,7 +488,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool IsPackInstalled(string packId)
         {
-            return App.Settings.Current.InstalledPackIds.Contains(packId);
+            return App.Settings?.Current?.InstalledPackIds?.Contains(packId) ?? false;
         }
 
         /// <summary>
@@ -306,24 +496,68 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool IsPackActive(string packId)
         {
-            return App.Settings.Current.ActivePackIds.Contains(packId);
+            return App.Settings?.Current?.ActivePackIds?.Contains(packId) ?? false;
         }
 
-        private static void CopyDirectory(string sourceDir, string destDir)
+        /// <summary>
+        /// Gets all active packs.
+        /// </summary>
+        public List<string> GetActivePackIds()
         {
-            Directory.CreateDirectory(destDir);
+            return App.Settings?.Current?.ActivePackIds?.ToList() ?? new List<string>();
+        }
 
-            foreach (var file in Directory.GetFiles(sourceDir))
+        private void LoadInstalledManifests()
+        {
+            foreach (var packId in App.Settings?.Current?.InstalledPackIds ?? new List<string>())
             {
-                var destFile = Path.Combine(destDir, Path.GetFileName(file));
-                File.Copy(file, destFile, true);
+                LoadPackManifest(packId);
             }
+        }
 
-            foreach (var dir in Directory.GetDirectories(sourceDir))
+        private void LoadPackManifest(string packId)
+        {
+            try
             {
-                var destSubDir = Path.Combine(destDir, Path.GetFileName(dir));
-                CopyDirectory(dir, destSubDir);
+                var guidMap = App.Settings.Current.PackGuidMap;
+                if (guidMap == null || !guidMap.TryGetValue(packId, out var guid))
+                    return;
+
+                var manifestPath = Path.Combine(_packsFolder, guid, ".manifest.enc");
+                if (!File.Exists(manifestPath)) return;
+
+                var json = PackEncryptionService.LoadEncryptedManifest(manifestPath);
+                var manifest = JsonConvert.DeserializeObject<InstalledPackManifest>(json);
+
+                if (manifest != null)
+                {
+                    _installedManifests[packId] = manifest;
+                }
             }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to load manifest for pack: {Id}", packId);
+            }
+        }
+
+        private void CleanupFailedInstall(string tempZipPath, string packFolder)
+        {
+            try
+            {
+                if (File.Exists(tempZipPath))
+                    File.Delete(tempZipPath);
+
+                if (Directory.Exists(packFolder))
+                    Directory.Delete(packFolder, true);
+
+                // Clean up any temp extract folders
+                var tempFolders = Directory.GetDirectories(_packsFolder, ".*_extract");
+                foreach (var folder in tempFolders)
+                {
+                    Directory.Delete(folder, true);
+                }
+            }
+            catch { }
         }
 
         public void Dispose()
@@ -337,7 +571,7 @@ namespace ConditioningControlPanel.Services
     }
 
     /// <summary>
-    /// JSON structure for the packs manifest.
+    /// Remote packs manifest structure.
     /// </summary>
     internal class PacksManifest
     {
@@ -346,5 +580,28 @@ namespace ConditioningControlPanel.Services
 
         [JsonProperty("packs")]
         public List<ContentPack> Packs { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Manifest for an installed pack (stored encrypted locally).
+    /// </summary>
+    public class InstalledPackManifest
+    {
+        public string PackId { get; set; } = "";
+        public string PackGuid { get; set; } = "";
+        public string PackName { get; set; } = "";
+        public DateTime InstalledDate { get; set; }
+        public List<PackFileEntry> Files { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Entry for a file in an installed pack.
+    /// </summary>
+    public class PackFileEntry
+    {
+        public string OriginalName { get; set; } = "";
+        public string ObfuscatedName { get; set; } = "";
+        public string FileType { get; set; } = ""; // "image" or "video"
+        public string Extension { get; set; } = "";
     }
 }

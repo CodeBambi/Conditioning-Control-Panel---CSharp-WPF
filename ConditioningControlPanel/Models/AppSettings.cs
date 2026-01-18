@@ -524,6 +524,18 @@ namespace ConditioningControlPanel.Models
             set { _activePackIds = value ?? new(); OnPropertyChanged(); }
         }
 
+        private Dictionary<string, string> _packGuidMap = new();
+        /// <summary>
+        /// Maps pack IDs to their obfuscated GUID folder names.
+        /// Used to locate installed pack files in the hidden .packs directory.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, string> PackGuidMap
+        {
+            get => _packGuidMap;
+            set { _packGuidMap = value ?? new(); OnPropertyChanged(); }
+        }
+
         #endregion
 
         private string _marqueeMessage = "GOOD GIRLS CONDITION DAILY     ❤️🔒";

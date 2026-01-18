@@ -96,6 +96,21 @@ namespace ConditioningControlPanel.Models
             set { _sizeBytes = value; OnPropertyChanged(); OnPropertyChanged(nameof(SizeDisplay)); }
         }
 
+        /// <summary>
+        /// Whether this file is from an encrypted content pack.
+        /// </summary>
+        public bool IsPackFile { get; set; }
+
+        /// <summary>
+        /// The pack ID if this is a pack file.
+        /// </summary>
+        public string? PackId { get; set; }
+
+        /// <summary>
+        /// Reference to the pack file entry for encrypted file access.
+        /// </summary>
+        public Services.PackFileEntry? PackFileEntry { get; set; }
+
         // Computed properties
         public bool HasThumbnail => Thumbnail != null;
 

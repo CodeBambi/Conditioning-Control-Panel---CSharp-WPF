@@ -77,6 +77,21 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
+        /// Whether this is a virtual folder representing a content pack.
+        /// </summary>
+        public bool IsPackFolder { get; set; }
+
+        /// <summary>
+        /// The pack ID if this is a pack folder (images or videos subfolder).
+        /// </summary>
+        public string? PackId { get; set; }
+
+        /// <summary>
+        /// The file type filter for pack folders ("image" or "video").
+        /// </summary>
+        public string? PackFileType { get; set; }
+
+        /// <summary>
         /// Update this folder's check state based on children.
         /// Returns true if all checked, false if none, null if mixed.
         /// </summary>

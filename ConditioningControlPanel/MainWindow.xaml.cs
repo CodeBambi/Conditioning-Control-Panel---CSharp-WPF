@@ -7413,8 +7413,101 @@ namespace ConditioningControlPanel
                 _assetTree.Add(videosNode);
             }
 
+            // Add content pack virtual folders for active packs
+            var activePackIds = App.ContentPacks?.GetActivePackIds() ?? new List<string>();
+            if (activePackIds.Count > 0)
+            {
+                var packsNode = new AssetTreeItem
+                {
+                    Name = "📦 Content Packs",
+                    FullPath = "",
+                    IsChecked = true,
+                    IsPackFolder = true,
+                    IsExpanded = true
+                };
+
+                foreach (var packId in activePackIds)
+                {
+                    var packNode = BuildPackTree(packId);
+                    if (packNode != null)
+                    {
+                        packNode.Parent = packsNode;
+                        packsNode.Children.Add(packNode);
+                    }
+                }
+
+                if (packsNode.Children.Count > 0)
+                {
+                    packsNode.FileCount = packsNode.Children.Sum(c => c.FileCount);
+                    _assetTree.Add(packsNode);
+                }
+            }
+
             AssetTreeView.ItemsSource = _assetTree;
             UpdateAssetCounts();
+        }
+
+        private AssetTreeItem? BuildPackTree(string packId)
+        {
+            var packFiles = App.ContentPacks?.GetPackFiles(packId);
+            if (packFiles == null || packFiles.Count == 0)
+                return null;
+
+            // Get pack name from built-in packs
+            var packs = App.ContentPacks?.GetBuiltInPacks();
+            var packInfo = packs?.FirstOrDefault(p => p.Id == packId);
+            var packName = packInfo?.Name ?? packId;
+
+            var packNode = new AssetTreeItem
+            {
+                Name = packName,
+                FullPath = "",
+                IsPackFolder = true,
+                PackId = packId,
+                IsChecked = true,
+                IsExpanded = false
+            };
+
+            // Images subfolder
+            var imageFiles = packFiles.Where(f => f.FileType == "image").ToList();
+            if (imageFiles.Count > 0)
+            {
+                var imagesNode = new AssetTreeItem
+                {
+                    Name = "images",
+                    FullPath = "",
+                    IsPackFolder = true,
+                    PackId = packId,
+                    PackFileType = "image",
+                    IsChecked = true,
+                    FileCount = imageFiles.Count,
+                    CheckedFileCount = imageFiles.Count,
+                    Parent = packNode
+                };
+                packNode.Children.Add(imagesNode);
+            }
+
+            // Videos subfolder
+            var videoFiles = packFiles.Where(f => f.FileType == "video").ToList();
+            if (videoFiles.Count > 0)
+            {
+                var videosNode = new AssetTreeItem
+                {
+                    Name = "videos",
+                    FullPath = "",
+                    IsPackFolder = true,
+                    PackId = packId,
+                    PackFileType = "video",
+                    IsChecked = true,
+                    FileCount = videoFiles.Count,
+                    CheckedFileCount = videoFiles.Count,
+                    Parent = packNode
+                };
+                packNode.Children.Add(videosNode);
+            }
+
+            packNode.FileCount = packFiles.Count;
+            return packNode;
         }
 
         private AssetTreeItem BuildFolderTree(string path, string name)
@@ -7467,7 +7560,110 @@ namespace ConditioningControlPanel
             if (e.NewValue is AssetTreeItem folder)
             {
                 _selectedFolder = folder;
-                LoadFolderThumbnails(folder.FullPath);
+
+                // Handle pack virtual folders differently
+                if (folder.IsPackFolder && !string.IsNullOrEmpty(folder.PackId) && !string.IsNullOrEmpty(folder.PackFileType))
+                {
+                    LoadPackFolderThumbnails(folder.PackId, folder.PackFileType);
+                }
+                else if (!string.IsNullOrEmpty(folder.FullPath))
+                {
+                    LoadFolderThumbnails(folder.FullPath);
+                }
+                else
+                {
+                    // Parent pack folder or root - show empty
+                    _currentFolderFiles.Clear();
+                    TxtThumbnailsEmpty.Text = "Select a subfolder to view files";
+                    TxtThumbnailsEmpty.Visibility = Visibility.Visible;
+                    ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
+                }
+            }
+        }
+
+        private void LoadPackFolderThumbnails(string packId, string fileType)
+        {
+            _currentFolderFiles.Clear();
+            TxtThumbnailsEmpty.Visibility = Visibility.Collapsed;
+
+            var packFiles = App.ContentPacks?.GetPackFiles(packId, fileType);
+            if (packFiles == null || packFiles.Count == 0)
+            {
+                TxtThumbnailsEmpty.Text = "No files in this pack folder";
+                TxtThumbnailsEmpty.Visibility = Visibility.Visible;
+                ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
+                return;
+            }
+
+            foreach (var file in packFiles.OrderBy(f => f.OriginalName))
+            {
+                var item = new AssetFileItem
+                {
+                    RelativePath = $"pack:{packId}/{file.OriginalName}",
+                    IsChecked = true, // Pack files are always active
+                    IsPackFile = true,
+                    PackId = packId,
+                    PackFileEntry = file
+                };
+
+                // Set properties manually for pack files (don't use FullPath setter)
+                item.Name = file.OriginalName;
+                item.Extension = file.Extension;
+                item.IsVideo = file.FileType == "video";
+
+                _currentFolderFiles.Add(item);
+
+                // Load thumbnail from encrypted pack
+                _ = LoadPackThumbnailAsync(item, packId, file);
+            }
+
+            ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
+        }
+
+        private async Task LoadPackThumbnailAsync(AssetFileItem item, string packId, Services.PackFileEntry file)
+        {
+            item.IsLoadingThumbnail = true;
+            try
+            {
+                await Task.Run(() =>
+                {
+                    try
+                    {
+                        // For images, get decrypted thumbnail from pack
+                        if (file.FileType == "image")
+                        {
+                            var thumbnail = App.ContentPacks?.GetPackFileThumbnail(packId, file, 100, 100);
+                            if (thumbnail != null)
+                            {
+                                Dispatcher.Invoke(() => item.Thumbnail = thumbnail);
+                            }
+                        }
+                        else
+                        {
+                            // For videos, create temp file and use shell thumbnail
+                            var tempPath = App.ContentPacks?.GetPackFileTempPath(packId, file);
+                            if (!string.IsNullOrEmpty(tempPath) && File.Exists(tempPath))
+                            {
+                                var thumbnail = Helpers.ShellThumbnailHelper.GetThumbnail(tempPath, 100, 100);
+                                if (thumbnail != null)
+                                {
+                                    Dispatcher.Invoke(() => item.Thumbnail = thumbnail);
+                                }
+
+                                // Clean up temp file after thumbnail is loaded
+                                try { File.Delete(tempPath); } catch { }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Failed to load pack thumbnail: {Error}", ex.Message);
+                    }
+                });
+            }
+            finally
+            {
+                Dispatcher.Invoke(() => item.IsLoadingThumbnail = false);
             }
         }
 
@@ -7478,7 +7674,9 @@ namespace ConditioningControlPanel
 
             if (!Directory.Exists(folderPath))
             {
+                TxtThumbnailsEmpty.Text = "Folder does not exist";
                 TxtThumbnailsEmpty.Visibility = Visibility.Visible;
+                ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
                 return;
             }
 
@@ -7767,13 +7965,14 @@ namespace ConditioningControlPanel
                     {
                         if (pack.IsActive)
                         {
-                            App.ContentPacks?.DeactivatePack(pack);
+                            App.ContentPacks?.DeactivatePack(pack.Id);
+                            pack.IsActive = false;
                         }
                         else
                         {
-                            App.ContentPacks?.ActivatePack(pack);
+                            App.ContentPacks?.ActivatePack(pack.Id);
+                            pack.IsActive = true;
                         }
-                        App.Settings.Save();
                         RefreshAssetTree();
                     }
                     catch (Exception ex)
@@ -7783,23 +7982,37 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    // Download
+                    // Show confirmation dialog before download
+                    var sizeStr = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024):F0} MB)" : "";
+                    var result = MessageBox.Show(
+                        $"Download and install '{pack.Name}'?{sizeStr}\n\nThis will download encrypted content to a secure folder on your computer.",
+                        "Install Content Pack",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result != MessageBoxResult.Yes)
+                        return;
+
+                    // Download and install
                     pack.IsDownloading = true;
                     try
                     {
-                        await App.ContentPacks!.DownloadPackAsync(pack, new Progress<int>(p => pack.DownloadProgress = p));
-                        App.ContentPacks.ActivatePack(pack);
-                        App.Settings.Save();
+                        var progress = new Progress<int>(p => pack.DownloadProgress = p);
+                        await App.ContentPacks!.InstallPackAsync(pack, progress);
+                        App.ContentPacks.ActivatePack(pack.Id);
+                        pack.IsActive = true;
                         RefreshAssetTree();
-                        MessageBox.Show($"Pack '{pack.Name}' installed and activated!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                        MessageBox.Show($"'{pack.Name}' installed and activated successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (Exception ex)
                     {
-                        MessageBox.Show($"Download failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        App.Logger?.Error(ex, "Failed to install pack: {Name}", pack.Name);
+                        MessageBox.Show($"Installation failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                     finally
                     {
                         pack.IsDownloading = false;
+                        pack.DownloadProgress = 0;
                     }
                 }
             }
