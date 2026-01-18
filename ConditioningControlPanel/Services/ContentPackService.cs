@@ -38,8 +38,8 @@ namespace ConditioningControlPanel.Services
                 Description = "Essential images and videos to begin your bimbo journey. A curated collection perfect for newcomers!",
                 Author = "CodeBambi",
                 Version = "1.0.0",
-                ImageCount = 500,
-                VideoCount = 25,
+                ImageCount = 113,
+                VideoCount = 7,
                 SizeBytes = 2_397_264_867, // 2.23 GB
                 DownloadUrl = "https://ccp-packs.b-cdn.net/Basic%20Bimbo%20Starter%20Pack.zip",
                 PreviewImageUrl = "",
@@ -53,8 +53,8 @@ namespace ConditioningControlPanel.Services
                 Description = "Premium video collection for experienced users. High-quality hypno videos and exclusive content.",
                 Author = "CodeBambi",
                 Version = "1.0.0",
-                ImageCount = 100,
-                VideoCount = 80,
+                ImageCount = 0,
+                VideoCount = 27,
                 SizeBytes = 4_392_954_093, // 4.09 GB
                 DownloadUrl = "https://ccp-packs.b-cdn.net/Enhanced%20Bimbodoll%20video%20pack.zip",
                 PreviewImageUrl = "",

@@ -4297,7 +4297,7 @@
                                                    Foreground="{StaticResource TextMutedBrush}" FontSize="10"
                                                    TextWrapping="Wrap" MaxHeight="32" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Foreground="#FF69B4" FontSize="9" Margin="0,4,0,6" FontWeight="SemiBold">
-                                            500+ images, 25 videos
+                                            113 images, 7 videos
                                         </TextBlock>
 
                                         <!-- Buttons -->
@@ -4355,7 +4355,7 @@
                                                    Foreground="{StaticResource TextMutedBrush}" FontSize="10"
                                                    TextWrapping="Wrap" MaxHeight="32" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Foreground="#FF6B35" FontSize="9" Margin="0,4,0,6" FontWeight="SemiBold">
-                                            100+ images, 80 videos
+                                            27 videos
                                         </TextBlock>
 
                                         <!-- Buttons -->
