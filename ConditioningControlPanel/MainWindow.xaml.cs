@@ -7383,9 +7383,112 @@ namespace ConditioningControlPanel
 
         private async Task RefreshPacksAsync()
         {
-            // Placeholder: Content packs are currently static UI placeholders
-            // This will be implemented when the pack system is ready
+            try
+            {
+                var packs = App.ContentPacks?.GetBuiltInPacks() ?? new List<ContentPack>();
+
+                // Initialize Pack 1: Basic Bimbo Starter Pack
+                var pack1 = packs.FirstOrDefault(p => p.Id == "basic-bimbo-starter");
+                if (pack1 != null)
+                {
+                    BtnPack1Install.Tag = pack1;
+                    UpdatePackCardUI(pack1, BtnPack1Install, Pack1InstalledBadge, Pack1Progress);
+                }
+
+                // Initialize Pack 2: Enhanced Bimbodoll Expansion
+                var pack2 = packs.FirstOrDefault(p => p.Id == "enhanced-bimbodoll-expansion");
+                if (pack2 != null)
+                {
+                    BtnPack2Install.Tag = pack2;
+                    UpdatePackCardUI(pack2, BtnPack2Install, Pack2InstalledBadge, Pack2Progress);
+                }
+
+                // Subscribe to pack events for progress updates
+                if (App.ContentPacks != null)
+                {
+                    App.ContentPacks.PackDownloadProgress -= OnPackDownloadProgress;
+                    App.ContentPacks.PackDownloadProgress += OnPackDownloadProgress;
+                    App.ContentPacks.PackDownloadCompleted -= OnPackDownloadCompleted;
+                    App.ContentPacks.PackDownloadCompleted += OnPackDownloadCompleted;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to refresh packs");
+            }
+
             await Task.CompletedTask;
+        }
+
+        private void UpdatePackCardUI(ContentPack pack, Button installButton, Border installedBadge, ProgressBar progressBar)
+        {
+            if (pack.IsDownloaded)
+            {
+                installedBadge.Visibility = Visibility.Visible;
+                installButton.Content = pack.IsActive ? "Deactivate" : "Activate";
+            }
+            else
+            {
+                installedBadge.Visibility = Visibility.Collapsed;
+                installButton.Content = "Install";
+            }
+
+            progressBar.Visibility = pack.IsDownloading ? Visibility.Visible : Visibility.Collapsed;
+            progressBar.Value = pack.DownloadProgress;
+        }
+
+        private void OnPackDownloadProgress(object? sender, (ContentPack Pack, int Progress) e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (e.Pack.Id == "basic-bimbo-starter")
+                {
+                    Pack1Progress.Visibility = Visibility.Visible;
+                    Pack1Progress.Value = e.Progress;
+                    BtnPack1Install.Content = $"Installing... {e.Progress}%";
+                    BtnPack1Install.IsEnabled = false;
+                }
+                else if (e.Pack.Id == "enhanced-bimbodoll-expansion")
+                {
+                    Pack2Progress.Visibility = Visibility.Visible;
+                    Pack2Progress.Value = e.Progress;
+                    BtnPack2Install.Content = $"Installing... {e.Progress}%";
+                    BtnPack2Install.IsEnabled = false;
+                }
+            });
+        }
+
+        private void OnPackDownloadCompleted(object? sender, ContentPack pack)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (pack.Id == "basic-bimbo-starter")
+                {
+                    Pack1Progress.Visibility = Visibility.Collapsed;
+                    Pack1InstalledBadge.Visibility = Visibility.Visible;
+                    BtnPack1Install.Content = "Activate";
+                    BtnPack1Install.IsEnabled = true;
+                }
+                else if (pack.Id == "enhanced-bimbodoll-expansion")
+                {
+                    Pack2Progress.Visibility = Visibility.Collapsed;
+                    Pack2InstalledBadge.Visibility = Visibility.Visible;
+                    BtnPack2Install.Content = "Activate";
+                    BtnPack2Install.IsEnabled = true;
+                }
+            });
+        }
+
+        private void BtnCreatorDiscord_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("https://discord.gg/YVxKpjVR") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to open Discord link");
+            }
         }
 
         private void BtnRefreshPacks_Click(object sender, RoutedEventArgs e) => _ = RefreshPacksAsync();
@@ -7973,6 +8076,9 @@ namespace ConditioningControlPanel
                             App.ContentPacks?.ActivatePack(pack.Id);
                             pack.IsActive = true;
                         }
+
+                        // Update button text based on new state
+                        btn.Content = pack.IsActive ? "Deactivate" : "Activate";
                         RefreshAssetTree();
                     }
                     catch (Exception ex)
@@ -7995,24 +8101,43 @@ namespace ConditioningControlPanel
 
                     // Download and install
                     pack.IsDownloading = true;
+                    btn.IsEnabled = false;
+                    btn.Content = "Installing...";
+
                     try
                     {
                         var progress = new Progress<int>(p => pack.DownloadProgress = p);
                         await App.ContentPacks!.InstallPackAsync(pack, progress);
                         App.ContentPacks.ActivatePack(pack.Id);
                         pack.IsActive = true;
+
+                        // Update UI to show installed state
+                        btn.Content = "Deactivate";
+                        if (pack.Id == "basic-bimbo-starter")
+                        {
+                            Pack1InstalledBadge.Visibility = Visibility.Visible;
+                            Pack1Progress.Visibility = Visibility.Collapsed;
+                        }
+                        else if (pack.Id == "enhanced-bimbodoll-expansion")
+                        {
+                            Pack2InstalledBadge.Visibility = Visibility.Visible;
+                            Pack2Progress.Visibility = Visibility.Collapsed;
+                        }
+
                         RefreshAssetTree();
                         MessageBox.Show($"'{pack.Name}' installed and activated successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (Exception ex)
                     {
                         App.Logger?.Error(ex, "Failed to install pack: {Name}", pack.Name);
+                        btn.Content = "Install";
                         MessageBox.Show($"Installation failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                     finally
                     {
                         pack.IsDownloading = false;
                         pack.DownloadProgress = 0;
+                        btn.IsEnabled = true;
                     }
                 }
             }
