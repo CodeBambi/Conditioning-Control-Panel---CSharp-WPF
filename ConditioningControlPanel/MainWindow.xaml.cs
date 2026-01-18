@@ -7395,8 +7395,8 @@ namespace ConditioningControlPanel
                     UpdatePackCardUI(pack1, BtnPack1Install, Pack1InstalledBadge, Pack1Progress);
                 }
 
-                // Initialize Pack 2: Enhanced Bimbodoll Expansion
-                var pack2 = packs.FirstOrDefault(p => p.Id == "enhanced-bimbodoll-expansion");
+                // Initialize Pack 2: Enhanced Bimbodoll Video Pack
+                var pack2 = packs.FirstOrDefault(p => p.Id == "enhanced-bimbodoll-video");
                 if (pack2 != null)
                 {
                     BtnPack2Install.Tag = pack2;
@@ -7448,7 +7448,7 @@ namespace ConditioningControlPanel
                     BtnPack1Install.Content = $"Installing... {e.Progress}%";
                     BtnPack1Install.IsEnabled = false;
                 }
-                else if (e.Pack.Id == "enhanced-bimbodoll-expansion")
+                else if (e.Pack.Id == "enhanced-bimbodoll-video")
                 {
                     Pack2Progress.Visibility = Visibility.Visible;
                     Pack2Progress.Value = e.Progress;
@@ -7469,7 +7469,7 @@ namespace ConditioningControlPanel
                     BtnPack1Install.Content = "Activate";
                     BtnPack1Install.IsEnabled = true;
                 }
-                else if (pack.Id == "enhanced-bimbodoll-expansion")
+                else if (pack.Id == "enhanced-bimbodoll-video")
                 {
                     Pack2Progress.Visibility = Visibility.Collapsed;
                     Pack2InstalledBadge.Visibility = Visibility.Visible;
@@ -8118,7 +8118,7 @@ namespace ConditioningControlPanel
                             Pack1InstalledBadge.Visibility = Visibility.Visible;
                             Pack1Progress.Visibility = Visibility.Collapsed;
                         }
-                        else if (pack.Id == "enhanced-bimbodoll-expansion")
+                        else if (pack.Id == "enhanced-bimbodoll-video")
                         {
                             Pack2InstalledBadge.Visibility = Visibility.Visible;
                             Pack2Progress.Visibility = Visibility.Collapsed;

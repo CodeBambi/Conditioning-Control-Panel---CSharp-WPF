@@ -28,35 +28,36 @@ namespace ConditioningControlPanel.Services
         private const string PacksManifestUrl = "https://raw.githubusercontent.com/CodeBambi/ccp-packs/main/manifest.json";
 
         // Built-in packs definition (shown even if manifest fetch fails)
+        // Download URLs point to private CDN - update these when hosting is configured
         private static readonly List<ContentPack> BuiltInPacks = new()
         {
             new ContentPack
             {
                 Id = "basic-bimbo-starter",
                 Name = "Basic Bimbo Starter Pack",
-                Description = "Essential images and videos to begin your journey. Perfect for newcomers!",
+                Description = "Essential images and videos to begin your bimbo journey. A curated collection perfect for newcomers!",
                 Author = "CodeBambi",
                 Version = "1.0.0",
-                ImageCount = 50,
-                VideoCount = 5,
-                SizeBytes = 350_000_000, // ~350 MB
-                DownloadUrl = "https://github.com/CodeBambi/ccp-packs/releases/download/v1.0/basic-bimbo-starter.zip",
-                PreviewImageUrl = "https://raw.githubusercontent.com/CodeBambi/ccp-packs/main/previews/basic-bimbo-starter.jpg",
+                ImageCount = 500,
+                VideoCount = 25,
+                SizeBytes = 2_397_264_867, // 2.23 GB
+                DownloadUrl = "https://ccp-packs.b-cdn.net/Basic%20Bimbo%20Starter%20Pack.zip",
+                PreviewImageUrl = "",
                 PatreonUrl = "",
                 UpgradeUrl = ""
             },
             new ContentPack
             {
-                Id = "enhanced-bimbodoll-expansion",
-                Name = "Enhanced Bimbodoll Expansion",
-                Description = "Advanced content for experienced users. Includes premium videos and exclusive images.",
+                Id = "enhanced-bimbodoll-video",
+                Name = "Enhanced Bimbodoll Video Pack",
+                Description = "Premium video collection for experienced users. High-quality hypno videos and exclusive content.",
                 Author = "CodeBambi",
                 Version = "1.0.0",
-                ImageCount = 150,
-                VideoCount = 15,
-                SizeBytes = 500_000_000, // ~500 MB
-                DownloadUrl = "https://github.com/CodeBambi/ccp-packs/releases/download/v1.0/enhanced-bimbodoll-expansion.zip",
-                PreviewImageUrl = "https://raw.githubusercontent.com/CodeBambi/ccp-packs/main/previews/enhanced-bimbodoll-expansion.jpg",
+                ImageCount = 100,
+                VideoCount = 80,
+                SizeBytes = 4_392_954_093, // 4.09 GB
+                DownloadUrl = "https://ccp-packs.b-cdn.net/Enhanced%20Bimbodoll%20video%20pack.zip",
+                PreviewImageUrl = "",
                 PatreonUrl = "https://patreon.com/CodeBambi",
                 UpgradeUrl = ""
             }

@@ -4262,7 +4262,7 @@
                                   VerticalScrollBarVisibility="Disabled">
                         <StackPanel Orientation="Horizontal">
                             <!-- Pack 1: Basic Bimbo Starter Pack -->
-                            <Border x:Name="Pack1Card" Width="220" Margin="0,0,12,0" CornerRadius="8"
+                            <Border x:Name="Pack1Card" Width="240" Margin="0,0,12,0" CornerRadius="8"
                                     Background="#252542" BorderBrush="#404060" BorderThickness="1">
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -4275,8 +4275,12 @@
                                         <Grid>
                                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                                 <TextBlock Text="🎀" FontSize="36" HorizontalAlignment="Center"/>
-                                                <TextBlock Text="~350 MB" FontSize="10" Foreground="#808090" HorizontalAlignment="Center"/>
                                             </StackPanel>
+                                            <!-- Size badge -->
+                                            <Border Background="#FF69B4" CornerRadius="4" Padding="8,3"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
+                                                <TextBlock Text="2.2 GB" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                                            </Border>
                                             <!-- Installed badge -->
                                             <Border x:Name="Pack1InstalledBadge" Visibility="Collapsed"
                                                     Background="#4CAF50" CornerRadius="4" Padding="6,2"
@@ -4290,11 +4294,11 @@
                                     <StackPanel Grid.Row="1" Margin="10,8,10,10">
                                         <TextBlock Text="Basic Bimbo Starter Pack" FontWeight="Bold"
                                                    Foreground="{StaticResource TextLightBrush}" FontSize="12"/>
-                                        <TextBlock Text="Essential images and videos to begin your journey. Perfect for newcomers!"
+                                        <TextBlock Text="Essential images and videos to begin your bimbo journey. Perfect for newcomers!"
                                                    Foreground="{StaticResource TextMutedBrush}" FontSize="10"
                                                    TextWrapping="Wrap" MaxHeight="32" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="9" Margin="0,4,0,6">
-                                            50 images, 5 videos
+                                        <TextBlock Foreground="#FF69B4" FontSize="9" Margin="0,4,0,6" FontWeight="SemiBold">
+                                            500+ images, 25 videos
                                         </TextBlock>
 
                                         <!-- Buttons -->
@@ -4303,7 +4307,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
 
-                                            <Button x:Name="BtnPack1Install" Grid.Column="0" Content="Install"
+                                            <Button x:Name="BtnPack1Install" Grid.Column="0" Content="Install (2.2 GB)"
                                                     Style="{StaticResource SmallPinkButton}"
                                                     Padding="8,4" Click="BtnPackDownload_Click"/>
                                         </Grid>
@@ -4316,8 +4320,8 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Pack 2: Enhanced Bimbodoll Expansion -->
-                            <Border x:Name="Pack2Card" Width="220" Margin="0,0,12,0" CornerRadius="8"
+                            <!-- Pack 2: Enhanced Bimbodoll Video Pack -->
+                            <Border x:Name="Pack2Card" Width="240" Margin="0,0,12,0" CornerRadius="8"
                                     Background="#252542" BorderBrush="#404060" BorderThickness="1">
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -4330,8 +4334,12 @@
                                         <Grid>
                                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                                 <TextBlock Text="💎" FontSize="36" HorizontalAlignment="Center"/>
-                                                <TextBlock Text="~500 MB" FontSize="10" Foreground="#808090" HorizontalAlignment="Center"/>
                                             </StackPanel>
+                                            <!-- Size badge - larger file warning -->
+                                            <Border Background="#FF6B35" CornerRadius="4" Padding="8,3"
+                                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
+                                                <TextBlock Text="4.1 GB" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                                            </Border>
                                             <!-- Installed badge -->
                                             <Border x:Name="Pack2InstalledBadge" Visibility="Collapsed"
                                                     Background="#4CAF50" CornerRadius="4" Padding="6,2"
@@ -4343,13 +4351,13 @@
 
                                     <!-- Info section -->
                                     <StackPanel Grid.Row="1" Margin="10,8,10,10">
-                                        <TextBlock Text="Enhanced Bimbodoll Expansion" FontWeight="Bold"
+                                        <TextBlock Text="Enhanced Bimbodoll Video Pack" FontWeight="Bold"
                                                    Foreground="{StaticResource TextLightBrush}" FontSize="12"/>
-                                        <TextBlock Text="Advanced content for experienced users. Includes premium videos and exclusive images."
+                                        <TextBlock Text="Premium video collection for experienced users. High-quality hypno content."
                                                    Foreground="{StaticResource TextMutedBrush}" FontSize="10"
                                                    TextWrapping="Wrap" MaxHeight="32" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="9" Margin="0,4,0,6">
-                                            150 images, 15 videos
+                                        <TextBlock Foreground="#FF6B35" FontSize="9" Margin="0,4,0,6" FontWeight="SemiBold">
+                                            100+ images, 80 videos
                                         </TextBlock>
 
                                         <!-- Buttons -->
@@ -4358,7 +4366,7 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
 
-                                            <Button x:Name="BtnPack2Install" Grid.Column="0" Content="Install"
+                                            <Button x:Name="BtnPack2Install" Grid.Column="0" Content="Install (4.1 GB)"
                                                     Style="{StaticResource SmallPinkButton}"
                                                     Padding="8,4" Click="BtnPackDownload_Click"/>
                                         </Grid>
