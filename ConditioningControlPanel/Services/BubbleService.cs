@@ -22,9 +22,11 @@ public class BubbleService : IDisposable
     private readonly List<Bubble> _bubbles = new();
     private readonly Random _random = new();
     private DispatcherTimer? _spawnTimer;
+    private DispatcherTimer? _animationTimer; // Single shared animation timer for all bubbles
     private bool _isRunning;
     private BitmapImage? _bubbleImage;
     private string _assetsPath = "";
+    internal static double? _cachedDpiScale; // Cache DPI scale (internal for Bubble class access)
 
     public bool IsRunning => _isRunning;
     public bool IsPaused => _isPaused;
@@ -65,10 +67,29 @@ public class BubbleService : IDisposable
         _spawnTimer.Tick += (s, e) => SpawnBubble();
         _spawnTimer.Start();
 
+        // Single shared animation timer for all bubbles (32ms = ~30 FPS, sufficient for floating bubbles)
+        _animationTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(32)
+        };
+        _animationTimer.Tick += AnimateAllBubbles;
+        _animationTimer.Start();
+
         // Spawn first bubble immediately
         SpawnBubble();
 
         App.Logger?.Information("BubbleService started - {Freq} bubbles/min", settings.BubblesFrequency);
+    }
+
+    private void AnimateAllBubbles(object? sender, EventArgs e)
+    {
+        if (!_isRunning) return;
+
+        // Animate all bubbles in a single pass
+        foreach (var bubble in _bubbles.ToArray())
+        {
+            bubble.AnimateFrame();
+        }
     }
 
     public void Stop()
@@ -78,6 +99,9 @@ public class BubbleService : IDisposable
 
         _spawnTimer?.Stop();
         _spawnTimer = null;
+
+        _animationTimer?.Stop();
+        _animationTimer = null;
 
         // Pop all remaining bubbles
         PopAllBubbles();
@@ -337,7 +361,6 @@ public class BubbleService : IDisposable
 internal class Bubble
 {
     private readonly Window _window;
-    private readonly DispatcherTimer _animTimer;
     private readonly Random _random;
     private readonly Action<Bubble> _onPop;
     private readonly Action<Bubble> _onMiss;
@@ -354,10 +377,13 @@ internal class Bubble
     private int _animType;
     private bool _isPopping;
     private bool _isAlive = true;
+    private bool _isDestroyed = false;
 
     private readonly Image _bubbleImage;
     private readonly int _size;
     private readonly double _screenTop;
+
+    public bool IsAlive => _isAlive && !_isDestroyed;
 
     public Bubble(System.Windows.Forms.Screen screen, BitmapImage? image, Random random,
                   Action<Bubble> onPop, Action<Bubble> onMiss, bool isClickable = true)
@@ -369,13 +395,13 @@ internal class Bubble
         
         // Random properties
         _size = random.Next(150, 250);
-        _speed = 0.5 + random.NextDouble() * 0.5; // 0.5 to 1.0 pixels per frame (scaled for 60fps)
+        _speed = 1.0 + random.NextDouble() * 1.0; // 1.0 to 2.0 pixels per frame (scaled for 30fps)
         _animType = random.Next(4);
         _wobbleOffset = random.NextDouble() * 100;
         _angle = random.Next(360);
 
-        // Get DPI scale
-        var dpiScale = GetDpiScale();
+        // Get cached DPI scale
+        var dpiScale = GetCachedDpiScale();
         
         // Position - start at bottom of screen
         var area = screen.WorkingArea;
@@ -502,22 +528,22 @@ internal class Bubble
         // Hide from Alt+Tab
         HideFromAltTab();
 
-        // Animation timer (~60 FPS for smooth animation)
-        _animTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        _animTimer.Tick += Animate;
-        _animTimer.Start();
+        // Note: Animation is now driven by shared timer in BubbleService.AnimateAllBubbles()
     }
 
-    private void Animate(object? sender, EventArgs e)
+    /// <summary>
+    /// Called by BubbleService's shared animation timer (~30 FPS)
+    /// </summary>
+    public void AnimateFrame()
     {
-        if (!_isAlive) return;
+        if (!_isAlive || _isDestroyed) return;
 
         if (_isPopping)
         {
-            // Pop animation - expand and fade (scaled for 60fps)
-            _scale += 0.02;
-            _fadeAlpha -= 0.033;
-            _angle += 1;
+            // Pop animation - expand and fade (scaled for 30fps)
+            _scale += 0.04;
+            _fadeAlpha -= 0.066;
+            _angle += 2;
 
             if (_fadeAlpha <= 0)
             {
@@ -527,8 +553,8 @@ internal class Bubble
         }
         else
         {
-            // Normal float animation (scaled for 60fps)
-            _timeAlive += 0.01;
+            // Normal float animation (scaled for 30fps)
+            _timeAlive += 0.02;
             _posY -= _speed;
 
             // Wobble based on animation type
@@ -537,19 +563,19 @@ internal class Bubble
             {
                 case 0:
                     offset = Math.Sin(_timeAlive * 6) * 25;
-                    _angle = (_angle + 0.17) % 360;
+                    _angle = (_angle + 0.34) % 360;
                     break;
                 case 1:
                     offset = Math.Sin(_timeAlive * 7.5) * 30;
-                    _angle = (_angle + 0.07) % 360;
+                    _angle = (_angle + 0.14) % 360;
                     break;
                 case 2:
                     offset = Math.Cos(_timeAlive * 5.4) * 25;
-                    _angle = (_angle - 0.33) % 360;
+                    _angle = (_angle - 0.66) % 360;
                     break;
                 case 3:
                     offset = Math.Sin(_timeAlive * 3) * 30 + Math.Cos(_timeAlive * 6) * 15;
-                    _angle = (_angle + 0.27) % 360;
+                    _angle = (_angle + 0.54) % 360;
                     break;
             }
             _posX = _startX + offset;
@@ -566,7 +592,7 @@ internal class Bubble
         // Update visuals
         try
         {
-            // Update scale wobble (scaled for 60fps)
+            // Update scale wobble (scaled for 30fps)
             var wobble = 0.06 * Math.Sin(_timeAlive * 7.5 + _wobbleOffset);
             var currentScale = _scale + wobble;
 
@@ -603,24 +629,29 @@ internal class Bubble
 
     private void Destroy()
     {
-        if (!_isAlive) return;
+        if (_isDestroyed) return;
+        _isDestroyed = true;
         _isAlive = false;
-        _animTimer.Stop();
 
         try { _window.Close(); } catch { }
     }
 
     #region Win32
 
-    private double GetDpiScale()
+    private static double GetCachedDpiScale()
     {
+        if (BubbleService._cachedDpiScale.HasValue)
+            return BubbleService._cachedDpiScale.Value;
+
         try
         {
             using var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero);
-            return g.DpiX / 96.0;
+            BubbleService._cachedDpiScale = g.DpiX / 96.0;
+            return BubbleService._cachedDpiScale.Value;
         }
         catch
         {
+            BubbleService._cachedDpiScale = 1.0;
             return 1.0;
         }
     }

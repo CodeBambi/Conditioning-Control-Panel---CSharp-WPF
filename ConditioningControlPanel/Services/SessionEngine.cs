@@ -222,6 +222,9 @@ namespace ConditioningControlPanel.Services
             if (completed && _currentSession != null)
             {
                 // Calculate XP with pause penalty (100 XP per pause)
+                App.Logger?.Debug("Session XP calculation: Session={Name}, Source={Source}, BonusXP={BonusXP}, Penalty={Penalty}",
+                    _currentSession.Name, _currentSession.Source, _currentSession.BonusXP, XPPenalty);
+
                 int baseXP = Math.Max(0, _currentSession.BonusXP - XPPenalty);
 
                 // Apply level-based XP multiplier for high-level players

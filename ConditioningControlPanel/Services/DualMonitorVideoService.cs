@@ -289,6 +289,9 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
+            App.Logger?.Information("DualMonitorVideo: Creating windows for {Count} screens: {Names}",
+                screens.Length, string.Join(", ", screens.Select(s => s.DeviceName)));
+
             foreach (var screen in screens)
             {
                 try
@@ -305,6 +308,8 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Error(ex, "DualMonitorVideo: Failed to create window on {Screen}", screen.DeviceName);
                 }
             }
+
+            App.Logger?.Information("DualMonitorVideo: Successfully created {Count} windows", _windows.Count);
         }
 
         private Window CreateFullscreenWindow(Screen screen)

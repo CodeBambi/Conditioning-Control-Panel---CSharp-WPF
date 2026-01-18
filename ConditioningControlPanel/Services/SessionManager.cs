@@ -81,6 +81,8 @@ namespace ConditioningControlPanel.Services
             foreach (var def in customSessions)
             {
                 var session = def.ToSession();
+                App.Logger?.Debug("Loaded custom session: {Name}, BonusXP={XP}, Source={Source}",
+                    session.Name, session.BonusXP, session.Source);
                 _sessions.Add(session);
             }
 

@@ -18,7 +18,9 @@ namespace ConditioningControlPanel.Services
         public void AddXP(double amount)
         {
             var settings = App.Settings.Current;
+            var previousXP = settings.PlayerXP;
             settings.PlayerXP += amount;
+            App.Logger?.Information("XP awarded: +{Amount} (was {Prev}, now {Now})", amount, previousXP, settings.PlayerXP);
             
             // Check for level up
             var xpNeeded = GetXPForLevel(settings.PlayerLevel);

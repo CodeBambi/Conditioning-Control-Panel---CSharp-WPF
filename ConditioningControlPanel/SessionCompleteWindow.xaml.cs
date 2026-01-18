@@ -56,7 +56,7 @@ namespace ConditioningControlPanel
                 {
                     var player = new System.Windows.Media.MediaPlayer();
                     player.Open(new Uri(soundPath));
-                    player.Volume = 0.5;
+                    player.Volume = (App.Settings.Current.MasterVolume / 100.0) * 0.5; // 50% of master volume
                     player.Play();
                 }
             }

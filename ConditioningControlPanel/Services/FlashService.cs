@@ -1066,7 +1066,8 @@ namespace ConditioningControlPanel.Services
 
             foreach (var ext in extensions)
             {
-                foreach (var file in Directory.GetFiles(folder, $"*{ext}", SearchOption.TopDirectoryOnly))
+                // Scan subfolders to support user-organized categories
+                foreach (var file in Directory.GetFiles(folder, $"*{ext}", SearchOption.AllDirectories))
                 {
                     // Security: Validate path is within allowed directories (app dir, user assets, or custom path)
                     var isInAppDir = SecurityHelper.IsPathSafe(file, AppDomain.CurrentDomain.BaseDirectory);

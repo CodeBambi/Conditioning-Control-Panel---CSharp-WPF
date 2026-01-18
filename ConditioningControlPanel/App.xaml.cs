@@ -123,6 +123,9 @@ namespace ConditioningControlPanel
                     {
                         _cachedScreens = System.Windows.Forms.Screen.AllScreens;
                         _screenCacheTime = DateTime.Now;
+                        Logger?.Debug("Screen enumeration: {Count} monitors detected: {Names}",
+                            _cachedScreens.Length,
+                            string.Join(", ", _cachedScreens.Select(s => $"{s.DeviceName} ({s.Bounds.Width}x{s.Bounds.Height})")));
                     }
                     catch (Exception ex)
                     {
@@ -855,59 +858,32 @@ Application State:
         {
             try
             {
-                var oldAssetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets");
-                if (!Directory.Exists(oldAssetsPath)) return;
-
-                // Map old folder names to new folder names (startle_videos -> videos)
-                var foldersToMigrate = new[] { ("images", "images"), ("startle_videos", "videos"), ("videos", "videos") };
                 var migratedCount = 0;
 
-                foreach (var (oldName, newName) in foldersToMigrate)
+                // 1. Migrate from current app directory (standard migration)
+                migratedCount += MigrateAssetsFromPath(AppDomain.CurrentDomain.BaseDirectory);
+
+                // 2. Also check old version folders in the Velopack app root
+                // This rescues assets from old app-X.X.X folders that might still exist
+                // Critical for users updating from versions that stored assets in the app folder
+                try
                 {
-                    var oldFolder = Path.Combine(oldAssetsPath, oldName);
-                    var newFolder = Path.Combine(UserAssetsPath, newName);
-
-                    if (!Directory.Exists(oldFolder)) continue;
-
-                    foreach (var file in Directory.GetFiles(oldFolder))
+                    var appRoot = Path.GetDirectoryName(AppDomain.CurrentDomain.BaseDirectory);
+                    if (!string.IsNullOrEmpty(appRoot))
                     {
-                        var fileName = Path.GetFileName(file);
-                        var destFile = Path.Combine(newFolder, fileName);
-
-                        // Don't overwrite existing files in user folder
-                        if (File.Exists(destFile)) continue;
-
-                        try
+                        foreach (var dir in Directory.GetDirectories(appRoot, "app-*"))
                         {
-                            File.Copy(file, destFile);
-                            migratedCount++;
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger?.Warning("Failed to migrate {File}: {Error}", fileName, ex.Message);
+                            // Skip current directory to avoid double-processing
+                            if (dir.Equals(AppDomain.CurrentDomain.BaseDirectory, StringComparison.OrdinalIgnoreCase))
+                                continue;
+
+                            migratedCount += MigrateAssetsFromPath(dir);
                         }
                     }
                 }
-
-                // Also migrate Spirals folder
-                var oldSpirals = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Spirals");
-                var newSpirals = Path.Combine(UserDataPath, "Spirals");
-                if (Directory.Exists(oldSpirals))
+                catch (Exception ex)
                 {
-                    foreach (var file in Directory.GetFiles(oldSpirals))
-                    {
-                        var fileName = Path.GetFileName(file);
-                        var destFile = Path.Combine(newSpirals, fileName);
-                        if (!File.Exists(destFile))
-                        {
-                            try
-                            {
-                                File.Copy(file, destFile);
-                                migratedCount++;
-                            }
-                            catch { }
-                        }
-                    }
+                    Logger?.Debug("Could not check old version folders: {Error}", ex.Message);
                 }
 
                 if (migratedCount > 0)
@@ -919,6 +895,86 @@ Application State:
             {
                 Logger?.Warning(ex, "Asset migration failed");
             }
+        }
+
+        /// <summary>
+        /// Migrates assets from a specific path (old app directory or old version folder).
+        /// Returns the number of files migrated.
+        /// </summary>
+        private static int MigrateAssetsFromPath(string basePath)
+        {
+            var migratedCount = 0;
+
+            try
+            {
+                var oldAssetsPath = Path.Combine(basePath, "assets");
+
+                // Map old folder names to new folder names (startle_videos -> videos)
+                var foldersToMigrate = new[] { ("images", "images"), ("startle_videos", "videos"), ("videos", "videos") };
+
+                if (Directory.Exists(oldAssetsPath))
+                {
+                    foreach (var (oldName, newName) in foldersToMigrate)
+                    {
+                        var oldFolder = Path.Combine(oldAssetsPath, oldName);
+                        var newFolder = Path.Combine(UserAssetsPath, newName);
+
+                        if (!Directory.Exists(oldFolder)) continue;
+
+                        Directory.CreateDirectory(newFolder);
+
+                        foreach (var file in Directory.GetFiles(oldFolder))
+                        {
+                            var fileName = Path.GetFileName(file);
+                            var destFile = Path.Combine(newFolder, fileName);
+
+                            // Don't overwrite existing files in user folder
+                            if (File.Exists(destFile)) continue;
+
+                            try
+                            {
+                                File.Copy(file, destFile);
+                                migratedCount++;
+                                Logger?.Debug("Migrated asset: {File} from {Source}", fileName, basePath);
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger?.Warning("Failed to migrate {File}: {Error}", fileName, ex.Message);
+                            }
+                        }
+                    }
+                }
+
+                // Also migrate Spirals folder
+                var oldSpirals = Path.Combine(basePath, "Spirals");
+                var newSpirals = Path.Combine(UserDataPath, "Spirals");
+                if (Directory.Exists(oldSpirals))
+                {
+                    Directory.CreateDirectory(newSpirals);
+
+                    foreach (var file in Directory.GetFiles(oldSpirals))
+                    {
+                        var fileName = Path.GetFileName(file);
+                        var destFile = Path.Combine(newSpirals, fileName);
+                        if (!File.Exists(destFile))
+                        {
+                            try
+                            {
+                                File.Copy(file, destFile);
+                                migratedCount++;
+                                Logger?.Debug("Migrated spiral: {File} from {Source}", fileName, basePath);
+                            }
+                            catch { }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("Could not migrate from {Path}: {Error}", basePath, ex.Message);
+            }
+
+            return migratedCount;
         }
 
         protected override void OnExit(ExitEventArgs e)

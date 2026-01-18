@@ -1234,10 +1234,10 @@
                                 </Grid.RowDefinitions>
                                 
                                 <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
-                                            ToolTip="Show content on all monitors">
+                                            ToolTip="Show content on all connected monitors (2, 3, or more)">
                                     <CheckBox x:Name="ChkDualMon" Style="{StaticResource ToggleStyle}"
                                               Checked="ChkDualMon_Changed" Unchecked="ChkDualMon_Changed"/>
-                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Dual Mon" Margin="6,0,0,0"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Multi Mon" Margin="6,0,0,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
                                             ToolTip="Launch automatically when Windows starts">
@@ -4306,17 +4306,17 @@
             </Grid>
         </Border>
 
-        <!-- Global Drop Overlay (shown when dragging JSON anywhere) -->
+        <!-- Global Drop Overlay (shown when dragging files anywhere) -->
         <Border x:Name="GlobalDropOverlay" Grid.RowSpan="5" Visibility="Collapsed" Background="#D0000000" IsHitTestVisible="False">
             <Border Background="#1E1E3A" CornerRadius="16" BorderBrush="#FF69B4" BorderThickness="3"
-                    MaxWidth="400" MaxHeight="200" VerticalAlignment="Center" HorizontalAlignment="Center"
+                    MaxWidth="450" MaxHeight="220" VerticalAlignment="Center" HorizontalAlignment="Center"
                     Padding="40,30">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock Text="📂" FontSize="48" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Drop to Import Session" Foreground="#FF69B4" FontSize="20" FontWeight="Bold"
+                    <TextBlock x:Name="DropOverlayIcon" Text="📂" FontSize="48" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="DropOverlayTitle" Text="Drop to Import" Foreground="#FF69B4" FontSize="20" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,15,0,5"/>
-                    <TextBlock Text=".session.json" Foreground="#909090" FontSize="14"
-                               HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="DropOverlaySubtitle" Text="Images, Videos, ZIPs, Folders" Foreground="#909090" FontSize="14"
+                               HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
                 </StackPanel>
             </Border>
         </Border>

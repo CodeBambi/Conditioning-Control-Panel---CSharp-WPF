@@ -580,6 +580,10 @@ namespace ConditioningControlPanel.Services
                 var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
                 var secondaries = allScreens.Where(s => !s.Primary).ToList();
 
+                App.Logger?.Information("VideoService: Detected {Total} screens - Primary: {Primary}, Secondary: {SecCount} ({SecNames})",
+                    allScreens.Count, primary.DeviceName, secondaries.Count,
+                    string.Join(", ", secondaries.Select(s => s.DeviceName)));
+
                 // Use LibVLC if available (codec-independent), otherwise fall back to MediaElement
                 if (_libVLC != null)
                 {
@@ -614,6 +618,9 @@ namespace ConditioningControlPanel.Services
 
                     primaryMedia.Play();
                 }
+
+                App.Logger?.Information("VideoService: Created {Count} video windows (DualMonitor={Enabled})",
+                    _windows.Count, App.Settings.Current.DualMonitorEnabled);
 
                 if (App.Settings.Current.AttentionChecksEnabled)
                     SetupAttention();
@@ -1437,7 +1444,8 @@ namespace ConditioningControlPanel.Services
                 var files = new List<string>();
                 if (Directory.Exists(_videosPath))
                 {
-                    foreach (var file in Directory.GetFiles(_videosPath))
+                    // Scan subfolders to support user-organized categories
+                    foreach (var file in Directory.GetFiles(_videosPath, "*.*", SearchOption.AllDirectories))
                     {
                         var ext = Path.GetExtension(file).ToLowerInvariant();
                         if (!validExtensions.Contains(ext)) continue;

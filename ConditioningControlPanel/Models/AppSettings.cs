@@ -474,6 +474,11 @@ namespace ConditioningControlPanel.Models
         }
 
         private bool _dualMonitorEnabled = true;
+        /// <summary>
+        /// When enabled, content displays on ALL connected monitors (2, 3, or more).
+        /// When disabled, content only appears on the primary monitor.
+        /// Property name kept as "DualMonitor" for settings file backwards compatibility.
+        /// </summary>
         public bool DualMonitorEnabled
         {
             get => _dualMonitorEnabled;

@@ -666,6 +666,10 @@ namespace ConditioningControlPanel.Services
                         continue;
                     }
 
+                    // CRITICAL: Rescue user assets from old version folder BEFORE deleting
+                    // This prevents data loss when users had assets in the old app folder
+                    RescueAssetsFromFolder(dir);
+
                     try
                     {
                         var dirInfo = new DirectoryInfo(dir);
@@ -686,6 +690,103 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("Cleanup: Error scanning for old version folders: {Error}", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Rescues user assets (images, videos, spirals) from an old version folder before it gets deleted.
+        /// This prevents data loss when updating from versions that stored assets in the app folder.
+        /// </summary>
+        private static void RescueAssetsFromFolder(string oldVersionFolder)
+        {
+            try
+            {
+                var rescuedCount = 0;
+
+                // Check for assets folder in old version
+                var oldAssetsPath = Path.Combine(oldVersionFolder, "assets");
+                if (Directory.Exists(oldAssetsPath))
+                {
+                    // Migrate images
+                    var oldImages = Path.Combine(oldAssetsPath, "images");
+                    var newImages = Path.Combine(App.UserAssetsPath, "images");
+                    if (Directory.Exists(oldImages))
+                    {
+                        Directory.CreateDirectory(newImages);
+                        rescuedCount += CopyNewFiles(oldImages, newImages);
+                    }
+
+                    // Migrate videos (check both "videos" and legacy "startle_videos")
+                    var newVideos = Path.Combine(App.UserAssetsPath, "videos");
+                    Directory.CreateDirectory(newVideos);
+
+                    var oldVideos = Path.Combine(oldAssetsPath, "videos");
+                    if (Directory.Exists(oldVideos))
+                    {
+                        rescuedCount += CopyNewFiles(oldVideos, newVideos);
+                    }
+
+                    var oldStartleVideos = Path.Combine(oldAssetsPath, "startle_videos");
+                    if (Directory.Exists(oldStartleVideos))
+                    {
+                        rescuedCount += CopyNewFiles(oldStartleVideos, newVideos);
+                    }
+                }
+
+                // Check for Spirals folder in old version
+                var oldSpirals = Path.Combine(oldVersionFolder, "Spirals");
+                var newSpirals = Path.Combine(App.UserDataPath, "Spirals");
+                if (Directory.Exists(oldSpirals))
+                {
+                    Directory.CreateDirectory(newSpirals);
+                    rescuedCount += CopyNewFiles(oldSpirals, newSpirals);
+                }
+
+                if (rescuedCount > 0)
+                {
+                    App.Logger?.Information("Rescued {Count} asset files from old version folder {Folder}",
+                        rescuedCount, Path.GetFileName(oldVersionFolder));
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to rescue assets from {Folder}", oldVersionFolder);
+            }
+        }
+
+        /// <summary>
+        /// Copies files from source to destination, skipping files that already exist.
+        /// Returns the number of files copied.
+        /// </summary>
+        private static int CopyNewFiles(string sourceDir, string destDir)
+        {
+            var copiedCount = 0;
+            try
+            {
+                foreach (var file in Directory.GetFiles(sourceDir))
+                {
+                    var fileName = Path.GetFileName(file);
+                    var destFile = Path.Combine(destDir, fileName);
+
+                    // Don't overwrite existing files
+                    if (File.Exists(destFile)) continue;
+
+                    try
+                    {
+                        File.Copy(file, destFile);
+                        copiedCount++;
+                        App.Logger?.Debug("Rescued asset: {File}", fileName);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("Failed to rescue {File}: {Error}", fileName, ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to enumerate files in {Dir}: {Error}", sourceDir, ex.Message);
+            }
+            return copiedCount;
         }
 
         private static long GetDirectorySize(DirectoryInfo dir)

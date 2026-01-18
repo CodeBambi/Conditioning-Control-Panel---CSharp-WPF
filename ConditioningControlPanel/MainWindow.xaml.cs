@@ -270,7 +270,7 @@ namespace ConditioningControlPanel
                     {
                         var player = new System.Windows.Media.MediaPlayer();
                         player.Open(new Uri(path, UriKind.Absolute));
-                        player.Volume = (App.Settings.Current.MasterVolume / 100.0);
+                        player.Volume = (App.Settings.Current.MasterVolume / 100.0) * 0.5; // 50% of master volume
                         player.Play();
                         App.Logger?.Debug("Level up sound played from: {Path}", path);
                         return;
@@ -3339,6 +3339,7 @@ namespace ConditioningControlPanel
 
         private Services.SessionManager? _sessionManager;
         private Services.SessionFileService? _sessionFileService;
+        private Services.AssetImportService? _assetImportService;
 
         private void InitializeSessionManager()
         {
@@ -3750,9 +3751,14 @@ namespace ConditioningControlPanel
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                if (files.Length == 1 && files[0].EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
+                var dropType = DetectDropType(files);
+
+                if (dropType != DropType.None)
                 {
                     e.Effects = DragDropEffects.Copy;
+                    UpdateDropOverlay(dropType, files);
+                    // Hide browser to avoid WebView2 airspace issue (renders on top of WPF)
+                    BrowserContainer.Visibility = Visibility.Hidden;
                     GlobalDropOverlay.Visibility = Visibility.Visible;
                 }
                 else
@@ -3772,14 +3778,8 @@ namespace ConditioningControlPanel
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                if (files.Length == 1 && files[0].EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
-                {
-                    e.Effects = DragDropEffects.Copy;
-                }
-                else
-                {
-                    e.Effects = DragDropEffects.None;
-                }
+                var dropType = DetectDropType(files);
+                e.Effects = dropType != DropType.None ? DragDropEffects.Copy : DragDropEffects.None;
             }
             else
             {
@@ -3791,24 +3791,120 @@ namespace ConditioningControlPanel
         private void Window_DragLeave(object sender, DragEventArgs e)
         {
             GlobalDropOverlay.Visibility = Visibility.Collapsed;
+            BrowserContainer.Visibility = Visibility.Visible;
         }
 
-        private void Window_Drop(object sender, DragEventArgs e)
+        private async void Window_Drop(object sender, DragEventArgs e)
         {
             GlobalDropOverlay.Visibility = Visibility.Collapsed;
+            BrowserContainer.Visibility = Visibility.Visible;
 
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
 
             var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (files.Length != 1) return;
+            var dropType = DetectDropType(files);
 
-            var filePath = files[0];
-            if (!filePath.EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
+            switch (dropType)
             {
-                return;
+                case DropType.Session:
+                    HandleSessionDrop(files[0]);
+                    break;
+
+                case DropType.Assets:
+                case DropType.Zip:
+                case DropType.Folder:
+                    await HandleAssetDropAsync(files);
+                    break;
+            }
+        }
+
+        private enum DropType { None, Session, Assets, Zip, Folder }
+
+        private static readonly HashSet<string> AssetVideoExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm", ".m4v", ".flv", ".mpeg", ".mpg", ".3gp"
+        };
+
+        private static readonly HashSet<string> AssetImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".tif"
+        };
+
+        private static DropType DetectDropType(string[] files)
+        {
+            if (files.Length == 0) return DropType.None;
+
+            // Single session file
+            if (files.Length == 1 && files[0].EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
+                return DropType.Session;
+
+            // Single folder
+            if (files.Length == 1 && Directory.Exists(files[0]))
+                return DropType.Folder;
+
+            // Check for ZIP files or asset files
+            var hasZip = false;
+            var hasAssets = false;
+
+            foreach (var file in files)
+            {
+                if (Directory.Exists(file))
+                {
+                    hasAssets = true;
+                    continue;
+                }
+
+                var ext = Path.GetExtension(file);
+                if (ext.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                    hasZip = true;
+                else if (AssetVideoExtensions.Contains(ext) || AssetImageExtensions.Contains(ext))
+                    hasAssets = true;
             }
 
-            // Validate and import
+            if (hasZip) return DropType.Zip;
+            if (hasAssets) return DropType.Assets;
+
+            return DropType.None;
+        }
+
+        private void UpdateDropOverlay(DropType dropType, string[] files)
+        {
+            switch (dropType)
+            {
+                case DropType.Session:
+                    DropOverlayIcon.Text = "📋";
+                    DropOverlayTitle.Text = "Drop to Import Session";
+                    DropOverlaySubtitle.Text = Path.GetFileName(files[0]);
+                    break;
+
+                case DropType.Zip:
+                    DropOverlayIcon.Text = "📦";
+                    DropOverlayTitle.Text = "Drop to Extract Assets";
+                    var zipCount = files.Count(f => Path.GetExtension(f).Equals(".zip", StringComparison.OrdinalIgnoreCase));
+                    DropOverlaySubtitle.Text = zipCount == 1
+                        ? Path.GetFileName(files.First(f => f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
+                        : $"{zipCount} ZIP files";
+                    break;
+
+                case DropType.Folder:
+                    DropOverlayIcon.Text = "📁";
+                    DropOverlayTitle.Text = "Drop to Import Folder";
+                    DropOverlaySubtitle.Text = $"Scan for images & videos";
+                    break;
+
+                case DropType.Assets:
+                    DropOverlayIcon.Text = "🖼️";
+                    DropOverlayTitle.Text = "Drop to Import Assets";
+                    DropOverlaySubtitle.Text = files.Length == 1
+                        ? Path.GetFileName(files[0])
+                        : $"{files.Length} files";
+                    break;
+            }
+        }
+
+        private void HandleSessionDrop(string filePath)
+        {
+            // Validate and import session
             if (_sessionFileService == null)
             {
                 _sessionFileService = new Services.SessionFileService();
@@ -3829,12 +3925,65 @@ namespace ConditioningControlPanel
             if (result.success)
             {
                 ShowDropZoneStatus($"Session loaded: {result.session?.Name}", isError: false);
-                App.Logger?.Information("Session imported via global drag-drop: {Name}", result.session?.Name);
+                App.Logger?.Information("Session imported via drag-drop: {Name}", result.session?.Name);
             }
             else
             {
                 ShowDropZoneStatus($"Failed: {result.message}", isError: true);
             }
+        }
+
+        private async Task HandleAssetDropAsync(string[] paths)
+        {
+            try
+            {
+                _assetImportService ??= new Services.AssetImportService();
+
+                var progress = new Progress<Services.ImportProgress>(p =>
+                {
+                    // Could update a progress indicator here if needed
+                    App.Logger?.Debug("Import progress: {Current}/{Total} - {File}", p.Current, p.Total, p.CurrentFile);
+                });
+
+                var result = await Task.Run(() => _assetImportService.ImportAsync(paths, progress));
+
+                // Show result notification
+                ShowDropZoneStatus(result.GetSummary(), isError: result.TotalImported == 0 && !result.HasErrors);
+
+                // Refresh the asset lists if any were imported
+                if (result.ImagesImported > 0)
+                {
+                    App.Flash?.RefreshImagesPath();
+                    RefreshImagesList();
+                }
+
+                if (result.VideosImported > 0)
+                {
+                    App.Video?.RefreshVideosPath();
+                    RefreshVideosList();
+                }
+
+                App.Logger?.Information("Asset import complete: {Summary}", result.GetSummary());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Asset import failed");
+                ShowDropZoneStatus($"Import failed: {ex.Message}", isError: true);
+            }
+        }
+
+        private void RefreshImagesList()
+        {
+            // The FlashService manages its own file list internally
+            // RefreshImagesPath() already clears and reloads the cache
+            App.Logger?.Debug("Images list refreshed after import");
+        }
+
+        private void RefreshVideosList()
+        {
+            // The VideoService manages its own file list internally
+            // RefreshVideosPath() already clears and reloads the cache
+            App.Logger?.Debug("Videos list refreshed after import");
         }
 
         // Session action button handlers
