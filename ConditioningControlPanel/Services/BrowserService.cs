@@ -90,9 +90,10 @@ namespace ConditioningControlPanel.Services
 
         public BrowserService()
         {
-            // Store browser data in app directory
+            // Store browser data in AppData (not install folder) to avoid lock issues during updates/uninstall
             _userDataFolder = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory, 
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ConditioningControlPanel",
                 "browser_data"
             );
             Directory.CreateDirectory(_userDataFolder);
