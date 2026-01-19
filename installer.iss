@@ -13,7 +13,7 @@
 ; - Store install path in registry for Velopack updates
 
 #define MyAppName "Conditioning Control Panel"
-#define MyAppVersion "5.0.3"
+#define MyAppVersion "5.1.0"
 #define MyAppPublisher "CodeBambi"
 #define MyAppURL "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF"
 #define MyAppExeName "ConditioningControlPanel.exe"
@@ -173,36 +173,67 @@ end;
 // Check for existing assets and count them
 procedure DetectExistingAssets();
 var
-  DefaultAssetsPath, ImagesPath, VideosPath: String;
+  NewAssetsPath, OldVelopackAssetsPath, ImagesPath, VideosPath: String;
+  NewImageCount, NewVideoCount, OldImageCount, OldVideoCount: Integer;
 begin
-  DefaultAssetsPath := ExpandConstant('{localappdata}\ConditioningControlPanel\assets');
+  // New location (AppData root)
+  NewAssetsPath := ExpandConstant('{localappdata}\ConditioningControlPanel\assets');
+  // Old Velopack location (inside current folder)
+  OldVelopackAssetsPath := ExpandConstant('{localappdata}\ConditioningControlPanel\current\assets');
 
-  // Check if assets folder exists
-  if DirExists(DefaultAssetsPath) then
+  // Count assets in new location
+  NewImageCount := 0;
+  NewVideoCount := 0;
+  if DirExists(NewAssetsPath) then
   begin
-    AssetsPath := DefaultAssetsPath;
-    HasExistingAssets := True;
+    if DirExists(NewAssetsPath + '\images') then
+      NewImageCount := CountFilesInDir(NewAssetsPath + '\images', '.png.jpg.jpeg.gif.webp.bmp');
+    if DirExists(NewAssetsPath + '\videos') then
+      NewVideoCount := CountFilesInDir(NewAssetsPath + '\videos', '.mp4.webm.mkv.avi.mov.wmv');
+  end;
 
-    // Count images
-    ImagesPath := AssetsPath + '\images';
-    if DirExists(ImagesPath) then
-      ImageCount := CountFilesInDir(ImagesPath, '.png.jpg.jpeg.gif.webp.bmp')
+  // Count assets in old Velopack location
+  OldImageCount := 0;
+  OldVideoCount := 0;
+  if DirExists(OldVelopackAssetsPath) then
+  begin
+    if DirExists(OldVelopackAssetsPath + '\images') then
+      OldImageCount := CountFilesInDir(OldVelopackAssetsPath + '\images', '.png.jpg.jpeg.gif.webp.bmp');
+    if DirExists(OldVelopackAssetsPath + '\videos') then
+      OldVideoCount := CountFilesInDir(OldVelopackAssetsPath + '\videos', '.mp4.webm.mkv.avi.mov.wmv');
+  end;
+
+  // Use whichever location has more assets (prefer old Velopack location if equal)
+  if (OldImageCount + OldVideoCount) >= (NewImageCount + NewVideoCount) then
+  begin
+    if (OldImageCount + OldVideoCount) > 0 then
+    begin
+      AssetsPath := OldVelopackAssetsPath;
+      HasExistingAssets := True;
+      ImageCount := OldImageCount;
+      VideoCount := OldVideoCount;
+    end
+    else if (NewImageCount + NewVideoCount) > 0 then
+    begin
+      AssetsPath := NewAssetsPath;
+      HasExistingAssets := True;
+      ImageCount := NewImageCount;
+      VideoCount := NewVideoCount;
+    end
     else
+    begin
+      AssetsPath := NewAssetsPath;
+      HasExistingAssets := False;
       ImageCount := 0;
-
-    // Count videos
-    VideosPath := AssetsPath + '\videos';
-    if DirExists(VideosPath) then
-      VideoCount := CountFilesInDir(VideosPath, '.mp4.webm.mkv.avi.mov.wmv')
-    else
       VideoCount := 0;
+    end;
   end
   else
   begin
-    AssetsPath := DefaultAssetsPath;
-    HasExistingAssets := False;
-    ImageCount := 0;
-    VideoCount := 0;
+    AssetsPath := NewAssetsPath;
+    HasExistingAssets := True;
+    ImageCount := NewImageCount;
+    VideoCount := NewVideoCount;
   end;
 end;
 
@@ -228,6 +259,72 @@ begin
   end;
 end;
 
+// Copy all files from source to dest directory (non-recursive for a single folder)
+procedure CopyFilesFromDir(const SourceDir, DestDir: String);
+var
+  FindRec: TFindRec;
+  SourceFile, DestFile: String;
+begin
+  if not DirExists(SourceDir) then Exit;
+  ForceDirectories(DestDir);
+
+  if FindFirst(SourceDir + '\*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
+        begin
+          SourceFile := SourceDir + '\' + FindRec.Name;
+          DestFile := DestDir + '\' + FindRec.Name;
+          // Only copy if destination doesn't exist (don't overwrite)
+          if not FileExists(DestFile) then
+            CopyFile(SourceFile, DestFile, False);
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+// Migrate assets from old Velopack location to new AppData location
+procedure MigrateAssetsFromVelopack();
+var
+  OldAssetsPath, NewAssetsPath: String;
+  OldImagesPath, OldVideosPath, NewImagesPath, NewVideosPath: String;
+  OldSpiralsPath, NewSpiralsPath: String;
+begin
+  OldAssetsPath := VelopackPath + '\current\assets';
+  NewAssetsPath := VelopackPath + '\assets';
+  OldSpiralsPath := VelopackPath + '\current\Spirals';
+  NewSpiralsPath := VelopackPath + '\Spirals';
+
+  // Migrate images
+  OldImagesPath := OldAssetsPath + '\images';
+  NewImagesPath := NewAssetsPath + '\images';
+  if DirExists(OldImagesPath) then
+  begin
+    Log('Migrating images from ' + OldImagesPath + ' to ' + NewImagesPath);
+    CopyFilesFromDir(OldImagesPath, NewImagesPath);
+  end;
+
+  // Migrate videos
+  OldVideosPath := OldAssetsPath + '\videos';
+  NewVideosPath := NewAssetsPath + '\videos';
+  if DirExists(OldVideosPath) then
+  begin
+    Log('Migrating videos from ' + OldVideosPath + ' to ' + NewVideosPath);
+    CopyFilesFromDir(OldVideosPath, NewVideosPath);
+  end;
+
+  // Migrate spirals
+  if DirExists(OldSpiralsPath) then
+  begin
+    Log('Migrating spirals from ' + OldSpiralsPath + ' to ' + NewSpiralsPath);
+    CopyFilesFromDir(OldSpiralsPath, NewSpiralsPath);
+  end;
+end;
+
 // Clean up old Velopack installation (preserves user data)
 procedure CleanupVelopackInstall();
 var
@@ -237,7 +334,10 @@ begin
   PackagesPath := VelopackPath + '\packages';
   UpdatePath := VelopackPath + '\Update.exe';
 
-  // Remove Velopack-specific folders only (NOT user data like assets, settings.json, logs)
+  // IMPORTANT: Migrate assets BEFORE deleting current folder!
+  MigrateAssetsFromVelopack();
+
+  // Remove Velopack-specific folders only (assets already migrated)
   if DirExists(CurrentPath) then
     DelTree(CurrentPath, True, True, True);
 
@@ -250,6 +350,12 @@ begin
 
   // Remove any .velopack files
   DelTree(VelopackPath + '\*.velopack', False, True, False);
+
+  // Remove old Velopack uninstall registry entry (shows in Add/Remove Programs)
+  RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\ConditioningControlPanel');
+
+  // Also clean up old app registry entries if they exist
+  RegDeleteKeyIncludingSubkeys(HKCU, 'Software\ConditioningControlPanel');
 end;
 
 // Prompt to close app if running

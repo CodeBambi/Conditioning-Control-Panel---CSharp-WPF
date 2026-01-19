@@ -28,20 +28,31 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.0.2:
+        public const string CurrentPatchNotes = @"v5.1.0 - MAJOR UPDATE
 
-🎨 UI IMPROVEMENTS
-• Compacted browser section header for more screen space
-• Haptics section now clearly shows 'Patreon Only' instead of 'Coming Soon'
+📦 CONTENT PACKS
+• Download curated content packs from community creators
+• Encrypted pack files protect creators' work
+• One-click install with automatic file organization
+• Pack manager with preview images and creator links
 
-🌐 BROWSER ENHANCEMENTS
-• Added built-in ad blocker for cleaner browsing
-• Pop-out browser button for resizable window
+📁 FILE MANAGER
+• New drag & drop interface for managing images and videos
+• Auto-sorting feature organizes files automatically
+• Visual file browser with thumbnails
+• Easy file import from anywhere on your PC
 
-🔧 BUG FIXES
-• Fixed mandatory video and bubble count video playing simultaneously
-• Fixed browser returning to wrong location after fullscreen
-• Improved online status accuracy with 1-minute heartbeat";
+🔄 FRESH INSTALL SYSTEM
+• Major updates now trigger clean installation
+• Choose your own install location
+• Assets and settings automatically preserved
+• Old Velopack installations cleaned up safely
+
+🛠️ STABILITY IMPROVEMENTS
+• Browser data moved to AppData (no more file lock issues)
+• WebView2 processes properly cleaned before updates
+• Old registry entries removed during upgrade
+• Better crash recovery and logging";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
@@ -614,6 +625,12 @@ namespace ConditioningControlPanel.Services
             // Save settings before exit
             App.Settings?.Save();
 
+            // Clean up browser data and kill WebView2 processes to prevent file locks
+            CleanupBeforeFreshInstall();
+
+            // Small delay to ensure processes are terminated
+            System.Threading.Thread.Sleep(500);
+
             // Start the installer
             var startInfo = new ProcessStartInfo
             {
@@ -627,6 +644,167 @@ namespace ConditioningControlPanel.Services
             // Exit the current application
             App.Logger?.Information("Exiting application for fresh install...");
             Application.Current.Shutdown();
+        }
+
+        /// <summary>
+        /// Cleans up browser data and kills WebView2 processes before fresh install.
+        /// This prevents "Failed to remove existing application directory" errors.
+        /// </summary>
+        private static void CleanupBeforeFreshInstall()
+        {
+            try
+            {
+                App.Logger?.Information("Cleaning up before fresh install...");
+
+                // Get the current installation directory
+                var exePath = Process.GetCurrentProcess().MainModule?.FileName;
+                if (string.IsNullOrEmpty(exePath)) return;
+
+                var installDir = Path.GetDirectoryName(exePath);
+                if (string.IsNullOrEmpty(installDir)) return;
+
+                // Kill any WebView2 processes that might be using our browser_data
+                KillWebView2Processes(installDir);
+
+                // Delete browser_data folder in install directory (old location)
+                var browserDataPath = Path.Combine(installDir, "browser_data");
+                if (Directory.Exists(browserDataPath))
+                {
+                    App.Logger?.Information("Deleting browser_data folder: {Path}", browserDataPath);
+                    try
+                    {
+                        Directory.Delete(browserDataPath, true);
+                        App.Logger?.Information("Browser data deleted successfully");
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("Could not delete browser_data: {Error}", ex.Message);
+                        // Try to at least delete the lock file
+                        TryDeleteLockFile(browserDataPath);
+                    }
+                }
+
+                // Also clean up Velopack install location if different
+                var velopackPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "ConditioningControlPanel",
+                    "current",
+                    "browser_data");
+
+                if (Directory.Exists(velopackPath) && !velopackPath.Equals(browserDataPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    App.Logger?.Information("Deleting Velopack browser_data: {Path}", velopackPath);
+                    try
+                    {
+                        Directory.Delete(velopackPath, true);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("Could not delete Velopack browser_data: {Error}", ex.Message);
+                        TryDeleteLockFile(velopackPath);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Error during pre-install cleanup");
+                // Continue anyway - installer might still succeed
+            }
+        }
+
+        /// <summary>
+        /// Kills WebView2 processes that are using the app's browser data folder.
+        /// Uses wmic command line to identify processes by their command line arguments.
+        /// </summary>
+        private static void KillWebView2Processes(string installDir)
+        {
+            try
+            {
+                App.Logger?.Information("Looking for WebView2 processes to kill...");
+
+                // Use wmic to get WebView2 processes with their command lines
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "wmic",
+                    Arguments = "process where \"name='msedgewebview2.exe'\" get processid,commandline /format:csv",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var wmicProcess = Process.Start(startInfo);
+                if (wmicProcess == null) return;
+
+                var output = wmicProcess.StandardOutput.ReadToEnd();
+                wmicProcess.WaitForExit(5000);
+
+                var killedCount = 0;
+                var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+                foreach (var line in lines)
+                {
+                    // Skip header line
+                    if (line.Contains("CommandLine") || string.IsNullOrWhiteSpace(line))
+                        continue;
+
+                    // Check if this process is using our install directory
+                    if (line.Contains(installDir, StringComparison.OrdinalIgnoreCase) ||
+                        line.Contains("ConditioningControlPanel", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Extract PID from CSV (format: Node,CommandLine,ProcessId)
+                        var parts = line.Split(',');
+                        if (parts.Length >= 2)
+                        {
+                            var pidStr = parts[^1].Trim(); // Last part is ProcessId
+                            if (int.TryParse(pidStr, out var pid))
+                            {
+                                try
+                                {
+                                    var process = Process.GetProcessById(pid);
+                                    App.Logger?.Information("Killing WebView2 process {Id}", pid);
+                                    process.Kill();
+                                    process.WaitForExit(2000);
+                                    process.Dispose();
+                                    killedCount++;
+                                }
+                                catch (Exception ex)
+                                {
+                                    App.Logger?.Debug("Could not kill process {Id}: {Error}", pid, ex.Message);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (killedCount > 0)
+                {
+                    App.Logger?.Information("Killed {Count} WebView2 processes", killedCount);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Error killing WebView2 processes: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Tries to delete the WebView2 lock file specifically.
+        /// </summary>
+        private static void TryDeleteLockFile(string browserDataPath)
+        {
+            try
+            {
+                var lockFile = Path.Combine(browserDataPath, "EBWebView", "Default", "LOCK");
+                if (File.Exists(lockFile))
+                {
+                    File.Delete(lockFile);
+                    App.Logger?.Information("Deleted WebView2 lock file");
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Could not delete lock file: {Error}", ex.Message);
+            }
         }
 
         /// <summary>
