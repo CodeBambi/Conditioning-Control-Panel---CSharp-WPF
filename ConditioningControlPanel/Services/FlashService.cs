@@ -30,7 +30,9 @@ namespace ConditioningControlPanel.Services
         private readonly Random _random = new();
         private readonly List<FlashWindow> _activeWindows = new();
         private Queue<string> _imageQueue = new();  // Performance: Changed to Queue for O(1) dequeue
+        private Queue<(string PackId, PackFileEntry File)> _packImageQueue = new();  // Queue for pack images
         private Queue<string> _soundQueue = new();  // Performance: Changed to Queue for O(1) dequeue
+        private readonly List<string> _tempPackFiles = new();  // Track temp files for cleanup
         private readonly object _lockObj = new();
 
         // Performance: Cache for directory file listings to avoid repeated disk scans
@@ -106,12 +108,14 @@ namespace ConditioningControlPanel.Services
             _imagesPath = Path.Combine(App.EffectiveAssetsPath, "images");
             Directory.CreateDirectory(_imagesPath);
             ClearFileCache(); // Clear cached file list so it reloads from new path
-            
+
             lock (_lockObj)
             {
                 _imageQueue.Clear();
+                _packImageQueue.Clear();
+                CleanupTempPackFiles();
             }
-            
+
             App.Logger?.Information("FlashService: Images path refreshed to {Path}", _imagesPath);
         }
 
@@ -191,7 +195,9 @@ namespace ConditioningControlPanel.Services
             lock (_lockObj)
             {
                 _imageQueue = new Queue<string>();  // Performance: Reset queues
+                _packImageQueue = new Queue<(string, PackFileEntry)>();  // Reset pack queue
                 _soundQueue = new Queue<string>();
+                CleanupTempPackFiles();
             }
             ClearFileCache();  // Performance: Clear cached file listings to pick up new files
             App.Logger.Information("Assets reloaded");
@@ -1012,28 +1018,106 @@ namespace ConditioningControlPanel.Services
         {
             lock (_lockObj)
             {
-                var files = GetMediaFiles(_imagesPath, new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" });
-                if (files.Count == 0) return new List<string>();
-
-                // Refill queue if empty
-                if (_imageQueue.Count == 0)
+                // Refill queues if both are empty
+                if (_imageQueue.Count == 0 && _packImageQueue.Count == 0)
                 {
-                    // Performance: Shuffle and enqueue all at once
-                    _imageQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
+                    RefillImageQueues();
+                }
+
+                // If both queues are empty after refill, no images available
+                if (_imageQueue.Count == 0 && _packImageQueue.Count == 0)
+                {
+                    return new List<string>();
                 }
 
                 var result = new List<string>(count);
                 for (int i = 0; i < count; i++)
                 {
-                    // Refill queue if we run out (allows reusing images when pool is small)
-                    if (_imageQueue.Count == 0)
+                    // Refill queues if we run out
+                    if (_imageQueue.Count == 0 && _packImageQueue.Count == 0)
                     {
-                        _imageQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
+                        RefillImageQueues();
+                        if (_imageQueue.Count == 0 && _packImageQueue.Count == 0)
+                            break;
                     }
-                    result.Add(_imageQueue.Dequeue());
+
+                    // Randomly choose between regular and pack images based on what's available
+                    bool usePackImage = false;
+                    if (_imageQueue.Count > 0 && _packImageQueue.Count > 0)
+                    {
+                        // Both available - pick randomly weighted by count
+                        var totalCount = _imageQueue.Count + _packImageQueue.Count;
+                        usePackImage = _random.Next(totalCount) >= _imageQueue.Count;
+                    }
+                    else if (_packImageQueue.Count > 0)
+                    {
+                        usePackImage = true;
+                    }
+
+                    if (usePackImage && _packImageQueue.Count > 0)
+                    {
+                        var packImage = _packImageQueue.Dequeue();
+                        // Decrypt pack image to temp file
+                        var tempPath = App.ContentPacks?.GetPackFileTempPath(packImage.PackId, packImage.File);
+                        if (!string.IsNullOrEmpty(tempPath))
+                        {
+                            _tempPackFiles.Add(tempPath);  // Track for cleanup
+                            result.Add(tempPath);
+                            App.Logger?.Debug("Using pack image: {Name} from pack {PackId}", packImage.File.OriginalName, packImage.PackId);
+                            continue;
+                        }
+                        // If decryption failed, try regular queue
+                    }
+
+                    if (_imageQueue.Count > 0)
+                    {
+                        result.Add(_imageQueue.Dequeue());
+                    }
                 }
                 return result;
             }
+        }
+
+        /// <summary>
+        /// Refills both image queues (regular and pack images).
+        /// </summary>
+        private void RefillImageQueues()
+        {
+            // Clean up old temp pack files
+            CleanupTempPackFiles();
+
+            // Load regular images
+            var files = GetMediaFiles(_imagesPath, new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" });
+            _imageQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
+
+            // Load pack images from active packs
+            var packImages = App.ContentPacks?.GetAllActivePackImages() ?? new List<(string, PackFileEntry)>();
+            _packImageQueue = new Queue<(string, PackFileEntry)>(packImages.OrderBy(_ => _random.Next()));
+
+            App.Logger?.Debug("Image queues refilled: {RegularCount} regular, {PackCount} from packs",
+                _imageQueue.Count, _packImageQueue.Count);
+        }
+
+        /// <summary>
+        /// Cleans up temporary pack image files.
+        /// </summary>
+        private void CleanupTempPackFiles()
+        {
+            foreach (var tempFile in _tempPackFiles)
+            {
+                try
+                {
+                    if (File.Exists(tempFile))
+                    {
+                        File.Delete(tempFile);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Failed to delete temp pack file: {Error}", ex.Message);
+                }
+            }
+            _tempPackFiles.Clear();
         }
 
         private string? GetNextSound()
@@ -1271,6 +1355,7 @@ namespace ConditioningControlPanel.Services
             Stop();
             _cancellationSource?.Dispose();
             StopCurrentSound();
+            CleanupTempPackFiles();
         }
 
         #endregion

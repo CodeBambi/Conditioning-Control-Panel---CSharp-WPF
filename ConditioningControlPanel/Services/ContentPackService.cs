@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Models;
@@ -26,6 +29,9 @@ namespace ConditioningControlPanel.Services
 
         // GitHub releases URL for pack downloads
         private const string PacksManifestUrl = "https://raw.githubusercontent.com/CodeBambi/ccp-packs/main/manifest.json";
+
+        // Proxy server URL for authenticated downloads
+        private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
 
         // Built-in packs definition (shown even if manifest fetch fails)
         // Download URLs point to private CDN - update these when hosting is configured
@@ -66,7 +72,10 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<ContentPack>? PackDownloadStarted;
         public event EventHandler<ContentPack>? PackDownloadCompleted;
         public event EventHandler<(ContentPack Pack, int Progress)>? PackDownloadProgress;
+        public event EventHandler<(ContentPack Pack, string Status)>? PackInstallStatus;
         public event EventHandler<ContentPack>? PackInstallFailed;
+        public event EventHandler<string>? AuthenticationRequired;
+        public event EventHandler<(ContentPack Pack, string Message, DateTime ResetTime)>? RateLimitExceeded;
 
         public ContentPackService()
         {
@@ -141,12 +150,44 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Downloads, encrypts, and installs a content pack.
+        /// Requires Patreon authentication.
         /// </summary>
         public async Task InstallPackAsync(ContentPack pack, IProgress<int>? progress = null)
         {
-            if (string.IsNullOrEmpty(pack.DownloadUrl))
+            if (string.IsNullOrEmpty(pack.Id))
             {
-                throw new InvalidOperationException("Pack has no download URL");
+                throw new InvalidOperationException("Pack has no ID");
+            }
+
+            // Check if user is authenticated with Patreon
+            if (App.Patreon == null || !App.Patreon.IsAuthenticated)
+            {
+                AuthenticationRequired?.Invoke(this, "Please log in with Patreon to download content packs.");
+                throw new UnauthorizedAccessException("Patreon authentication required to download packs");
+            }
+
+            var accessToken = App.Patreon.GetAccessToken();
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                AuthenticationRequired?.Invoke(this, "Your Patreon session has expired. Please log in again.");
+                throw new UnauthorizedAccessException("Patreon access token not available");
+            }
+
+            // Get signed download URL from proxy server
+            string downloadUrl;
+            try
+            {
+                downloadUrl = await GetSignedDownloadUrlAsync(pack.Id, accessToken);
+            }
+            catch (PackRateLimitException ex)
+            {
+                RateLimitExceeded?.Invoke(this, (pack, ex.Message, ex.ResetTime));
+                throw;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                AuthenticationRequired?.Invoke(this, "Your Patreon session has expired. Please log in again.");
+                throw;
             }
 
             // Generate unique folder name (GUID for obfuscation)
@@ -160,8 +201,8 @@ namespace ConditioningControlPanel.Services
                 PackDownloadStarted?.Invoke(this, pack);
                 App.Logger?.Information("Starting download of pack: {Name}", pack.Name);
 
-                // Download ZIP file
-                using var response = await _httpClient.GetAsync(pack.DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
+                // Download ZIP file from signed URL
+                using var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
                 response.EnsureSuccessStatusCode();
 
                 var totalBytes = response.Content.Headers.ContentLength ?? pack.SizeBytes;
@@ -190,14 +231,49 @@ namespace ConditioningControlPanel.Services
 
                 App.Logger?.Debug("Download complete ({Bytes} bytes), extracting and encrypting...", downloadedBytes);
 
-                // Extract to temp folder first
+                // Ensure we show 100% briefly before switching to extracting
+                pack.DownloadProgress = 100;
+                PackDownloadProgress?.Invoke(this, (pack, 100));
+
+                // Small delay so user sees 100% before status change
+                await Task.Delay(200);
+
+                // Update status - extracting (this hides progress bar)
+                PackInstallStatus?.Invoke(this, (pack, "Extracting..."));
+
+                // Extract to temp folder first (run on background thread to not block UI)
                 var tempExtractPath = Path.Combine(_packsFolder, $".{packGuid}_extract");
-                ZipFile.ExtractToDirectory(tempZipPath, tempExtractPath);
+                await Task.Run(() => ZipFile.ExtractToDirectory(tempZipPath, tempExtractPath));
 
                 // Create encrypted pack structure
                 Directory.CreateDirectory(packFolder);
                 var contentFolder = Path.Combine(packFolder, "content");
                 Directory.CreateDirectory(contentFolder);
+
+                // Count total files for progress
+                var imageExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp" };
+                var videoExtensions = new[] { ".mp4", ".webm", ".mkv", ".avi", ".mov", ".wmv" };
+
+                // Find images and videos folders (may be nested if ZIP has root folder)
+                var imagesPath = FindSubfolder(tempExtractPath, "images");
+                var videosPath = FindSubfolder(tempExtractPath, "videos");
+
+                App.Logger?.Debug("Pack extract paths - images: {Images}, videos: {Videos}",
+                    imagesPath ?? "not found", videosPath ?? "not found");
+
+                var imageFiles = imagesPath != null && Directory.Exists(imagesPath)
+                    ? Directory.GetFiles(imagesPath, "*", SearchOption.AllDirectories)
+                        .Where(f => imageExtensions.Contains(Path.GetExtension(f).ToLowerInvariant())).ToList()
+                    : new List<string>();
+                var videoFiles = videosPath != null && Directory.Exists(videosPath)
+                    ? Directory.GetFiles(videosPath, "*", SearchOption.AllDirectories)
+                        .Where(f => videoExtensions.Contains(Path.GetExtension(f).ToLowerInvariant())).ToList()
+                    : new List<string>();
+
+                App.Logger?.Debug("Pack files found - images: {ImageCount}, videos: {VideoCount}",
+                    imageFiles.Count, videoFiles.Count);
+                var totalFiles = imageFiles.Count + videoFiles.Count;
+                var processedFiles = 0;
 
                 // Process and encrypt files, building manifest
                 var manifest = new InstalledPackManifest
@@ -209,18 +285,28 @@ namespace ConditioningControlPanel.Services
                     Files = new List<PackFileEntry>()
                 };
 
+                // Update status - encrypting
+                PackInstallStatus?.Invoke(this, (pack, $"Encrypting 0/{totalFiles}..."));
+
                 // Process images
-                var imagesPath = Path.Combine(tempExtractPath, "images");
-                if (Directory.Exists(imagesPath))
+                if (imageFiles.Count > 0)
                 {
-                    await ProcessAndEncryptFilesAsync(imagesPath, contentFolder, "image", manifest);
+                    await ProcessAndEncryptFilesWithProgressAsync(imageFiles, contentFolder, "image", manifest,
+                        (current) => {
+                            processedFiles = current;
+                            PackInstallStatus?.Invoke(this, (pack, $"Encrypting {processedFiles}/{totalFiles}..."));
+                        });
                 }
 
                 // Process videos
-                var videosPath = Path.Combine(tempExtractPath, "videos");
-                if (Directory.Exists(videosPath))
+                if (videoFiles.Count > 0)
                 {
-                    await ProcessAndEncryptFilesAsync(videosPath, contentFolder, "video", manifest);
+                    var imageCount = imageFiles.Count;
+                    await ProcessAndEncryptFilesWithProgressAsync(videoFiles, contentFolder, "video", manifest,
+                        (current) => {
+                            processedFiles = imageCount + current;
+                            PackInstallStatus?.Invoke(this, (pack, $"Encrypting {processedFiles}/{totalFiles}..."));
+                        });
                 }
 
                 // Save encrypted manifest
@@ -272,6 +358,103 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Gets a signed download URL from the proxy server.
+        /// Requires Patreon authentication.
+        /// </summary>
+        private async Task<string> GetSignedDownloadUrlAsync(string packId, string accessToken)
+        {
+            var requestUrl = $"{ProxyBaseUrl}/pack/download-url";
+            var requestBody = new { packId };
+            var jsonContent = new StringContent(
+                JsonConvert.SerializeObject(requestBody),
+                Encoding.UTF8,
+                "application/json");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Content = jsonContent;
+
+            using var response = await _httpClient.SendAsync(request);
+
+            var responseJson = await response.Content.ReadAsStringAsync();
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                App.Logger?.Warning("Pack download auth failed: {Response}", responseJson);
+                throw new UnauthorizedAccessException("Patreon authentication failed");
+            }
+
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                var errorResponse = JsonConvert.DeserializeObject<PackDownloadErrorResponse>(responseJson);
+                var resetTime = DateTime.TryParse(errorResponse?.ResetTime, out var parsed)
+                    ? parsed
+                    : DateTime.UtcNow.AddHours(24);
+                App.Logger?.Warning("Pack download rate limited: {Message}", errorResponse?.Message);
+                throw new PackRateLimitException(
+                    errorResponse?.Message ?? "Download limit exceeded. Try again later.",
+                    resetTime);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorResponse = JsonConvert.DeserializeObject<PackDownloadErrorResponse>(responseJson);
+                App.Logger?.Warning("Pack download failed: {Status} - {Message}", response.StatusCode, errorResponse?.Message);
+                throw new Exception(errorResponse?.Message ?? $"Failed to get download URL: {response.StatusCode}");
+            }
+
+            var successResponse = JsonConvert.DeserializeObject<PackDownloadUrlResponse>(responseJson);
+            if (string.IsNullOrEmpty(successResponse?.DownloadUrl))
+            {
+                throw new Exception("Server returned empty download URL");
+            }
+
+            App.Logger?.Information("Got signed download URL for pack: {PackId}, remaining downloads: {Remaining}",
+                packId, successResponse.RateLimit?.Remaining ?? -1);
+
+            return successResponse.DownloadUrl;
+        }
+
+        /// <summary>
+        /// Gets the download status for all packs (rate limits).
+        /// </summary>
+        public async Task<Dictionary<string, PackDownloadStatus>?> GetPackDownloadStatusAsync()
+        {
+            if (App.Patreon == null || !App.Patreon.IsAuthenticated)
+            {
+                return null;
+            }
+
+            var accessToken = App.Patreon.GetAccessToken();
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                return null;
+            }
+
+            try
+            {
+                var requestUrl = $"{ProxyBaseUrl}/pack/status";
+                using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                using var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return null;
+                }
+
+                var responseJson = await response.Content.ReadAsStringAsync();
+                var statusResponse = JsonConvert.DeserializeObject<PackStatusResponse>(responseJson);
+                return statusResponse?.Packs;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to get pack status: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Processes files from a folder, encrypts them, and adds to manifest.
         /// </summary>
         private async Task ProcessAndEncryptFilesAsync(string sourceFolder, string destFolder,
@@ -302,6 +485,36 @@ namespace ConditioningControlPanel.Services
                     FileType = fileType,
                     Extension = Path.GetExtension(file).ToLowerInvariant()
                 });
+            }
+        }
+
+        /// <summary>
+        /// Processes a list of files, encrypts them, and reports progress.
+        /// </summary>
+        private async Task ProcessAndEncryptFilesWithProgressAsync(List<string> files, string destFolder,
+            string fileType, InstalledPackManifest manifest, Action<int> onProgress)
+        {
+            var processed = 0;
+            foreach (var file in files)
+            {
+                var originalName = Path.GetFileName(file);
+                var obfuscatedName = PackEncryptionService.GenerateObfuscatedFilename() + ".enc";
+                var destPath = Path.Combine(destFolder, obfuscatedName);
+
+                // Encrypt file on background thread
+                await Task.Run(() => PackEncryptionService.EncryptFile(file, destPath));
+
+                // Add to manifest
+                manifest.Files.Add(new PackFileEntry
+                {
+                    OriginalName = originalName,
+                    ObfuscatedName = obfuscatedName,
+                    FileType = fileType,
+                    Extension = Path.GetExtension(file).ToLowerInvariant()
+                });
+
+                processed++;
+                onProgress?.Invoke(processed);
             }
         }
 
@@ -508,6 +721,42 @@ namespace ConditioningControlPanel.Services
             return App.Settings?.Current?.ActivePackIds?.ToList() ?? new List<string>();
         }
 
+        /// <summary>
+        /// Gets all video files from all active packs.
+        /// Returns tuples of (packId, PackFileEntry) for each video.
+        /// </summary>
+        public List<(string PackId, PackFileEntry File)> GetAllActivePackVideos()
+        {
+            var result = new List<(string, PackFileEntry)>();
+            foreach (var packId in GetActivePackIds())
+            {
+                var videos = GetPackFiles(packId, "video");
+                foreach (var video in videos)
+                {
+                    result.Add((packId, video));
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Gets all image files from all active packs.
+        /// Returns tuples of (packId, PackFileEntry) for each image.
+        /// </summary>
+        public List<(string PackId, PackFileEntry File)> GetAllActivePackImages()
+        {
+            var result = new List<(string, PackFileEntry)>();
+            foreach (var packId in GetActivePackIds())
+            {
+                var images = GetPackFiles(packId, "image");
+                foreach (var image in images)
+                {
+                    result.Add((packId, image));
+                }
+            }
+            return result;
+        }
+
         private void LoadInstalledManifests()
         {
             foreach (var packId in App.Settings?.Current?.InstalledPackIds ?? new List<string>())
@@ -538,6 +787,29 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to load manifest for pack: {Id}", packId);
+            }
+        }
+
+        /// <summary>
+        /// Finds a subfolder by name anywhere in the directory tree.
+        /// Handles ZIP files that have a root folder containing the images/videos folders.
+        /// </summary>
+        private static string? FindSubfolder(string rootPath, string folderName)
+        {
+            // First check direct child
+            var directPath = Path.Combine(rootPath, folderName);
+            if (Directory.Exists(directPath))
+                return directPath;
+
+            // Search recursively (handles ZIPs with root folder like "PackName/videos/")
+            try
+            {
+                var dirs = Directory.GetDirectories(rootPath, folderName, SearchOption.AllDirectories);
+                return dirs.FirstOrDefault();
+            }
+            catch
+            {
+                return null;
             }
         }
 
@@ -604,5 +876,118 @@ namespace ConditioningControlPanel.Services
         public string ObfuscatedName { get; set; } = "";
         public string FileType { get; set; } = ""; // "image" or "video"
         public string Extension { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Response from POST /pack/download-url endpoint.
+    /// </summary>
+    internal class PackDownloadUrlResponse
+    {
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("downloadUrl")]
+        public string? DownloadUrl { get; set; }
+
+        [JsonProperty("packId")]
+        public string? PackId { get; set; }
+
+        [JsonProperty("packName")]
+        public string? PackName { get; set; }
+
+        [JsonProperty("sizeBytes")]
+        public long SizeBytes { get; set; }
+
+        [JsonProperty("expiresIn")]
+        public int ExpiresIn { get; set; }
+
+        [JsonProperty("rateLimit")]
+        public PackRateLimitInfo? RateLimit { get; set; }
+    }
+
+    /// <summary>
+    /// Rate limit info from server response.
+    /// </summary>
+    internal class PackRateLimitInfo
+    {
+        [JsonProperty("remaining")]
+        public int Remaining { get; set; }
+
+        [JsonProperty("limit")]
+        public int Limit { get; set; }
+
+        [JsonProperty("resetTime")]
+        public string? ResetTime { get; set; }
+    }
+
+    /// <summary>
+    /// Error response from pack download endpoints.
+    /// </summary>
+    internal class PackDownloadErrorResponse
+    {
+        [JsonProperty("error")]
+        public string? Error { get; set; }
+
+        [JsonProperty("message")]
+        public string? Message { get; set; }
+
+        [JsonProperty("resetTime")]
+        public string? ResetTime { get; set; }
+
+        [JsonProperty("remaining")]
+        public int Remaining { get; set; }
+    }
+
+    /// <summary>
+    /// Response from GET /pack/status endpoint.
+    /// </summary>
+    internal class PackStatusResponse
+    {
+        [JsonProperty("userId")]
+        public string? UserId { get; set; }
+
+        [JsonProperty("packs")]
+        public Dictionary<string, PackDownloadStatus>? Packs { get; set; }
+
+        [JsonProperty("dailyLimit")]
+        public int DailyLimit { get; set; }
+    }
+
+    /// <summary>
+    /// Download status for a single pack.
+    /// </summary>
+    public class PackDownloadStatus
+    {
+        [JsonProperty("name")]
+        public string? Name { get; set; }
+
+        [JsonProperty("sizeBytes")]
+        public long SizeBytes { get; set; }
+
+        [JsonProperty("canDownload")]
+        public bool CanDownload { get; set; }
+
+        [JsonProperty("downloadsRemaining")]
+        public int DownloadsRemaining { get; set; }
+
+        [JsonProperty("downloadsUsed")]
+        public int DownloadsUsed { get; set; }
+
+        [JsonProperty("resetTime")]
+        public string? ResetTime { get; set; }
+    }
+
+    /// <summary>
+    /// Exception thrown when pack download rate limit is exceeded.
+    /// </summary>
+    public class PackRateLimitException : Exception
+    {
+        public DateTime ResetTime { get; }
+
+        public PackRateLimitException(string message, DateTime resetTime)
+            : base(message)
+        {
+            ResetTime = resetTime;
+        }
     }
 }

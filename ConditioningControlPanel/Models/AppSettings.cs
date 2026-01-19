@@ -217,6 +217,13 @@ namespace ConditioningControlPanel.Models
             set { _attentionDensity = Math.Clamp(value, 1, 10); OnPropertyChanged(); }
         }
 
+        private bool _randomizeAttentionTargets = false; // Randomize target count (1 to AttentionDensity)
+        public bool RandomizeAttentionTargets
+        {
+            get => _randomizeAttentionTargets;
+            set { _randomizeAttentionTargets = value; OnPropertyChanged(); }
+        }
+
         private int _attentionLifespan = 12; // Seconds - longer to give time to click
         public int AttentionLifespan
         {

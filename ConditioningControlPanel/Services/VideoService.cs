@@ -24,8 +24,10 @@ namespace ConditioningControlPanel.Services
     {
         private readonly Random _random = new();
         private Queue<string> _videoQueue = new();  // Performance: Changed to Queue for O(1) dequeue
+        private Queue<(string PackId, PackFileEntry File)> _packVideoQueue = new();  // Queue for pack videos
         private readonly List<Window> _windows = new();
         private readonly List<FloatingText> _targets = new();
+        private readonly List<string> _tempPackFiles = new();  // Track temp files for cleanup
 
         private DispatcherTimer? _scheduler;
         private DispatcherTimer? _attentionTimer;
@@ -996,7 +998,10 @@ namespace ConditioningControlPanel.Services
                         _spawned = 0; // Reset spawned counter
                         var dur = _duration > 0 ? _duration : 60;
                         // Use setting directly as total count (not density)
-                        _total = Math.Max(1, App.Settings.Current.AttentionDensity);
+                        var maxTargets = Math.Max(1, App.Settings.Current.AttentionDensity);
+                        _total = App.Settings.Current.RandomizeAttentionTargets
+                            ? _random.Next(1, maxTargets + 1)  // Random from 1 to max (inclusive)
+                            : maxTargets;
 
                         for (int i = 0; i < _total; i++)
                             _spawnTimes.Add(3 + _random.NextDouble() * Math.Max(1, dur - 8)); // Stop spawning ~5s before end
@@ -1449,56 +1454,129 @@ namespace ConditioningControlPanel.Services
 
         private string? GetNextVideo()
         {
-            if (_videoQueue.Count == 0)
+            // Refill queues if both are empty
+            if (_videoQueue.Count == 0 && _packVideoQueue.Count == 0)
             {
-                var validExtensions = new[] { ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm" };
-
-                var files = new List<string>();
-                if (Directory.Exists(_videosPath))
-                {
-                    // Scan subfolders to support user-organized categories
-                    foreach (var file in Directory.GetFiles(_videosPath, "*.*", SearchOption.AllDirectories))
-                    {
-                        var ext = Path.GetExtension(file).ToLowerInvariant();
-                        if (!validExtensions.Contains(ext)) continue;
-
-                        // Security: Validate path is within allowed directories (app dir, user assets, or custom path)
-                        var isInAppDir = SecurityHelper.IsPathSafe(file, AppDomain.CurrentDomain.BaseDirectory);
-                        var isInUserAssets = SecurityHelper.IsPathSafe(file, App.UserDataPath);
-                        var isInCustomPath = SecurityHelper.IsPathSafe(file, App.EffectiveAssetsPath);
-
-                        if (!isInAppDir && !isInUserAssets && !isInCustomPath)
-                        {
-                            App.Logger?.Warning("Blocked video outside allowed directory: {Path}", file);
-                            continue;
-                        }
-
-                        // Security: Sanitize filename
-                        var fileName = SecurityHelper.SanitizeFilename(Path.GetFileName(file));
-                        if (string.IsNullOrEmpty(fileName)) continue;
-
-                        files.Add(file);
-                    }
-                }
-
-                // Filter out disabled assets (blacklist approach)
-                if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
-                {
-                    var basePath = App.EffectiveAssetsPath;
-                    files = files.Where(f =>
-                    {
-                        var relativePath = Path.GetRelativePath(basePath, f);
-                        return !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
-                    }).ToList();
-                }
-
-                if (files.Count == 0) return null;
-
-                // Performance: Shuffle and enqueue all at once
-                _videoQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
+                RefillVideoQueues();
             }
 
-            return _videoQueue.Count > 0 ? _videoQueue.Dequeue() : null;  // Performance: O(1) instead of O(n)
+            // If both queues are empty after refill, no videos available
+            if (_videoQueue.Count == 0 && _packVideoQueue.Count == 0)
+            {
+                return null;
+            }
+
+            // Randomly choose between regular and pack videos based on what's available
+            bool usePackVideo = false;
+            if (_videoQueue.Count > 0 && _packVideoQueue.Count > 0)
+            {
+                // Both available - pick randomly weighted by count
+                var totalCount = _videoQueue.Count + _packVideoQueue.Count;
+                usePackVideo = _random.Next(totalCount) >= _videoQueue.Count;
+            }
+            else if (_packVideoQueue.Count > 0)
+            {
+                usePackVideo = true;
+            }
+
+            if (usePackVideo && _packVideoQueue.Count > 0)
+            {
+                var packVideo = _packVideoQueue.Dequeue();
+                // Decrypt pack video to temp file
+                var tempPath = App.ContentPacks?.GetPackFileTempPath(packVideo.PackId, packVideo.File);
+                if (!string.IsNullOrEmpty(tempPath))
+                {
+                    _tempPackFiles.Add(tempPath);  // Track for cleanup
+                    App.Logger?.Debug("Using pack video: {Name} from pack {PackId}", packVideo.File.OriginalName, packVideo.PackId);
+                    return tempPath;
+                }
+                // If decryption failed, try regular queue
+            }
+
+            return _videoQueue.Count > 0 ? _videoQueue.Dequeue() : null;
+        }
+
+        /// <summary>
+        /// Refills both video queues (regular and pack videos).
+        /// </summary>
+        private void RefillVideoQueues()
+        {
+            var validExtensions = new[] { ".mp4", ".mov", ".avi", ".wmv", ".mkv", ".webm" };
+
+            // Clean up old temp pack files
+            CleanupTempPackFiles();
+
+            // Load regular videos
+            var files = new List<string>();
+            if (Directory.Exists(_videosPath))
+            {
+                // Scan subfolders to support user-organized categories
+                foreach (var file in Directory.GetFiles(_videosPath, "*.*", SearchOption.AllDirectories))
+                {
+                    var ext = Path.GetExtension(file).ToLowerInvariant();
+                    if (!validExtensions.Contains(ext)) continue;
+
+                    // Security: Validate path is within allowed directories (app dir, user assets, or custom path)
+                    var isInAppDir = SecurityHelper.IsPathSafe(file, AppDomain.CurrentDomain.BaseDirectory);
+                    var isInUserAssets = SecurityHelper.IsPathSafe(file, App.UserDataPath);
+                    var isInCustomPath = SecurityHelper.IsPathSafe(file, App.EffectiveAssetsPath);
+
+                    if (!isInAppDir && !isInUserAssets && !isInCustomPath)
+                    {
+                        App.Logger?.Warning("Blocked video outside allowed directory: {Path}", file);
+                        continue;
+                    }
+
+                    // Security: Sanitize filename
+                    var fileName = SecurityHelper.SanitizeFilename(Path.GetFileName(file));
+                    if (string.IsNullOrEmpty(fileName)) continue;
+
+                    files.Add(file);
+                }
+            }
+
+            // Filter out disabled assets (blacklist approach)
+            if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
+            {
+                var basePath = App.EffectiveAssetsPath;
+                files = files.Where(f =>
+                {
+                    var relativePath = Path.GetRelativePath(basePath, f);
+                    return !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
+                }).ToList();
+            }
+
+            // Shuffle and enqueue regular videos
+            _videoQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
+
+            // Load pack videos from active packs
+            var packVideos = App.ContentPacks?.GetAllActivePackVideos() ?? new List<(string, PackFileEntry)>();
+            _packVideoQueue = new Queue<(string, PackFileEntry)>(packVideos.OrderBy(_ => _random.Next()));
+
+            App.Logger?.Debug("Video queues refilled: {RegularCount} regular, {PackCount} from packs",
+                _videoQueue.Count, _packVideoQueue.Count);
+        }
+
+        /// <summary>
+        /// Cleans up temporary pack video files.
+        /// </summary>
+        private void CleanupTempPackFiles()
+        {
+            foreach (var tempFile in _tempPackFiles)
+            {
+                try
+                {
+                    if (File.Exists(tempFile))
+                    {
+                        File.Delete(tempFile);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Failed to delete temp pack file: {Error}", ex.Message);
+                }
+            }
+            _tempPackFiles.Clear();
         }
 
         public void Dispose() => Stop();

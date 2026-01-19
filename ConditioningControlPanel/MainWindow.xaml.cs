@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -712,7 +713,7 @@ namespace ConditioningControlPanel
             {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = "https://discord.gg/M6kpnrTPa9",
+                    FileName = "https://discord.gg/YxVAMt4qaZ",
                     UseShellExecute = true
                 });
                 App.Logger?.Information("Opened Discord invite link");
@@ -5106,9 +5107,10 @@ namespace ConditioningControlPanel
             s.StrictLockEnabled = ChkStrictLock.IsChecked ?? false;
             s.AttentionChecksEnabled = ChkMiniGameEnabled.IsChecked ?? false;
             s.AttentionDensity = (int)SliderTargets.Value;
+            s.RandomizeAttentionTargets = ChkRandomizeTargets.IsChecked ?? false;
             s.AttentionLifespan = (int)SliderDuration.Value;
             s.AttentionSize = (int)SliderTargetSize.Value;
-            
+
             // Subliminal settings
             s.SubliminalEnabled = ChkSubliminalEnabled.IsChecked ?? false;
             s.SubliminalFrequency = (int)SliderSubPerMin.Value;
@@ -5243,6 +5245,7 @@ namespace ConditioningControlPanel
             ChkStrictLock.IsChecked = s.StrictLockEnabled;
             ChkMiniGameEnabled.IsChecked = s.AttentionChecksEnabled;
             SliderTargets.Value = s.AttentionDensity;
+            ChkRandomizeTargets.IsChecked = s.RandomizeAttentionTargets;
             SliderDuration.Value = s.AttentionLifespan;
             SliderTargetSize.Value = s.AttentionSize;
 
@@ -5508,6 +5511,7 @@ namespace ConditioningControlPanel
             s.StrictLockEnabled = ChkStrictLock.IsChecked ?? false;
             s.AttentionChecksEnabled = ChkMiniGameEnabled.IsChecked ?? false;
             s.AttentionDensity = (int)SliderTargets.Value;
+            s.RandomizeAttentionTargets = ChkRandomizeTargets.IsChecked ?? false;
             s.AttentionLifespan = (int)SliderDuration.Value;
             s.AttentionSize = (int)SliderTargetSize.Value;
 
@@ -6071,6 +6075,12 @@ namespace ConditioningControlPanel
         {
             if (_isLoading || TxtTargets == null) return;
             TxtTargets.Text = ((int)e.NewValue).ToString();
+            ApplySettingsLive();
+        }
+
+        private void ChkRandomizeTargets_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
             ApplySettingsLive();
         }
 
@@ -7408,8 +7418,14 @@ namespace ConditioningControlPanel
                 {
                     App.ContentPacks.PackDownloadProgress -= OnPackDownloadProgress;
                     App.ContentPacks.PackDownloadProgress += OnPackDownloadProgress;
+                    App.ContentPacks.PackInstallStatus -= OnPackInstallStatus;
+                    App.ContentPacks.PackInstallStatus += OnPackInstallStatus;
                     App.ContentPacks.PackDownloadCompleted -= OnPackDownloadCompleted;
                     App.ContentPacks.PackDownloadCompleted += OnPackDownloadCompleted;
+                    App.ContentPacks.AuthenticationRequired -= OnPackAuthenticationRequired;
+                    App.ContentPacks.AuthenticationRequired += OnPackAuthenticationRequired;
+                    App.ContentPacks.RateLimitExceeded -= OnPackRateLimitExceeded;
+                    App.ContentPacks.RateLimitExceeded += OnPackRateLimitExceeded;
                 }
             }
             catch (Exception ex)
@@ -7443,18 +7459,39 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                var statusText = e.Progress >= 100 ? "Download complete!" : $"Downloading... {e.Progress}%";
+
                 if (e.Pack.Id == "basic-bimbo-starter")
                 {
                     Pack1Progress.Visibility = Visibility.Visible;
                     Pack1Progress.Value = e.Progress;
-                    BtnPack1Install.Content = $"Installing... {e.Progress}%";
+                    BtnPack1Install.Content = statusText;
                     BtnPack1Install.IsEnabled = false;
                 }
                 else if (e.Pack.Id == "enhanced-bimbodoll-video")
                 {
                     Pack2Progress.Visibility = Visibility.Visible;
                     Pack2Progress.Value = e.Progress;
-                    BtnPack2Install.Content = $"Installing... {e.Progress}%";
+                    BtnPack2Install.Content = statusText;
+                    BtnPack2Install.IsEnabled = false;
+                }
+            });
+        }
+
+        private void OnPackInstallStatus(object? sender, (ContentPack Pack, string Status) e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (e.Pack.Id == "basic-bimbo-starter")
+                {
+                    Pack1Progress.Visibility = Visibility.Collapsed; // Hide progress bar during extraction/encryption
+                    BtnPack1Install.Content = e.Status;
+                    BtnPack1Install.IsEnabled = false;
+                }
+                else if (e.Pack.Id == "enhanced-bimbodoll-video")
+                {
+                    Pack2Progress.Visibility = Visibility.Collapsed;
+                    BtnPack2Install.Content = e.Status;
                     BtnPack2Install.IsEnabled = false;
                 }
             });
@@ -7481,11 +7518,70 @@ namespace ConditioningControlPanel
             });
         }
 
+        private void OnPackAuthenticationRequired(object? sender, string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                // Reset button states
+                BtnPack1Install.IsEnabled = true;
+                BtnPack2Install.IsEnabled = true;
+                Pack1Progress.Visibility = Visibility.Collapsed;
+                Pack2Progress.Visibility = Visibility.Collapsed;
+
+                // Show login prompt
+                var result = MessageBox.Show(
+                    $"{message}\n\nWould you like to log in with Patreon now?",
+                    "Login Required",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    // Trigger Patreon login
+                    _ = App.Patreon?.StartOAuthFlowAsync();
+                }
+            });
+        }
+
+        private void OnPackRateLimitExceeded(object? sender, (ContentPack Pack, string Message, DateTime ResetTime) e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                // Reset button states
+                if (e.Pack.Id == "basic-bimbo-starter")
+                {
+                    BtnPack1Install.IsEnabled = true;
+                    Pack1Progress.Visibility = Visibility.Collapsed;
+                    var sizeLabel = e.Pack.SizeBytes > 0 ? $" ({e.Pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
+                    BtnPack1Install.Content = $"Install{sizeLabel}";
+                }
+                else if (e.Pack.Id == "enhanced-bimbodoll-video")
+                {
+                    BtnPack2Install.IsEnabled = true;
+                    Pack2Progress.Visibility = Visibility.Collapsed;
+                    var sizeLabel = e.Pack.SizeBytes > 0 ? $" ({e.Pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
+                    BtnPack2Install.Content = $"Install{sizeLabel}";
+                }
+
+                // Calculate time until reset
+                var timeUntilReset = e.ResetTime - DateTime.UtcNow;
+                var hoursText = timeUntilReset.TotalHours > 1
+                    ? $"{(int)timeUntilReset.TotalHours} hours"
+                    : $"{(int)timeUntilReset.TotalMinutes} minutes";
+
+                MessageBox.Show(
+                    $"{e.Message}\n\nYou can download again in approximately {hoursText}.",
+                    "Download Limit Reached",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            });
+        }
+
         private void BtnCreatorDiscord_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                Process.Start(new ProcessStartInfo("https://discord.gg/YVxKpjVR") { UseShellExecute = true });
+                Process.Start(new ProcessStartInfo("https://discord.gg/YxVAMt4qaZ") { UseShellExecute = true });
             }
             catch (Exception ex)
             {
@@ -7725,46 +7821,73 @@ namespace ConditioningControlPanel
             ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
         }
 
+        // Thumbnail cache for pack files (keyed by packId + obfuscatedName)
+        private static readonly Dictionary<string, ImageSource> _packThumbnailCache = new();
+        private static readonly SemaphoreSlim _thumbnailSemaphore = new(4); // Limit concurrent loads
+
         private async Task LoadPackThumbnailAsync(AssetFileItem item, string packId, Services.PackFileEntry file)
         {
             item.IsLoadingThumbnail = true;
             try
             {
-                await Task.Run(() =>
+                // Check cache first
+                var cacheKey = $"{packId}:{file.ObfuscatedName}";
+                if (_packThumbnailCache.TryGetValue(cacheKey, out var cached))
                 {
-                    try
+                    Dispatcher.Invoke(() => item.Thumbnail = cached);
+                    return;
+                }
+
+                // Limit concurrent thumbnail loads (videos are slow, so limit helps)
+                await _thumbnailSemaphore.WaitAsync();
+                try
+                {
+                    // Double-check cache after acquiring semaphore
+                    if (_packThumbnailCache.TryGetValue(cacheKey, out cached))
                     {
-                        // For images, get decrypted thumbnail from pack
-                        if (file.FileType == "image")
+                        Dispatcher.Invoke(() => item.Thumbnail = cached);
+                        return;
+                    }
+
+                    await Task.Run(() =>
+                    {
+                        try
                         {
-                            var thumbnail = App.ContentPacks?.GetPackFileThumbnail(packId, file, 100, 100);
+                            ImageSource? thumbnail = null;
+
+                            if (file.FileType == "image")
+                            {
+                                // For images, get decrypted thumbnail directly
+                                thumbnail = App.ContentPacks?.GetPackFileThumbnail(packId, file, 100, 100);
+                            }
+                            else if (file.FileType == "video")
+                            {
+                                // For videos, decrypt to temp file and get shell thumbnail
+                                var tempPath = App.ContentPacks?.GetPackFileTempPath(packId, file);
+                                if (!string.IsNullOrEmpty(tempPath) && File.Exists(tempPath))
+                                {
+                                    thumbnail = Helpers.ShellThumbnailHelper.GetThumbnail(tempPath, 100, 100);
+                                    // Clean up temp file
+                                    try { File.Delete(tempPath); } catch { }
+                                }
+                            }
+
                             if (thumbnail != null)
                             {
+                                _packThumbnailCache[cacheKey] = thumbnail;
                                 Dispatcher.Invoke(() => item.Thumbnail = thumbnail);
                             }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            // For videos, create temp file and use shell thumbnail
-                            var tempPath = App.ContentPacks?.GetPackFileTempPath(packId, file);
-                            if (!string.IsNullOrEmpty(tempPath) && File.Exists(tempPath))
-                            {
-                                var thumbnail = Helpers.ShellThumbnailHelper.GetThumbnail(tempPath, 100, 100);
-                                if (thumbnail != null)
-                                {
-                                    Dispatcher.Invoke(() => item.Thumbnail = thumbnail);
-                                }
-
-                                // Clean up temp file after thumbnail is loaded
-                                try { File.Delete(tempPath); } catch { }
-                            }
+                            App.Logger?.Debug("Failed to load pack thumbnail: {Error}", ex.Message);
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Debug("Failed to load pack thumbnail: {Error}", ex.Message);
-                    }
-                });
+                    });
+                }
+                finally
+                {
+                    _thumbnailSemaphore.Release();
+                }
             }
             finally
             {
@@ -8146,6 +8269,20 @@ namespace ConditioningControlPanel
 
                         RefreshAssetTree();
                         MessageBox.Show($"'{pack.Name}' installed successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        // Auth error - already handled by OnPackAuthenticationRequired event
+                        App.Logger?.Debug("Pack install cancelled - authentication required");
+                        var sizeLabel = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
+                        btn.Content = $"Install{sizeLabel}";
+                    }
+                    catch (Services.PackRateLimitException)
+                    {
+                        // Rate limit error - already handled by OnPackRateLimitExceeded event
+                        App.Logger?.Debug("Pack install cancelled - rate limit exceeded");
+                        var sizeLabel = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
+                        btn.Content = $"Install{sizeLabel}";
                     }
                     catch (Exception ex)
                     {

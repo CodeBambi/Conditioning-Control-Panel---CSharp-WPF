@@ -1130,7 +1130,17 @@
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" Margin="0,0,6,0" ToolTip="Number of targets to click per video">
-                                            <Grid><TextBlock Text="Targets" FontSize="11" Foreground="#A0A0B0"/><TextBlock x:Name="TxtTargets" Text="3" FontSize="11" Foreground="#E0E0E0" HorizontalAlignment="Right"/></Grid>
+                                            <Grid>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="Targets" FontSize="11" Foreground="#A0A0B0"/>
+                                                    <CheckBox x:Name="ChkRandomizeTargets" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                              ToolTip="Randomize target count (1 to max)"
+                                                              Checked="ChkRandomizeTargets_Changed" Unchecked="ChkRandomizeTargets_Changed">
+                                                        <TextBlock Text="🎲" FontSize="9" ToolTip="Randomize"/>
+                                                    </CheckBox>
+                                                </StackPanel>
+                                                <TextBlock x:Name="TxtTargets" Text="3" FontSize="11" Foreground="#E0E0E0" HorizontalAlignment="Right"/>
+                                            </Grid>
                                             <Slider x:Name="SliderTargets" Minimum="1" Maximum="10" Value="3" Margin="0,3,0,0" ValueChanged="SliderTargets_Changed"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Margin="3,0" ToolTip="Seconds each target stays visible">
@@ -4471,7 +4481,7 @@
                     <!-- Split view: TreeView on left, Thumbnails on right -->
                     <Grid Grid.Row="2">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="220"/>
+                            <ColumnDefinition Width="280"/>
                             <ColumnDefinition Width="5"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
@@ -4544,13 +4554,14 @@
                                                         <!-- Thumbnail image -->
                                                         <Border Grid.Row="0" CornerRadius="6,6,0,0" ClipToBounds="True" Background="#1A1A2E">
                                                             <Grid>
+                                                                <!-- Video placeholder icon (shows when IsVideo and no thumbnail) -->
+                                                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                            Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                                                    <TextBlock Text="🎬" FontSize="32" HorizontalAlignment="Center"/>
+                                                                    <TextBlock Text="VIDEO" FontSize="9" Foreground="#888" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                                                </StackPanel>
+                                                                <!-- Image thumbnail (for images, or video if we had one) -->
                                                                 <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
-                                                                <!-- Video badge (small corner indicator) -->
-                                                                <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                                                        Background="#80000000" CornerRadius="4,0,0,0" Padding="4,2"
-                                                                        Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
-                                                                    <TextBlock Text="▶" FontSize="10" Foreground="White"/>
-                                                                </Border>
                                                                 <!-- Loading indicator -->
                                                                 <TextBlock Text="⏳" FontSize="14"
                                                                            HorizontalAlignment="Center" VerticalAlignment="Center"
