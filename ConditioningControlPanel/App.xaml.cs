@@ -584,31 +584,66 @@ namespace ConditioningControlPanel
                 Logger?.Information("Showing update notification dialog for version {Version}", updateInfo.Version);
                 IsUpdateDialogActive = true;
 
+                // Check if this is a major update requiring fresh install
+                var requiresFreshInstall = Update?.RequiresFreshInstall == true;
+                Logger?.Information("Update requires fresh install: {RequiresFreshInstall}", requiresFreshInstall);
+
                 // Ensure owner window is active and in foreground
                 owner.Activate();
                 owner.Focus();
 
-                var dialog = new UpdateNotificationDialog(updateInfo)
-                {
-                    Owner = owner,
-                    Topmost = true,
-                    WindowStartupLocation = WindowStartupLocation.CenterOwner
-                };
+                bool installRequested;
 
-                // Activate dialog when it's loaded to ensure it's visible
-                dialog.Loaded += (s, e) =>
+                if (requiresFreshInstall)
                 {
-                    dialog.Activate();
-                    dialog.Focus();
-                };
+                    // Show special warning for fresh install updates
+                    var result = MessageBox.Show(
+                        owner,
+                        $"Version {updateInfo.Version} is a major update that requires a fresh installation.\n\n" +
+                        "What this means:\n" +
+                        "• The installer will run and let you choose your install location\n" +
+                        "• Your assets folder (images, videos) will NOT be touched\n" +
+                        "• Your settings and progress will be preserved\n\n" +
+                        "The app will close and the installer will start automatically.\n\n" +
+                        "Would you like to update now?",
+                        "Major Update Available",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Information);
 
-                var installRequested = dialog.ShowDialog() == true && dialog.InstallRequested;
+                    installRequested = result == MessageBoxResult.Yes;
+                }
+                else
+                {
+                    var dialog = new UpdateNotificationDialog(updateInfo)
+                    {
+                        Owner = owner,
+                        Topmost = true,
+                        WindowStartupLocation = WindowStartupLocation.CenterOwner
+                    };
+
+                    // Activate dialog when it's loaded to ensure it's visible
+                    dialog.Loaded += (s, e) =>
+                    {
+                        dialog.Activate();
+                        dialog.Focus();
+                    };
+
+                    installRequested = dialog.ShowDialog() == true && dialog.InstallRequested;
+                }
+
                 Logger?.Information("Update dialog closed, install requested: {InstallRequested}", installRequested);
 
                 if (installRequested)
                 {
                     // Keep flag active during download
-                    DownloadAndInstallUpdateAsync(owner);
+                    if (requiresFreshInstall)
+                    {
+                        DownloadAndRunInstallerAsync(owner);
+                    }
+                    else
+                    {
+                        DownloadAndInstallUpdateAsync(owner);
+                    }
                 }
                 else
                 {
@@ -619,6 +654,90 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 Logger?.Error(ex, "Error showing update notification dialog");
+                IsUpdateDialogActive = false;
+            }
+        }
+
+        /// <summary>
+        /// Download the installer and run it for fresh install updates (5.1+)
+        /// </summary>
+        private async void DownloadAndRunInstallerAsync(Window owner)
+        {
+            UpdateProgressDialog? progressDialog = null;
+            EventHandler<int>? progressHandler = null;
+
+            try
+            {
+                Logger?.Information("Starting fresh install update - downloading installer...");
+
+                progressDialog = new UpdateProgressDialog();
+                progressDialog.Topmost = true;
+                progressDialog.Show();
+
+                await Task.Delay(100);
+
+                progressHandler = (s, progress) =>
+                {
+                    try
+                    {
+                        progressDialog?.Dispatcher.BeginInvoke(() =>
+                        {
+                            if (progressDialog.IsVisible)
+                            {
+                                progressDialog.SetProgress(progress);
+                            }
+                        });
+                    }
+                    catch { }
+                };
+
+                Update.DownloadProgressChanged += progressHandler;
+
+                var installerPath = await Update.DownloadInstallerAsync();
+
+                progressDialog.Close();
+                progressDialog = null;
+
+                if (string.IsNullOrEmpty(installerPath))
+                {
+                    throw new InvalidOperationException("Failed to download installer");
+                }
+
+                // Final confirmation before running installer
+                var result = MessageBox.Show(
+                    owner,
+                    "Installer downloaded successfully.\n\n" +
+                    "The app will now close and the installer will start.\n" +
+                    "Please follow the installer prompts to complete the update.\n\n" +
+                    "Continue?",
+                    "Ready to Install",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    Update.RunInstallerAndExit(installerPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to download installer for fresh install");
+
+                try { progressDialog?.Close(); } catch { }
+
+                MessageBox.Show(
+                    owner,
+                    $"Failed to download installer: {ex.Message}",
+                    "Update Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (progressHandler != null)
+                {
+                    Update.DownloadProgressChanged -= progressHandler;
+                }
                 IsUpdateDialogActive = false;
             }
         }
@@ -740,29 +859,62 @@ namespace ConditioningControlPanel
                 {
                     IsUpdateDialogActive = true;
 
+                    // Check if this is a major update requiring fresh install
+                    var requiresFreshInstall = Update?.RequiresFreshInstall == true;
+
                     // Ensure owner window is active and in foreground
                     owner.Activate();
                     owner.Focus();
 
-                    var dialog = new UpdateNotificationDialog(updateInfo)
-                    {
-                        Owner = owner,
-                        Topmost = true,
-                        WindowStartupLocation = WindowStartupLocation.CenterOwner
-                    };
+                    bool installRequested;
 
-                    // Activate dialog when it's loaded to ensure it's visible
-                    dialog.Loaded += (s, e) =>
+                    if (requiresFreshInstall)
                     {
-                        dialog.Activate();
-                        dialog.Focus();
-                    };
+                        // Show special warning for fresh install updates
+                        var result = MessageBox.Show(
+                            owner,
+                            $"Version {updateInfo.Version} is a major update that requires a fresh installation.\n\n" +
+                            "What this means:\n" +
+                            "• The installer will run and let you choose your install location\n" +
+                            "• Your assets folder (images, videos) will NOT be touched\n" +
+                            "• Your settings and progress will be preserved\n\n" +
+                            "The app will close and the installer will start automatically.\n\n" +
+                            "Would you like to update now?",
+                            "Major Update Available",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Information);
 
-                    var installRequested = dialog.ShowDialog() == true && dialog.InstallRequested;
+                        installRequested = result == MessageBoxResult.Yes;
+                    }
+                    else
+                    {
+                        var dialog = new UpdateNotificationDialog(updateInfo)
+                        {
+                            Owner = owner,
+                            Topmost = true,
+                            WindowStartupLocation = WindowStartupLocation.CenterOwner
+                        };
+
+                        // Activate dialog when it's loaded to ensure it's visible
+                        dialog.Loaded += (s, e) =>
+                        {
+                            dialog.Activate();
+                            dialog.Focus();
+                        };
+
+                        installRequested = dialog.ShowDialog() == true && dialog.InstallRequested;
+                    }
 
                     if (installRequested)
                     {
-                        ((App)Current).DownloadAndInstallUpdateAsync(owner);
+                        if (requiresFreshInstall)
+                        {
+                            ((App)Current).DownloadAndRunInstallerAsync(owner);
+                        }
+                        else
+                        {
+                            ((App)Current).DownloadAndInstallUpdateAsync(owner);
+                        }
                     }
                     else
                     {

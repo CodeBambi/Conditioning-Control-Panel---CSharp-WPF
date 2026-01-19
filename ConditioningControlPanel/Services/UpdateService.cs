@@ -92,6 +92,30 @@ namespace ConditioningControlPanel.Services
         public bool IsInstalled => _updateManager.IsInstalled;
 
         /// <summary>
+        /// Version threshold that requires a fresh install (major update)
+        /// </summary>
+        private static readonly Version FreshInstallVersion = new Version(5, 1, 0);
+
+        /// <summary>
+        /// Checks if the update requires a fresh install (upgrading from pre-5.1 to 5.1+)
+        /// </summary>
+        public bool RequiresFreshInstall
+        {
+            get
+            {
+                if (_latestUpdate == null || !_latestUpdate.IsNewer)
+                    return false;
+
+                var currentVersion = GetCurrentVersion();
+                if (!Version.TryParse(_latestUpdate.Version, out var newVersion))
+                    return false;
+
+                // Fresh install required when: current < 5.1 AND new >= 5.1
+                return currentVersion < FreshInstallVersion && newVersion >= FreshInstallVersion;
+            }
+        }
+
+        /// <summary>
         /// Gets the install path from registry (set by the installer).
         /// Returns null if not installed via installer or registry key not found.
         /// </summary>
@@ -448,6 +472,161 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("Update will be applied on next restart");
                 _updateManager.ApplyUpdatesAndExit(_velopackUpdateInfo);
             }
+        }
+
+        /// <summary>
+        /// Downloads the Setup.exe installer from GitHub releases for fresh install updates.
+        /// </summary>
+        public async Task<string?> DownloadInstallerAsync(Action<int>? progressCallback = null, CancellationToken ct = default)
+        {
+            if (_latestUpdate == null)
+            {
+                throw new InvalidOperationException("No update available to download");
+            }
+
+            try
+            {
+                IsDownloading = true;
+                App.Logger?.Information("Downloading installer for fresh install, version {Version}...", _latestUpdate.Version);
+
+                using var client = new System.Net.Http.HttpClient();
+                client.DefaultRequestHeaders.Add("User-Agent", "ConditioningControlPanel");
+                client.Timeout = TimeSpan.FromMinutes(10);
+
+                // Get release assets from GitHub API
+                var version = _latestUpdate.Version;
+                var tags = new[] { $"v{version}", version };
+                string? downloadUrl = null;
+                string? assetName = null;
+
+                foreach (var tag in tags)
+                {
+                    try
+                    {
+                        var apiUrl = $"https://api.github.com/repos/{GitHubOwner}/{GitHubRepo}/releases/tags/{tag}";
+                        var response = await client.GetStringAsync(apiUrl);
+
+                        // Find the Setup.exe asset - look for common installer patterns
+                        var patterns = new[] { "Setup.exe", "-win-Setup.exe", "Installer.exe", "-Setup.exe" };
+                        foreach (var pattern in patterns)
+                        {
+                            var assetMatch = System.Text.RegularExpressions.Regex.Match(
+                                response,
+                                $"\"browser_download_url\"\\s*:\\s*\"([^\"]*{System.Text.RegularExpressions.Regex.Escape(pattern)}[^\"]*)\"",
+                                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                            if (assetMatch.Success)
+                            {
+                                downloadUrl = assetMatch.Groups[1].Value;
+                                assetName = Path.GetFileName(new Uri(downloadUrl).LocalPath);
+                                App.Logger?.Information("Found installer asset: {Asset}", assetName);
+                                break;
+                            }
+                        }
+
+                        if (downloadUrl != null) break;
+                    }
+                    catch
+                    {
+                        // Tag not found, try next
+                    }
+                }
+
+                if (string.IsNullOrEmpty(downloadUrl))
+                {
+                    throw new InvalidOperationException($"Could not find Setup.exe installer in GitHub release {version}");
+                }
+
+                // Download to temp directory
+                var tempDir = Path.Combine(Path.GetTempPath(), "ConditioningControlPanel_Update");
+                Directory.CreateDirectory(tempDir);
+                var installerPath = Path.Combine(tempDir, assetName ?? "Setup.exe");
+
+                // Delete old installer if exists
+                if (File.Exists(installerPath))
+                {
+                    File.Delete(installerPath);
+                }
+
+                App.Logger?.Information("Downloading installer from {Url} to {Path}", downloadUrl, installerPath);
+
+                // Download with progress
+                using var downloadResponse = await client.GetAsync(downloadUrl, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, ct);
+                downloadResponse.EnsureSuccessStatusCode();
+
+                var totalBytes = downloadResponse.Content.Headers.ContentLength ?? -1;
+                var downloadedBytes = 0L;
+
+                using var contentStream = await downloadResponse.Content.ReadAsStreamAsync();
+                using var fileStream = new FileStream(installerPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
+
+                var buffer = new byte[8192];
+                int bytesRead;
+                var lastProgress = -1;
+
+                while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, ct)) > 0)
+                {
+                    await fileStream.WriteAsync(buffer, 0, bytesRead, ct);
+                    downloadedBytes += bytesRead;
+
+                    if (totalBytes > 0)
+                    {
+                        var progress = (int)(downloadedBytes * 100 / totalBytes);
+                        if (progress != lastProgress)
+                        {
+                            lastProgress = progress;
+                            progressCallback?.Invoke(progress);
+                            DownloadProgressChanged?.Invoke(this, progress);
+                        }
+                    }
+                }
+
+                App.Logger?.Information("Installer downloaded successfully: {Path} ({Size:F1} MB)",
+                    installerPath, downloadedBytes / (1024.0 * 1024.0));
+
+                return installerPath;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to download installer");
+                UpdateFailed?.Invoke(this, ex);
+                throw;
+            }
+            finally
+            {
+                IsDownloading = false;
+            }
+        }
+
+        /// <summary>
+        /// Runs the downloaded installer and exits the current application.
+        /// The installer will handle the fresh install with folder selection.
+        /// </summary>
+        public void RunInstallerAndExit(string installerPath)
+        {
+            if (!File.Exists(installerPath))
+            {
+                throw new FileNotFoundException("Installer not found", installerPath);
+            }
+
+            App.Logger?.Information("Launching installer for fresh install: {Path}", installerPath);
+
+            // Save settings before exit
+            App.Settings?.Save();
+
+            // Start the installer
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = installerPath,
+                UseShellExecute = true,
+                // Don't pass any arguments - let the user go through normal install flow
+            };
+
+            Process.Start(startInfo);
+
+            // Exit the current application
+            App.Logger?.Information("Exiting application for fresh install...");
+            Application.Current.Shutdown();
         }
 
         /// <summary>
