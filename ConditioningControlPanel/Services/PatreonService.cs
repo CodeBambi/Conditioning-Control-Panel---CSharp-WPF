@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
@@ -30,49 +29,8 @@ namespace ConditioningControlPanel.Services
         private const int CacheHours = 24;
         private const int OAuthTimeoutMinutes = 5;
 
-        // Email whitelist - these users get Tier 1 access even without paying
-        // (must still have a Patreon account for verification)
-        private static readonly HashSet<string> WhitelistedEmails = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "REDACTED@example.com",
-            "REDACTED@example.com",
-            "REDACTED@example.com",
-            "REDACTED@example.com",
-            "REDACTED@example.com",
-            "REDACTED@example.com",
-            "REDACTED@example.com",
-            "REDACTED@example.com", // Ceejay
-            "REDACTED@example.com", // AirheadBambiDoll
-            "REDACTED@example.com", // Ria
-        };
-
-        // Name whitelist - fallback if proxy doesn't return email
-        private static readonly HashSet<string> WhitelistedNames = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "Gino Pippo",
-            "AnyGirl57",
-            "Koalegy",
-            "hose",
-            "leuda",
-            "pyet",
-            "Twinkle The Young Llamacorn",
-            "rdyPreContact",
-            "Ceejay",
-            "ceejay",
-            "CeeJay",
-            "Cee Jay",
-            "cee jay",
-            "Connor West",
-            "connor west",
-            "ConnorWest",
-            "connorwest",
-            "AirheadBambiDoll",
-            "Ria",
-            "wefnetjegne",
-            "Steveo",
-            "Maya",
-            "austin webb",
-        };
+        // Server-side whitelist status (fetched from proxy)
+        private bool _isWhitelisted;
 
         /// <summary>
         /// Fired when the Patreon tier changes
@@ -131,11 +89,9 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Whether the user is whitelisted (gets Tier 1 access regardless of subscription)
-        /// Checks both email and name as fallback
+        /// This is now determined by the server-side whitelist
         /// </summary>
-        public bool IsWhitelisted =>
-            (!string.IsNullOrEmpty(PatronEmail) && WhitelistedEmails.Contains(PatronEmail)) ||
-            (!string.IsNullOrEmpty(PatronName) && WhitelistedNames.Contains(PatronName));
+        public bool IsWhitelisted => _isWhitelisted;
 
         /// <summary>
         /// Whether the user has AI access (Tier 1+ OR whitelisted)
@@ -415,18 +371,14 @@ namespace ConditioningControlPanel.Services
                     var cachedState = _tokenStorage.RetrieveCachedState();
                     if (cachedState != null && !cachedState.IsExpired)
                     {
-                        // Re-check whitelist when loading from cache (whitelist may have been updated)
-                        var cachedWhitelistedByEmail = !string.IsNullOrEmpty(cachedState.PatronEmail) &&
-                            WhitelistedEmails.Contains(cachedState.PatronEmail);
-                        var cachedWhitelistedByName = !string.IsNullOrEmpty(cachedState.PatronName) &&
-                            WhitelistedNames.Contains(cachedState.PatronName);
-                        var cachedUserIsWhitelisted = cachedWhitelistedByEmail || cachedWhitelistedByName;
+                        // Use cached whitelist status from server
+                        _isWhitelisted = cachedState.IsWhitelisted;
 
                         // If whitelisted, ensure they get Level1 access even if cached tier is None
-                        var cachedEffectiveTier = cachedUserIsWhitelisted && cachedState.Tier == PatreonTier.None
+                        var cachedEffectiveTier = cachedState.IsWhitelisted && cachedState.Tier == PatreonTier.None
                             ? PatreonTier.Level1
                             : cachedState.Tier;
-                        var cachedEffectivelyActive = cachedState.IsActive || cachedUserIsWhitelisted;
+                        var cachedEffectivelyActive = cachedState.IsActive || cachedState.IsWhitelisted;
 
                         UpdateTier(cachedEffectiveTier, cachedEffectivelyActive, cachedState.PatronName, cachedState.PatronEmail, cachedState.DisplayName);
                         return CurrentTier;
@@ -497,15 +449,12 @@ namespace ConditioningControlPanel.Services
                     return CurrentTier;
                 }
 
-                // Check if user is whitelisted by name or email BEFORE updating tier
-                var isWhitelistedByEmail = !string.IsNullOrEmpty(subscription.PatronEmail) &&
-                    WhitelistedEmails.Contains(subscription.PatronEmail);
-                var isWhitelistedByName = !string.IsNullOrEmpty(subscription.PatronName) &&
-                    WhitelistedNames.Contains(subscription.PatronName);
-                var userIsWhitelisted = isWhitelistedByEmail || isWhitelistedByName;
+                // Get whitelist status from server response
+                var userIsWhitelisted = subscription.IsWhitelisted;
+                _isWhitelisted = userIsWhitelisted;
 
-                App.Logger?.Debug("Whitelist check: Email={Email}, EmailMatch={EmailMatch}, Name={Name}, NameMatch={NameMatch}, Whitelisted={Whitelisted}",
-                    subscription.PatronEmail, isWhitelistedByEmail, subscription.PatronName, isWhitelistedByName, userIsWhitelisted);
+                App.Logger?.Debug("Server whitelist check: Email={Email}, Name={Name}, Whitelisted={Whitelisted}",
+                    subscription.PatronEmail, subscription.PatronName, userIsWhitelisted);
 
                 // Update state and cache
                 // If active but tier is 0, default to Level1 (proxy may not return tier correctly)
@@ -545,7 +494,8 @@ namespace ConditioningControlPanel.Services
                     CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours),
                     PatronName = subscription.PatronName,
                     PatronEmail = subscription.PatronEmail,
-                    DisplayName = effectiveDisplayName
+                    DisplayName = effectiveDisplayName,
+                    IsWhitelisted = userIsWhitelisted
                 });
 
                 App.Logger?.Information("Patreon subscription validated: Tier={Tier}, ProxyActive={ProxyActive}, EffectiveActive={EffectiveActive}, Name={Name}, Email={Email}, Whitelisted={Whitelisted}",
@@ -790,11 +740,15 @@ namespace ConditioningControlPanel.Services
                 var cachedState = _tokenStorage.RetrieveCachedState();
                 if (cachedState != null && !cachedState.IsExpired && _tokenStorage.HasValidTokens())
                 {
-                    // If active but tier is 0, default to Level1 (proxy may not return tier correctly)
-                    CurrentTier = cachedState.IsActive && cachedState.Tier == PatreonTier.None
+                    // Load whitelist status from cache
+                    _isWhitelisted = cachedState.IsWhitelisted;
+
+                    // If active or whitelisted but tier is 0, default to Level1
+                    var effectivelyActive = cachedState.IsActive || cachedState.IsWhitelisted;
+                    CurrentTier = effectivelyActive && cachedState.Tier == PatreonTier.None
                         ? PatreonTier.Level1
                         : cachedState.Tier;
-                    IsActivePatron = cachedState.IsActive;
+                    IsActivePatron = effectivelyActive;
                     PatronName = cachedState.PatronName;
                     PatronEmail = cachedState.PatronEmail;
                     DisplayName = cachedState.DisplayName;
@@ -824,6 +778,7 @@ namespace ConditioningControlPanel.Services
             _tokenStorage.ClearCachedState(); // Clear cached state including DisplayName
             DisplayName = null; // Explicitly clear DisplayName
             NeedsDisplayNameMigration = false;
+            _isWhitelisted = false; // Clear whitelist status
             UpdateTier(PatreonTier.None, false, null);
             App.Logger?.Information("Patreon logout completed");
         }

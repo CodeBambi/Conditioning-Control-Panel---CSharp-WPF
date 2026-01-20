@@ -25,6 +25,9 @@
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
+        <!-- Global converters -->
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
         <!-- Custom Tooltip Style -->
         <Style TargetType="ToolTip">
             <Setter Property="Background" Value="{StaticResource DarkerBgBrush}"/>
@@ -4232,9 +4235,6 @@
 
         <!-- Assets & Packs Tab -->
         <Grid x:Name="AssetsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
-            <Grid.Resources>
-                <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-            </Grid.Resources>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto" MaxHeight="280"/>

@@ -102,6 +102,13 @@ namespace ConditioningControlPanel.Models
         [JsonPropertyName("display_name")]
         public string? DisplayName { get; set; }
 
+        /// <summary>
+        /// Whether the user is on the server-side whitelist
+        /// </summary>
+        [JsonProperty("is_whitelisted")]
+        [JsonPropertyName("is_whitelisted")]
+        public bool IsWhitelisted { get; set; }
+
         [JsonProperty("error")]
         [JsonPropertyName("error")]
         public string? Error { get; set; }
@@ -135,6 +142,12 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         [JsonProperty("display_name")]
         public string? DisplayName { get; set; }
+
+        /// <summary>
+        /// Whether the user is whitelisted (from server)
+        /// </summary>
+        [JsonProperty("is_whitelisted")]
+        public bool IsWhitelisted { get; set; }
 
         /// <summary>
         /// Check if the cache has expired (older than 24 hours)

@@ -82,8 +82,8 @@ namespace ConditioningControlPanel.Services
             _httpClient = new HttpClient();
             _httpClient.Timeout = TimeSpan.FromMinutes(30); // Allow long downloads for large packs
 
-            // Use hidden folder with dot prefix
-            _packsFolder = Path.Combine(App.UserDataPath, ".packs");
+            // Use hidden folder in user's chosen assets folder (where they want heavy files)
+            _packsFolder = Path.Combine(App.EffectiveAssetsPath, ".packs");
             _manifestCachePath = Path.Combine(_packsFolder, ".manifest_cache.enc");
 
             // Create hidden directory
