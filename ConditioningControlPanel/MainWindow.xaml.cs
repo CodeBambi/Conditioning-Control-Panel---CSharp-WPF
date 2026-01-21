@@ -8463,19 +8463,38 @@ namespace ConditioningControlPanel
         {
             if (sender is CheckBox cb && cb.DataContext is AssetTreeItem folder)
             {
-                // Get the target state from the checkbox (now simple bool, not nullable)
+                // Get the target state from the checkbox
                 bool targetState = folder.IsChecked;
 
-                // Update file items in this folder and subfolders (updates DisabledAssetPaths)
+                // FIRST: Visually update this folder and ALL subfolders immediately
+                // This gives instant feedback to the user
+                SetFolderAndChildrenChecked(folder, targetState);
+
+                // SECOND: Update the source of truth (DisabledAssetPaths)
                 UpdateFolderFilesCheckState(folder, targetState);
 
-                // Recalculate ALL folder check states from the source of truth (DisabledAssetPaths)
-                RecalculateAllFolderCheckStates();
+                // THIRD: Update parent folder states (they may become partially checked)
+                folder.Parent?.UpdateCheckStateFromChildren();
 
                 UpdateAssetCounts();
 
                 // Sync thumbnail checkboxes with current DisabledAssetPaths state
                 RefreshThumbnailCheckboxes();
+            }
+        }
+
+        /// <summary>
+        /// Set IsChecked and CheckedFileCount for a folder and all its children recursively.
+        /// This provides immediate visual feedback when user clicks a folder checkbox.
+        /// </summary>
+        private void SetFolderAndChildrenChecked(AssetTreeItem folder, bool isChecked)
+        {
+            folder.IsChecked = isChecked;
+            folder.CheckedFileCount = isChecked ? folder.FileCount : 0;
+
+            foreach (var child in folder.Children)
+            {
+                SetFolderAndChildrenChecked(child, isChecked);
             }
         }
 

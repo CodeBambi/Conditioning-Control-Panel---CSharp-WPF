@@ -99,12 +99,23 @@ namespace ConditioningControlPanel.Models
         {
             // Calculate total checked files including children
             var totalChecked = GetTotalCheckedFileCount();
-            var totalFiles = GetTotalFileCount();
 
             // Checked if at least some files are enabled
             IsChecked = totalChecked > 0;
+        }
 
-            // Don't propagate to parent - we recalculate the whole tree
+        /// <summary>
+        /// Update this folder's check state based on children's states, then propagate to parent.
+        /// Used when a child folder changes to update the visual state up the tree.
+        /// </summary>
+        public void UpdateCheckStateFromChildren()
+        {
+            // Recalculate based on children
+            var totalChecked = GetTotalCheckedFileCount();
+            IsChecked = totalChecked > 0;
+
+            // Propagate to parent
+            Parent?.UpdateCheckStateFromChildren();
         }
 
         /// <summary>
