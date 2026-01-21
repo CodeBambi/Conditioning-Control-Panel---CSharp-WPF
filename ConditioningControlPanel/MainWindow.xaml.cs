@@ -8425,6 +8425,24 @@ namespace ConditioningControlPanel
                 // Update parent states
                 folder.Parent?.UpdateCheckState();
                 UpdateAssetCounts();
+
+                // Sync thumbnail checkboxes with current DisabledAssetPaths state
+                RefreshThumbnailCheckboxes();
+            }
+        }
+
+        /// <summary>
+        /// Refresh the IsChecked state of thumbnail items based on DisabledAssetPaths
+        /// </summary>
+        private void RefreshThumbnailCheckboxes()
+        {
+            foreach (var item in _currentFolderFiles)
+            {
+                var isActive = !App.Settings.Current.DisabledAssetPaths.Contains(item.RelativePath);
+                if (item.IsChecked != isActive)
+                {
+                    item.IsChecked = isActive;
+                }
             }
         }
 
@@ -8639,6 +8657,9 @@ namespace ConditioningControlPanel
             // Refresh tree to show new state
             RefreshAssetTree();
             UpdateAssetCounts();
+
+            // Sync thumbnail checkboxes with new preset state
+            RefreshThumbnailCheckboxes();
 
             // Clear caches so services pick up new selection
             App.Flash?.ClearFileCache();
