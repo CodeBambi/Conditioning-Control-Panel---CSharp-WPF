@@ -4438,6 +4438,34 @@
                                   PreviewMouseWheel="PacksScrollViewer_PreviewMouseWheel"
                                   Padding="0,0,0,8"
                                   MaxHeight="340">
+                        <ScrollViewer.Resources>
+                            <!-- Force bigger scrollbar -->
+                            <Style TargetType="ScrollBar">
+                                <Setter Property="Height" Value="14"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ScrollBar">
+                                            <Grid Background="Transparent">
+                                                <Border Background="#403949" CornerRadius="7" Opacity="0.5" Margin="2"/>
+                                                <Track x:Name="PART_Track" IsDirectionReversed="False">
+                                                    <Track.Thumb>
+                                                        <Thumb Background="#FF69B4" Cursor="Hand">
+                                                            <Thumb.Template>
+                                                                <ControlTemplate TargetType="Thumb">
+                                                                    <Border Background="{TemplateBinding Background}"
+                                                                            CornerRadius="6" Margin="2"/>
+                                                                </ControlTemplate>
+                                                            </Thumb.Template>
+                                                        </Thumb>
+                                                    </Track.Thumb>
+                                                </Track>
+                                            </Grid>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ScrollViewer.Resources>
                         <StackPanel Orientation="Horizontal">
                             <!-- Dynamic Pack Cards -->
                             <ItemsControl x:Name="PackCardsItemsControl">
@@ -4672,8 +4700,43 @@
                         <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="6" Padding="4">
                             <TreeView x:Name="AssetTreeView" Background="Transparent" BorderThickness="0"
                                       SelectedItemChanged="AssetTreeView_SelectedItemChanged"
-                                      VirtualizingPanel.IsVirtualizing="True">
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
                                 <TreeView.Resources>
+                                    <!-- Force bigger scrollbars in TreeView -->
+                                    <Style TargetType="ScrollBar">
+                                        <Setter Property="Width" Value="14"/>
+                                        <Setter Property="Height" Value="14"/>
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="ScrollBar">
+                                                    <Grid Background="Transparent">
+                                                        <Border Background="#403949" CornerRadius="7" Opacity="0.5" Margin="2"/>
+                                                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                                            <Track.Thumb>
+                                                                <Thumb Background="#FF69B4" Cursor="Hand">
+                                                                    <Thumb.Template>
+                                                                        <ControlTemplate TargetType="Thumb">
+                                                                            <Border Background="{TemplateBinding Background}"
+                                                                                    CornerRadius="6" Margin="2"/>
+                                                                        </ControlTemplate>
+                                                                    </Thumb.Template>
+                                                                </Thumb>
+                                                            </Track.Thumb>
+                                                        </Track>
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="Orientation" Value="Horizontal">
+                                                <Setter Property="Height" Value="14"/>
+                                                <Setter Property="Width" Value="Auto"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
                                     <Style TargetType="TreeViewItem">
                                         <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
                                         <Setter Property="FontSize" Value="12"/>
