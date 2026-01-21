@@ -489,6 +489,29 @@
             </Setter>
         </Style>
 
+        <!-- Custom TreeView style with bigger scrollbars -->
+        <Style TargetType="TreeView">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TreeView">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ScrollViewer Focusable="False"
+                                          CanContentScroll="False"
+                                          Padding="{TemplateBinding Padding}"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsPresenter/>
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Section Panel Style -->
         <Style x:Key="SectionPanel" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource PanelBgBrush}"/>
