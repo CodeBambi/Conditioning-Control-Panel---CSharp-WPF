@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -95,6 +96,10 @@ namespace ConditioningControlPanel
         private System.Windows.Media.Animation.Storyboard? _marqueeStoryboard;
         private DispatcherTimer? _marqueeRefreshTimer;
         private string _currentMarqueeMessage = "";
+
+        // Content packs
+        private ObservableCollection<ContentPack> _availablePacks = new();
+        private DispatcherTimer? _packPreviewTimer;
 
         public MainWindow()
         {
@@ -554,6 +559,10 @@ namespace ConditioningControlPanel
             ChkDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
             ChkQuickDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
 
+            // Initialize Quick Links login buttons
+            UpdateQuickPatreonUI();
+            UpdateQuickDiscordUI();
+
             // Initialize scrolling marquee banner
             InitializeMarqueeBanner();
         }
@@ -707,6 +716,186 @@ namespace ConditioningControlPanel
             ShowTab("patreon");
         }
 
+        private async void BtnQuickPatreonLogin_Click(object sender, RoutedEventArgs e)
+        {
+            await HandleQuickPatreonLoginAsync();
+        }
+
+        private async Task HandleQuickPatreonLoginAsync()
+        {
+            if (App.Patreon == null) return;
+
+            if (App.Patreon.IsAuthenticated)
+            {
+                // Logout
+                App.Patreon.Logout();
+                UpdateQuickPatreonUI();
+                UpdatePatreonUI();
+            }
+            else
+            {
+                // Start OAuth flow
+                BtnQuickPatreonLogin.IsEnabled = false;
+                BtnQuickPatreonLogin.Content = "⭐ Connecting...";
+
+                try
+                {
+                    await App.Patreon.StartOAuthFlowAsync();
+                    UpdateQuickPatreonUI();
+                    UpdatePatreonUI();
+                }
+                catch (OperationCanceledException)
+                {
+                    // User cancelled - ignore
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Patreon login failed");
+                    MessageBox.Show(
+                        $"Failed to connect to Patreon.\n\n{ex.Message}",
+                        "Connection Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+                finally
+                {
+                    BtnQuickPatreonLogin.IsEnabled = true;
+                    UpdateQuickPatreonUI();
+                }
+            }
+        }
+
+        private void UpdateQuickPatreonUI()
+        {
+            if (App.Patreon?.IsAuthenticated == true)
+            {
+                var name = App.Patreon.DisplayName ?? App.Patreon.PatronName ?? "Connected";
+                BtnQuickPatreonLogin.Content = $"✓ {name}";
+                BtnQuickPatreonLogin.ToolTip = "Click to disconnect Patreon";
+            }
+            else
+            {
+                BtnQuickPatreonLogin.Content = "⭐ Login with Patreon";
+                BtnQuickPatreonLogin.ToolTip = "Login with Patreon for premium features";
+            }
+        }
+
+        private async void BtnQuickDiscordLogin_Click(object sender, RoutedEventArgs e)
+        {
+            await HandleDiscordLoginAsync();
+        }
+
+        private async Task HandleDiscordLoginAsync()
+        {
+            if (App.Discord == null) return;
+
+            if (App.Discord.IsAuthenticated)
+            {
+                // Logout
+                App.Discord.Logout();
+                UpdateQuickDiscordUI();
+            }
+            else
+            {
+                // Start OAuth flow
+                SetDiscordButtonsEnabled(false);
+                SetDiscordButtonsContent("Connecting...");
+
+                try
+                {
+                    await App.Discord.StartOAuthFlowAsync();
+
+                    // Check if this is a first-time login (no display name set)
+                    if (App.Discord.IsFirstLogin)
+                    {
+                        // Prompt user to choose their display name (loop until valid or cancelled)
+                        bool nameSet = false;
+                        while (!nameSet)
+                        {
+                            var dialog = new DisplayNameDialog
+                            {
+                                Owner = this,
+                                Topmost = true
+                            };
+
+                            // Ensure dialog appears on top
+                            dialog.Activated += (s, args) => dialog.Topmost = false;
+
+                            if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.DisplayName))
+                            {
+                                var result = await App.Discord.SetDisplayNameAsync(dialog.DisplayName);
+                                if (result.Success)
+                                {
+                                    nameSet = true;
+                                }
+                                else
+                                {
+                                    // Name taken or error - show message and let user try again
+                                    MessageBox.Show(
+                                        result.Error ?? "This name is already taken. Please choose another.",
+                                        "Name Unavailable",
+                                        MessageBoxButton.OK,
+                                        MessageBoxImage.Warning);
+                                }
+                            }
+                            else
+                            {
+                                // User cancelled
+                                break;
+                            }
+                        }
+                    }
+
+                    UpdateQuickDiscordUI();
+                }
+                catch (OperationCanceledException)
+                {
+                    // User cancelled - ignore
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Discord login failed");
+                    MessageBox.Show(
+                        $"Failed to connect to Discord.\n\n{ex.Message}",
+                        "Connection Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+                finally
+                {
+                    SetDiscordButtonsEnabled(true);
+                    UpdateQuickDiscordUI();
+                }
+            }
+        }
+
+        private void SetDiscordButtonsEnabled(bool enabled)
+        {
+            BtnQuickDiscordLogin.IsEnabled = enabled;
+        }
+
+        private void SetDiscordButtonsContent(string text)
+        {
+            BtnQuickDiscordLogin.Content = $"🎮 {text}";
+        }
+
+        private void UpdateQuickDiscordUI()
+        {
+            if (App.Discord?.IsAuthenticated == true)
+            {
+                BtnQuickDiscordLogin.Content = $"✓ {App.Discord.DisplayName ?? "Connected"}";
+                BtnQuickDiscordLogin.ToolTip = "Click to logout";
+            }
+            else
+            {
+                BtnQuickDiscordLogin.Content = "🎮 Login with Discord";
+                BtnQuickDiscordLogin.ToolTip = "Login with Discord for community features";
+            }
+
+            // Also update the Patreon tab Discord UI
+            UpdateDiscordUI();
+        }
+
         private void BtnDiscord_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -851,7 +1040,7 @@ namespace ConditioningControlPanel
             BtnCompanion.Style = inactiveStyle;
             BtnLeaderboard.Style = inactiveStyle;
             BtnOpenAssets.Style = inactiveStyle;
-            // BtnPatreonExclusives keeps its inline purple style defined in XAML
+            // BtnPatreonExclusives keeps its inline Patreon red style defined in XAML
 
             switch (tab)
             {
@@ -895,7 +1084,7 @@ namespace ConditioningControlPanel
 
                 case "patreon":
                     PatreonTab.Visibility = Visibility.Visible;
-                    BtnPatreonExclusives.Style = activeStyle;
+                    // Note: The main Discord login button isn't a tab button, so no style update needed
                     UpdatePatreonUI();
                     break;
 
@@ -1109,14 +1298,12 @@ namespace ConditioningControlPanel
                     _ => isActivePatron ? "Patron - Thank you for your support!" : "Connected - Subscribe to unlock features"
                 };
                 BtnPatreonLogin.Content = "Logout";
-                BtnQuickPatreonLogin.Content = "🔓 Logout";
             }
             else
             {
                 TxtPatreonStatus.Text = "Not Connected";
                 TxtPatreonTier.Text = "Login to unlock exclusive features";
                 BtnPatreonLogin.Content = "Login with Patreon";
-                BtnQuickPatreonLogin.Content = "🔐 Login with Patreon";
             }
 
             // Update feature lockboxes
@@ -1146,6 +1333,10 @@ namespace ConditioningControlPanel
 
             // Hide "Coming Soon" overlay for Patreon supporters
             HapticsComingSoonOverlay.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
+
+            // Bambi Takeover (Autonomy) lock
+            if (AutonomyLocked != null) AutonomyLocked.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
+            if (AutonomyUnlocked != null) AutonomyUnlocked.Visibility = hasPremiumAccess ? Visibility.Visible : Visibility.Collapsed;
 
             // Update connection status
             if (TxtAiStatus != null)
@@ -1186,8 +1377,6 @@ namespace ConditioningControlPanel
                 // Start OAuth flow
                 BtnPatreonLogin.IsEnabled = false;
                 BtnPatreonLogin.Content = "Connecting...";
-                BtnQuickPatreonLogin.IsEnabled = false;
-                BtnQuickPatreonLogin.Content = "⏳ Connecting...";
 
                 try
                 {
@@ -1273,9 +1462,100 @@ namespace ConditioningControlPanel
                 finally
                 {
                     BtnPatreonLogin.IsEnabled = true;
-                    BtnQuickPatreonLogin.IsEnabled = true;
                     UpdatePatreonUI();
                 }
+            }
+        }
+
+        private async void BtnDiscordLogin_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Discord == null) return;
+
+            if (App.Discord.IsAuthenticated)
+            {
+                // Logout
+                App.Discord.Logout();
+                UpdateDiscordUI();
+            }
+            else
+            {
+                // Start OAuth flow
+                BtnDiscordLogin.IsEnabled = false;
+                BtnDiscordLogin.Content = "Connecting...";
+
+                try
+                {
+                    await App.Discord.StartOAuthFlowAsync();
+                    UpdateDiscordUI();
+                }
+                catch (OperationCanceledException)
+                {
+                    // User cancelled - ignore
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Discord login failed");
+                    MessageBox.Show(
+                        $"Failed to connect to Discord.\n\n{ex.Message}",
+                        "Connection Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+                finally
+                {
+                    BtnDiscordLogin.IsEnabled = true;
+                    UpdateDiscordUI();
+                }
+            }
+        }
+
+        private void UpdateDiscordUI()
+        {
+            if (App.Discord?.IsAuthenticated == true)
+            {
+                TxtDiscordStatus.Text = $"Connected as {App.Discord.DisplayName}";
+                TxtDiscordInfo.Text = $"@{App.Discord.Username}";
+                BtnDiscordLogin.Content = "Logout";
+            }
+            else
+            {
+                TxtDiscordStatus.Text = "Not Connected";
+                TxtDiscordInfo.Text = "Link Discord for community features";
+                BtnDiscordLogin.Content = "Login with Discord";
+            }
+        }
+
+        private void ChkShareAchievements_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.DiscordShareAchievements = ChkShareAchievements.IsChecked == true;
+            }
+        }
+
+        private void ChkShareLevelUps_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.DiscordShareLevelUps = ChkShareLevelUps.IsChecked == true;
+            }
+        }
+
+        private void ChkUseAnonymousName_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.DiscordUseAnonymousName = ChkUseAnonymousName.IsChecked == true;
+            }
+        }
+
+        private void ChkShowLevelInPresence_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.DiscordShowLevelInPresence = ChkShowLevelInPresence.IsChecked == true;
+                // Update presence immediately to reflect change
+                App.DiscordRpc?.UpdateLevel(App.Settings.Current.PlayerLevel);
             }
         }
 
@@ -5415,6 +5695,15 @@ namespace ConditioningControlPanel
             CmbHapticAchievementMode.SelectedIndex = (int)s.Haptics.AchievementMode;
             CmbHapticBouncingTextMode.SelectedIndex = (int)s.Haptics.BouncingTextMode;
 
+            // Discord Sharing Settings
+            ChkShareAchievements.IsChecked = s.DiscordShareAchievements;
+            ChkShareLevelUps.IsChecked = s.DiscordShareLevelUps;
+            ChkUseAnonymousName.IsChecked = s.DiscordUseAnonymousName;
+            ChkShowLevelInPresence.IsChecked = s.DiscordShowLevelInPresence;
+
+            // Update Discord UI (both main tab and Patreon tab)
+            UpdateQuickDiscordUI();
+
             // Update level display
             UpdateLevelDisplay();
 
@@ -7376,7 +7665,6 @@ namespace ConditioningControlPanel
 
         #region Assets & Packs Tab
 
-        private ObservableCollection<ContentPack> _availablePacks = new();
         private ObservableCollection<AssetTreeItem> _assetTree = new();
         private ObservableCollection<AssetFileItem> _currentFolderFiles = new();
         private AssetTreeItem? _selectedFolder;
@@ -7395,31 +7683,92 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var packs = App.ContentPacks?.GetBuiltInPacks() ?? new List<ContentPack>();
+                // Fetch packs from server (with fallback to built-in)
+                var packs = await App.ContentPacks?.GetAvailablePacksAsync() ?? new List<ContentPack>();
 
-                // Initialize Pack 1: Basic Bimbo Starter Pack
-                var pack1 = packs.FirstOrDefault(p => p.Id == "basic-bimbo-starter");
-                if (pack1 != null)
+                // Set static preview images for original packs (always use embedded resources)
+                foreach (var pack in packs)
                 {
-                    BtnPack1Install.Tag = pack1;
-                    UpdatePackCardUI(pack1, BtnPack1Install, Pack1InstalledBadge, Pack1Progress);
+                    if (pack.Id == "basic-bimbo-starter")
+                        pack.PreviewImageUrl = "pack://application:,,,/Resources/pack1.png";
+                    else if (pack.Id == "enhanced-bimbodoll-video")
+                        pack.PreviewImageUrl = "pack://application:,,,/Resources/pack2.png";
                 }
 
-                // Initialize Pack 2: Enhanced Bimbodoll Video Pack
-                var pack2 = packs.FirstOrDefault(p => p.Id == "enhanced-bimbodoll-video");
-                if (pack2 != null)
+                // Update the observable collection
+                _availablePacks.Clear();
+                foreach (var pack in packs)
                 {
-                    BtnPack2Install.Tag = pack2;
-                    UpdatePackCardUI(pack2, BtnPack2Install, Pack2InstalledBadge, Pack2Progress);
+                    _availablePacks.Add(pack);
                 }
+
+                // Bind to ItemsControl
+                PackCardsItemsControl.ItemsSource = _availablePacks;
+
+                // Load preview images for all packs
+                var loadTasks = new List<Task>();
+                foreach (var pack in packs)
+                {
+                    if (pack.IsDownloaded)
+                    {
+                        // Load from local encrypted files for installed packs
+                        loadTasks.Add(Task.Run(() =>
+                        {
+                            try
+                            {
+                                var previewImages = App.ContentPacks?.GetPackPreviewImages(pack.Id, 10, 240, 100);
+                                if (previewImages != null && previewImages.Count > 0)
+                                {
+                                    Dispatcher.Invoke(() =>
+                                    {
+                                        pack.PreviewImages = previewImages;
+                                        pack.CurrentPreviewIndex = 0;
+                                    });
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Debug("Failed to load preview images for {PackId}: {Error}", pack.Id, ex.Message);
+                            }
+                        }));
+                    }
+                    else if (pack.PreviewUrls?.Count > 0)
+                    {
+                        // Load from server URLs for non-installed packs
+                        loadTasks.Add(Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var previewImages = await LoadPreviewImagesFromUrlsAsync(pack.PreviewUrls);
+                                if (previewImages.Count > 0)
+                                {
+                                    Dispatcher.Invoke(() =>
+                                    {
+                                        pack.PreviewImages = previewImages;
+                                        pack.CurrentPreviewIndex = 0;
+                                    });
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Debug("Failed to load preview images from URLs for {PackId}: {Error}", pack.Id, ex.Message);
+                            }
+                        }));
+                    }
+                }
+                await Task.WhenAll(loadTasks);
+
+                // Start preview rotation timer
+                StartPackPreviewRotation();
+
+                // Fetch and update bandwidth usage
+                await UpdateBandwidthDisplayAsync();
 
                 // Subscribe to pack events for progress updates
                 if (App.ContentPacks != null)
                 {
                     App.ContentPacks.PackDownloadProgress -= OnPackDownloadProgress;
                     App.ContentPacks.PackDownloadProgress += OnPackDownloadProgress;
-                    App.ContentPacks.PackInstallStatus -= OnPackInstallStatus;
-                    App.ContentPacks.PackInstallStatus += OnPackInstallStatus;
                     App.ContentPacks.PackDownloadCompleted -= OnPackDownloadCompleted;
                     App.ContentPacks.PackDownloadCompleted += OnPackDownloadCompleted;
                     App.ContentPacks.AuthenticationRequired -= OnPackAuthenticationRequired;
@@ -7432,89 +7781,152 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "Failed to refresh packs");
             }
-
-            await Task.CompletedTask;
         }
 
-        private void UpdatePackCardUI(ContentPack pack, Button installButton, Border installedBadge, ProgressBar progressBar)
+        private async Task UpdateBandwidthDisplayAsync()
         {
-            var sizeLabel = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
-
-            if (pack.IsDownloaded)
+            try
             {
-                installedBadge.Visibility = Visibility.Visible;
-                installButton.Content = "Uninstall";
+                if (App.ContentPacks == null || App.Patreon == null || !App.Patreon.IsAuthenticated)
+                {
+                    BandwidthPanel.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                var status = await App.ContentPacks.GetFullPackStatusAsync();
+                if (status?.Bandwidth == null)
+                {
+                    BandwidthPanel.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                var bandwidth = status.Bandwidth;
+                var usedGB = double.TryParse(bandwidth.UsedGB, out var used) ? used : 0;
+                var limitGB = bandwidth.LimitGB;
+                var percentage = limitGB > 0 ? (usedGB / limitGB) * 100 : 0;
+
+                BandwidthProgressBar.Value = Math.Min(100, percentage);
+                TxtBandwidthUsage.Text = $"{usedGB:F1} / {limitGB:F0} GB";
+
+                // Change color based on usage
+                if (percentage >= 90)
+                    BandwidthProgressBar.Foreground = new SolidColorBrush(Color.FromRgb(0xE7, 0x4C, 0x3C)); // Red
+                else if (percentage >= 70)
+                    BandwidthProgressBar.Foreground = new SolidColorBrush(Color.FromRgb(0xF3, 0x9C, 0x12)); // Orange
+                else
+                    BandwidthProgressBar.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)); // Pink
+
+                // Update label to show if Patreon or free
+                TxtBandwidthLabel.Text = bandwidth.IsPatreon ? "Bandwidth (Patreon):" : "Bandwidth (Free):";
+
+                BandwidthPanel.Visibility = Visibility.Visible;
             }
-            else
+            catch (Exception ex)
             {
-                installedBadge.Visibility = Visibility.Collapsed;
-                installButton.Content = $"Install{sizeLabel}";
+                App.Logger?.Debug("Failed to update bandwidth display: {Error}", ex.Message);
+                BandwidthPanel.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void StartPackPreviewRotation()
+        {
+            // Stop existing timer if running
+            _packPreviewTimer?.Stop();
+
+            // Create timer to rotate preview images every 1 second
+            _packPreviewTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _packPreviewTimer.Tick += (s, e) =>
+            {
+                try
+                {
+                    foreach (var pack in _availablePacks.Where(p => p.HasPreviewImages))
+                    {
+                        pack.AdvancePreviewImage();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Error rotating pack previews: {Error}", ex.Message);
+                }
+            };
+            _packPreviewTimer.Start();
+        }
+
+        private void StopPackPreviewRotation()
+        {
+            _packPreviewTimer?.Stop();
+            _packPreviewTimer = null;
+        }
+
+        private async Task<List<BitmapImage>> LoadPreviewImagesFromUrlsAsync(List<string> urls)
+        {
+            var images = new List<BitmapImage>();
+            using var httpClient = new HttpClient();
+            httpClient.Timeout = TimeSpan.FromSeconds(10);
+
+            foreach (var url in urls)
+            {
+                try
+                {
+                    var bytes = await httpClient.GetByteArrayAsync(url);
+                    var bitmap = new BitmapImage();
+                    using (var stream = new MemoryStream(bytes))
+                    {
+                        bitmap.BeginInit();
+                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmap.StreamSource = stream;
+                        bitmap.EndInit();
+                    }
+                    bitmap.Freeze(); // Required for cross-thread access
+                    images.Add(bitmap);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Failed to load preview image from {Url}: {Error}", url, ex.Message);
+                }
             }
 
-            progressBar.Visibility = pack.IsDownloading ? Visibility.Visible : Visibility.Collapsed;
-            progressBar.Value = pack.DownloadProgress;
+            return images;
         }
 
         private void OnPackDownloadProgress(object? sender, (ContentPack Pack, int Progress) e)
         {
+            // Progress is bound via INotifyPropertyChanged, no manual UI update needed
+            // Just update the pack's download progress property
             Dispatcher.Invoke(() =>
             {
-                var statusText = e.Progress >= 100 ? "Download complete!" : $"Downloading... {e.Progress}%";
-
-                if (e.Pack.Id == "basic-bimbo-starter")
-                {
-                    Pack1Progress.Visibility = Visibility.Visible;
-                    Pack1Progress.Value = e.Progress;
-                    BtnPack1Install.Content = statusText;
-                    BtnPack1Install.IsEnabled = false;
-                }
-                else if (e.Pack.Id == "enhanced-bimbodoll-video")
-                {
-                    Pack2Progress.Visibility = Visibility.Visible;
-                    Pack2Progress.Value = e.Progress;
-                    BtnPack2Install.Content = statusText;
-                    BtnPack2Install.IsEnabled = false;
-                }
-            });
-        }
-
-        private void OnPackInstallStatus(object? sender, (ContentPack Pack, string Status) e)
-        {
-            Dispatcher.Invoke(() =>
-            {
-                if (e.Pack.Id == "basic-bimbo-starter")
-                {
-                    Pack1Progress.Visibility = Visibility.Collapsed; // Hide progress bar during extraction/encryption
-                    BtnPack1Install.Content = e.Status;
-                    BtnPack1Install.IsEnabled = false;
-                }
-                else if (e.Pack.Id == "enhanced-bimbodoll-video")
-                {
-                    Pack2Progress.Visibility = Visibility.Collapsed;
-                    BtnPack2Install.Content = e.Status;
-                    BtnPack2Install.IsEnabled = false;
-                }
+                e.Pack.DownloadProgress = e.Progress;
             });
         }
 
         private void OnPackDownloadCompleted(object? sender, ContentPack pack)
         {
-            Dispatcher.Invoke(() =>
+            Dispatcher.Invoke(async () =>
             {
-                if (pack.Id == "basic-bimbo-starter")
+                // Properties are bound, just ensure state is correct
+                pack.IsDownloaded = true;
+                pack.IsDownloading = false;
+
+                // Load preview images for the newly installed pack
+                try
                 {
-                    Pack1Progress.Visibility = Visibility.Collapsed;
-                    Pack1InstalledBadge.Visibility = Visibility.Visible;
-                    BtnPack1Install.Content = "Uninstall";
-                    BtnPack1Install.IsEnabled = true;
+                    var previewImages = await Task.Run(() =>
+                        App.ContentPacks?.GetPackPreviewImages(pack.Id, 10, 240, 100));
+                    if (previewImages != null && previewImages.Count > 0)
+                    {
+                        pack.PreviewImages = previewImages;
+                        pack.CurrentPreviewIndex = 0;
+                    }
                 }
-                else if (pack.Id == "enhanced-bimbodoll-video")
+                catch (Exception ex)
                 {
-                    Pack2Progress.Visibility = Visibility.Collapsed;
-                    Pack2InstalledBadge.Visibility = Visibility.Visible;
-                    BtnPack2Install.Content = "Uninstall";
-                    BtnPack2Install.IsEnabled = true;
+                    App.Logger?.Debug("Failed to load preview images after install: {Error}", ex.Message);
                 }
+
+                RefreshAssetTree();
             });
         }
 
@@ -7522,12 +7934,6 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
-                // Reset button states
-                BtnPack1Install.IsEnabled = true;
-                BtnPack2Install.IsEnabled = true;
-                Pack1Progress.Visibility = Visibility.Collapsed;
-                Pack2Progress.Visibility = Visibility.Collapsed;
-
                 // Show login prompt
                 var result = MessageBox.Show(
                     $"{message}\n\nWould you like to log in with Patreon now?",
@@ -7547,21 +7953,8 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
-                // Reset button states
-                if (e.Pack.Id == "basic-bimbo-starter")
-                {
-                    BtnPack1Install.IsEnabled = true;
-                    Pack1Progress.Visibility = Visibility.Collapsed;
-                    var sizeLabel = e.Pack.SizeBytes > 0 ? $" ({e.Pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
-                    BtnPack1Install.Content = $"Install{sizeLabel}";
-                }
-                else if (e.Pack.Id == "enhanced-bimbodoll-video")
-                {
-                    BtnPack2Install.IsEnabled = true;
-                    Pack2Progress.Visibility = Visibility.Collapsed;
-                    var sizeLabel = e.Pack.SizeBytes > 0 ? $" ({e.Pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
-                    BtnPack2Install.Content = $"Install{sizeLabel}";
-                }
+                // Reset pack state (bound via INotifyPropertyChanged)
+                e.Pack.IsDownloading = false;
 
                 // Calculate time until reset
                 var timeUntilReset = e.ResetTime - DateTime.UtcNow;
@@ -7586,6 +7979,16 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to open Discord link");
+            }
+        }
+
+        private void PacksScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            // Enable horizontal scrolling with mouse wheel
+            if (sender is ScrollViewer scrollViewer)
+            {
+                scrollViewer.ScrollToHorizontalOffset(scrollViewer.HorizontalOffset - e.Delta);
+                e.Handled = true;
             }
         }
 
@@ -8205,20 +8608,9 @@ namespace ConditioningControlPanel
                         App.ContentPacks?.UninstallPack(pack.Id);
                         pack.IsDownloaded = false;
                         pack.IsActive = false;
+                        pack.PreviewImages.Clear(); // Clear preview images
 
-                        // Update UI to show uninstalled state
-                        var sizeLabel = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
-                        btn.Content = $"Install{sizeLabel}";
-
-                        // Hide installed badge
-                        if (pack.Id == "basic-bimbo-starter")
-                        {
-                            Pack1InstalledBadge.Visibility = Visibility.Collapsed;
-                        }
-                        else if (pack.Id == "enhanced-bimbodoll-video")
-                        {
-                            Pack2InstalledBadge.Visibility = Visibility.Collapsed;
-                        }
+                        // UI updates automatically via data binding
 
                         RefreshAssetTree();
                         MessageBox.Show($"'{pack.Name}' has been uninstalled.", "Uninstalled", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -8242,10 +8634,8 @@ namespace ConditioningControlPanel
                     if (result != MessageBoxResult.Yes)
                         return;
 
-                    // Download and install
+                    // Download and install - UI updates automatically via data binding
                     pack.IsDownloading = true;
-                    btn.IsEnabled = false;
-                    btn.Content = "Installing...";
 
                     try
                     {
@@ -8254,18 +8644,8 @@ namespace ConditioningControlPanel
                         App.ContentPacks.ActivatePack(pack.Id);
                         pack.IsActive = true;
 
-                        // Update UI to show installed state
-                        btn.Content = "Uninstall";
-                        if (pack.Id == "basic-bimbo-starter")
-                        {
-                            Pack1InstalledBadge.Visibility = Visibility.Visible;
-                            Pack1Progress.Visibility = Visibility.Collapsed;
-                        }
-                        else if (pack.Id == "enhanced-bimbodoll-video")
-                        {
-                            Pack2InstalledBadge.Visibility = Visibility.Visible;
-                            Pack2Progress.Visibility = Visibility.Collapsed;
-                        }
+                        // UI updates automatically via data binding
+                        // Preview images are loaded by OnPackDownloadCompleted event handler
 
                         RefreshAssetTree();
                         MessageBox.Show($"'{pack.Name}' installed successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -8274,28 +8654,22 @@ namespace ConditioningControlPanel
                     {
                         // Auth error - already handled by OnPackAuthenticationRequired event
                         App.Logger?.Debug("Pack install cancelled - authentication required");
-                        var sizeLabel = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
-                        btn.Content = $"Install{sizeLabel}";
                     }
                     catch (Services.PackRateLimitException)
                     {
                         // Rate limit error - already handled by OnPackRateLimitExceeded event
                         App.Logger?.Debug("Pack install cancelled - rate limit exceeded");
-                        var sizeLabel = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
-                        btn.Content = $"Install{sizeLabel}";
                     }
                     catch (Exception ex)
                     {
                         App.Logger?.Error(ex, "Failed to install pack: {Name}", pack.Name);
-                        var sizeLabel = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024.0 * 1024.0):F1} GB)" : "";
-                        btn.Content = $"Install{sizeLabel}";
                         MessageBox.Show($"Installation failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                     finally
                     {
+                        // UI updates automatically via data binding
                         pack.IsDownloading = false;
                         pack.DownloadProgress = 0;
-                        btn.IsEnabled = true;
                     }
                 }
             }
@@ -8557,6 +8931,7 @@ namespace ConditioningControlPanel
                 SaveSettings();
                 _schedulerTimer?.Stop();
                 _rampTimer?.Stop();
+                _packPreviewTimer?.Stop();
                 _keyboardHook?.Dispose();
                 _trayIcon?.Dispose();
                 _browser?.Dispose();

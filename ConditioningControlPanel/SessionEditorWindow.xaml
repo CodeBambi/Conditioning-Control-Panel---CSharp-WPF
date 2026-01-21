@@ -9,24 +9,29 @@
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
+        ResizeMode="CanResizeWithGrip"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
         PreviewMouseDown="Window_PreviewMouseDown">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0"
+                      ResizeBorderThickness="8"
+                      GlassFrameThickness="0"
+                      CornerRadius="12"/>
+    </WindowChrome.WindowChrome>
 
     <Window.Resources>
     </Window.Resources>
 
     <Grid>
-        <Grid.LayoutTransform>
-            <ScaleTransform ScaleX="0.935" ScaleY="0.935"/>
-        </Grid.LayoutTransform>
         <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
             <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>  <!-- Title bar -->
                 <RowDefinition Height="Auto"/>  <!-- Session name + stats -->
                 <RowDefinition Height="Auto"/>  <!-- Duration slider -->
-                <RowDefinition Height="Auto"/>  <!-- Timeline -->
-                <RowDefinition Height="*"/>     <!-- Feature icons -->
+                <RowDefinition Height="*" MinHeight="150"/>  <!-- Timeline (expandable) -->
+                <RowDefinition Height="Auto"/>  <!-- Feature icons -->
                 <RowDefinition Height="Auto"/>  <!-- Description + buttons -->
             </Grid.RowDefinitions>
 
@@ -104,8 +109,7 @@
             </Grid>
 
             <!-- Timeline -->
-            <Border Grid.Row="3" Background="#1E1E3A" CornerRadius="8" Margin="30,10,30,10" Padding="15"
-                    MaxHeight="220">
+            <Border Grid.Row="3" Background="#1E1E3A" CornerRadius="8" Margin="30,10,30,10" Padding="15">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>  <!-- Minute markers -->
@@ -229,6 +233,10 @@
             </Grid>
             </Grid>
         </Border>
+
+        <!-- Resize Grip -->
+        <ResizeGrip HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Width="16" Height="16" Margin="0,0,4,4" Cursor="SizeNWSE"/>
 
         <!-- Popup overlay for settings -->
         <Popup x:Name="SettingsPopup" Placement="Mouse" StaysOpen="True"

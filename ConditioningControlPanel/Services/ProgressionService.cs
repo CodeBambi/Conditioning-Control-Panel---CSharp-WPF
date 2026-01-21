@@ -17,6 +17,13 @@ namespace ConditioningControlPanel.Services
 
         public void AddXP(double amount)
         {
+            // Require login for progression tracking (prevents JSON cheating)
+            if (!App.IsLoggedIn)
+            {
+                App.Logger?.Debug("XP not awarded - user not logged in");
+                return;
+            }
+
             var settings = App.Settings.Current;
             var previousXP = settings.PlayerXP;
             settings.PlayerXP += amount;
@@ -33,6 +40,18 @@ namespace ConditioningControlPanel.Services
                 _ = App.Haptics?.LevelUpPatternAsync();
                 _ = App.Haptics?.LevelUpPatternAsync();
                 App.Logger.Information("Level up! Now level {Level}", settings.PlayerLevel);
+
+                // Update Discord Rich Presence level
+                App.DiscordRpc?.UpdateLevel(settings.PlayerLevel);
+
+                // Send Discord webhook for level milestones (10, 25, 50, 100, etc.)
+                if (settings.DiscordShareLevelUps && IsLevelMilestone(settings.PlayerLevel))
+                {
+                    var displayName = settings.DiscordUseAnonymousName
+                        ? (App.Patreon?.DisplayName ?? App.Discord?.DisplayName ?? "Someone")
+                        : (App.Discord?.Username ?? App.Patreon?.DisplayName ?? "Someone");
+                    _ = App.Discord?.SendLevelUpWebhookAsync(settings.PlayerLevel, displayName);
+                }
 
                 // Sync profile to cloud on level up so leaderboard updates
                 _ = App.ProfileSync?.SyncProfileAsync();
@@ -112,6 +131,16 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Converts total accumulated XP back to current level progress.
+        /// This is the inverse of GetTotalXP - used when loading from cloud sync.
+        /// </summary>
+        public double GetCurrentLevelXP(int level, double totalXP)
+        {
+            var cumulativeForPreviousLevels = GetCumulativeXPForLevel(level - 1);
+            return Math.Max(0, totalXP - cumulativeForPreviousLevels);
+        }
+
+        /// <summary>
         /// Gets the cumulative XP required to reach a given level (sum of all previous levels).
         /// Results are memoized for performance.
         /// </summary>
@@ -153,6 +182,16 @@ namespace ConditioningControlPanel.Services
                 "bubbles" => currentLevel >= 20,
                 _ => true
             };
+        }
+
+        /// <summary>
+        /// Check if a level is a milestone worth announcing (10, 25, 50, 100, 125, 150)
+        /// </summary>
+        private static bool IsLevelMilestone(int level)
+        {
+            return level == 10 || level == 25 || level == 50 ||
+                   level == 100 || level == 125 || level == 150 ||
+                   (level > 150 && level % 25 == 0); // Every 25 levels after 150
         }
     }
 }

@@ -12,7 +12,7 @@ namespace ConditioningControlPanel.Services
 {
     /// <summary>
     /// Handles syncing user progression (XP, level, achievements) to the cloud.
-    /// Only syncs for authenticated Patreon users.
+    /// Supports both Patreon and Discord authentication.
     /// </summary>
     public class ProfileSyncService : IDisposable
     {
@@ -25,9 +25,24 @@ namespace ConditioningControlPanel.Services
         private bool _syncEnabled = true;
 
         /// <summary>
-        /// Whether cloud sync is enabled (checks for access token directly)
+        /// Whether using Patreon auth (vs Discord)
         /// </summary>
-        public bool IsSyncEnabled => _syncEnabled && !string.IsNullOrEmpty(App.Patreon?.GetAccessToken());
+        private bool IsPatreonAuth => !string.IsNullOrEmpty(App.Patreon?.GetAccessToken());
+
+        /// <summary>
+        /// Whether using Discord auth
+        /// </summary>
+        private bool IsDiscordAuth => !IsPatreonAuth && !string.IsNullOrEmpty(App.Discord?.GetAccessToken());
+
+        /// <summary>
+        /// Get the appropriate access token (Patreon preferred, then Discord)
+        /// </summary>
+        private string? GetAccessToken() => App.Patreon?.GetAccessToken() ?? App.Discord?.GetAccessToken();
+
+        /// <summary>
+        /// Whether cloud sync is enabled (checks for either Patreon or Discord token)
+        /// </summary>
+        public bool IsSyncEnabled => _syncEnabled && App.IsLoggedIn;
 
         /// <summary>
         /// Last sync time
@@ -97,10 +112,12 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var accessToken = App.Patreon?.GetAccessToken();
+                var accessToken = GetAccessToken();
                 if (string.IsNullOrEmpty(accessToken)) return;
 
-                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/user/heartbeat");
+                // Use appropriate endpoint based on auth type
+                var endpoint = IsPatreonAuth ? "/user/heartbeat" : "/user/heartbeat-discord";
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}{endpoint}");
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
                 request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
 
@@ -138,14 +155,16 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var accessToken = App.Patreon.GetAccessToken();
+                var accessToken = GetAccessToken();
                 if (string.IsNullOrEmpty(accessToken))
                 {
                     App.Logger?.Warning("No access token available for profile sync");
                     return false;
                 }
 
-                var request = new HttpRequestMessage(HttpMethod.Get, $"{ProxyBaseUrl}/user/profile");
+                // Use appropriate endpoint based on auth type
+                var endpoint = IsPatreonAuth ? "/user/profile" : "/user/profile-discord";
+                var request = new HttpRequestMessage(HttpMethod.Get, $"{ProxyBaseUrl}{endpoint}");
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
                 var response = await _httpClient.SendAsync(request);
@@ -209,7 +228,7 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var accessToken = App.Patreon.GetAccessToken();
+                var accessToken = GetAccessToken();
                 if (string.IsNullOrEmpty(accessToken))
                 {
                     App.Logger?.Warning("No access token available for profile sync");
@@ -256,7 +275,9 @@ namespace ConditioningControlPanel.Services
                     LastSession = DateTime.Now.ToString("o")
                 };
 
-                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/user/sync");
+                // Use appropriate endpoint based on auth type
+                var endpoint = IsPatreonAuth ? "/user/sync" : "/user/sync-discord";
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}{endpoint}");
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
                 request.Content = new StringContent(
                     JsonConvert.SerializeObject(syncData),
@@ -300,8 +321,8 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Merge cloud profile data with local progression.
-        /// Takes the higher value for XP/level, union for achievements.
+        /// Load cloud profile data as source of truth (prevents JSON cheating).
+        /// Server values always override local values.
         /// </summary>
         private void MergeCloudProfile(CloudProfile cloudProfile)
         {
@@ -312,16 +333,25 @@ namespace ConditioningControlPanel.Services
 
             bool needsSave = false;
 
-            // Compare by level (primary progression indicator)
-            // Cloud stores total XP, but level is what matters for local state
-            if (cloudProfile.Level > settings.PlayerLevel)
+            // SERVER IS SOURCE OF TRUTH - always use cloud values to prevent cheating
+            // Cloud stores TOTAL XP, but PlayerXP is progress within current level
+            // Convert total XP back to current level progress
+            var currentLevelXp = App.Progression?.GetCurrentLevelXP(cloudProfile.Level, cloudProfile.Xp) ?? 0;
+
+            if (settings.PlayerLevel != cloudProfile.Level || Math.Abs(settings.PlayerXP - currentLevelXp) > 0.01)
             {
-                App.Logger?.Information("Cloud has higher level ({CloudLevel} vs {LocalLevel}), updating local",
-                    cloudProfile.Level, settings.PlayerLevel);
+                if (settings.PlayerLevel > cloudProfile.Level)
+                {
+                    App.Logger?.Warning("Local level ({Local}) higher than cloud ({Cloud}) - resetting to cloud (anti-cheat)",
+                        settings.PlayerLevel, cloudProfile.Level);
+                }
+                App.Logger?.Information("Setting level from cloud: Level {Level}, CurrentXP {CurrentXP} (from total {TotalXP})",
+                    cloudProfile.Level, currentLevelXp, cloudProfile.Xp);
                 settings.PlayerLevel = cloudProfile.Level;
+                settings.PlayerXP = currentLevelXp;
                 needsSave = true;
 
-                // Check for level-based achievements that may have been missed
+                // Check for level-based achievements
                 App.Achievements?.CheckLevelAchievements(cloudProfile.Level);
             }
 
@@ -339,7 +369,7 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Merge stats into achievement progress
+            // Load stats from cloud (SERVER IS SOURCE OF TRUTH - prevents JSON cheating)
             if (cloudProfile.Stats != null && achievements?.Progress != null)
             {
                 var progress = achievements.Progress;
@@ -347,7 +377,7 @@ namespace ConditioningControlPanel.Services
                 if (cloudProfile.Stats.TryGetValue("longest_session_minutes", out var minutes))
                 {
                     var m = Convert.ToDouble(minutes);
-                    if (m > progress.LongestSessionMinutes)
+                    if (progress.LongestSessionMinutes != m)
                     {
                         progress.LongestSessionMinutes = m;
                         needsSave = true;
@@ -356,7 +386,7 @@ namespace ConditioningControlPanel.Services
                 if (cloudProfile.Stats.TryGetValue("total_flashes", out var flashes))
                 {
                     var f = Convert.ToInt32(flashes);
-                    if (f > progress.TotalFlashImages)
+                    if (progress.TotalFlashImages != f)
                     {
                         progress.TotalFlashImages = f;
                         needsSave = true;
@@ -365,7 +395,7 @@ namespace ConditioningControlPanel.Services
                 if (cloudProfile.Stats.TryGetValue("consecutive_days", out var streak))
                 {
                     var st = Convert.ToInt32(streak);
-                    if (st > progress.ConsecutiveDays)
+                    if (progress.ConsecutiveDays != st)
                     {
                         progress.ConsecutiveDays = st;
                         needsSave = true;
@@ -374,7 +404,7 @@ namespace ConditioningControlPanel.Services
                 if (cloudProfile.Stats.TryGetValue("total_bubbles_popped", out var bubbles))
                 {
                     var b = Convert.ToInt32(bubbles);
-                    if (b > progress.TotalBubblesPopped)
+                    if (progress.TotalBubblesPopped != b)
                     {
                         progress.TotalBubblesPopped = b;
                         needsSave = true;

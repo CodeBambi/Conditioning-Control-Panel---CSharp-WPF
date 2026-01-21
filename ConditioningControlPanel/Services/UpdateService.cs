@@ -22,37 +22,22 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.0.2";
+        public const string AppVersion = "5.1.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.1.0 - MAJOR UPDATE
+        public const string CurrentPatchNotes = @"v5.1.1 - BUG FIXES
 
-📦 CONTENT PACKS
-• Download curated content packs from community creators
-• Encrypted pack files protect creators' work
-• One-click install with automatic file organization
-• Pack manager with preview images and creator links
+🛠️ BUG FIXES
+• Fixed session crash caused by BoolToVisibility converter
+• Fixed content packs installing to wrong directory
+• Packs now install to your chosen assets folder
 
-📁 FILE MANAGER
-• New drag & drop interface for managing images and videos
-• Auto-sorting feature organizes files automatically
-• Visual file browser with thumbnails
-• Easy file import from anywhere on your PC
-
-🔄 FRESH INSTALL SYSTEM
-• Major updates now trigger clean installation
-• Choose your own install location
-• Assets and settings automatically preserved
-• Old Velopack installations cleaned up safely
-
-🛠️ STABILITY IMPROVEMENTS
-• Browser data moved to AppData (no more file lock issues)
-• WebView2 processes properly cleaned before updates
-• Old registry entries removed during upgrade
-• Better crash recovery and logging";
+🔒 WHITELIST CHANGES
+• Whitelist now managed server-side for easier updates
+• Whitelisted users get full Patreon features";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

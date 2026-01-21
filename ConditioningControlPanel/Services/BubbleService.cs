@@ -345,14 +345,33 @@ public class BubbleService : IDisposable
 
     public void PopAllBubbles()
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        try
         {
-            foreach (var bubble in _bubbles.ToArray())
+            // Safety check for shutdown scenarios
+            if (Application.Current?.Dispatcher == null)
             {
-                bubble.Pop();
+                // Direct cleanup without dispatcher
+                foreach (var bubble in _bubbles.ToArray())
+                {
+                    bubble.Pop();
+                }
+                _bubbles.Clear();
+                return;
             }
-            _bubbles.Clear();
-        });
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                foreach (var bubble in _bubbles.ToArray())
+                {
+                    bubble.Pop();
+                }
+                _bubbles.Clear();
+            });
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("PopAllBubbles error during shutdown: {Error}", ex.Message);
+        }
     }
 
     public void Dispose()
@@ -631,6 +650,7 @@ internal class Bubble
         if (!_isAlive || _isPopping) return;
         _isPopping = true;
         _onPop?.Invoke(this);
+        Destroy(); // Close the window
     }
 
     private void Destroy()

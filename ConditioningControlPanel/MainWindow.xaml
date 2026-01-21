@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
         Title="Conditioning Control Panel"
         Height="943" Width="1385"
         MinHeight="620" MinWidth="978"
@@ -27,6 +28,7 @@
     <Window.Resources>
         <!-- Global converters -->
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
 
         <!-- Custom Tooltip Style -->
         <Style TargetType="ToolTip">
@@ -738,8 +740,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="🩷 v5.0.2 IS OUT! 🩷"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.0.2 - Thanks to 100+ Patreons!"
+                    <Button x:Name="BtnUpdateAvailable" Content="🩷 v5.1.1 IS OUT! 🩷"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.1.1 - Bug fixes and improvements!"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -866,10 +868,10 @@
                         </StackPanel>
                     </Button>
                     <Button Grid.Column="4" x:Name="BtnPatreonExclusives" Tag="Patreon" Click="BtnPatreonExclusives_Click"
-                            ToolTip="Login with Patreon" Cursor="Hand" Height="28" Margin="2,0">
+                            ToolTip="View Patreon exclusive features" Cursor="Hand" Height="28" Margin="2,0">
                         <Button.Style>
                             <Style TargetType="Button">
-                                <Setter Property="Background" Value="#9B59B6"/>
+                                <Setter Property="Background" Value="#FF424D"/>
                                 <Setter Property="Foreground" Value="White"/>
                                 <Setter Property="FontWeight" Value="Bold"/>
                                 <Setter Property="FontSize" Value="10"/>
@@ -877,14 +879,14 @@
                                     <Setter.Value>
                                         <ControlTemplate TargetType="Button">
                                             <Border x:Name="border" Background="{TemplateBinding Background}"
-                                                    CornerRadius="6" BorderThickness="2" BorderBrush="#8E44AD"
+                                                    CornerRadius="6" BorderThickness="2" BorderBrush="#E8363F"
                                                     Padding="8,4">
                                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="#8E44AD"/>
-                                                    <Setter TargetName="border" Property="BorderBrush" Value="#9B59B6"/>
+                                                    <Setter TargetName="border" Property="Background" Value="#E8363F"/>
+                                                    <Setter TargetName="border" Property="BorderBrush" Value="#FF424D"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -893,8 +895,8 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="💎" FontSize="11" Margin="0,0,4,0"/>
-                            <TextBlock Text="Login with Patreon" FontSize="10"/>
+                            <TextBlock Text="⭐" FontSize="11" Margin="0,0,4,0"/>
+                            <TextBlock Text="Patreon Exclusives" FontSize="10"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnMainHelp" Grid.Column="5" Content="?" Click="BtnMainHelp_Click"
@@ -1065,7 +1067,7 @@
                     </Border>
 
                     <!-- Logo (Clickable for Neon Obsession achievement + Easter Egg) -->
-                    <Border Background="#01000000" Padding="0" Height="280" Margin="0,0,0,8"
+                    <Border Background="#01000000" Padding="0" Height="310" Margin="0,0,0,8"
                             Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                             ToolTip="Click me rapidly! 💗">
                         <Border CornerRadius="20" ClipToBounds="True">
@@ -1533,10 +1535,10 @@
                             <TextBlock Style="{StaticResource SectionHeader}" Text="🔗 Quick Links" FontSize="12" Margin="0,0,0,6"/>
 
                             <!-- Patreon Login Button -->
-                            <Button x:Name="BtnQuickPatreonLogin" Content="🔐 Login with Patreon"
-                                    Click="BtnPatreonLogin_Click"
+                            <Button x:Name="BtnQuickPatreonLogin" Content="⭐ Login with Patreon"
+                                    Click="BtnQuickPatreonLogin_Click"
                                     Padding="8,10" Margin="0,0,0,6"
-                                    ToolTip="Login with Patreon to unlock exclusive features">
+                                    ToolTip="Login with Patreon for premium features">
                                 <Button.Style>
                                     <Style TargetType="Button">
                                         <Setter Property="Background" Value="#FF424D"/>
@@ -1554,10 +1556,10 @@
                                                     </Border>
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter Property="Background" Value="#FF5A65"/>
+                                                            <Setter Property="Background" Value="#E8363F"/>
                                                         </Trigger>
                                                         <Trigger Property="IsPressed" Value="True">
-                                                            <Setter Property="Background" Value="#E03A45"/>
+                                                            <Setter Property="Background" Value="#D42F38"/>
                                                         </Trigger>
                                                     </ControlTemplate.Triggers>
                                                 </ControlTemplate>
@@ -1567,17 +1569,19 @@
                                 </Button.Style>
                             </Button>
 
-                            <!-- Discord Button with Rich Presence checkbox -->
-                            <Grid>
+                            <!-- Discord row: Login + Rich Presence + Server Link -->
+                            <Grid Margin="0,0,0,2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Button x:Name="BtnQuickDiscord" Content="💬 Discord"
-                                        Click="BtnDiscord_Click"
+                                <!-- Discord Login Button -->
+                                <Button x:Name="BtnQuickDiscordLogin" Content="🎮 Login with Discord"
+                                        Click="BtnQuickDiscordLogin_Click"
                                         Padding="8,10"
-                                        ToolTip="Join the Discord community">
+                                        ToolTip="Login with Discord for community features">
                                     <Button.Style>
                                         <Style TargetType="Button">
                                             <Setter Property="Background" Value="#5865F2"/>
@@ -1595,10 +1599,10 @@
                                                         </Border>
                                                         <ControlTemplate.Triggers>
                                                             <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter Property="Background" Value="#6D79F7"/>
+                                                                <Setter Property="Background" Value="#4752C4"/>
                                                             </Trigger>
                                                             <Trigger Property="IsPressed" Value="True">
-                                                                <Setter Property="Background" Value="#4752C4"/>
+                                                                <Setter Property="Background" Value="#3C45A5"/>
                                                             </Trigger>
                                                         </ControlTemplate.Triggers>
                                                     </ControlTemplate>
@@ -1609,13 +1613,39 @@
                                 </Button>
 
                                 <!-- Rich Presence Toggle -->
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0"
+                                <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Center" Margin="6,0,0,0"
                                             ToolTip="Show your activity on Discord">
                                     <CheckBox x:Name="ChkQuickDiscordRichPresence" Style="{StaticResource ToggleStyle}"
                                               Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"/>
+                                    <TextBlock Text="RP" Foreground="#808090" FontSize="8" HorizontalAlignment="Center" Margin="0,1,0,0"/>
                                 </StackPanel>
+
+                                <!-- Discord Server Link -->
+                                <Button Grid.Column="2" Click="BtnDiscord_Click" Margin="4,0,0,0"
+                                        ToolTip="Join the Discord community" Cursor="Hand">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="border" Background="#3A3A5A" CornerRadius="6"
+                                                                Padding="8,6" BorderThickness="1" BorderBrush="#5865F2">
+                                                            <TextBlock Text="💬" FontSize="14" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="border" Property="Background" Value="#5865F2"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
                             </Grid>
-                            <TextBlock Text="Rich Presence" Foreground="#808090" FontSize="9" HorizontalAlignment="Right" Margin="0,2,0,0"/>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -3320,6 +3350,30 @@
                             </Grid>
                         </Border>
 
+                        <!-- Discord Login Status -->
+                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,15"
+                                BorderBrush="#5865F2" BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtDiscordStatus" Text="Not Connected" Foreground="White" FontSize="14" FontWeight="Bold"/>
+                                    <TextBlock x:Name="TxtDiscordInfo" Text="Link Discord for community features" Foreground="#808080" FontSize="12"/>
+                                </StackPanel>
+
+                                <Button x:Name="BtnDiscordLogin" Grid.Column="1"
+                                        Content="Login with Discord"
+                                        Background="#5865F2" Foreground="White"
+                                        BorderThickness="0" Padding="15,8"
+                                        FontWeight="Bold" FontSize="12"
+                                        Cursor="Hand"
+                                        Click="BtnDiscordLogin_Click"/>
+                            </Grid>
+                        </Border>
+
                         <!-- Feature Boxes Side by Side -->
                         <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
@@ -4065,6 +4119,60 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Discord Sharing Settings -->
+                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0"
+                                BorderBrush="#5865F2" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="Discord Community Sharing" Foreground="#5865F2" FontSize="14" FontWeight="Bold"/>
+                                <TextBlock Text="Share achievements and level milestones to the community Discord" Foreground="#808080" FontSize="11" Margin="0,4,0,10"/>
+
+                                <!-- Sharing Options -->
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,10,0">
+                                        <CheckBox x:Name="ChkShareAchievements" Style="{StaticResource ToggleStyle}"
+                                                  Checked="ChkShareAchievements_Changed" Unchecked="ChkShareAchievements_Changed"/>
+                                        <TextBlock Text="Share Achievements" Foreground="White" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <CheckBox x:Name="ChkShareLevelUps" Style="{StaticResource ToggleStyle}"
+                                                  Checked="ChkShareLevelUps_Changed" Unchecked="ChkShareLevelUps_Changed"/>
+                                        <TextBlock Text="Share Level Milestones" Foreground="White" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Privacy Options -->
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,10,0">
+                                        <CheckBox x:Name="ChkUseAnonymousName" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                                  Checked="ChkUseAnonymousName_Changed" Unchecked="ChkUseAnonymousName_Changed"/>
+                                        <TextBlock Text="Use Display Name" Foreground="White" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                   ToolTip="Use your display name instead of Discord username for privacy"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <CheckBox x:Name="ChkShowLevelInPresence" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                                  Checked="ChkShowLevelInPresence_Changed" Unchecked="ChkShowLevelInPresence_Changed"/>
+                                        <TextBlock Text="Show Level in Status" Foreground="White" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                   ToolTip="Show your level in Discord Rich Presence status"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="All sharing is opt-in. Nothing is shared without your consent."
+                                           Foreground="#5865F2" FontSize="10" FontStyle="Italic"/>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Patreon Status -->
                         <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0">
                             <StackPanel>
@@ -4237,7 +4345,7 @@
         <Grid x:Name="AssetsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto" MaxHeight="280"/>
+                <RowDefinition Height="Auto" MaxHeight="410"/>
                 <RowDefinition Height="5"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
@@ -4261,138 +4369,146 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="🎁 Community Content Packs"
-                               Style="{StaticResource SectionHeader}" Margin="0,0,0,10"/>
+                    <!-- Header with bandwidth bar -->
+                    <Grid Grid.Row="0" Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="🎁 Community Content Packs"
+                                   Style="{StaticResource SectionHeader}"/>
+
+                        <!-- Bandwidth usage bar -->
+                        <StackPanel x:Name="BandwidthPanel" Grid.Column="1" Orientation="Horizontal"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    Visibility="Collapsed">
+                            <TextBlock x:Name="TxtBandwidthLabel" Text="Bandwidth:"
+                                       Foreground="#888" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <Border Background="#1A1A2E" CornerRadius="4" Width="150" Height="16" VerticalAlignment="Center">
+                                <Grid>
+                                    <ProgressBar x:Name="BandwidthProgressBar"
+                                                 Minimum="0" Maximum="100" Value="0"
+                                                 Foreground="#FF69B4" Background="Transparent"
+                                                 BorderThickness="0"/>
+                                    <TextBlock x:Name="TxtBandwidthUsage" Text="0 / 10 GB"
+                                               Foreground="White" FontSize="10" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
 
                     <!-- Horizontal scrolling pack cards -->
-                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto"
-                                  VerticalScrollBarVisibility="Disabled">
+                    <ScrollViewer x:Name="PacksScrollViewer" Grid.Row="2"
+                                  HorizontalScrollBarVisibility="Visible"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  PreviewMouseWheel="PacksScrollViewer_PreviewMouseWheel"
+                                  Height="330">
                         <StackPanel Orientation="Horizontal">
-                            <!-- Pack 1: Basic Bimbo Starter Pack -->
-                            <Border x:Name="Pack1Card" Width="240" Margin="0,0,12,0" CornerRadius="8"
-                                    Background="#252542" BorderBrush="#404060" BorderThickness="1">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="100"/>
-                                        <RowDefinition Height="*"/>
-                                    </Grid.RowDefinitions>
+                            <!-- Dynamic Pack Cards -->
+                            <ItemsControl x:Name="PackCardsItemsControl">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Width="240" Height="310" Margin="0,0,12,0" CornerRadius="8"
+                                                Background="#252542" BorderBrush="#404060" BorderThickness="1">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="90"/>
+                                                    <RowDefinition Height="*"/>
+                                                </Grid.RowDefinitions>
 
-                                    <!-- Preview Image -->
-                                    <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True" Background="#1A1A2E">
-                                        <Grid>
-                                            <Image Source="pack://application:,,,/Resources/pack1.png"
-                                                   Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                                            <!-- Size badge -->
-                                            <Border Background="#FF69B4" CornerRadius="4" Padding="8,3"
-                                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
-                                                <TextBlock Text="2.2 GB" FontSize="11" FontWeight="Bold" Foreground="White"/>
-                                            </Border>
-                                            <!-- Installed badge -->
-                                            <Border x:Name="Pack1InstalledBadge" Visibility="Collapsed"
-                                                    Background="#4CAF50" CornerRadius="4" Padding="6,2"
-                                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
-                                                <TextBlock Text="INSTALLED" FontSize="8" FontWeight="Bold" Foreground="White"/>
-                                            </Border>
-                                        </Grid>
-                                    </Border>
+                                                <!-- Preview Image (rotating for installed packs, static otherwise) -->
+                                                <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True" Background="#1A1A2E">
+                                                    <Grid>
+                                                        <!-- Rotating preview image from pack content (for installed packs with loaded previews) -->
+                                                        <Image Source="{Binding CurrentPreviewImage}"
+                                                               Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"
+                                                               Visibility="{Binding HasPreviewImages, Converter={StaticResource BoolToVisibility}}"/>
+                                                        <!-- Static preview image from URL (fallback when no dynamic previews) -->
+                                                        <Image Source="{Binding PreviewImageUrl, TargetNullValue={x:Null}}"
+                                                               Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"
+                                                               Visibility="{Binding HasPreviewImages, Converter={StaticResource InverseBoolToVisibility}}"/>
+                                                        <!-- "No Preview" text shows only when no dynamic or static preview exists -->
+                                                        <TextBlock Text="No Preview" FontSize="14" Foreground="#666"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                   Visibility="{Binding HasAnyPreview, Converter={StaticResource InverseBoolToVisibility}}"/>
+                                                        <!-- Size badge -->
+                                                        <Border Background="#FF69B4" CornerRadius="4" Padding="8,3"
+                                                                HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
+                                                            <TextBlock Text="{Binding SizeDisplay}" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                                                        </Border>
+                                                        <!-- Installed badge -->
+                                                        <Border Background="#4CAF50" CornerRadius="4" Padding="6,2"
+                                                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
+                                                                Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVisibility}}">
+                                                            <TextBlock Text="INSTALLED" FontSize="8" FontWeight="Bold" Foreground="White"/>
+                                                        </Border>
+                                                    </Grid>
+                                                </Border>
 
-                                    <!-- Info section -->
-                                    <StackPanel Grid.Row="1" Margin="10,8,10,10">
-                                        <TextBlock Text="Basic Bimbo Starter Pack" FontWeight="Bold"
-                                                   Foreground="{StaticResource TextLightBrush}" FontSize="12"/>
-                                        <TextBlock Text="Essential images and videos to begin your bimbo journey. Perfect for newcomers!"
-                                                   Foreground="{StaticResource TextMutedBrush}" FontSize="10"
-                                                   TextWrapping="Wrap" MaxHeight="32" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Foreground="#FF69B4" FontSize="9" Margin="0,4,0,6" FontWeight="SemiBold">
-                                            113 images, 7 videos
-                                        </TextBlock>
+                                                <!-- Info section -->
+                                                <Grid Grid.Row="1" Margin="8,4,8,6">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
 
-                                        <!-- Buttons -->
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Row="0" Text="{Binding Name}" FontWeight="Bold"
+                                                               Foreground="{StaticResource TextLightBrush}" FontSize="12"
+                                                               Margin="0,0,0,2"/>
+                                                    <TextBlock Grid.Row="1" Text="{Binding Description}"
+                                                               Foreground="{StaticResource TextMutedBrush}" FontSize="10"
+                                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                                               MaxHeight="70"
+                                                               VerticalAlignment="Top"
+                                                               ToolTip="{Binding Description}"/>
+                                                    <TextBlock Grid.Row="2" Foreground="#FF69B4" FontSize="9" Margin="0,2,0,4" FontWeight="SemiBold">
+                                                        <TextBlock.Text>
+                                                            <MultiBinding StringFormat="{}{0} images, {1} videos">
+                                                                <Binding Path="ImageCount"/>
+                                                                <Binding Path="VideoCount"/>
+                                                            </MultiBinding>
+                                                        </TextBlock.Text>
+                                                    </TextBlock>
 
-                                            <Button x:Name="BtnPack1Install" Grid.Column="0" Content="Install (2.2 GB)"
-                                                    Style="{StaticResource SmallPinkButton}"
-                                                    Padding="8,4" Click="BtnPackDownload_Click"/>
-                                        </Grid>
+                                                    <!-- Action Button -->
+                                                    <Button Grid.Row="3" Content="{Binding DownloadButtonText}"
+                                                            Tag="{Binding}"
+                                                            Style="{StaticResource SmallPinkButton}"
+                                                            Padding="8,4" Click="BtnPackDownload_Click"
+                                                            IsEnabled="{Binding IsNotDownloading}"/>
 
-                                        <!-- Progress bar (hidden by default) -->
-                                        <ProgressBar x:Name="Pack1Progress" Visibility="Collapsed" Height="4"
-                                                     Margin="0,6,0,0" Minimum="0" Maximum="100" Value="0"
-                                                     Foreground="#FF69B4" Background="#1A1A2E"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-
-                            <!-- Pack 2: Enhanced Bimbodoll Video Pack -->
-                            <Border x:Name="Pack2Card" Width="240" Margin="0,0,12,0" CornerRadius="8"
-                                    Background="#252542" BorderBrush="#404060" BorderThickness="1">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="100"/>
-                                        <RowDefinition Height="*"/>
-                                    </Grid.RowDefinitions>
-
-                                    <!-- Preview Image -->
-                                    <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True" Background="#1A1A2E">
-                                        <Grid>
-                                            <Image Source="pack://application:,,,/Resources/pack2.png"
-                                                   Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
-                                            <!-- Size badge - larger file warning -->
-                                            <Border Background="#FF6B35" CornerRadius="4" Padding="8,3"
-                                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
-                                                <TextBlock Text="4.1 GB" FontSize="11" FontWeight="Bold" Foreground="White"/>
-                                            </Border>
-                                            <!-- Installed badge -->
-                                            <Border x:Name="Pack2InstalledBadge" Visibility="Collapsed"
-                                                    Background="#4CAF50" CornerRadius="4" Padding="6,2"
-                                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
-                                                <TextBlock Text="INSTALLED" FontSize="8" FontWeight="Bold" Foreground="White"/>
-                                            </Border>
-                                        </Grid>
-                                    </Border>
-
-                                    <!-- Info section -->
-                                    <StackPanel Grid.Row="1" Margin="10,8,10,10">
-                                        <TextBlock Text="Enhanced Bimbodoll Video Pack" FontWeight="Bold"
-                                                   Foreground="{StaticResource TextLightBrush}" FontSize="12"/>
-                                        <TextBlock Text="Premium video collection for experienced users. High-quality hypno content."
-                                                   Foreground="{StaticResource TextMutedBrush}" FontSize="10"
-                                                   TextWrapping="Wrap" MaxHeight="32" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Foreground="#FF6B35" FontSize="9" Margin="0,4,0,6" FontWeight="SemiBold">
-                                            27 videos
-                                        </TextBlock>
-
-                                        <!-- Buttons -->
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-
-                                            <Button x:Name="BtnPack2Install" Grid.Column="0" Content="Install (4.1 GB)"
-                                                    Style="{StaticResource SmallPinkButton}"
-                                                    Padding="8,4" Click="BtnPackDownload_Click"/>
-                                        </Grid>
-
-                                        <!-- Progress bar (hidden by default) -->
-                                        <ProgressBar x:Name="Pack2Progress" Visibility="Collapsed" Height="4"
-                                                     Margin="0,6,0,0" Minimum="0" Maximum="100" Value="0"
-                                                     Foreground="#FF69B4" Background="#1A1A2E"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
+                                                    <!-- Progress bar -->
+                                                    <ProgressBar Grid.Row="4" Height="4" Margin="0,6,0,0"
+                                                                 Minimum="0" Maximum="100" Value="{Binding DownloadProgress}"
+                                                                 Foreground="#FF69B4" Background="#1A1A2E"
+                                                                 Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVisibility}}"/>
+                                                </Grid>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
 
                             <!-- Creator Card: Join Discord -->
-                            <Border Width="220" Margin="0,0,12,0" CornerRadius="8"
+                            <Border Width="220" Height="310" Margin="0,0,12,0" CornerRadius="8"
                                     Background="#252542" BorderBrush="#5865F2" BorderThickness="2">
                                 <Grid>
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="100"/>
+                                        <RowDefinition Height="90"/>
                                         <RowDefinition Height="*"/>
                                     </Grid.RowDefinitions>
 
@@ -4406,18 +4522,26 @@
                                     </Border>
 
                                     <!-- Info section -->
-                                    <StackPanel Grid.Row="1" Margin="10,8,10,10">
-                                        <TextBlock Text="Create Your Own Pack!" FontWeight="Bold"
-                                                   Foreground="{StaticResource TextLightBrush}" FontSize="12"/>
-                                        <TextBlock Text="Are you a content creator? Join our Discord to submit your pack and reach thousands of users!"
+                                    <Grid Grid.Row="1" Margin="8,4,8,6">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Text="Create Your Own Pack!" FontWeight="Bold"
+                                                   Foreground="{StaticResource TextLightBrush}" FontSize="12"
+                                                   Margin="0,0,0,2"/>
+                                        <TextBlock Grid.Row="1" Text="Are you a content creator? Join our Discord to submit your pack and reach thousands of users!"
                                                    Foreground="{StaticResource TextMutedBrush}" FontSize="10"
-                                                   TextWrapping="Wrap" MaxHeight="32" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Foreground="#5865F2" FontSize="9" Margin="0,4,0,6" FontWeight="SemiBold">
+                                                   TextWrapping="Wrap" MaxHeight="70" VerticalAlignment="Top"/>
+                                        <TextBlock Grid.Row="2" Foreground="#5865F2" FontSize="9" Margin="0,2,0,4" FontWeight="SemiBold">
                                             Get featured in the app
                                         </TextBlock>
 
                                         <!-- Button -->
-                                        <Button Content="Join Discord"
+                                        <Button Grid.Row="3" Content="Join Discord"
                                                 Background="#5865F2" Foreground="White" BorderThickness="0"
                                                 Padding="8,4" FontSize="11" FontWeight="SemiBold" Cursor="Hand"
                                                 Click="BtnCreatorDiscord_Click">
@@ -4436,7 +4560,7 @@
                                                 </Style>
                                             </Button.Style>
                                         </Button>
-                                    </StackPanel>
+                                    </Grid>
                                 </Grid>
                             </Border>
                         </StackPanel>

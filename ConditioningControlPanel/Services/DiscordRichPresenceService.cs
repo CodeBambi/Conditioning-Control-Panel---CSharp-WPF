@@ -21,6 +21,7 @@ public class DiscordRichPresenceService : IDisposable
     private string _currentState = "Idle";
     private string _currentDetails = "In the app";
     private readonly DispatcherTimer _updateTimer;
+    private int _currentLevel = 0;
 
     public bool IsConnected => _client?.IsInitialized == true;
     public bool IsEnabled
@@ -89,6 +90,9 @@ public class DiscordRichPresenceService : IDisposable
             _client.Initialize();
             _sessionStartTime = DateTime.UtcNow;
             _updateTimer.Start();
+
+            // Initialize with current level
+            _currentLevel = App.Settings?.Current?.PlayerLevel ?? 0;
 
             // Give Discord a moment to connect, then set initial presence
             System.Threading.Tasks.Task.Delay(1000).ContinueWith(_ =>
@@ -325,6 +329,15 @@ public class DiscordRichPresenceService : IDisposable
         UpdatePresence();
     }
 
+    /// <summary>
+    /// Update the current level for Rich Presence display
+    /// </summary>
+    public void UpdateLevel(int level)
+    {
+        _currentLevel = level;
+        UpdatePresence();
+    }
+
     private void UpdatePresence()
     {
         if (_client == null || !_client.IsInitialized || !_isEnabled)
@@ -332,10 +345,17 @@ public class DiscordRichPresenceService : IDisposable
 
         try
         {
+            // Build state string, optionally including level
+            var state = _currentState;
+            if (_currentLevel > 0 && App.Settings?.Current?.DiscordShowLevelInPresence == true)
+            {
+                state = $"{_currentState} | Level {_currentLevel}";
+            }
+
             var presence = new RichPresence
             {
                 Details = _currentDetails,
-                State = _currentState,
+                State = state,
                 Timestamps = new Timestamps
                 {
                     Start = _sessionStartTime
@@ -355,7 +375,7 @@ public class DiscordRichPresenceService : IDisposable
             // };
 
             _client.SetPresence(presence);
-            App.Logger?.Debug("Discord presence updated: {Details} - {State}", _currentDetails, _currentState);
+            App.Logger?.Debug("Discord presence updated: {Details} - {State}", _currentDetails, state);
         }
         catch (Exception ex)
         {

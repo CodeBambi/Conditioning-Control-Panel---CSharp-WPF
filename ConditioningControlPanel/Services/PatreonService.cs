@@ -95,14 +95,14 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Whether the user has AI access (Tier 1+ OR whitelisted)
-        /// All features are currently Tier 1
+        /// All features are currently Tier 1. Also grants access during 2-week grace period.
         /// </summary>
-        public bool HasAiAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted;
+        public bool HasAiAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true);
 
         /// <summary>
-        /// Whether the user has any premium feature access (Tier 1+ OR whitelisted)
+        /// Whether the user has any premium feature access (Tier 1+ OR whitelisted OR within 2-week grace period)
         /// </summary>
-        public bool HasPremiumAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted;
+        public bool HasPremiumAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true);
 
         public PatreonService()
         {
@@ -139,6 +139,16 @@ namespace ConditioningControlPanel.Services
                 if (_tokenStorage.HasValidTokens())
                 {
                     await ValidateSubscriptionAsync();
+                }
+                else
+                {
+                    // No valid tokens - ensure cached premium access is cleared
+                    if (App.Settings?.Current != null)
+                    {
+                        App.Settings.Current.PatreonTier = 0;
+                        App.Settings.Current.PatreonPremiumValidUntil = null;
+                        App.Logger?.Debug("No Patreon tokens found, cleared cached premium access");
+                    }
                 }
             }
             catch (Exception ex)
@@ -498,6 +508,17 @@ namespace ConditioningControlPanel.Services
                     IsWhitelisted = userIsWhitelisted
                 });
 
+                // If user has premium access, extend the 2-week grace period
+                // This allows users to log in with Discord and still keep premium features
+                if (newTier >= PatreonTier.Level1 || userIsWhitelisted)
+                {
+                    if (App.Settings?.Current != null)
+                    {
+                        App.Settings.Current.PatreonPremiumValidUntil = DateTime.UtcNow.AddDays(14);
+                        App.Logger?.Information("Extended premium access grace period to {Date}", App.Settings.Current.PatreonPremiumValidUntil);
+                    }
+                }
+
                 App.Logger?.Information("Patreon subscription validated: Tier={Tier}, ProxyActive={ProxyActive}, EffectiveActive={EffectiveActive}, Name={Name}, Email={Email}, Whitelisted={Whitelisted}",
                     newTier, subscription.IsActive, effectivelyActive, subscription.PatronName, subscription.PatronEmail, userIsWhitelisted);
 
@@ -779,8 +800,17 @@ namespace ConditioningControlPanel.Services
             DisplayName = null; // Explicitly clear DisplayName
             NeedsDisplayNameMigration = false;
             _isWhitelisted = false; // Clear whitelist status
+
+            // Clear all cached premium access - user explicitly logged out
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.PatreonPremiumValidUntil = null;
+                App.Settings.Current.PatreonTier = 0; // Clear cached tier
+                App.Settings.Save(); // Force save immediately
+            }
+
             UpdateTier(PatreonTier.None, false, null);
-            App.Logger?.Information("Patreon logout completed");
+            App.Logger?.Information("Patreon logout completed, all premium access cleared");
         }
 
         public void Dispose()

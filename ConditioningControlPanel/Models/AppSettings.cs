@@ -626,6 +626,56 @@ namespace ConditioningControlPanel.Models
             set { _discordRichPresenceEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _discordShowLevelInPresence = true;
+        /// <summary>
+        /// Show current level in Discord Rich Presence status
+        /// </summary>
+        public bool DiscordShowLevelInPresence
+        {
+            get => _discordShowLevelInPresence;
+            set { _discordShowLevelInPresence = value; OnPropertyChanged(); }
+        }
+
+        private string _discordWebhookUrl = "";
+        /// <summary>
+        /// Discord webhook URL for achievement and level announcements
+        /// </summary>
+        public string DiscordWebhookUrl
+        {
+            get => _discordWebhookUrl;
+            set { _discordWebhookUrl = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _discordShareAchievements = false;
+        /// <summary>
+        /// Share achievement unlocks to Discord webhook (opt-in)
+        /// </summary>
+        public bool DiscordShareAchievements
+        {
+            get => _discordShareAchievements;
+            set { _discordShareAchievements = value; OnPropertyChanged(); }
+        }
+
+        private bool _discordShareLevelUps = false;
+        /// <summary>
+        /// Share level up milestones to Discord webhook (opt-in)
+        /// </summary>
+        public bool DiscordShareLevelUps
+        {
+            get => _discordShareLevelUps;
+            set { _discordShareLevelUps = value; OnPropertyChanged(); }
+        }
+
+        private bool _discordUseAnonymousName = true;
+        /// <summary>
+        /// Use display name instead of Discord username for sharing (privacy)
+        /// </summary>
+        public bool DiscordUseAnonymousName
+        {
+            get => _discordUseAnonymousName;
+            set { _discordUseAnonymousName = value; OnPropertyChanged(); }
+        }
+
         private bool _offlineMode = false;
         /// <summary>
         /// Offline mode - disables all network features (updates, AI chat, leaderboard, Patreon verification).
@@ -636,6 +686,26 @@ namespace ConditioningControlPanel.Models
             get => _offlineMode;
             set { _offlineMode = value; OnPropertyChanged(); }
         }
+
+        private DateTime? _patreonPremiumValidUntil = null;
+        /// <summary>
+        /// Cached premium access validity. When a user logs in with Patreon and has premium,
+        /// this timestamp is set to 2 weeks from validation. Premium features remain available
+        /// even if user logs in with Discord, as long as this hasn't expired.
+        /// </summary>
+        [JsonProperty("patreon_premium_valid_until")]
+        public DateTime? PatreonPremiumValidUntil
+        {
+            get => _patreonPremiumValidUntil;
+            set { _patreonPremiumValidUntil = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Check if cached Patreon premium access is still valid (within 2-week window)
+        /// </summary>
+        [Newtonsoft.Json.JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool HasCachedPremiumAccess => _patreonPremiumValidUntil.HasValue && DateTime.UtcNow < _patreonPremiumValidUntil.Value;
 
         #endregion
 

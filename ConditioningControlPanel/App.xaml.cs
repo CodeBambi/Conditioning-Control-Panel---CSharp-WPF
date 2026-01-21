@@ -93,11 +93,23 @@ namespace ConditioningControlPanel
         public static LeaderboardService Leaderboard { get; private set; } = null!;
         public static HapticService Haptics { get; private set; } = null!;
         public static DiscordRichPresenceService DiscordRpc { get; private set; } = null!;
+        public static DiscordService Discord { get; private set; } = null!;
         public static DualMonitorVideoService DualMonitorVideo { get; private set; } = null!;
         public static ScreenMirrorService ScreenMirror { get; private set; } = null!;
         public static AutonomyService Autonomy { get; private set; } = null!;
         public static InteractionQueueService InteractionQueue { get; private set; } = null!;
         public static ContentPackService ContentPacks { get; private set; } = null!;
+
+        /// <summary>
+        /// Whether user is logged in with either Patreon or Discord (required for progression tracking)
+        /// </summary>
+        public static bool IsLoggedIn => (Patreon?.IsAuthenticated == true) || (Discord?.IsAuthenticated == true);
+
+        /// <summary>
+        /// Get the user's display name (from Patreon or Discord)
+        /// </summary>
+        public static string? UserDisplayName =>
+            Patreon?.DisplayName ?? Discord?.CustomDisplayName ?? Discord?.DisplayName;
 
         /// <summary>
         /// Reference to the avatar companion window (set by MainWindow)
@@ -373,6 +385,9 @@ namespace ConditioningControlPanel
                 DiscordRpc.IsEnabled = true;
             }
 
+            // Initialize Discord OAuth service
+            Discord = new DiscordService();
+
             // Initialize dual monitor video service for Hypnotube playback
             DualMonitorVideo = new DualMonitorVideoService();
             ScreenMirror = new ScreenMirrorService();
@@ -386,6 +401,9 @@ namespace ConditioningControlPanel
             // Initialize Patreon (validate subscription in background)
             // Then load cloud profile if authenticated
             _ = InitializePatreonAndSyncAsync();
+
+            // Initialize Discord OAuth (validate session in background)
+            _ = InitializeDiscordAsync();
 
             // Initialize Update service and check for updates in background
             Update = new UpdateService();
@@ -418,7 +436,7 @@ namespace ConditioningControlPanel
         private void OnAchievementUnlocked(object? sender, Models.Achievement achievement)
         {
             Logger.Information("OnAchievementUnlocked handler called for: {Name}", achievement.Name);
-            
+
             // Show achievement popup
             try
             {
@@ -430,9 +448,18 @@ namespace ConditioningControlPanel
             {
                 Logger.Error(ex, "Failed to show achievement popup for: {Name}", achievement.Name);
             }
-            
+
             // Play achievement sound
             PlayAchievementSound();
+
+            // Send Discord webhook if enabled (fire and forget)
+            if (Settings?.Current?.DiscordShareAchievements == true)
+            {
+                var displayName = Settings.Current.DiscordUseAnonymousName
+                    ? (Patreon?.DisplayName ?? Discord?.DisplayName ?? "Someone")
+                    : (Discord?.Username ?? Patreon?.DisplayName ?? "Someone");
+                _ = Discord?.SendAchievementWebhookAsync(achievement, displayName);
+            }
         }
         
         /// <summary>
@@ -469,6 +496,26 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 Logger?.Error(ex, "Failed to initialize Patreon and sync profile");
+            }
+        }
+
+        /// <summary>
+        /// Initialize Discord OAuth and validate session
+        /// </summary>
+        private async Task InitializeDiscordAsync()
+        {
+            try
+            {
+                await Discord.InitializeAsync();
+
+                if (Discord.IsAuthenticated)
+                {
+                    Logger?.Information("Discord authenticated: {Username} ({Id})", Discord.Username, Discord.UserId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to initialize Discord");
             }
         }
 
@@ -1216,6 +1263,7 @@ Application State:
             ProfileSync?.Dispose();
             Leaderboard?.Dispose();
             DiscordRpc?.Dispose();
+            Discord?.Dispose();
             DualMonitorVideo?.Dispose();
             ScreenMirror?.Dispose();
             Autonomy?.Dispose();

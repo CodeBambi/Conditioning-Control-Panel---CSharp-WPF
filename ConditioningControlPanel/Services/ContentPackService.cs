@@ -27,8 +27,8 @@ namespace ConditioningControlPanel.Services
         private Dictionary<string, InstalledPackManifest> _installedManifests = new();
         private bool _disposed;
 
-        // GitHub releases URL for pack downloads
-        private const string PacksManifestUrl = "https://raw.githubusercontent.com/CodeBambi/ccp-packs/main/manifest.json";
+        // Server-controlled packs manifest (allows enable/disable without app update)
+        private const string PacksManifestUrl = "https://codebambi-proxy.vercel.app/packs/manifest";
 
         // Proxy server URL for authenticated downloads
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
@@ -420,6 +420,15 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task<Dictionary<string, PackDownloadStatus>?> GetPackDownloadStatusAsync()
         {
+            var status = await GetFullPackStatusAsync();
+            return status?.Packs;
+        }
+
+        /// <summary>
+        /// Gets the full pack status including bandwidth from the server.
+        /// </summary>
+        public async Task<PackStatusResponse?> GetFullPackStatusAsync()
+        {
             if (App.Patreon == null || !App.Patreon.IsAuthenticated)
             {
                 return null;
@@ -444,8 +453,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 var responseJson = await response.Content.ReadAsStringAsync();
-                var statusResponse = JsonConvert.DeserializeObject<PackStatusResponse>(responseJson);
-                return statusResponse?.Packs;
+                return JsonConvert.DeserializeObject<PackStatusResponse>(responseJson);
             }
             catch (Exception ex)
             {
@@ -757,6 +765,135 @@ namespace ConditioningControlPanel.Services
             return result;
         }
 
+        /// <summary>
+        /// Gets cached preview images for a pack's rotating thumbnail.
+        /// Returns up to 10 random images from the installed pack.
+        /// Caches selection in .preview-cache.json for consistency.
+        /// </summary>
+        public List<BitmapImage> GetPackPreviewImages(string packId, int count = 10, int width = 240, int height = 100)
+        {
+            var result = new List<BitmapImage>();
+
+            if (!IsPackInstalled(packId))
+                return result;
+
+            try
+            {
+                var guidMap = App.Settings.Current.PackGuidMap;
+                if (guidMap == null || !guidMap.TryGetValue(packId, out var guid))
+                    return result;
+
+                var packFolder = Path.Combine(_packsFolder, guid);
+                var cacheFile = Path.Combine(packFolder, ".preview-cache.json");
+
+                List<string>? cachedNames = null;
+
+                // Try to load cached selection
+                if (File.Exists(cacheFile))
+                {
+                    try
+                    {
+                        var cacheJson = File.ReadAllText(cacheFile);
+                        cachedNames = JsonConvert.DeserializeObject<List<string>>(cacheJson);
+                    }
+                    catch
+                    {
+                        // Cache corrupted, will regenerate
+                    }
+                }
+
+                // Get all image files from pack
+                var allImages = GetPackFiles(packId, "image");
+                if (allImages.Count == 0)
+                    return result;
+
+                List<PackFileEntry> selectedFiles = new();
+                bool needsNewSelection = true;
+
+                if (cachedNames != null && cachedNames.Count > 0)
+                {
+                    // Use cached selection (find entries by obfuscated name)
+                    selectedFiles = allImages
+                        .Where(f => cachedNames.Contains(f.ObfuscatedName))
+                        .ToList();
+
+                    // If cache has valid entries, use them
+                    if (selectedFiles.Count > 0)
+                        needsNewSelection = false;
+                }
+
+                if (needsNewSelection)
+                {
+                    // Select random images
+                    var random = new Random();
+                    selectedFiles = allImages
+                        .OrderBy(_ => random.Next())
+                        .Take(count)
+                        .ToList();
+
+                    // Cache the selection
+                    try
+                    {
+                        var namesToCache = selectedFiles.Select(f => f.ObfuscatedName).ToList();
+                        File.WriteAllText(cacheFile, JsonConvert.SerializeObject(namesToCache));
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Failed to cache preview selection: {Error}", ex.Message);
+                    }
+                }
+
+                // Load and decrypt images as thumbnails
+                foreach (var file in selectedFiles)
+                {
+                    try
+                    {
+                        var bitmap = GetPackFileThumbnail(packId, file, width, height);
+                        if (bitmap != null)
+                        {
+                            result.Add(bitmap);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Failed to load preview image {Name}: {Error}", file.OriginalName, ex.Message);
+                    }
+                }
+
+                App.Logger?.Debug("Loaded {Count} preview images for pack {PackId}", result.Count, packId);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to get preview images for pack: {PackId}", packId);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Clears the cached preview image selection for a pack.
+        /// Call this after pack update to refresh previews.
+        /// </summary>
+        public void ClearPreviewCache(string packId)
+        {
+            try
+            {
+                var guidMap = App.Settings.Current.PackGuidMap;
+                if (guidMap == null || !guidMap.TryGetValue(packId, out var guid))
+                    return;
+
+                var cacheFile = Path.Combine(_packsFolder, guid, ".preview-cache.json");
+                if (File.Exists(cacheFile))
+                {
+                    File.Delete(cacheFile);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to clear preview cache: {Error}", ex.Message);
+            }
+        }
+
         private void LoadInstalledManifests()
         {
             foreach (var packId in App.Settings?.Current?.InstalledPackIds ?? new List<string>())
@@ -941,7 +1078,7 @@ namespace ConditioningControlPanel.Services
     /// <summary>
     /// Response from GET /pack/status endpoint.
     /// </summary>
-    internal class PackStatusResponse
+    public class PackStatusResponse
     {
         [JsonProperty("userId")]
         public string? UserId { get; set; }
@@ -951,6 +1088,33 @@ namespace ConditioningControlPanel.Services
 
         [JsonProperty("dailyLimit")]
         public int DailyLimit { get; set; }
+
+        [JsonProperty("bandwidth")]
+        public BandwidthStatus? Bandwidth { get; set; }
+    }
+
+    /// <summary>
+    /// Bandwidth usage status.
+    /// </summary>
+    public class BandwidthStatus
+    {
+        [JsonProperty("usedBytes")]
+        public long UsedBytes { get; set; }
+
+        [JsonProperty("limitBytes")]
+        public long LimitBytes { get; set; }
+
+        [JsonProperty("remainingBytes")]
+        public long RemainingBytes { get; set; }
+
+        [JsonProperty("usedGB")]
+        public string? UsedGB { get; set; }
+
+        [JsonProperty("limitGB")]
+        public double LimitGB { get; set; }
+
+        [JsonProperty("isPatreon")]
+        public bool IsPatreon { get; set; }
     }
 
     /// <summary>

@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Media.Imaging;
+using Newtonsoft.Json;
 
 namespace ConditioningControlPanel.Models
 {
@@ -12,6 +15,45 @@ namespace ConditioningControlPanel.Models
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        // Preview images for rotating thumbnail (cached from installed pack)
+        private List<BitmapImage> _previewImages = new();
+        public List<BitmapImage> PreviewImages
+        {
+            get => _previewImages;
+            set { _previewImages = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasPreviewImages)); OnPropertyChanged(nameof(HasAnyPreview)); }
+        }
+
+        // Current preview image index for rotation
+        private int _currentPreviewIndex;
+        public int CurrentPreviewIndex
+        {
+            get => _currentPreviewIndex;
+            set
+            {
+                _currentPreviewIndex = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(CurrentPreviewImage));
+            }
+        }
+
+        // Currently displayed preview image (bound to UI)
+        public BitmapImage? CurrentPreviewImage =>
+            _previewImages.Count > 0 && _currentPreviewIndex < _previewImages.Count
+                ? _previewImages[_currentPreviewIndex]
+                : null;
+
+        public bool HasPreviewImages => _previewImages.Count > 0;
+        public bool HasAnyPreview => _previewImages.Count > 0 || !string.IsNullOrEmpty(_previewImageUrl);
+
+        /// <summary>
+        /// Advances to the next preview image in rotation.
+        /// </summary>
+        public void AdvancePreviewImage()
+        {
+            if (_previewImages.Count == 0) return;
+            CurrentPreviewIndex = (_currentPreviewIndex + 1) % _previewImages.Count;
+        }
 
         private string _id = "";
         public string Id
@@ -45,7 +87,16 @@ namespace ConditioningControlPanel.Models
         public string PreviewImageUrl
         {
             get => _previewImageUrl;
-            set { _previewImageUrl = value; OnPropertyChanged(); }
+            set { _previewImageUrl = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasAnyPreview)); }
+        }
+
+        // Server-provided preview URLs for rotating thumbnails (before download)
+        private List<string> _previewUrls = new();
+        [JsonProperty("previewUrls")]
+        public List<string> PreviewUrls
+        {
+            get => _previewUrls;
+            set { _previewUrls = value ?? new(); OnPropertyChanged(); }
         }
 
         private string _downloadUrl = "";
@@ -122,14 +173,14 @@ namespace ConditioningControlPanel.Models
         public bool IsDownloading
         {
             get => _isDownloading;
-            set { _isDownloading = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsNotDownloading)); }
+            set { _isDownloading = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsNotDownloading)); OnPropertyChanged(nameof(DownloadButtonText)); }
         }
 
         private double _downloadProgress;
         public double DownloadProgress
         {
             get => _downloadProgress;
-            set { _downloadProgress = value; OnPropertyChanged(); }
+            set { _downloadProgress = value; OnPropertyChanged(); OnPropertyChanged(nameof(DownloadButtonText)); }
         }
 
         private string _localPath = "";
@@ -148,8 +199,14 @@ namespace ConditioningControlPanel.Models
         {
             get
             {
-                if (!IsDownloaded) return "Download";
-                return IsActive ? "Deactivate" : "Activate";
+                if (IsDownloading)
+                {
+                    if (DownloadProgress >= 100)
+                        return "Installing...";
+                    return $"Downloading... {DownloadProgress:F0}%";
+                }
+                if (IsDownloaded) return "Uninstall";
+                return "Download";
             }
         }
 
