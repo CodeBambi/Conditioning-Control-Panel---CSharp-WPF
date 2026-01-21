@@ -404,21 +404,21 @@
 
         <!-- Thumb for controlling ScrollBar -->
         <Style x:Key="SimpleCuteThumb" TargetType="Thumb">
-            <Setter Property="MinWidth" Value="8"/>
-            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="MinWidth" Value="12"/>
+            <Setter Property="MinHeight" Value="30"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
                         <Border x:Name="Bd"
                                 CornerRadius="6"
                                 Background="{StaticResource PinkBrush}"
-                                Opacity="0.9"
+                                Opacity="0.85"
                                 HorizontalAlignment="Stretch"
                                 VerticalAlignment="Stretch"
                                 SnapsToDevicePixels="True"
                                 RenderTransformOrigin="0.5,0.5">
                             <Border.RenderTransform>
-                                <ScaleTransform ScaleX="0.6" ScaleY="1.0"/>
+                                <ScaleTransform ScaleX="0.85" ScaleY="1.0"/>
                             </Border.RenderTransform>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -427,14 +427,14 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource DarkPinkBrush}"/>
                                 <Setter TargetName="Bd" Property="RenderTransform">
                                     <Setter.Value>
-                                        <ScaleTransform ScaleX="0.6" ScaleY="1.0"/>
+                                        <ScaleTransform ScaleX="0.92" ScaleY="1.0"/>
                                     </Setter.Value>
                                 </Setter>
                             </Trigger>
                             <Trigger Property="IsDragging" Value="True">
                                 <Setter TargetName="Bd" Property="RenderTransform">
                                     <Setter.Value>
-                                        <ScaleTransform ScaleX="0.65" ScaleY="1.0"/>
+                                        <ScaleTransform ScaleX="0.95" ScaleY="1.0"/>
                                     </Setter.Value>
                                 </Setter>
                             </Trigger>
@@ -447,7 +447,7 @@
 
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Width" Value="10"/>
+            <Setter Property="Width" Value="14"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
