@@ -8672,6 +8672,81 @@ namespace ConditioningControlPanel
 
             // Refresh the ComboBox
             RefreshAssetPresetsComboBox();
+
+            // Update existing preset counts to match current file counts
+            // (in case files were added/removed since preset was saved)
+            UpdatePresetCountsFromCurrentState();
+        }
+
+        /// <summary>
+        /// Recalculates the enabled counts for all non-default presets based on current files.
+        /// This ensures preset displays are accurate even if files were added/removed.
+        /// </summary>
+        private void UpdatePresetCountsFromCurrentState()
+        {
+            var imageExts = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" };
+            var videoExts = new[] { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+            var basePath = App.EffectiveAssetsPath;
+
+            foreach (var preset in App.Settings.Current.AssetPresets.Where(p => !p.IsDefault))
+            {
+                var enabledImages = 0;
+                var enabledVideos = 0;
+
+                // Count files in images folder that are NOT in this preset's disabled list
+                var imagesPath = Path.Combine(basePath, "images");
+                if (Directory.Exists(imagesPath))
+                {
+                    CountEnabledFilesRecursive(imagesPath, basePath, preset.DisabledAssetPaths, imageExts, ref enabledImages);
+                }
+
+                // Count files in videos folder that are NOT in this preset's disabled list
+                var videosPath = Path.Combine(basePath, "videos");
+                if (Directory.Exists(videosPath))
+                {
+                    CountEnabledFilesRecursive(videosPath, basePath, preset.DisabledAssetPaths, videoExts, ref enabledVideos);
+                }
+
+                // Add pack files (always active)
+                var activePackIds = App.ContentPacks?.GetActivePackIds() ?? new List<string>();
+                foreach (var packId in activePackIds)
+                {
+                    var packImages = App.ContentPacks?.GetPackFiles(packId, "image");
+                    var packVideos = App.ContentPacks?.GetPackFiles(packId, "video");
+                    if (packImages != null) enabledImages += packImages.Count();
+                    if (packVideos != null) enabledVideos += packVideos.Count();
+                }
+
+                // Update preset if counts changed
+                if (preset.EnabledImageCount != enabledImages || preset.EnabledVideoCount != enabledVideos)
+                {
+                    preset.EnabledImageCount = enabledImages;
+                    preset.EnabledVideoCount = enabledVideos;
+                }
+            }
+        }
+
+        private void CountEnabledFilesRecursive(string path, string basePath, HashSet<string>? disabledPaths, string[] validExts, ref int count)
+        {
+            if (!Directory.Exists(path)) return;
+
+            var files = Directory.GetFiles(path);
+            foreach (var file in files)
+            {
+                var ext = Path.GetExtension(file).ToLowerInvariant();
+                if (!validExts.Contains(ext)) continue;
+
+                var relativePath = Path.GetRelativePath(basePath, file);
+                if (disabledPaths == null || !disabledPaths.Contains(relativePath))
+                {
+                    count++;
+                }
+            }
+
+            foreach (var dir in Directory.GetDirectories(path))
+            {
+                CountEnabledFilesRecursive(dir, basePath, disabledPaths, validExts, ref count);
+            }
         }
 
         private void RefreshAssetPresetsComboBox()
@@ -8703,6 +8778,7 @@ namespace ConditioningControlPanel
             if (CmbAssetPresets.SelectedItem is not Models.AssetPreset preset) return;
 
             // Apply preset's disabled paths
+            var presetDisabledCount = preset.DisabledAssetPaths?.Count ?? 0;
             preset.ApplyToSettings();
             App.Settings.Current.CurrentAssetPresetId = preset.Id;
 
@@ -8717,7 +8793,10 @@ namespace ConditioningControlPanel
             App.Flash?.ClearFileCache();
             App.Video?.RefreshVideosPath();
 
-            App.Logger?.Information("Loaded asset preset: {Name}", preset.Name);
+            // Get actual counts after applying
+            var (activeImages, activeVideos) = GetCurrentActiveAssetCounts();
+            App.Logger?.Information("Loaded asset preset: {Name} - Preset had {PresetDisabled} disabled paths, now {ActiveImages} images and {ActiveVideos} videos active",
+                preset.Name, presetDisabledCount, activeImages, activeVideos);
         }
 
         private void BtnSaveAssetPreset_Click(object sender, RoutedEventArgs e)
@@ -8799,6 +8878,7 @@ namespace ConditioningControlPanel
 
             if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(textBox.Text))
             {
+                var disabledCount = App.Settings.Current.DisabledAssetPaths.Count;
                 var preset = Models.AssetPreset.FromCurrentSettings(textBox.Text.Trim(), imageCount, videoCount);
                 App.Settings.Current.AssetPresets.Add(preset);
                 App.Settings.Current.CurrentAssetPresetId = preset.Id;
@@ -8807,7 +8887,14 @@ namespace ConditioningControlPanel
                 RefreshAssetPresetsComboBox();
                 CmbAssetPresets.SelectedValue = preset.Id;
 
-                App.Logger?.Information("Saved asset preset: {Name}", preset.Name);
+                App.Logger?.Information("Saved asset preset: {Name} with {Images} images, {Videos} videos, {Disabled} disabled paths",
+                    preset.Name, imageCount, videoCount, disabledCount);
+
+                MessageBox.Show(
+                    $"Preset '{preset.Name}' saved!\n\n{imageCount} images, {videoCount} videos enabled.\n{disabledCount} assets disabled.",
+                    "Preset Saved",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
         }
 
@@ -8834,6 +8921,7 @@ namespace ConditioningControlPanel
             if (result == MessageBoxResult.Yes)
             {
                 var (imageCount, videoCount) = GetCurrentActiveAssetCounts();
+                var disabledCount = App.Settings.Current.DisabledAssetPaths.Count;
                 preset.UpdateFromCurrentSettings(imageCount, videoCount);
                 App.Settings.Save();
 
@@ -8841,7 +8929,14 @@ namespace ConditioningControlPanel
                 RefreshAssetPresetsComboBox();
                 CmbAssetPresets.SelectedValue = preset.Id;
 
-                App.Logger?.Information("Updated asset preset: {Name}", preset.Name);
+                App.Logger?.Information("Updated asset preset: {Name} with {Images} images, {Videos} videos, {Disabled} disabled paths",
+                    preset.Name, imageCount, videoCount, disabledCount);
+
+                MessageBox.Show(
+                    $"Preset '{preset.Name}' updated!\n\n{imageCount} images, {videoCount} videos enabled.\n{disabledCount} assets disabled.",
+                    "Preset Updated",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
         }
 
