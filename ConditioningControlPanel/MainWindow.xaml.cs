@@ -8189,6 +8189,8 @@ namespace ConditioningControlPanel
                 else if (!string.IsNullOrEmpty(folder.FullPath))
                 {
                     LoadFolderThumbnails(folder.FullPath);
+                    // Recalculate folder's checked state from actual data
+                    RecalculateFolderCheckState(folder);
                 }
                 else
                 {
@@ -8197,6 +8199,54 @@ namespace ConditioningControlPanel
                     TxtThumbnailsEmpty.Text = "Select a subfolder to view files";
                     TxtThumbnailsEmpty.Visibility = Visibility.Visible;
                     ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Recalculate a folder's CheckedFileCount and IsChecked from DisabledAssetPaths
+        /// </summary>
+        private void RecalculateFolderCheckState(AssetTreeItem folder)
+        {
+            if (string.IsNullOrEmpty(folder.FullPath)) return;
+
+            var basePath = App.EffectiveAssetsPath;
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+
+            // Count checked files in this folder
+            if (Directory.Exists(folder.FullPath))
+            {
+                var files = Directory.GetFiles(folder.FullPath)
+                    .Where(f => validExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                    .ToList();
+
+                folder.CheckedFileCount = files.Count(f =>
+                {
+                    var relativePath = Path.GetRelativePath(basePath, f);
+                    return !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
+                });
+            }
+
+            // Recalculate children too
+            foreach (var child in folder.Children)
+            {
+                RecalculateFolderCheckState(child);
+            }
+
+            // Update visual state
+            folder.UpdateCheckState();
+        }
+
+        /// <summary>
+        /// Recalculate all folder check states in the tree from DisabledAssetPaths
+        /// </summary>
+        private void RecalculateAllFolderCheckStates()
+        {
+            foreach (var root in _assetTree)
+            {
+                if (!root.IsPackFolder)
+                {
+                    RecalculateFolderCheckState(root);
                 }
             }
         }
@@ -8416,14 +8466,12 @@ namespace ConditioningControlPanel
                 // Determine the target state - treat null (indeterminate) as false (uncheck all)
                 bool targetState = folder.IsChecked ?? false;
 
-                // Propagate to children
-                folder.SetCheckedRecursive(targetState);
-
-                // Update file items in this folder and subfolders
+                // Update file items in this folder and subfolders (updates DisabledAssetPaths)
                 UpdateFolderFilesCheckState(folder, targetState);
 
-                // Update parent states
-                folder.Parent?.UpdateCheckState();
+                // Recalculate ALL folder check states from the source of truth (DisabledAssetPaths)
+                RecalculateAllFolderCheckStates();
+
                 UpdateAssetCounts();
 
                 // Sync thumbnail checkboxes with current DisabledAssetPaths state
@@ -8522,11 +8570,17 @@ namespace ConditioningControlPanel
 
         private void BtnSelectAllAssets_Click(object sender, RoutedEventArgs e)
         {
+            // Update DisabledAssetPaths (clear all = everything enabled)
             foreach (var folder in _assetTree)
             {
-                folder.SetCheckedRecursive(true);
-                UpdateFolderFilesCheckState(folder, true);
+                if (!folder.IsPackFolder)
+                {
+                    UpdateFolderFilesCheckState(folder, true);
+                }
             }
+
+            // Recalculate all folder check states from DisabledAssetPaths
+            RecalculateAllFolderCheckStates();
 
             // Sync thumbnail checkboxes
             RefreshThumbnailCheckboxes();
@@ -8535,11 +8589,17 @@ namespace ConditioningControlPanel
 
         private void BtnDeselectAllAssets_Click(object sender, RoutedEventArgs e)
         {
+            // Update DisabledAssetPaths (add all = everything disabled)
             foreach (var folder in _assetTree)
             {
-                folder.SetCheckedRecursive(false);
-                UpdateFolderFilesCheckState(folder, false);
+                if (!folder.IsPackFolder)
+                {
+                    UpdateFolderFilesCheckState(folder, false);
+                }
             }
+
+            // Recalculate all folder check states from DisabledAssetPaths
+            RecalculateAllFolderCheckStates();
 
             // Sync thumbnail checkboxes
             RefreshThumbnailCheckboxes();
