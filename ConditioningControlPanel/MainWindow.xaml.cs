@@ -8143,7 +8143,7 @@ namespace ConditioningControlPanel
             {
                 Name = name,
                 FullPath = path,
-                IsChecked = null
+                IsChecked = true // Will be recalculated based on DisabledAssetPaths
             };
 
             // Count files in this folder
@@ -8463,8 +8463,8 @@ namespace ConditioningControlPanel
         {
             if (sender is CheckBox cb && cb.DataContext is AssetTreeItem folder)
             {
-                // Determine the target state - treat null (indeterminate) as false (uncheck all)
-                bool targetState = folder.IsChecked ?? false;
+                // Get the target state from the checkbox (now simple bool, not nullable)
+                bool targetState = folder.IsChecked;
 
                 // Update file items in this folder and subfolders (updates DisabledAssetPaths)
                 UpdateFolderFilesCheckState(folder, targetState);

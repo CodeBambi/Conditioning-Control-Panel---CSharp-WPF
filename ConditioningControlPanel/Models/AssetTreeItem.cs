@@ -28,8 +28,8 @@ namespace ConditioningControlPanel.Models
             set { _fullPath = value; OnPropertyChanged(); }
         }
 
-        private bool? _isChecked = true;
-        public bool? IsChecked
+        private bool _isChecked = true;
+        public bool IsChecked
         {
             get => _isChecked;
             set
@@ -92,49 +92,19 @@ namespace ConditioningControlPanel.Models
         public string? PackFileType { get; set; }
 
         /// <summary>
-        /// Update this folder's check state based on children.
-        /// Returns true if all checked, false if none, null if mixed.
+        /// Update this folder's check state based on file counts.
+        /// Checked if any files are enabled, unchecked if all disabled.
         /// </summary>
         public void UpdateCheckState()
         {
-            if (Children.Count == 0 && FileCount == 0)
-            {
-                IsChecked = true;
-                return;
-            }
+            // Calculate total checked files including children
+            var totalChecked = GetTotalCheckedFileCount();
+            var totalFiles = GetTotalFileCount();
 
-            var childStates = Children.Select(c => c.IsChecked).ToList();
+            // Checked if at least some files are enabled
+            IsChecked = totalChecked > 0;
 
-            // Also consider file counts if any
-            if (FileCount > 0)
-            {
-                if (CheckedFileCount == FileCount)
-                    childStates.Add(true);
-                else if (CheckedFileCount == 0)
-                    childStates.Add(false);
-                else
-                    childStates.Add(null);
-            }
-
-            if (childStates.Count == 0)
-            {
-                IsChecked = true;
-            }
-            else if (childStates.All(s => s == true))
-            {
-                IsChecked = true;
-            }
-            else if (childStates.All(s => s == false))
-            {
-                IsChecked = false;
-            }
-            else
-            {
-                IsChecked = null; // Mixed state
-            }
-
-            // Propagate to parent
-            Parent?.UpdateCheckState();
+            // Don't propagate to parent - we recalculate the whole tree
         }
 
         /// <summary>
