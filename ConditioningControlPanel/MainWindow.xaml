@@ -4616,7 +4616,6 @@
                             <TextBlock Text="Preset:" Foreground="{StaticResource TextMutedBrush}"
                                        FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <ComboBox x:Name="CmbAssetPresets" Width="180" FontSize="11"
-                                      Style="{StaticResource SettingsComboBox}"
                                       DisplayMemberPath="DisplayText"
                                       SelectedValuePath="Id"
                                       SelectionChanged="CmbAssetPresets_SelectionChanged"/>
