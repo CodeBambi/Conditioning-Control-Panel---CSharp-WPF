@@ -8528,11 +8528,8 @@ namespace ConditioningControlPanel
                 UpdateFolderFilesCheckState(folder, true);
             }
 
-            foreach (var file in _currentFolderFiles)
-            {
-                file.IsChecked = true;
-            }
-
+            // Sync thumbnail checkboxes
+            RefreshThumbnailCheckboxes();
             UpdateAssetCounts();
         }
 
@@ -8544,11 +8541,8 @@ namespace ConditioningControlPanel
                 UpdateFolderFilesCheckState(folder, false);
             }
 
-            foreach (var file in _currentFolderFiles)
-            {
-                file.IsChecked = false;
-            }
-
+            // Sync thumbnail checkboxes
+            RefreshThumbnailCheckboxes();
             UpdateAssetCounts();
         }
 
