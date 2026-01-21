@@ -8637,37 +8637,16 @@ namespace ConditioningControlPanel
                 App.Settings.Current.AssetPresets.Insert(0, Models.AssetPreset.CreateDefault());
             }
 
-            // Update default preset counts (it should show all assets)
+            // Update default preset counts (it should show all assets including packs)
             var defaultPreset = App.Settings.Current.AssetPresets.FirstOrDefault(p => p.IsDefault);
             if (defaultPreset != null)
             {
-                // For the default "All Assets" preset, count all files (not just active ones)
+                // Use the same counting logic as asset counts display
                 var totalImages = 0;
                 var totalVideos = 0;
-
-                // Calculate total counts
-                var imageExts = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" };
-                var videoExts = new[] { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
-
-                void CountTotal(IEnumerable<AssetTreeItem> items)
-                {
-                    foreach (var folder in items)
-                    {
-                        if (Directory.Exists(folder.FullPath))
-                        {
-                            var files = Directory.GetFiles(folder.FullPath);
-                            foreach (var file in files)
-                            {
-                                var ext = Path.GetExtension(file).ToLowerInvariant();
-                                if (imageExts.Contains(ext)) totalImages++;
-                                if (videoExts.Contains(ext)) totalVideos++;
-                            }
-                        }
-                        CountTotal(folder.Children);
-                    }
-                }
-
-                CountTotal(_assetTree);
+                var activeImages = 0;
+                var activeVideos = 0;
+                CountAssetsRecursive(_assetTree, ref totalImages, ref totalVideos, ref activeImages, ref activeVideos);
                 defaultPreset.EnabledImageCount = totalImages;
                 defaultPreset.EnabledVideoCount = totalVideos;
             }
@@ -8921,7 +8900,29 @@ namespace ConditioningControlPanel
 
             foreach (var folder in items)
             {
-                if (Directory.Exists(folder.FullPath))
+                // Handle pack virtual folders
+                if (folder.IsPackFolder && !string.IsNullOrEmpty(folder.PackId) && !string.IsNullOrEmpty(folder.PackFileType))
+                {
+                    var packFiles = App.ContentPacks?.GetPackFiles(folder.PackId, folder.PackFileType);
+                    if (packFiles != null)
+                    {
+                        foreach (var packFile in packFiles)
+                        {
+                            if (folder.PackFileType == "image")
+                            {
+                                totalImages++;
+                                activeImages++; // Pack files are always active
+                            }
+                            else if (folder.PackFileType == "video")
+                            {
+                                totalVideos++;
+                                activeVideos++; // Pack files are always active
+                            }
+                        }
+                    }
+                }
+                // Handle local folders
+                else if (Directory.Exists(folder.FullPath))
                 {
                     var files = Directory.GetFiles(folder.FullPath);
                     var basePath = App.EffectiveAssetsPath;
