@@ -740,8 +740,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="🩷 v5.1.1 IS OUT! 🩷"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.1.1 - Bug fixes and improvements!"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.2.0 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.2.0 - UI improvements and bug fixes!"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -1067,7 +1067,7 @@
                     </Border>
 
                     <!-- Logo (Clickable for Neon Obsession achievement + Easter Egg) -->
-                    <Border Background="#01000000" Padding="0" Height="310" Margin="0,0,0,8"
+                    <Border Background="#01000000" Padding="0" Height="260" Margin="0,0,0,8"
                             Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                             ToolTip="Click me rapidly! 💗">
                         <Border CornerRadius="20" ClipToBounds="True">
@@ -1660,7 +1660,7 @@
                 </Border.Effect>
                 <Canvas x:Name="MarqueeCanvas" ClipToBounds="True">
                     <TextBlock x:Name="MarqueeText"
-                               Text="v5.0.2 IS OUT - THANKS TO ALL THE 100+ PATREONS AND TO ALL THE SUPPORTERS/TESTERS 🩷🔒"
+                               Text="v5.0.2 IS OUT - THANKS TO ALL THE 100+ PATREONS AND TO ALL THE SUPPORTERS/TESTERS 💖🔒"
                                FontFamily="Impact" FontSize="28" FontWeight="Bold"
                                Foreground="#FF69B4" Canvas.Top="8">
                         <TextBlock.Effect>
@@ -1680,9 +1680,10 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="430"/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition Width="430" MinWidth="300" MaxWidth="700"/>
                 </Grid.ColumnDefinitions>
-                
+
                 <!-- Left Side: Presets and Sessions -->
                 <Grid Grid.Column="0">
                     <Grid.RowDefinitions>
@@ -2044,9 +2045,13 @@
                     </Grid>
                 </Border>
             </Grid>
-            
+
+                <!-- Splitter -->
+                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                              Background="#404060" Cursor="SizeWE"/>
+
             <!-- Right Side: Details Panel -->
-            <Border Grid.Column="1" Style="{StaticResource SectionPanel}" Margin="5">
+            <Border Grid.Column="2" Style="{StaticResource SectionPanel}" Margin="5">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -4345,7 +4350,7 @@
         <Grid x:Name="AssetsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto" MaxHeight="410"/>
+                <RowDefinition Height="Auto" MaxHeight="340"/>
                 <RowDefinition Height="5"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
@@ -4408,7 +4413,7 @@
                                   HorizontalScrollBarVisibility="Visible"
                                   VerticalScrollBarVisibility="Disabled"
                                   PreviewMouseWheel="PacksScrollViewer_PreviewMouseWheel"
-                                  Height="330">
+                                  Height="280">
                         <StackPanel Orientation="Horizontal">
                             <!-- Dynamic Pack Cards -->
                             <ItemsControl x:Name="PackCardsItemsControl">
@@ -4419,7 +4424,7 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Width="240" Height="310" Margin="0,0,12,0" CornerRadius="8"
+                                        <Border Width="240" Height="300" Margin="0,0,12,0" CornerRadius="8"
                                                 Background="#252542" BorderBrush="#404060" BorderThickness="1">
                                             <Grid>
                                                 <Grid.RowDefinitions>
@@ -4457,7 +4462,7 @@
                                                 </Border>
 
                                                 <!-- Info section -->
-                                                <Grid Grid.Row="1" Margin="8,4,8,6">
+                                                <Grid Grid.Row="1" Margin="8,4,8,4">
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
@@ -4472,7 +4477,7 @@
                                                     <TextBlock Grid.Row="1" Text="{Binding Description}"
                                                                Foreground="{StaticResource TextMutedBrush}" FontSize="10"
                                                                TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
-                                                               MaxHeight="70"
+                                                               MaxHeight="92"
                                                                VerticalAlignment="Top"
                                                                ToolTip="{Binding Description}"/>
                                                     <TextBlock Grid.Row="2" Foreground="#FF69B4" FontSize="9" Margin="0,2,0,4" FontWeight="SemiBold">
@@ -4504,7 +4509,7 @@
                             </ItemsControl>
 
                             <!-- Creator Card: Join Discord -->
-                            <Border Width="220" Height="310" Margin="0,0,12,0" CornerRadius="8"
+                            <Border Width="220" Height="300" Margin="0,0,12,0" CornerRadius="8"
                                     Background="#252542" BorderBrush="#5865F2" BorderThickness="2">
                                 <Grid>
                                     <Grid.RowDefinitions>
@@ -4522,7 +4527,7 @@
                                     </Border>
 
                                     <!-- Info section -->
-                                    <Grid Grid.Row="1" Margin="8,4,8,6">
+                                    <Grid Grid.Row="1" Margin="8,4,8,4">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
@@ -4535,7 +4540,7 @@
                                                    Margin="0,0,0,2"/>
                                         <TextBlock Grid.Row="1" Text="Are you a content creator? Join our Discord to submit your pack and reach thousands of users!"
                                                    Foreground="{StaticResource TextMutedBrush}" FontSize="10"
-                                                   TextWrapping="Wrap" MaxHeight="70" VerticalAlignment="Top"/>
+                                                   TextWrapping="Wrap" MaxHeight="52" VerticalAlignment="Top"/>
                                         <TextBlock Grid.Row="2" Foreground="#5865F2" FontSize="9" Margin="0,2,0,4" FontWeight="SemiBold">
                                             Get featured in the app
                                         </TextBlock>

@@ -6653,7 +6653,6 @@ namespace ConditioningControlPanel
                     "• You will NOT be able to skip the bubble count challenge\n" +
                     "• You MUST answer correctly to dismiss\n" +
                     "• After 3 wrong attempts, a mercy lock card appears\n" +
-                    "• The app will minimize to tray when this is enabled\n" +
                     "• This can be very restrictive!");
 
                 if (!confirmed)
@@ -6663,9 +6662,6 @@ namespace ConditioningControlPanel
                     _isLoading = false;
                     return;
                 }
-
-                // Minimize to tray immediately
-                _trayIcon?.MinimizeToTray();
             }
 
             App.Settings.Current.BubbleCountStrictLock = isEnabled;
@@ -7787,18 +7783,37 @@ namespace ConditioningControlPanel
         {
             try
             {
+                App.Logger?.Information("UpdateBandwidthDisplayAsync: Starting update");
+
+                // Show default state if not logged in with Patreon
                 if (App.ContentPacks == null || App.Patreon == null || !App.Patreon.IsAuthenticated)
                 {
-                    BandwidthPanel.Visibility = Visibility.Collapsed;
+                    App.Logger?.Information("UpdateBandwidthDisplayAsync: Not authenticated, showing default");
+                    // Show default bar for non-Patreon users
+                    BandwidthProgressBar.Value = 0;
+                    TxtBandwidthUsage.Text = "0 / 10 GB";
+                    TxtBandwidthLabel.Text = "Bandwidth (Free):";
+                    BandwidthProgressBar.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4));
+                    BandwidthPanel.Visibility = Visibility.Visible;
                     return;
                 }
 
                 var status = await App.ContentPacks.GetFullPackStatusAsync();
                 if (status?.Bandwidth == null)
                 {
-                    BandwidthPanel.Visibility = Visibility.Collapsed;
+                    App.Logger?.Information("UpdateBandwidthDisplayAsync: Server returned no bandwidth data");
+                    // Server didn't return bandwidth - show default
+                    BandwidthProgressBar.Value = 0;
+                    var isPremium = App.Patreon?.HasPremiumAccess == true;
+                    TxtBandwidthUsage.Text = isPremium ? "0 / 100 GB" : "0 / 10 GB";
+                    TxtBandwidthLabel.Text = isPremium ? "Bandwidth (Patreon):" : "Bandwidth (Free):";
+                    BandwidthProgressBar.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4));
+                    BandwidthPanel.Visibility = Visibility.Visible;
                     return;
                 }
+
+                App.Logger?.Information("UpdateBandwidthDisplayAsync: Got bandwidth - UsedBytes={Used}, LimitBytes={Limit}, UsedGB={UsedGB}",
+                    status.Bandwidth.UsedBytes, status.Bandwidth.LimitBytes, status.Bandwidth.UsedGB);
 
                 var bandwidth = status.Bandwidth;
                 var usedGB = double.TryParse(bandwidth.UsedGB, out var used) ? used : 0;
@@ -7824,7 +7839,11 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Debug("Failed to update bandwidth display: {Error}", ex.Message);
-                BandwidthPanel.Visibility = Visibility.Collapsed;
+                // Show default on error
+                BandwidthProgressBar.Value = 0;
+                TxtBandwidthUsage.Text = "0 / 10 GB";
+                TxtBandwidthLabel.Text = "Bandwidth:";
+                BandwidthPanel.Visibility = Visibility.Visible;
             }
         }
 
@@ -7925,6 +7944,9 @@ namespace ConditioningControlPanel
                 {
                     App.Logger?.Debug("Failed to load preview images after install: {Error}", ex.Message);
                 }
+
+                // Update bandwidth display after download
+                await UpdateBandwidthDisplayAsync();
 
                 RefreshAssetTree();
             });

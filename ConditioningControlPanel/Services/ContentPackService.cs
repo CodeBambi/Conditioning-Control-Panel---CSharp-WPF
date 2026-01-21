@@ -1040,6 +1040,9 @@ namespace ConditioningControlPanel.Services
 
         [JsonProperty("rateLimit")]
         public PackRateLimitInfo? RateLimit { get; set; }
+
+        [JsonProperty("bandwidth")]
+        public BandwidthStatus? Bandwidth { get; set; }
     }
 
     /// <summary>

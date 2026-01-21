@@ -22,22 +22,28 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.1.1";
+        public const string AppVersion = "5.2.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.1.1 - BUG FIXES
+        public const string CurrentPatchNotes = @"v5.2.0
+
+🎨 UI IMPROVEMENTS
+• Pack cards now show full descriptions (increased height)
+• Session Editor timeline is now resizable
+• Sessions detail panel is now resizable
+• Fixed emoji display on update button
 
 🛠️ BUG FIXES
-• Fixed session crash caused by BoolToVisibility converter
-• Fixed content packs installing to wrong directory
-• Packs now install to your chosen assets folder
+• Fixed bubble count strict lock auto-minimizing app
+• Fixed bandwidth tracking for whitelisted users (100GB limit)
+• Added video detection debug logging
 
-🔒 WHITELIST CHANGES
-• Whitelist now managed server-side for easier updates
-• Whitelisted users get full Patreon features";
+🔧 TECHNICAL
+• Bandwidth display updates after pack downloads
+• Whitelisted users now properly get Patreon bandwidth limits";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

@@ -1506,15 +1506,24 @@ namespace ConditioningControlPanel.Services
             // Clean up old temp pack files
             CleanupTempPackFiles();
 
+            App.Logger?.Debug("VideoService: Scanning for videos in {Path}", _videosPath);
+
             // Load regular videos
             var files = new List<string>();
             if (Directory.Exists(_videosPath))
             {
                 // Scan subfolders to support user-organized categories
-                foreach (var file in Directory.GetFiles(_videosPath, "*.*", SearchOption.AllDirectories))
+                var allFiles = Directory.GetFiles(_videosPath, "*.*", SearchOption.AllDirectories);
+                App.Logger?.Debug("VideoService: Found {Count} total files in videos folder", allFiles.Length);
+
+                foreach (var file in allFiles)
                 {
                     var ext = Path.GetExtension(file).ToLowerInvariant();
-                    if (!validExtensions.Contains(ext)) continue;
+                    if (!validExtensions.Contains(ext))
+                    {
+                        App.Logger?.Debug("VideoService: Skipping non-video file: {Path} (ext: {Ext})", file, ext);
+                        continue;
+                    }
 
                     // Security: Validate path is within allowed directories (app dir, user assets, or custom path)
                     var isInAppDir = SecurityHelper.IsPathSafe(file, AppDomain.CurrentDomain.BaseDirectory);
@@ -1523,27 +1532,45 @@ namespace ConditioningControlPanel.Services
 
                     if (!isInAppDir && !isInUserAssets && !isInCustomPath)
                     {
-                        App.Logger?.Warning("Blocked video outside allowed directory: {Path}", file);
+                        App.Logger?.Warning("Blocked video outside allowed directory: {Path} (AppDir={AppDir}, UserData={UserData}, Custom={Custom})",
+                            file, AppDomain.CurrentDomain.BaseDirectory, App.UserDataPath, App.EffectiveAssetsPath);
                         continue;
                     }
 
                     // Security: Sanitize filename
                     var fileName = SecurityHelper.SanitizeFilename(Path.GetFileName(file));
-                    if (string.IsNullOrEmpty(fileName)) continue;
+                    if (string.IsNullOrEmpty(fileName))
+                    {
+                        App.Logger?.Warning("VideoService: Sanitized filename empty for: {Path}", file);
+                        continue;
+                    }
 
                     files.Add(file);
                 }
             }
+            else
+            {
+                App.Logger?.Warning("VideoService: Videos directory does not exist: {Path}", _videosPath);
+            }
+
+            App.Logger?.Debug("VideoService: {Count} videos passed security checks", files.Count);
 
             // Filter out disabled assets (blacklist approach)
             if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
             {
+                var beforeCount = files.Count;
                 var basePath = App.EffectiveAssetsPath;
                 files = files.Where(f =>
                 {
                     var relativePath = Path.GetRelativePath(basePath, f);
-                    return !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
+                    var isDisabled = App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
+                    if (isDisabled)
+                    {
+                        App.Logger?.Debug("VideoService: Video disabled by user: {Path}", relativePath);
+                    }
+                    return !isDisabled;
                 }).ToList();
+                App.Logger?.Debug("VideoService: {Before} -> {After} after disabled filter", beforeCount, files.Count);
             }
 
             // Shuffle and enqueue regular videos
@@ -1553,8 +1580,8 @@ namespace ConditioningControlPanel.Services
             var packVideos = App.ContentPacks?.GetAllActivePackVideos() ?? new List<(string, PackFileEntry)>();
             _packVideoQueue = new Queue<(string, PackFileEntry)>(packVideos.OrderBy(_ => _random.Next()));
 
-            App.Logger?.Debug("Video queues refilled: {RegularCount} regular, {PackCount} from packs",
-                _videoQueue.Count, _packVideoQueue.Count);
+            App.Logger?.Information("VideoService: Queues refilled - {RegularCount} regular videos, {PackCount} pack videos (path: {Path})",
+                _videoQueue.Count, _packVideoQueue.Count, _videosPath);
         }
 
         /// <summary>

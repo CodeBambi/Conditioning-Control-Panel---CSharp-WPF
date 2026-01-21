@@ -31,6 +31,7 @@
                 <RowDefinition Height="Auto"/>  <!-- Session name + stats -->
                 <RowDefinition Height="Auto"/>  <!-- Duration slider -->
                 <RowDefinition Height="*" MinHeight="150"/>  <!-- Timeline (expandable) -->
+                <RowDefinition Height="5"/>     <!-- Splitter -->
                 <RowDefinition Height="Auto"/>  <!-- Feature icons -->
                 <RowDefinition Height="Auto"/>  <!-- Description + buttons -->
             </Grid.RowDefinitions>
@@ -139,8 +140,12 @@
                 </Grid>
             </Border>
 
+            <!-- Splitter for resizing timeline -->
+            <GridSplitter Grid.Row="4" Height="5" HorizontalAlignment="Stretch"
+                          Background="#404060" Cursor="SizeNS" Margin="20,0"/>
+
             <!-- Feature Icons Grid - Horizontal Layout -->
-            <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="20,10,20,10">
+            <ScrollViewer Grid.Row="5" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="20,10,20,10">
                 <Grid x:Name="FeatureIconsPanel">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -188,7 +193,7 @@
             </ScrollViewer>
 
             <!-- Bottom Section: Description + Buttons -->
-            <Grid Grid.Row="5" Margin="30,10,30,20">
+            <Grid Grid.Row="6" Margin="30,10,30,20">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>

@@ -13,7 +13,7 @@
 ; - Store install path in registry for Velopack updates
 
 #define MyAppName "Conditioning Control Panel"
-#define MyAppVersion "5.1.0"
+#define MyAppVersion "5.2.0"
 #define MyAppPublisher "CodeBambi"
 #define MyAppURL "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF"
 #define MyAppExeName "ConditioningControlPanel.exe"
