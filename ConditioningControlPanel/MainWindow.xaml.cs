@@ -1098,6 +1098,7 @@ namespace ConditioningControlPanel
                     AssetsTab.Visibility = Visibility.Visible;
                     BtnOpenAssets.Style = activeStyle;
                     RefreshAssetTree();
+                    InitializeAssetPresets();
                     _ = RefreshPacksAsync();
                     break;
             }
@@ -8152,20 +8153,13 @@ namespace ConditioningControlPanel
                 .ToList();
             node.FileCount = files.Count;
 
-            // Count checked files based on settings
-            if (App.Settings.Current.UseAssetWhitelist && App.Settings.Current.ActiveAssetPaths.Count > 0)
+            // Count checked files using blacklist (files NOT in DisabledAssetPaths are active)
+            var basePath = App.EffectiveAssetsPath;
+            node.CheckedFileCount = files.Count(f =>
             {
-                var basePath = App.EffectiveAssetsPath;
-                node.CheckedFileCount = files.Count(f =>
-                {
-                    var relativePath = Path.GetRelativePath(basePath, f);
-                    return App.Settings.Current.ActiveAssetPaths.Contains(relativePath);
-                });
-            }
-            else
-            {
-                node.CheckedFileCount = files.Count; // All active by default
-            }
+                var relativePath = Path.GetRelativePath(basePath, f);
+                return !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
+            });
 
             // Add subfolders
             foreach (var dir in Directory.GetDirectories(path))
@@ -8559,6 +8553,279 @@ namespace ConditioningControlPanel
                 MessageBoxImage.Information);
         }
 
+        #region Asset Presets
+
+        private bool _isLoadingPreset = false;
+
+        private void InitializeAssetPresets()
+        {
+            // Ensure default preset exists
+            if (!App.Settings.Current.AssetPresets.Any(p => p.IsDefault))
+            {
+                App.Settings.Current.AssetPresets.Insert(0, Models.AssetPreset.CreateDefault());
+            }
+
+            // Update default preset counts (it should show all assets)
+            var defaultPreset = App.Settings.Current.AssetPresets.FirstOrDefault(p => p.IsDefault);
+            if (defaultPreset != null)
+            {
+                // For the default "All Assets" preset, count all files (not just active ones)
+                var totalImages = 0;
+                var totalVideos = 0;
+
+                // Calculate total counts
+                var imageExts = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" };
+                var videoExts = new[] { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+
+                void CountTotal(IEnumerable<AssetTreeItem> items)
+                {
+                    foreach (var folder in items)
+                    {
+                        if (Directory.Exists(folder.FullPath))
+                        {
+                            var files = Directory.GetFiles(folder.FullPath);
+                            foreach (var file in files)
+                            {
+                                var ext = Path.GetExtension(file).ToLowerInvariant();
+                                if (imageExts.Contains(ext)) totalImages++;
+                                if (videoExts.Contains(ext)) totalVideos++;
+                            }
+                        }
+                        CountTotal(folder.Children);
+                    }
+                }
+
+                CountTotal(_assetTree);
+                defaultPreset.EnabledImageCount = totalImages;
+                defaultPreset.EnabledVideoCount = totalVideos;
+            }
+
+            // Refresh the ComboBox
+            RefreshAssetPresetsComboBox();
+        }
+
+        private void RefreshAssetPresetsComboBox()
+        {
+            _isLoadingPreset = true;
+            CmbAssetPresets.ItemsSource = null;
+            CmbAssetPresets.ItemsSource = App.Settings.Current.AssetPresets;
+
+            // Select current preset if set
+            if (!string.IsNullOrEmpty(App.Settings.Current.CurrentAssetPresetId))
+            {
+                CmbAssetPresets.SelectedValue = App.Settings.Current.CurrentAssetPresetId;
+            }
+            else
+            {
+                // Default to "All Assets" preset
+                var defaultPreset = App.Settings.Current.AssetPresets.FirstOrDefault(p => p.IsDefault);
+                if (defaultPreset != null)
+                {
+                    CmbAssetPresets.SelectedValue = defaultPreset.Id;
+                }
+            }
+            _isLoadingPreset = false;
+        }
+
+        private void CmbAssetPresets_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoadingPreset) return;
+            if (CmbAssetPresets.SelectedItem is not Models.AssetPreset preset) return;
+
+            // Apply preset's disabled paths
+            preset.ApplyToSettings();
+            App.Settings.Current.CurrentAssetPresetId = preset.Id;
+
+            // Refresh tree to show new state
+            RefreshAssetTree();
+            UpdateAssetCounts();
+
+            // Clear caches so services pick up new selection
+            App.Flash?.ClearFileCache();
+            App.Video?.RefreshVideosPath();
+
+            App.Logger?.Information("Loaded asset preset: {Name}", preset.Name);
+        }
+
+        private void BtnSaveAssetPreset_Click(object sender, RoutedEventArgs e)
+        {
+            // Get current counts
+            var (imageCount, videoCount) = GetCurrentActiveAssetCounts();
+
+            // Simple input dialog using WPF
+            var dialog = new System.Windows.Window
+            {
+                Title = "Save Asset Preset",
+                Width = 350,
+                Height = 150,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.NoResize,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A1A2E")),
+                WindowStyle = WindowStyle.ToolWindow
+            };
+
+            var grid = new Grid { Margin = new Thickness(15) };
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var label = new TextBlock
+            {
+                Text = "Enter a name for this preset:",
+                Foreground = new SolidColorBrush(Colors.White),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            Grid.SetRow(label, 0);
+            grid.Children.Add(label);
+
+            var textBox = new TextBox
+            {
+                Text = $"Preset {App.Settings.Current.AssetPresets.Count}",
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252542")),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
+                Padding = new Thickness(8, 5, 8, 5),
+                Margin = new Thickness(0, 0, 0, 15)
+            };
+            textBox.SelectAll();
+            Grid.SetRow(textBox, 1);
+            grid.Children.Add(textBox);
+
+            var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var btnOk = new Button
+            {
+                Content = "Save",
+                Width = 80,
+                Padding = new Thickness(8, 5, 8, 5),
+                Margin = new Thickness(0, 0, 8, 0),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderThickness = new Thickness(0)
+            };
+            var btnCancel = new Button
+            {
+                Content = "Cancel",
+                Width = 80,
+                Padding = new Thickness(8, 5, 8, 5),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#404060")),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderThickness = new Thickness(0)
+            };
+
+            btnOk.Click += (s, args) => { dialog.DialogResult = true; dialog.Close(); };
+            btnCancel.Click += (s, args) => { dialog.DialogResult = false; dialog.Close(); };
+
+            btnPanel.Children.Add(btnOk);
+            btnPanel.Children.Add(btnCancel);
+            Grid.SetRow(btnPanel, 2);
+            grid.Children.Add(btnPanel);
+
+            dialog.Content = grid;
+            textBox.Focus();
+
+            if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                var preset = Models.AssetPreset.FromCurrentSettings(textBox.Text.Trim(), imageCount, videoCount);
+                App.Settings.Current.AssetPresets.Add(preset);
+                App.Settings.Current.CurrentAssetPresetId = preset.Id;
+                App.Settings.Save();
+
+                RefreshAssetPresetsComboBox();
+                CmbAssetPresets.SelectedValue = preset.Id;
+
+                App.Logger?.Information("Saved asset preset: {Name}", preset.Name);
+            }
+        }
+
+        private void BtnUpdateAssetPreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (CmbAssetPresets.SelectedItem is not Models.AssetPreset preset)
+            {
+                MessageBox.Show("Please select a preset to update.", "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (preset.IsDefault)
+            {
+                MessageBox.Show("Cannot update the default 'All Assets' preset.\nUse 'Save As' to create a new preset.", "Cannot Update Default", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"Update preset '{preset.Name}' with the current selection?",
+                "Update Preset",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                var (imageCount, videoCount) = GetCurrentActiveAssetCounts();
+                preset.UpdateFromCurrentSettings(imageCount, videoCount);
+                App.Settings.Save();
+
+                // Refresh display
+                RefreshAssetPresetsComboBox();
+                CmbAssetPresets.SelectedValue = preset.Id;
+
+                App.Logger?.Information("Updated asset preset: {Name}", preset.Name);
+            }
+        }
+
+        private void BtnDeleteAssetPreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (CmbAssetPresets.SelectedItem is not Models.AssetPreset preset)
+            {
+                MessageBox.Show("Please select a preset to delete.", "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (preset.IsDefault)
+            {
+                MessageBox.Show("Cannot delete the default 'All Assets' preset.", "Cannot Delete Default", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"Delete preset '{preset.Name}'?\n\nThis cannot be undone.",
+                "Delete Preset",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                App.Settings.Current.AssetPresets.Remove(preset);
+
+                // Select default preset
+                var defaultPreset = App.Settings.Current.AssetPresets.FirstOrDefault(p => p.IsDefault);
+                if (defaultPreset != null)
+                {
+                    App.Settings.Current.CurrentAssetPresetId = defaultPreset.Id;
+                }
+                else
+                {
+                    App.Settings.Current.CurrentAssetPresetId = null;
+                }
+
+                App.Settings.Save();
+                RefreshAssetPresetsComboBox();
+
+                App.Logger?.Information("Deleted asset preset: {Name}", preset.Name);
+            }
+        }
+
+        private (int imageCount, int videoCount) GetCurrentActiveAssetCounts()
+        {
+            var totalImages = 0;
+            var totalVideos = 0;
+            var activeImages = 0;
+            var activeVideos = 0;
+            CountAssetsRecursive(_assetTree, ref totalImages, ref totalVideos, ref activeImages, ref activeVideos);
+            return (activeImages, activeVideos);
+        }
+
+        #endregion
+
         private void UpdateAssetCounts()
         {
             var totalImages = 0;
@@ -8568,10 +8835,8 @@ namespace ConditioningControlPanel
 
             CountAssetsRecursive(_assetTree, ref totalImages, ref totalVideos, ref activeImages, ref activeVideos);
 
-            var displayImages = App.Settings.Current.UseAssetWhitelist ? activeImages : totalImages;
-            var displayVideos = App.Settings.Current.UseAssetWhitelist ? activeVideos : totalVideos;
-
-            TxtAssetCounts.Text = $"{displayImages} images, {displayVideos} videos active";
+            // Always show active counts (blacklist system: files NOT in DisabledAssetPaths are active)
+            TxtAssetCounts.Text = $"{activeImages} images, {activeVideos} videos active";
         }
 
         private void CountAssetsRecursive(IEnumerable<AssetTreeItem> items, ref int totalImages, ref int totalVideos, ref int activeImages, ref int activeVideos)
@@ -8595,8 +8860,9 @@ namespace ConditioningControlPanel
                         if (isImage) totalImages++;
                         if (isVideo) totalVideos++;
 
+                        // Use blacklist: files NOT in DisabledAssetPaths are active
                         var relativePath = Path.GetRelativePath(basePath, file);
-                        var isActive = App.Settings.Current.ActiveAssetPaths.Contains(relativePath);
+                        var isActive = !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
 
                         if (isActive && isImage) activeImages++;
                         if (isActive && isVideo) activeVideos++;

@@ -543,6 +543,28 @@ namespace ConditioningControlPanel.Models
             set { _packGuidMap = value ?? new(); OnPropertyChanged(); }
         }
 
+        private List<AssetPreset> _assetPresets = new();
+        /// <summary>
+        /// Saved asset presets that store which files are disabled.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<AssetPreset> AssetPresets
+        {
+            get => _assetPresets;
+            set { _assetPresets = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private string? _currentAssetPresetId = null;
+        /// <summary>
+        /// ID of the currently selected asset preset, or null if none selected.
+        /// </summary>
+        [JsonProperty]
+        public string? CurrentAssetPresetId
+        {
+            get => _currentAssetPresetId;
+            set { _currentAssetPresetId = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         private string _marqueeMessage = "GOOD GIRLS CONDITION DAILY     ❤️🔒";
