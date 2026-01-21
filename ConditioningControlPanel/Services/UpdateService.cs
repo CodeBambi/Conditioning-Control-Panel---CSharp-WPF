@@ -22,28 +22,32 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.2.0";
+        public const string AppVersion = "5.2.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.2.0
+        public const string CurrentPatchNotes = @"v5.2.1
 
-🎨 UI IMPROVEMENTS
-• Pack cards now show full descriptions (increased height)
-• Session Editor timeline is now resizable
-• Sessions detail panel is now resizable
-• Fixed emoji display on update button
+🎨 ASSET MANAGER IMPROVEMENTS
+• Folder checkboxes now toggle all subfolders recursively
+• Pack folders can now be enabled/disabled in presets
+• Select All / Deselect All now includes downloaded packs
+• Bigger, more visible scrollbars in Asset Browser
+• Better preset save/update feedback with confirmation dialogs
 
 🛠️ BUG FIXES
-• Fixed bubble count strict lock auto-minimizing app
-• Fixed bandwidth tracking for whitelisted users (100GB limit)
-• Added video detection debug logging
+• Fixed folder checkbox state not persisting when navigating
+• Fixed recursive checkbox triggering when updating parent states
+• Fixed pack files not being counted in preset asset totals
+• Fixed thumbnail checkboxes not syncing with folder changes
+• Simplified to 2-state checkboxes (removed confusing tri-state)
 
 🔧 TECHNICAL
-• Bandwidth display updates after pack downloads
-• Whitelisted users now properly get Patreon bandwidth limits";
+• Pack files now tracked as 'pack:{packId}/{filename}' in DisabledAssetPaths
+• Added detailed logging for preset save/load operations
+• Preset counts auto-recalculate when files change";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
