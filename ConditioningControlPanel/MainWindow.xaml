@@ -4673,6 +4673,7 @@
                                                       IsThreeState="True"
                                                       Checked="FolderCheckBox_Changed"
                                                       Unchecked="FolderCheckBox_Changed"
+                                                      Indeterminate="FolderCheckBox_Changed"
                                                       VerticalAlignment="Center" Margin="0,0,4,0"/>
                                             <TextBlock Text="📁" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
                                             <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>

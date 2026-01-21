@@ -8413,14 +8413,14 @@ namespace ConditioningControlPanel
         {
             if (sender is CheckBox cb && cb.DataContext is AssetTreeItem folder)
             {
-                // If the checkbox has a definite value, propagate to children
-                if (folder.IsChecked.HasValue)
-                {
-                    folder.SetCheckedRecursive(folder.IsChecked.Value);
+                // Determine the target state - treat null (indeterminate) as false (uncheck all)
+                bool targetState = folder.IsChecked ?? false;
 
-                    // Also update file items in this folder
-                    UpdateFolderFilesCheckState(folder, folder.IsChecked.Value);
-                }
+                // Propagate to children
+                folder.SetCheckedRecursive(targetState);
+
+                // Update file items in this folder and subfolders
+                UpdateFolderFilesCheckState(folder, targetState);
 
                 // Update parent states
                 folder.Parent?.UpdateCheckState();
