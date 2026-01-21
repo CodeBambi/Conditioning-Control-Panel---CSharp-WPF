@@ -8208,13 +8208,25 @@ namespace ConditioningControlPanel
         /// </summary>
         private void RecalculateFolderCheckState(AssetTreeItem folder)
         {
-            if (string.IsNullOrEmpty(folder.FullPath)) return;
-
             var basePath = App.EffectiveAssetsPath;
             var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
 
-            // Count checked files in this folder
-            if (Directory.Exists(folder.FullPath))
+            // Handle pack virtual folders
+            if (folder.IsPackFolder && !string.IsNullOrEmpty(folder.PackId) && !string.IsNullOrEmpty(folder.PackFileType))
+            {
+                var packFiles = App.ContentPacks?.GetPackFiles(folder.PackId, folder.PackFileType);
+                if (packFiles != null)
+                {
+                    folder.FileCount = packFiles.Count();
+                    folder.CheckedFileCount = packFiles.Count(f =>
+                    {
+                        var packPath = $"pack:{folder.PackId}/{f.OriginalName}";
+                        return !App.Settings.Current.DisabledAssetPaths.Contains(packPath);
+                    });
+                }
+            }
+            // Handle local folders
+            else if (!string.IsNullOrEmpty(folder.FullPath) && Directory.Exists(folder.FullPath))
             {
                 var files = Directory.GetFiles(folder.FullPath)
                     .Where(f => validExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
@@ -8244,10 +8256,7 @@ namespace ConditioningControlPanel
         {
             foreach (var root in _assetTree)
             {
-                if (!root.IsPackFolder)
-                {
-                    RecalculateFolderCheckState(root);
-                }
+                RecalculateFolderCheckState(root);
             }
         }
 
