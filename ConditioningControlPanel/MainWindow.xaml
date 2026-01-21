@@ -4410,10 +4410,11 @@
 
                     <!-- Horizontal scrolling pack cards -->
                     <ScrollViewer x:Name="PacksScrollViewer" Grid.Row="2"
-                                  HorizontalScrollBarVisibility="Visible"
+                                  HorizontalScrollBarVisibility="Auto"
                                   VerticalScrollBarVisibility="Disabled"
                                   PreviewMouseWheel="PacksScrollViewer_PreviewMouseWheel"
-                                  Height="280">
+                                  Padding="0,0,0,8"
+                                  MaxHeight="340">
                         <StackPanel Orientation="Horizontal">
                             <!-- Dynamic Pack Cards -->
                             <ItemsControl x:Name="PackCardsItemsControl">
