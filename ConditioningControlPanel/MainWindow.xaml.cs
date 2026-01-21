@@ -8267,10 +8267,13 @@ namespace ConditioningControlPanel
 
             foreach (var file in packFiles.OrderBy(f => f.OriginalName))
             {
+                var packPath = $"pack:{packId}/{file.OriginalName}";
+                var isActive = !App.Settings.Current.DisabledAssetPaths.Contains(packPath);
+
                 var item = new AssetFileItem
                 {
-                    RelativePath = $"pack:{packId}/{file.OriginalName}",
-                    IsChecked = true, // Pack files are always active
+                    RelativePath = packPath,
+                    IsChecked = isActive,
                     IsPackFile = true,
                     PackId = packId,
                     PackFileEntry = file
@@ -8459,27 +8462,40 @@ namespace ConditioningControlPanel
             }
         }
 
+        private bool _isUpdatingFolderCheckState = false;
+
         private void FolderCheckBox_Changed(object sender, RoutedEventArgs e)
         {
+            // Prevent recursive triggering when programmatically updating parent states
+            if (_isUpdatingFolderCheckState) return;
+
             if (sender is CheckBox cb && cb.DataContext is AssetTreeItem folder)
             {
-                // Get the target state from the checkbox
-                bool targetState = folder.IsChecked;
+                _isUpdatingFolderCheckState = true;
+                try
+                {
+                    // Get the target state from the checkbox
+                    bool targetState = folder.IsChecked;
 
-                // FIRST: Visually update this folder and ALL subfolders immediately
-                // This gives instant feedback to the user
-                SetFolderAndChildrenChecked(folder, targetState);
+                    // FIRST: Visually update this folder and ALL subfolders immediately
+                    // This gives instant feedback to the user
+                    SetFolderAndChildrenChecked(folder, targetState);
 
-                // SECOND: Update the source of truth (DisabledAssetPaths)
-                UpdateFolderFilesCheckState(folder, targetState);
+                    // SECOND: Update the source of truth (DisabledAssetPaths)
+                    UpdateFolderFilesCheckState(folder, targetState);
 
-                // THIRD: Update parent folder states (they may become partially checked)
-                folder.Parent?.UpdateCheckStateFromChildren();
+                    // THIRD: Update parent folder states (they may become partially checked)
+                    folder.Parent?.UpdateCheckStateFromChildren();
 
-                UpdateAssetCounts();
+                    UpdateAssetCounts();
 
-                // Sync thumbnail checkboxes with current DisabledAssetPaths state
-                RefreshThumbnailCheckboxes();
+                    // Sync thumbnail checkboxes with current DisabledAssetPaths state
+                    RefreshThumbnailCheckboxes();
+                }
+                finally
+                {
+                    _isUpdatingFolderCheckState = false;
+                }
             }
         }
 
@@ -8518,7 +8534,29 @@ namespace ConditioningControlPanel
             var basePath = App.EffectiveAssetsPath;
             var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
 
-            if (Directory.Exists(folder.FullPath))
+            // Handle pack virtual folders
+            if (folder.IsPackFolder && !string.IsNullOrEmpty(folder.PackId) && !string.IsNullOrEmpty(folder.PackFileType))
+            {
+                var packFiles = App.ContentPacks?.GetPackFiles(folder.PackId, folder.PackFileType);
+                if (packFiles != null)
+                {
+                    foreach (var packFile in packFiles)
+                    {
+                        // Pack file paths use format: pack:{packId}/{filename}
+                        var packPath = $"pack:{folder.PackId}/{packFile.OriginalName}";
+                        if (isChecked)
+                        {
+                            App.Settings.Current.DisabledAssetPaths.Remove(packPath);
+                        }
+                        else
+                        {
+                            App.Settings.Current.DisabledAssetPaths.Add(packPath);
+                        }
+                    }
+                }
+            }
+            // Handle local folders
+            else if (Directory.Exists(folder.FullPath))
             {
                 var files = Directory.GetFiles(folder.FullPath)
                     .Where(f => validExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()));
@@ -8592,10 +8630,7 @@ namespace ConditioningControlPanel
             // Update DisabledAssetPaths (clear all = everything enabled)
             foreach (var folder in _assetTree)
             {
-                if (!folder.IsPackFolder)
-                {
-                    UpdateFolderFilesCheckState(folder, true);
-                }
+                UpdateFolderFilesCheckState(folder, true);
             }
 
             // Recalculate all folder check states from DisabledAssetPaths
@@ -8611,10 +8646,7 @@ namespace ConditioningControlPanel
             // Update DisabledAssetPaths (add all = everything disabled)
             foreach (var folder in _assetTree)
             {
-                if (!folder.IsPackFolder)
-                {
-                    UpdateFolderFilesCheckState(folder, false);
-                }
+                UpdateFolderFilesCheckState(folder, false);
             }
 
             // Recalculate all folder check states from DisabledAssetPaths
@@ -8707,14 +8739,36 @@ namespace ConditioningControlPanel
                     CountEnabledFilesRecursive(videosPath, basePath, preset.DisabledAssetPaths, videoExts, ref enabledVideos);
                 }
 
-                // Add pack files (always active)
+                // Add pack files (check if disabled in preset)
                 var activePackIds = App.ContentPacks?.GetActivePackIds() ?? new List<string>();
                 foreach (var packId in activePackIds)
                 {
                     var packImages = App.ContentPacks?.GetPackFiles(packId, "image");
                     var packVideos = App.ContentPacks?.GetPackFiles(packId, "video");
-                    if (packImages != null) enabledImages += packImages.Count();
-                    if (packVideos != null) enabledVideos += packVideos.Count();
+
+                    if (packImages != null)
+                    {
+                        foreach (var packFile in packImages)
+                        {
+                            var packPath = $"pack:{packId}/{packFile.OriginalName}";
+                            if (preset.DisabledAssetPaths == null || !preset.DisabledAssetPaths.Contains(packPath))
+                            {
+                                enabledImages++;
+                            }
+                        }
+                    }
+
+                    if (packVideos != null)
+                    {
+                        foreach (var packFile in packVideos)
+                        {
+                            var packPath = $"pack:{packId}/{packFile.OriginalName}";
+                            if (preset.DisabledAssetPaths == null || !preset.DisabledAssetPaths.Contains(packPath))
+                            {
+                                enabledVideos++;
+                            }
+                        }
+                    }
                 }
 
                 // Update preset if counts changed
@@ -9022,15 +9076,19 @@ namespace ConditioningControlPanel
                     {
                         foreach (var packFile in packFiles)
                         {
+                            // Pack file paths use format: pack:{packId}/{filename}
+                            var packPath = $"pack:{folder.PackId}/{packFile.OriginalName}";
+                            var isActive = !App.Settings.Current.DisabledAssetPaths.Contains(packPath);
+
                             if (folder.PackFileType == "image")
                             {
                                 totalImages++;
-                                activeImages++; // Pack files are always active
+                                if (isActive) activeImages++;
                             }
                             else if (folder.PackFileType == "video")
                             {
                                 totalVideos++;
-                                activeVideos++; // Pack files are always active
+                                if (isActive) activeVideos++;
                             }
                         }
                     }
