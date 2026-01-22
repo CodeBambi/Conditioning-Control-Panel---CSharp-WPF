@@ -794,6 +794,7 @@ namespace ConditioningControlPanel
                 // Logout
                 App.Discord.Logout();
                 UpdateQuickDiscordUI();
+                UpdateBannerWelcomeMessage();
             }
             else
             {
@@ -828,9 +829,44 @@ namespace ConditioningControlPanel
                                 {
                                     nameSet = true;
                                 }
+                                else if (result.CanClaim)
+                                {
+                                    // Name belongs to a Patreon account - ask if user wants to claim it
+                                    var claimResult = MessageBox.Show(
+                                        $"The name \"{dialog.DisplayName}\" belongs to a Patreon account.\n\n" +
+                                        "If this is your Patreon account, click Yes to link it with your Discord login.\n\n" +
+                                        "This will allow you to use the same name and keep your Patreon benefits.",
+                                        "Claim Existing Name?",
+                                        MessageBoxButton.YesNo,
+                                        MessageBoxImage.Question);
+
+                                    if (claimResult == MessageBoxResult.Yes)
+                                    {
+                                        // Try again with claim flag
+                                        var claimSetResult = await App.Discord.SetDisplayNameAsync(dialog.DisplayName, claimExisting: true);
+                                        if (claimSetResult.Success)
+                                        {
+                                            nameSet = true;
+                                            MessageBox.Show(
+                                                $"Successfully linked to your Patreon account!\n\nYou can now use Discord login and keep your Patreon benefits.",
+                                                "Account Linked",
+                                                MessageBoxButton.OK,
+                                                MessageBoxImage.Information);
+                                        }
+                                        else
+                                        {
+                                            MessageBox.Show(
+                                                claimSetResult.Error ?? "Failed to claim the name. Please try again.",
+                                                "Claim Failed",
+                                                MessageBoxButton.OK,
+                                                MessageBoxImage.Warning);
+                                        }
+                                    }
+                                    // If No, loop continues and user can choose another name
+                                }
                                 else
                                 {
-                                    // Name taken or error - show message and let user try again
+                                    // Name taken by another Discord user - show message and let user try again
                                     MessageBox.Show(
                                         result.Error ?? "This name is already taken. Please choose another.",
                                         "Name Unavailable",
@@ -847,6 +883,10 @@ namespace ConditioningControlPanel
                     }
 
                     UpdateQuickDiscordUI();
+                    UpdateBannerWelcomeMessage();
+
+                    // Update bandwidth display (Discord users can inherit Patreon benefits via linked display name)
+                    _ = UpdateBandwidthDisplayAsync();
                 }
                 catch (OperationCanceledException)
                 {
@@ -1477,6 +1517,7 @@ namespace ConditioningControlPanel
                 // Logout
                 App.Discord.Logout();
                 UpdateDiscordUI();
+                UpdateBannerWelcomeMessage();
             }
             else
             {
@@ -1488,6 +1529,10 @@ namespace ConditioningControlPanel
                 {
                     await App.Discord.StartOAuthFlowAsync();
                     UpdateDiscordUI();
+                    UpdateBannerWelcomeMessage();
+
+                    // Update bandwidth display (Discord users can inherit Patreon benefits via linked display name)
+                    _ = UpdateBandwidthDisplayAsync();
                 }
                 catch (OperationCanceledException)
                 {
@@ -2364,7 +2409,8 @@ namespace ConditioningControlPanel
 
         private void UpdateBannerWelcomeMessage()
         {
-            var displayName = App.Patreon?.DisplayName;
+            // Check both Patreon and Discord for display name
+            var displayName = App.Patreon?.DisplayName ?? App.Discord?.DisplayName;
             if (!string.IsNullOrEmpty(displayName))
             {
                 TxtBannerSecondary.Text = $"Welcome back, {displayName}!";
@@ -7786,11 +7832,14 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Information("UpdateBandwidthDisplayAsync: Starting update");
 
-                // Show default state if not logged in with Patreon
-                if (App.ContentPacks == null || App.Patreon == null || !App.Patreon.IsAuthenticated)
+                // Show default state if not logged in with Patreon or Discord
+                var isPatreonAuth = App.Patreon?.IsAuthenticated == true;
+                var isDiscordAuth = App.Discord?.IsAuthenticated == true;
+
+                if (App.ContentPacks == null || (!isPatreonAuth && !isDiscordAuth))
                 {
                     App.Logger?.Information("UpdateBandwidthDisplayAsync: Not authenticated, showing default");
-                    // Show default bar for non-Patreon users
+                    // Show default bar for non-authenticated users
                     BandwidthProgressBar.Value = 0;
                     TxtBandwidthUsage.Text = "0 / 10 GB";
                     TxtBandwidthLabel.Text = "Bandwidth (Free):";

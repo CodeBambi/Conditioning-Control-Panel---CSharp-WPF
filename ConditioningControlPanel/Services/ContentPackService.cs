@@ -426,40 +426,64 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Gets the full pack status including bandwidth from the server.
+        /// Tries Patreon auth first, falls back to Discord auth if available.
+        /// Discord users can inherit Patreon benefits if their display name is linked to a Patreon account.
         /// </summary>
         public async Task<PackStatusResponse?> GetFullPackStatusAsync()
         {
-            if (App.Patreon == null || !App.Patreon.IsAuthenticated)
+            // Try Patreon auth first
+            if (App.Patreon?.IsAuthenticated == true)
             {
-                return null;
-            }
-
-            var accessToken = App.Patreon.GetAccessToken();
-            if (string.IsNullOrEmpty(accessToken))
-            {
-                return null;
-            }
-
-            try
-            {
-                var requestUrl = $"{ProxyBaseUrl}/pack/status";
-                using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-                using var response = await _httpClient.SendAsync(request);
-                if (!response.IsSuccessStatusCode)
+                var accessToken = App.Patreon.GetAccessToken();
+                if (!string.IsNullOrEmpty(accessToken))
                 {
-                    return null;
-                }
+                    try
+                    {
+                        var requestUrl = $"{ProxyBaseUrl}/pack/status";
+                        using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-                var responseJson = await response.Content.ReadAsStringAsync();
-                return JsonConvert.DeserializeObject<PackStatusResponse>(responseJson);
+                        using var response = await _httpClient.SendAsync(request);
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var responseJson = await response.Content.ReadAsStringAsync();
+                            return JsonConvert.DeserializeObject<PackStatusResponse>(responseJson);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Failed to get pack status via Patreon: {Error}", ex.Message);
+                    }
+                }
             }
-            catch (Exception ex)
+
+            // Fall back to Discord auth - Discord users can inherit Patreon benefits via linked display name
+            if (App.Discord?.IsAuthenticated == true)
             {
-                App.Logger?.Debug("Failed to get pack status: {Error}", ex.Message);
-                return null;
+                var discordToken = App.Discord.GetAccessToken();
+                if (!string.IsNullOrEmpty(discordToken))
+                {
+                    try
+                    {
+                        var requestUrl = $"{ProxyBaseUrl}/discord/pack/status";
+                        using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", discordToken);
+
+                        using var response = await _httpClient.SendAsync(request);
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var responseJson = await response.Content.ReadAsStringAsync();
+                            return JsonConvert.DeserializeObject<PackStatusResponse>(responseJson);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Failed to get pack status via Discord: {Error}", ex.Message);
+                    }
+                }
             }
+
+            return null;
         }
 
         /// <summary>

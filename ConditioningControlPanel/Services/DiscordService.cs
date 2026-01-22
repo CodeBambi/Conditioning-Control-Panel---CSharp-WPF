@@ -620,23 +620,24 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Set the user's custom display name (can only be set once) and save to server
         /// </summary>
-        /// <returns>True if successful, false if name is taken or other error</returns>
-        public async Task<(bool Success, string? Error)> SetDisplayNameAsync(string displayName)
+        /// <param name="displayName">The display name to set</param>
+        /// <param name="claimExisting">If true, claim an existing Patreon name as your own</param>
+        /// <returns>Success status, error message, and whether the name can be claimed from Patreon</returns>
+        public async Task<(bool Success, string? Error, bool CanClaim)> SetDisplayNameAsync(string displayName, bool claimExisting = false)
         {
             if (!string.IsNullOrEmpty(CustomDisplayName))
             {
                 App.Logger?.Warning("Attempted to change display name, but it's already set");
-                return (false, "Display name is already set");
+                return (false, "Display name is already set", false);
             }
 
             var trimmedName = displayName.Trim();
 
-            // Check if name is already taken on server
-            var checkResult = await CheckDisplayNameAvailableAsync(trimmedName);
-            if (!checkResult.Available)
+            // Save to server (with claim flag if claiming)
+            var saveResult = await SaveDisplayNameToServerAsync(trimmedName, claimExisting);
+            if (!saveResult.Success)
             {
-                App.Logger?.Warning("Display name '{Name}' is already taken", trimmedName);
-                return (false, checkResult.Error ?? "This name is already taken. Please choose another.");
+                return (false, saveResult.Error ?? "Failed to save display name", saveResult.CanClaim);
             }
 
             CustomDisplayName = trimmedName;
@@ -649,24 +650,21 @@ namespace ConditioningControlPanel.Services
                 _tokenStorage.StoreCachedState(cachedState);
             }
 
-            // Save to server so it syncs across devices
-            await SaveDisplayNameToServerAsync(CustomDisplayName);
-
-            App.Logger?.Information("Custom display name set to: {DisplayName}", CustomDisplayName);
-            return (true, null);
+            App.Logger?.Information("Custom display name set to: {DisplayName} (claimed: {Claimed})", CustomDisplayName, claimExisting);
+            return (true, null, false);
         }
 
         /// <summary>
         /// Check if a display name is available (not already taken)
         /// </summary>
-        public async Task<(bool Available, string? Error)> CheckDisplayNameAvailableAsync(string displayName)
+        public async Task<(bool Available, string? Error, bool CanClaim)> CheckDisplayNameAvailableAsync(string displayName)
         {
             try
             {
                 var tokens = _tokenStorage.RetrieveTokens();
                 if (tokens == null)
                 {
-                    return (true, null); // Can't check, allow optimistically
+                    return (true, null, false); // Can't check, allow optimistically
                 }
 
                 _httpClient.DefaultRequestHeaders.Authorization =
@@ -677,16 +675,16 @@ namespace ConditioningControlPanel.Services
                 if (response.IsSuccessStatusCode)
                 {
                     var result = await response.Content.ReadFromJsonAsync<DisplayNameCheckResult>();
-                    return (result?.Available ?? true, result?.Error);
+                    return (result?.Available ?? true, result?.Error, result?.CanClaim ?? false);
                 }
 
                 // If endpoint doesn't exist or errors, allow optimistically
-                return (true, null);
+                return (true, null, false);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to check display name availability");
-                return (true, null); // Allow optimistically on error
+                return (true, null, false); // Allow optimistically on error
             }
         }
 
@@ -694,12 +692,21 @@ namespace ConditioningControlPanel.Services
         {
             public bool Available { get; set; }
             public string? Error { get; set; }
+            public bool CanClaim { get; set; }
+        }
+
+        private class SetDisplayNameResult
+        {
+            public bool Success { get; set; }
+            public string? Error { get; set; }
+            public bool CanClaim { get; set; }
+            public string? DisplayName { get; set; }
         }
 
         /// <summary>
         /// Save display name to the server for cross-device sync
         /// </summary>
-        private async Task SaveDisplayNameToServerAsync(string displayName)
+        private async Task<(bool Success, string? Error, bool CanClaim)> SaveDisplayNameToServerAsync(string displayName, bool claimExisting = false)
         {
             try
             {
@@ -707,7 +714,7 @@ namespace ConditioningControlPanel.Services
                 if (tokens == null)
                 {
                     App.Logger?.Warning("Cannot save display name: no tokens available");
-                    return;
+                    return (false, "Not authenticated", false);
                 }
 
                 _httpClient.DefaultRequestHeaders.Authorization =
@@ -715,22 +722,31 @@ namespace ConditioningControlPanel.Services
 
                 var response = await _httpClient.PostAsJsonAsync("/user/set-display-name-discord", new
                 {
-                    display_name = displayName
+                    display_name = displayName,
+                    claim_existing = claimExisting
                 });
 
                 if (response.IsSuccessStatusCode)
                 {
                     App.Logger?.Information("Display name saved to server successfully");
+                    return (true, null, false);
                 }
-                else
+
+                // Parse error response to check if name can be claimed
+                try
                 {
-                    App.Logger?.Warning("Failed to save display name to server: {Status}", response.StatusCode);
+                    var errorResult = await response.Content.ReadFromJsonAsync<SetDisplayNameResult>();
+                    return (false, errorResult?.Error ?? "Name is taken", errorResult?.CanClaim ?? false);
+                }
+                catch
+                {
+                    return (false, "Failed to save display name", false);
                 }
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to save display name to server");
-                // Don't throw - local save was successful, server sync is best-effort
+                return (false, ex.Message, false);
             }
         }
 

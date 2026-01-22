@@ -22,32 +22,27 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.2.1";
+        public const string AppVersion = "5.2.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.2.1
+        public const string CurrentPatchNotes = @"v5.2.2
 
-🎨 ASSET MANAGER IMPROVEMENTS
-• Folder checkboxes now toggle all subfolders recursively
-• Pack folders can now be enabled/disabled in presets
-• Select All / Deselect All now includes downloaded packs
-• Bigger, more visible scrollbars in Asset Browser
-• Better preset save/update feedback with confirmation dialogs
+🔧 VIDEO SCHEDULING FIX
+• Fixed videos playing less frequently after 1-2 hours
+• Scheduler no longer resets during video playback
 
-🛠️ BUG FIXES
-• Fixed folder checkbox state not persisting when navigating
-• Fixed recursive checkbox triggering when updating parent states
-• Fixed pack files not being counted in preset asset totals
-• Fixed thumbnail checkboxes not syncing with folder changes
-• Simplified to 2-state checkboxes (removed confusing tri-state)
+🔗 ACCOUNT LINKING (Patreon ↔ Discord)
+• Same email: Auto-links accounts when logging in via Discord
+• Different emails: Can claim your Patreon name when logging in via Discord
+• Linked accounts share display name and Patreon benefits
 
-🔧 TECHNICAL
-• Pack files now tracked as 'pack:{packId}/{filename}' in DisabledAssetPaths
-• Added detailed logging for preset save/load operations
-• Preset counts auto-recalculate when files change";
+📊 BANDWIDTH & WELCOME BANNER
+• Bandwidth display now works with Discord login
+• Discord users inherit Patreon benefits if accounts are linked
+• Welcome banner shows your name for both Patreon and Discord logins";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
