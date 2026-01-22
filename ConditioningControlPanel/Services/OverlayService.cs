@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.ComponentModel;
 
@@ -31,11 +33,17 @@ public class OverlayService : IDisposable
     private bool _isRunning;
     private DispatcherTimer? _updateTimer;
     private DispatcherTimer? _gifLoopTimer;
+    private DispatcherTimer? _gifFrameTimer;
     private bool _isDisposed;
     private bool _isGifSpiral;
     private string _spiralPath = "";
     private Dictionary<MediaElement, DateTime> _mediaStartTimes = new();
-    private const double GIF_LOOP_INTERVAL_SECONDS = 4.0; // Restart GIFs every 4 seconds
+
+    // GIF frame animation fields
+    private List<BitmapSource> _spiralGifFrames = new();
+    private readonly List<System.Windows.Controls.Image> _spiralGifImages = new();
+    private int _currentGifFrameIndex = 0;
+    private TimeSpan _gifFrameDelay = TimeSpan.FromMilliseconds(50);
 
     public bool IsRunning => _isRunning;
 
@@ -433,34 +441,74 @@ public class OverlayService : IDisposable
         {
             var settings = App.Settings.Current;
 
-            var screens = settings.DualMonitorEnabled 
-                ? App.GetAllScreensCached() 
+            var screens = settings.DualMonitorEnabled
+                ? App.GetAllScreensCached()
                 : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
 
             _isGifSpiral = _spiralPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
 
-            foreach (var screen in screens)
+            // For GIFs, load frames once and share across all screens (more efficient)
+            if (_isGifSpiral)
             {
-                var (window, media) = CreateSpiralForScreen(screen, settings.SpiralOpacity);
-                if (window != null)
+                if (!LoadSpiralGifFrames())
                 {
-                    _spiralWindows.Add(window);
-                    if (media != null)
+                    App.Logger?.Warning("Spiral: Failed to load GIF frames from {Path}", _spiralPath);
+                    return;
+                }
+
+                foreach (var screen in screens)
+                {
+                    var (window, image) = CreateSpiralGifWindow(screen, settings.SpiralOpacity);
+                    if (window != null)
                     {
-                        _spiralMediaElements.Add(media);
+                        _spiralWindows.Add(window);
+                        if (image != null)
+                        {
+                            _spiralGifImages.Add(image);
+                        }
                     }
+                }
+
+                // Start frame animation timer
+                if (_spiralGifFrames.Count > 1 && _spiralGifImages.Count > 0)
+                {
+                    _gifFrameTimer = new DispatcherTimer(DispatcherPriority.Render)
+                    {
+                        Interval = _gifFrameDelay
+                    };
+                    _gifFrameTimer.Tick += GifFrameTimer_Tick;
+                    _gifFrameTimer.Start();
+                    App.Logger?.Debug("Spiral GIF animation started with {FrameCount} frames at {Delay}ms interval",
+                        _spiralGifFrames.Count, _gifFrameDelay.TotalMilliseconds);
+                }
+            }
+            else
+            {
+                // For video files, use MediaElement
+                foreach (var screen in screens)
+                {
+                    var (window, media) = CreateSpiralVideoWindow(screen, settings.SpiralOpacity);
+                    if (window != null)
+                    {
+                        _spiralWindows.Add(window);
+                        if (media != null)
+                        {
+                            _spiralMediaElements.Add(media);
+                        }
+                    }
+                }
+
+                // Start loop timer for video files
+                if (_spiralMediaElements.Count > 0)
+                {
+                    _gifLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+                    _gifLoopTimer.Tick += VideoLoopTimer_Tick;
+                    _gifLoopTimer.Start();
                 }
             }
 
-            if (_isGifSpiral && _spiralMediaElements.Count > 0)
-            {
-                _gifLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
-                _gifLoopTimer.Tick += GifLoopTimer_Tick;
-                _gifLoopTimer.Start();
-            }
-
-            App.Logger?.Debug("Spiral started on {Count} screens at opacity {Opacity}%", 
-                _spiralWindows.Count, settings.SpiralOpacity);
+            App.Logger?.Debug("Spiral started on {Count} screens at opacity {Opacity}% (GIF: {IsGif})",
+                _spiralWindows.Count, settings.SpiralOpacity, _isGifSpiral);
         }
         catch (Exception ex)
         {
@@ -468,13 +516,182 @@ public class OverlayService : IDisposable
         }
     }
 
-    private void GifLoopTimer_Tick(object? sender, EventArgs e)
+    /// <summary>
+    /// Load GIF frames from file or embedded resource using System.Drawing.
+    /// This is much more reliable than WPF MediaElement for GIF animation.
+    /// </summary>
+    private bool LoadSpiralGifFrames()
+    {
+        _spiralGifFrames.Clear();
+        _currentGifFrameIndex = 0;
+
+        try
+        {
+            Stream? gifStream = null;
+            bool needsDispose = false;
+
+            // Check if it's an embedded resource (pack:// URI)
+            if (_spiralPath.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var resourceUri = new Uri(_spiralPath, UriKind.Absolute);
+                    var streamInfo = System.Windows.Application.GetResourceStream(resourceUri);
+                    if (streamInfo?.Stream != null)
+                    {
+                        gifStream = streamInfo.Stream;
+                        needsDispose = true;
+                        App.Logger?.Debug("Spiral: Loading embedded resource from {Path}", _spiralPath);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning("Spiral: Failed to load embedded resource {Path}: {Error}", _spiralPath, ex.Message);
+                    return false;
+                }
+            }
+            else if (File.Exists(_spiralPath))
+            {
+                gifStream = new FileStream(_spiralPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                needsDispose = true;
+                App.Logger?.Debug("Spiral: Loading GIF from file {Path}", _spiralPath);
+            }
+
+            if (gifStream == null)
+            {
+                App.Logger?.Warning("Spiral: Could not open stream for {Path}", _spiralPath);
+                return false;
+            }
+
+            try
+            {
+                using var gif = System.Drawing.Image.FromStream(gifStream);
+                var dimension = new FrameDimension(gif.FrameDimensionsList[0]);
+                var frameCount = gif.GetFrameCount(dimension);
+
+                // Get frame delay from metadata
+                var frameDelayMs = 50; // Default 50ms (20 FPS)
+                try
+                {
+                    var propertyItem = gif.GetPropertyItem(0x5100); // FrameDelay property
+                    if (propertyItem?.Value != null && propertyItem.Value.Length >= 4)
+                    {
+                        frameDelayMs = BitConverter.ToInt32(propertyItem.Value, 0) * 10; // Convert to ms
+                        if (frameDelayMs < 20) frameDelayMs = 50; // Sanity check - too fast
+                        if (frameDelayMs > 500) frameDelayMs = 50; // Sanity check - too slow
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Spiral: Could not read GIF frame delay: {Error}", ex.Message);
+                }
+
+                _gifFrameDelay = TimeSpan.FromMilliseconds(frameDelayMs);
+
+                // Limit frames to prevent memory issues (spiral GIFs are usually small)
+                var maxFrames = Math.Min(frameCount, 120);
+                var step = frameCount > maxFrames ? frameCount / maxFrames : 1;
+
+                App.Logger?.Debug("Spiral: Loading {MaxFrames} of {TotalFrames} frames (step={Step}, delay={Delay}ms)",
+                    maxFrames, frameCount, step, frameDelayMs);
+
+                for (int i = 0; i < frameCount && _spiralGifFrames.Count < maxFrames; i += step)
+                {
+                    gif.SelectActiveFrame(dimension, i);
+
+                    // Clone the frame
+                    using var frameBitmap = new System.Drawing.Bitmap(gif.Width, gif.Height);
+                    using (var g = System.Drawing.Graphics.FromImage(frameBitmap))
+                    {
+                        g.DrawImage(gif, 0, 0, gif.Width, gif.Height);
+                    }
+
+                    var bitmapSource = ConvertToBitmapSource(frameBitmap);
+                    bitmapSource.Freeze();
+                    _spiralGifFrames.Add(bitmapSource);
+                }
+
+                App.Logger?.Information("Spiral: Loaded {Count} GIF frames from {Path}", _spiralGifFrames.Count, _spiralPath);
+                return _spiralGifFrames.Count > 0;
+            }
+            finally
+            {
+                if (needsDispose)
+                {
+                    gifStream.Dispose();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error("Spiral: Failed to load GIF frames: {Error}", ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Convert System.Drawing.Bitmap to WPF BitmapSource.
+    /// </summary>
+    private static BitmapSource ConvertToBitmapSource(System.Drawing.Bitmap bitmap)
+    {
+        var bitmapData = bitmap.LockBits(
+            new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
+            System.Drawing.Imaging.ImageLockMode.ReadOnly,
+            System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+        try
+        {
+            var bitmapSource = BitmapSource.Create(
+                bitmap.Width, bitmap.Height,
+                96, 96,
+                PixelFormats.Bgra32,
+                null,
+                bitmapData.Scan0,
+                bitmapData.Stride * bitmap.Height,
+                bitmapData.Stride);
+
+            return bitmapSource;
+        }
+        finally
+        {
+            bitmap.UnlockBits(bitmapData);
+        }
+    }
+
+    /// <summary>
+    /// Timer tick for GIF frame animation - updates all spiral images to the next frame.
+    /// </summary>
+    private void GifFrameTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_spiralGifFrames.Count == 0 || _spiralGifImages.Count == 0) return;
+
+        try
+        {
+            // Advance to next frame
+            _currentGifFrameIndex = (_currentGifFrameIndex + 1) % _spiralGifFrames.Count;
+            var frame = _spiralGifFrames[_currentGifFrameIndex];
+
+            // Update all spiral images to show the same frame (synchronized)
+            foreach (var image in _spiralGifImages)
+            {
+                image.Source = frame;
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("Spiral: Frame animation tick failed: {Error}", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Timer tick for video looping (MediaElement doesn't always fire MediaEnded reliably).
+    /// </summary>
+    private void VideoLoopTimer_Tick(object? sender, EventArgs e)
     {
         foreach (var media in _spiralMediaElements)
         {
             try
             {
-                // For video files with known duration - use position-based looping
                 if (media.NaturalDuration.HasTimeSpan)
                 {
                     var currentPos = media.Position;
@@ -482,25 +699,7 @@ public class OverlayService : IDisposable
                     {
                         media.Position = TimeSpan.Zero;
                         media.Play();
-                        _mediaStartTimes[media] = DateTime.Now;
                     }
-                    continue;
-                }
-
-                // For GIFs - use time-based restart (WPF Position doesn't work for GIFs)
-                if (!_mediaStartTimes.TryGetValue(media, out var startTime))
-                {
-                    _mediaStartTimes[media] = DateTime.Now;
-                    continue;
-                }
-
-                var elapsed = (DateTime.Now - startTime).TotalSeconds;
-                if (elapsed >= GIF_LOOP_INTERVAL_SECONDS)
-                {
-                    // Restart the GIF by seeking to start
-                    media.Position = TimeSpan.Zero;
-                    media.Play();
-                    _mediaStartTimes[media] = DateTime.Now;
                 }
             }
             catch
@@ -510,14 +709,86 @@ public class OverlayService : IDisposable
         }
     }
 
-    private (Window? window, MediaElement? media) CreateSpiralForScreen(System.Windows.Forms.Screen screen, int opacity)
+    /// <summary>
+    /// Creates a spiral window with frame-by-frame GIF animation (reliable, no freezing).
+    /// </summary>
+    private (Window? window, System.Windows.Controls.Image? image) CreateSpiralGifWindow(System.Windows.Forms.Screen screen, int opacity)
     {
         try
         {
-            // Get WPF-compatible screen bounds for initial window creation
+            if (_spiralGifFrames.Count == 0) return (null, null);
+
             var wpfBounds = GetWpfScreenBounds(screen);
 
             // Very subtle opacity - 90% reduction
+            var actualOpacity = (opacity / 100.0) * 0.1;
+
+            var image = new System.Windows.Controls.Image
+            {
+                Source = _spiralGifFrames[0], // Start with first frame
+                Stretch = Stretch.UniformToFill,
+                Opacity = actualOpacity,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            var container = new Grid
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                ClipToBounds = true
+            };
+            container.Children.Add(image);
+
+            var window = new Window
+            {
+                WindowStyle = System.Windows.WindowStyle.None,
+                AllowsTransparency = true,
+                Background = System.Windows.Media.Brushes.Transparent,
+                Topmost = true,
+                ShowInTaskbar = false,
+                ShowActivated = false,
+                Focusable = false,
+                IsHitTestVisible = false,
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = wpfBounds.Left,
+                Top = wpfBounds.Top,
+                Width = wpfBounds.Width,
+                Height = wpfBounds.Height,
+                Content = container
+            };
+
+            var targetScreen = screen;
+
+            window.SourceInitialized += (s, e) =>
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
+                PositionWindowOnScreen(window, targetScreen);
+            };
+
+            window.Show();
+
+            App.Logger?.Debug("Spiral GIF window created for {Screen}", screen.DeviceName);
+
+            return (window, image);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error("Failed to create spiral GIF window: {Error}", ex.Message);
+            return (null, null);
+        }
+    }
+
+    /// <summary>
+    /// Creates a spiral window with MediaElement for video files (.mp4, .webm, etc.).
+    /// </summary>
+    private (Window? window, MediaElement? media) CreateSpiralVideoWindow(System.Windows.Forms.Screen screen, int opacity)
+    {
+        try
+        {
+            var wpfBounds = GetWpfScreenBounds(screen);
             var actualOpacity = (opacity / 100.0) * 0.1;
 
             var mediaElement = new MediaElement
@@ -538,9 +809,6 @@ public class OverlayService : IDisposable
                 mediaElement.Play();
             };
 
-            // Use a Grid container for proper centering on all monitors
-            // Grid respects HorizontalAlignment/VerticalAlignment of children
-            // UniformToFill on MediaElement will scale to fill while cropping edges, keeping center visible
             var container = new Grid
             {
                 HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -549,7 +817,6 @@ public class OverlayService : IDisposable
             };
             container.Children.Add(mediaElement);
 
-            // Create window - initial position is approximate, will be corrected via SetWindowPos
             var window = new Window
             {
                 WindowStyle = System.Windows.WindowStyle.None,
@@ -568,7 +835,6 @@ public class OverlayService : IDisposable
                 Content = container
             };
 
-            // Capture screen reference for use in handler
             var targetScreen = screen;
 
             window.SourceInitialized += (s, e) =>
@@ -576,30 +842,38 @@ public class OverlayService : IDisposable
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
                 var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
                 SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
-
-                // Use SetWindowPos with physical pixel coordinates for exact positioning
-                // This bypasses WPF's DPI virtualization which causes offset issues on mixed-DPI setups
                 PositionWindowOnScreen(window, targetScreen);
             };
 
             window.Show();
 
-            App.Logger?.Debug("Spiral created for {Screen}", screen.DeviceName);
+            App.Logger?.Debug("Spiral video window created for {Screen}", screen.DeviceName);
 
             return (window, mediaElement);
         }
         catch (Exception ex)
         {
-            App.Logger?.Error("Failed to create spiral for screen: {Error}", ex.Message);
+            App.Logger?.Error("Failed to create spiral video window: {Error}", ex.Message);
             return (null, null);
         }
     }
 
     private void StopSpiral()
     {
+        // Stop frame animation timer
+        _gifFrameTimer?.Stop();
+        _gifFrameTimer = null;
+
+        // Stop video loop timer
         _gifLoopTimer?.Stop();
         _gifLoopTimer = null;
 
+        // Clear GIF frames and images
+        _spiralGifFrames.Clear();
+        _spiralGifImages.Clear();
+        _currentGifFrameIndex = 0;
+
+        // Stop and clear MediaElements
         foreach (var media in _spiralMediaElements.ToList())
         {
             try { media.Stop(); media.Close(); }
@@ -611,6 +885,7 @@ public class OverlayService : IDisposable
         _spiralMediaElements.Clear();
         _mediaStartTimes.Clear();
 
+        // Close all windows
         foreach (var window in _spiralWindows.ToList())
         {
             try { window.Close(); }
@@ -627,6 +902,14 @@ public class OverlayService : IDisposable
     {
         // Very subtle opacity - 90% reduction
         var opacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
+
+        // Update GIF images
+        foreach (var image in _spiralGifImages)
+        {
+            image.Opacity = opacity;
+        }
+
+        // Update MediaElements (for video spirals)
         foreach (var media in _spiralMediaElements)
         {
             media.Opacity = opacity;

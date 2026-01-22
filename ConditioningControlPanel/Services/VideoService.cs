@@ -529,7 +529,16 @@ namespace ConditioningControlPanel.Services
 
             _scheduler?.Stop();
             _scheduler = new DispatcherTimer { Interval = TimeSpan.FromSeconds(Math.Max(60, secs)) };
-            _scheduler.Tick += (s, e) => { _scheduler?.Stop(); if (_isRunning && !_videoPlaying) TriggerVideo(); ScheduleNext(); };
+            _scheduler.Tick += (s, e) =>
+            {
+                _scheduler?.Stop();
+                if (_isRunning && !_videoPlaying)
+                {
+                    TriggerVideo();
+                    ScheduleNext();
+                }
+                // If video is playing, don't reschedule here - Cleanup() will call ScheduleNext() when video ends
+            };
             _scheduler.Start();
         }
 
@@ -1047,59 +1056,91 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning("SpawnTarget: No screens available");
                     return;
                 }
-                var screen = screens[_random.Next(screens.Length)];
 
-                _spawned++; // Track actually spawned targets
-                App.Logger?.Debug("Spawning attention target: '{Text}' on screen {Screen} ({Spawned}/{Total})", text, screen.DeviceName, _spawned, _total);
+                _spawned++; // Track spawn events (not individual targets)
 
-                FloatingText? target = null;
-                target = new FloatingText(text, screen, settings.AttentionSize, () =>
+                // When dual monitor is enabled, spawn targets on ALL screens simultaneously
+                // User only needs to click ONE target to get the hit - all targets from this spawn clear together
+                var spawnedTargets = new List<FloatingText>();
+                bool hitRegistered = false; // Prevent double-counting hits from the same spawn
+
+                App.Logger?.Debug("Spawning attention target: '{Text}' on {ScreenCount} screen(s) ({Spawned}/{Total})",
+                    text, screens.Length, _spawned, _total);
+
+                foreach (var screen in screens)
                 {
-                    _ = App.Haptics?.VideoTargetHitAsync();
-                    _hits++;
-                    App.Progression?.AddXP(10);
+                    if (screen == null) continue;
 
-                    // Remove from targets list immediately on click
-                    List<FloatingText> remainingTargets;
+                    FloatingText? target = null;
+                    target = new FloatingText(text, screen, settings.AttentionSize, () =>
+                    {
+                        // Only count as a hit once per spawn (user clicked any target from this batch)
+                        if (hitRegistered) return;
+                        hitRegistered = true;
+
+                        _ = App.Haptics?.VideoTargetHitAsync();
+                        _hits++;
+                        App.Progression?.AddXP(10);
+
+                        // Destroy ALL targets from this spawn (user caught one, clear all on all monitors)
+                        lock (_targets)
+                        {
+                            foreach (var t in spawnedTargets)
+                            {
+                                if (_targets.Contains(t))
+                                {
+                                    _targets.Remove(t);
+                                    if (t != target) // The clicked one will fade out naturally
+                                    {
+                                        t.Destroy();
+                                    }
+                                }
+                            }
+                        }
+
+                        // Get remaining targets for bringing to front
+                        List<FloatingText> remainingTargets;
+                        lock (_targets)
+                        {
+                            remainingTargets = _targets.ToList();
+                        }
+
+                        App.Logger?.Information("ATTENTION: Hit {Hits}/{Spawned}, {Remaining} targets remaining", _hits, _spawned, remainingTargets.Count);
+
+                        // Bring remaining targets to front AFTER the clicked target fully closes
+                        if (remainingTargets.Count > 0)
+                        {
+                            Task.Delay(300).ContinueWith(_ =>
+                            {
+                                try
+                                {
+                                    Application.Current?.Dispatcher.BeginInvoke(() =>
+                                    {
+                                        foreach (var t in remainingTargets)
+                                        {
+                                            t.BringToFront();
+                                        }
+                                    });
+                                }
+                                catch (Exception ex)
+                                {
+                                    App.Logger?.Debug("Failed to bring targets to front after hit: {Error}", ex.Message);
+                                }
+                            });
+                        }
+                    });
+
+                    spawnedTargets.Add(target);
                     lock (_targets)
                     {
-                        if (target != null) _targets.Remove(target);
-                        remainingTargets = _targets.ToList();
+                        _targets.Add(target);
                     }
-
-                    App.Logger?.Information("ATTENTION: Hit {Hits}/{Spawned}, {Remaining} targets remaining", _hits, _spawned, remainingTargets.Count);
-
-                    // Bring remaining targets to front AFTER the clicked target fully closes
-                    // FadeOut takes ~200ms, so wait 300ms to ensure window is closed
-                    if (remainingTargets.Count > 0)
-                    {
-                        Task.Delay(300).ContinueWith(_ =>
-                        {
-                            try
-                            {
-                                Application.Current?.Dispatcher.BeginInvoke(() =>
-                                {
-                                    foreach (var t in remainingTargets)
-                                    {
-                                        t.BringToFront();
-                                    }
-                                });
-                            }
-                            catch (Exception ex)
-                            {
-                                App.Logger?.Debug("Failed to bring targets to front after hit: {Error}", ex.Message);
-                            }
-                        });
-                    }
-                });
-
-                lock (_targets)
-                {
-                    _targets.Add(target);
-                    App.Logger?.Information("ATTENTION: Target added to list, total now: {Count}", _targets.Count);
                 }
 
-                // Auto-expire with safety check
+                App.Logger?.Information("ATTENTION: Spawned {Count} targets on all screens, total now: {Total}",
+                    spawnedTargets.Count, _targets.Count);
+
+                // Auto-expire all targets from this spawn together
                 var lifespan = settings.AttentionLifespan * 1000;
                 Task.Delay(lifespan).ContinueWith(_ =>
                 {
@@ -1112,16 +1153,19 @@ namespace ConditioningControlPanel.Services
                             {
                                 lock (_targets)
                                 {
-                                    if (_targets.Contains(target))
+                                    foreach (var target in spawnedTargets)
                                     {
-                                        _targets.Remove(target);
-                                        target.Destroy();
+                                        if (_targets.Contains(target))
+                                        {
+                                            _targets.Remove(target);
+                                            target.Destroy();
+                                        }
                                     }
                                 }
                             }
                             catch (Exception ex)
                             {
-                                App.Logger?.Warning("Error expiring target: {Error}", ex.Message);
+                                App.Logger?.Warning("Error expiring targets: {Error}", ex.Message);
                             }
                         });
                     }
