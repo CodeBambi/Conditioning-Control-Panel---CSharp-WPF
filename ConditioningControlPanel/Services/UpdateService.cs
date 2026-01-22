@@ -22,23 +22,23 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.2.3";
+        public const string AppVersion = "5.2.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.2.3
+        public const string CurrentPatchNotes = @"v5.2.4
 
-🔧 UPDATE FIX
+🔧 UPDATE IMPROVEMENTS
 • Fixed update detection for Inno Setup installations
-• Users who installed via installer can now update properly
+• Added browser fallback when automatic update fails
+• If update check fails but server says update exists, offers to open releases page
 
-📦 v5.2.2 FEATURES (included)
+📦 PREVIOUS FIXES (included)
 • Video scheduling fix - videos no longer slow down after 1-2 hours
 • Account linking (Patreon ↔ Discord)
-• Bandwidth display works with Discord login
-• Welcome banner shows name for both Patreon and Discord";
+• Bandwidth/welcome banner work with Discord login";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

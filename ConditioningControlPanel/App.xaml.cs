@@ -981,8 +981,44 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
+                    // Check if server banner indicated an update but our check failed
+                    // This can happen with Inno Setup installations or network issues
+                    var mainWindow = owner as MainWindow;
+                    var serverIndicatedUpdate = mainWindow?.BtnUpdateAvailable?.Tag?.ToString() == "UrgentUpdate";
+
+                    if (serverIndicatedUpdate)
+                    {
+                        // Offer to open releases page as fallback
+                        Logger?.Warning("Update check returned no update, but server banner indicated update available. Offering browser fallback.");
+                        var result = MessageBox.Show(
+                            owner,
+                            "The automatic update check couldn't find the update, but our server indicates a new version is available.\n\n" +
+                            "This can happen with certain installation types. Would you like to open the releases page to download manually?\n\n" +
+                            "After this update, automatic updates should work normally.",
+                            "Update Available",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Information);
+
+                        if (result == MessageBoxResult.Yes)
+                        {
+                            try
+                            {
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest",
+                                    UseShellExecute = true
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger?.Error(ex, "Failed to open releases page");
+                            }
+                        }
+                        return false;
+                    }
+
                     // Hide the update button since we're on latest
-                    (owner as MainWindow)?.ShowUpdateAvailableButton(false);
+                    mainWindow?.ShowUpdateAvailableButton(false);
 
                     MessageBox.Show(
                         owner,
@@ -996,6 +1032,36 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 Logger?.Error(ex, "Manual update check failed");
+
+                // Even on error, check if server indicated an update and offer browser fallback
+                var mainWindow = owner as MainWindow;
+                var serverIndicatedUpdate = mainWindow?.BtnUpdateAvailable?.Tag?.ToString() == "UrgentUpdate";
+
+                if (serverIndicatedUpdate)
+                {
+                    var result = MessageBox.Show(
+                        owner,
+                        $"Update check failed: {ex.Message}\n\n" +
+                        "However, our server indicates a new version is available. Would you like to open the releases page to download manually?",
+                        "Update Check Failed",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        try
+                        {
+                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/latest",
+                                UseShellExecute = true
+                            });
+                        }
+                        catch { }
+                    }
+                    return false;
+                }
+
                 MessageBox.Show(
                     owner,
                     $"Failed to check for updates: {ex.Message}",
