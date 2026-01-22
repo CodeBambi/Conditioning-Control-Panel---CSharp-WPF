@@ -954,8 +954,18 @@ namespace ConditioningControlPanel
 
                     if (installRequested)
                     {
-                        if (requiresFreshInstall)
+                        // Use installer download for:
+                        // 1. Major updates requiring fresh install (pre-5.1 to 5.1+)
+                        // 2. Updates detected via GitHub API fallback (Velopack couldn't find them)
+                        // 3. Inno Setup installations (Velopack not available)
+                        var useInstallerDownload = requiresFreshInstall ||
+                                                   updateInfo.IsGitHubFallback ||
+                                                   (UpdateService.IsInstalledViaInstaller && Update?.IsInstalled == false);
+
+                        if (useInstallerDownload)
                         {
+                            Logger?.Information("Using installer download flow (requiresFreshInstall={Fresh}, isGitHubFallback={Fallback}, isInnoSetup={Inno})",
+                                requiresFreshInstall, updateInfo.IsGitHubFallback, UpdateService.IsInstalledViaInstaller && Update?.IsInstalled == false);
                             ((App)Current).DownloadAndRunInstallerAsync(owner);
                         }
                         else

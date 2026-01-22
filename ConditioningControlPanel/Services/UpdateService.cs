@@ -22,27 +22,23 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.2.2";
+        public const string AppVersion = "5.2.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.2.2
+        public const string CurrentPatchNotes = @"v5.2.3
 
-🔧 VIDEO SCHEDULING FIX
-• Fixed videos playing less frequently after 1-2 hours
-• Scheduler no longer resets during video playback
+🔧 UPDATE FIX
+• Fixed update detection for Inno Setup installations
+• Users who installed via installer can now update properly
 
-🔗 ACCOUNT LINKING (Patreon ↔ Discord)
-• Same email: Auto-links accounts when logging in via Discord
-• Different emails: Can claim your Patreon name when logging in via Discord
-• Linked accounts share display name and Patreon benefits
-
-📊 BANDWIDTH & WELCOME BANNER
-• Bandwidth display now works with Discord login
-• Discord users inherit Patreon benefits if accounts are linked
-• Welcome banner shows your name for both Patreon and Discord logins";
+📦 v5.2.2 FEATURES (included)
+• Video scheduling fix - videos no longer slow down after 1-2 hours
+• Account linking (Patreon ↔ Discord)
+• Bandwidth display works with Discord login
+• Welcome banner shows name for both Patreon and Discord";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
@@ -195,12 +191,29 @@ namespace ConditioningControlPanel.Services
                     return null;
                 }
 
-                App.Logger?.Information("Checking for updates... (current AppVersion: {Version}, force: {Force})", AppVersion, forceCheck);
+                App.Logger?.Information("Checking for updates... (current AppVersion: {Version}, force: {Force}, IsInstalled: {IsInstalled}, IsInstalledViaInstaller: {IsInstalledViaInstaller})",
+                    AppVersion, forceCheck, _updateManager.IsInstalled, IsInstalledViaInstaller);
 
-                // Skip update check if running in development/not installed
+                // If not installed via Velopack, try GitHub API directly for Inno Setup users
                 if (!_updateManager.IsInstalled)
                 {
-                    App.Logger?.Information("App is not installed via Velopack, skipping update check");
+                    // Check if installed via Inno Setup installer
+                    if (IsInstalledViaInstaller)
+                    {
+                        App.Logger?.Information("App installed via Inno Setup, checking GitHub API for updates...");
+                        var githubUpdate = await CheckGitHubReleasesAsync();
+                        if (githubUpdate != null && githubUpdate.IsNewer)
+                        {
+                            App.Logger?.Information("GitHub API found update for Inno Setup user: {Version}", githubUpdate.Version);
+                            _latestUpdate = githubUpdate;
+                            UpdateAvailable?.Invoke(this, githubUpdate);
+                            return githubUpdate;
+                        }
+                        App.Logger?.Information("No updates available from GitHub API for Inno Setup user");
+                        return null;
+                    }
+
+                    App.Logger?.Information("App is not installed (running from source/dev), skipping update check");
                     return null;
                 }
 
