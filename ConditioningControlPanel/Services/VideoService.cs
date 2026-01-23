@@ -32,6 +32,7 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _scheduler;
         private DispatcherTimer? _attentionTimer;
         private DispatcherTimer? _safetyTimer;
+        private DispatcherTimer? _fallbackSafetyTimer;
 
         private bool _isRunning;
         private bool _videoPlaying;
@@ -39,6 +40,9 @@ namespace ConditioningControlPanel.Services
         private string? _retryPath;
         private DateTime _startTime;
         private double _duration;
+
+        // Maximum video duration fallback (10 minutes) - if LengthChanged never fires
+        private const int MaxVideoFallbackSeconds = 600;
         
         private List<double> _spawnTimes = new();
         private int _hits, _total, _spawned, _penalties;
@@ -242,6 +246,8 @@ namespace ConditioningControlPanel.Services
             _scheduler?.Stop();
             _attentionTimer?.Stop();
             _safetyTimer?.Stop();
+            _fallbackSafetyTimer?.Stop();
+            _fallbackSafetyTimer = null;
 
             // Force cleanup of any playing video
             _videoPlaying = false;
@@ -392,6 +398,8 @@ namespace ConditioningControlPanel.Services
         public void ForceCleanup()
         {
             _safetyTimer?.Stop();
+            _fallbackSafetyTimer?.Stop();
+            _fallbackSafetyTimer = null;
             _videoPlaying = false;
             _strictActive = false;
             CloseAll();
@@ -581,6 +589,11 @@ namespace ConditioningControlPanel.Services
 
             try
             {
+                // Start a fallback safety timer immediately - this ensures we ALWAYS have a timeout
+                // even if LibVLC's LengthChanged never fires. Will be replaced by accurate timer
+                // once video duration is known.
+                StartFallbackSafetyTimer();
+
                 // Ensure LibVLC is initialized (deferred from startup for faster launch)
                 EnsureLibVLCInitialized();
 
@@ -1425,6 +1438,10 @@ namespace ConditioningControlPanel.Services
         {
             _safetyTimer?.Stop();
 
+            // Stop the fallback timer since we now have accurate duration
+            _fallbackSafetyTimer?.Stop();
+            _fallbackSafetyTimer = null;
+
             // Add 5 second buffer beyond video duration
             var timeoutSeconds = videoDurationSeconds + 5;
 
@@ -1440,7 +1457,32 @@ namespace ConditioningControlPanel.Services
             };
             _safetyTimer.Start();
 
-            App.Logger?.Debug("VideoService: Safety timer started for {Duration}s", timeoutSeconds);
+            App.Logger?.Debug("VideoService: Safety timer started for {Duration}s (fallback timer stopped)", timeoutSeconds);
+        }
+
+        /// <summary>
+        /// Starts a fallback safety timer with a fixed maximum duration.
+        /// Used when video duration is unknown (LengthChanged may never fire).
+        /// Will be replaced by accurate timer once duration is known.
+        /// </summary>
+        private void StartFallbackSafetyTimer()
+        {
+            _fallbackSafetyTimer?.Stop();
+
+            _fallbackSafetyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(MaxVideoFallbackSeconds) };
+            _fallbackSafetyTimer.Tick += (s, e) =>
+            {
+                _fallbackSafetyTimer?.Stop();
+                if (_videoPlaying)
+                {
+                    App.Logger?.Warning("VideoService: FALLBACK safety timeout triggered after {Duration}s - video duration was never determined. Forcing cleanup.",
+                        MaxVideoFallbackSeconds);
+                    Cleanup();
+                }
+            };
+            _fallbackSafetyTimer.Start();
+
+            App.Logger?.Debug("VideoService: Fallback safety timer started for {Duration}s", MaxVideoFallbackSeconds);
         }
 
         #endregion
@@ -1526,6 +1568,8 @@ namespace ConditioningControlPanel.Services
         private void Cleanup()
         {
             _safetyTimer?.Stop();
+            _fallbackSafetyTimer?.Stop();
+            _fallbackSafetyTimer = null;
             _videoPlaying = false;
             CloseAll();
             App.Audio?.Unduck();

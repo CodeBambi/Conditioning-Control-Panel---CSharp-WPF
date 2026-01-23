@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Windows.Threading;
 
 namespace ConditioningControlPanel.Services;
 
@@ -18,6 +19,11 @@ public class InteractionQueueService
 
     private readonly Queue<(InteractionType Type, Action Trigger)> _queue = new();
     private readonly object _lock = new();
+    private DispatcherTimer? _stuckDetectionTimer;
+    private DateTime _interactionStartTime;
+
+    // Maximum time an interaction can be active before auto-recovery (5 minutes)
+    private const int MaxInteractionDurationMinutes = 5;
 
     /// <summary>
     /// Currently active interaction type, or null if none
@@ -62,10 +68,17 @@ public class InteractionQueueService
             if (!IsBusy)
             {
                 CurrentInteraction = type;
+                _interactionStartTime = DateTime.Now;
+                StartStuckDetectionTimer();
                 App.Logger?.Information("InteractionQueue: Starting {Type}", type);
                 triggerAction();
                 return true;
             }
+
+            // Log how long current interaction has been active (helps diagnose stuck queue)
+            var activeDuration = DateTime.Now - _interactionStartTime;
+            App.Logger?.Debug("InteractionQueue: {Type} blocked by {Current} (active for {Duration:F1}s, queue: {Count})",
+                type, CurrentInteraction, activeDuration.TotalSeconds, _queue.Count);
 
             if (queue)
             {
@@ -98,11 +111,22 @@ public class InteractionQueueService
     {
         lock (_lock)
         {
+            StopStuckDetectionTimer();
+
             if (CurrentInteraction != type)
             {
-                App.Logger?.Warning("InteractionQueue: Complete called for {Type} but current is {Current}",
-                    type, CurrentInteraction);
-                return;
+                // Type mismatch - this could indicate a bug, but we should still try to recover
+                // If CurrentInteraction is null, the queue is already clear
+                if (!CurrentInteraction.HasValue)
+                {
+                    App.Logger?.Debug("InteractionQueue: Complete({Type}) called but queue already clear", type);
+                    return;
+                }
+
+                // Log warning but continue to clear if this helps unstick the queue
+                var activeDuration = DateTime.Now - _interactionStartTime;
+                App.Logger?.Warning("InteractionQueue: Complete called for {Type} but current is {Current} (active {Duration:F1}s). Clearing anyway to prevent stuck state.",
+                    type, CurrentInteraction, activeDuration.TotalSeconds);
             }
 
             App.Logger?.Information("InteractionQueue: Completed {Type}", type);
@@ -113,6 +137,8 @@ public class InteractionQueueService
             {
                 var next = _queue.Dequeue();
                 CurrentInteraction = next.Type;
+                _interactionStartTime = DateTime.Now;
+                StartStuckDetectionTimer();
                 App.Logger?.Information("InteractionQueue: Starting queued {Type} (remaining: {Count})",
                     next.Type, _queue.Count);
 
@@ -150,6 +176,84 @@ public class InteractionQueueService
             if (count > 0)
             {
                 App.Logger?.Information("InteractionQueue: Cleared {Count} queued items", count);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts a timer that auto-recovers from stuck interactions after MaxInteractionDurationMinutes
+    /// </summary>
+    private void StartStuckDetectionTimer()
+    {
+        try
+        {
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            {
+                StopStuckDetectionTimer();
+
+                _stuckDetectionTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMinutes(MaxInteractionDurationMinutes)
+                };
+                _stuckDetectionTimer.Tick += OnStuckDetectionTimerTick;
+                _stuckDetectionTimer.Start();
+            });
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("Failed to start stuck detection timer: {Error}", ex.Message);
+        }
+    }
+
+    private void StopStuckDetectionTimer()
+    {
+        try
+        {
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            {
+                _stuckDetectionTimer?.Stop();
+                _stuckDetectionTimer = null;
+            });
+        }
+        catch
+        {
+            // Ignore errors during shutdown
+        }
+    }
+
+    private void OnStuckDetectionTimerTick(object? sender, EventArgs e)
+    {
+        _stuckDetectionTimer?.Stop();
+
+        lock (_lock)
+        {
+            if (!CurrentInteraction.HasValue)
+            {
+                return; // Not stuck anymore
+            }
+
+            var activeDuration = DateTime.Now - _interactionStartTime;
+            App.Logger?.Warning("InteractionQueue: STUCK INTERACTION DETECTED! {Type} has been active for {Duration:F1} minutes. Auto-recovering...",
+                CurrentInteraction, activeDuration.TotalMinutes);
+
+            // Force reset to recover
+            CurrentInteraction = null;
+
+            // Trigger next queued interaction if any
+            if (_queue.Count > 0)
+            {
+                var next = _queue.Dequeue();
+                CurrentInteraction = next.Type;
+                _interactionStartTime = DateTime.Now;
+                StartStuckDetectionTimer();
+                App.Logger?.Information("InteractionQueue: Auto-recovery starting queued {Type} (remaining: {Count})",
+                    next.Type, _queue.Count);
+
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(next.Trigger);
+            }
+            else
+            {
+                App.Logger?.Information("InteractionQueue: Auto-recovery complete, queue is now clear");
             }
         }
     }
