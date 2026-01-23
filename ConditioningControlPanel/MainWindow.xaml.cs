@@ -1197,6 +1197,24 @@ namespace ConditioningControlPanel
 
         private async void BtnUpdateAvailable_Click(object sender, RoutedEventArgs e)
         {
+            // If server provided a URL, open it in browser instead of auto-updating
+            if (!string.IsNullOrEmpty(_serverUpdateUrl))
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = _serverUpdateUrl,
+                        UseShellExecute = true
+                    });
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning("Failed to open update URL: {Error}", ex.Message);
+                }
+            }
+
             // Trigger the update installation
             await App.CheckForUpdatesManuallyAsync(this);
         }
@@ -2061,6 +2079,9 @@ namespace ConditioningControlPanel
                     TxtAiStatus.Text = "Subscribe to Level 1 ($5/mo) to unlock AI Chat";
                 }
             }
+
+            // Update XP bar login state when Patreon auth changes
+            UpdateXPBarLoginState();
         }
 
         private async void BtnPatreonLogin_Click(object sender, RoutedEventArgs e)
@@ -2231,6 +2252,9 @@ namespace ConditioningControlPanel
                 TxtDiscordInfo.Text = "Link Discord for community features";
                 BtnDiscordLogin.Content = "Login with Discord";
             }
+
+            // Update XP bar login state when Discord auth changes
+            UpdateXPBarLoginState();
         }
 
         private void ChkShareAchievements_Changed(object sender, RoutedEventArgs e)
@@ -6864,9 +6888,37 @@ namespace ConditioningControlPanel
                 < 100 => "SYNTHETIC BLOWDOLL",
                 _ => "PERFECT FUCKPUPPET"
             };
-            
+
             // Update unlockables visibility based on level
             UpdateUnlockablesVisibility(level);
+
+            // Update XP bar login state
+            UpdateXPBarLoginState();
+        }
+
+        /// <summary>
+        /// Updates the XP bar visibility based on login status.
+        /// Shows a login prompt overlay when user is not logged in.
+        /// </summary>
+        private void UpdateXPBarLoginState()
+        {
+            var isLoggedIn = (App.Discord?.IsAuthenticated == true) || (App.Patreon?.IsAuthenticated == true);
+
+            if (XPBarLoginOverlay != null && XPBarContent != null)
+            {
+                if (isLoggedIn)
+                {
+                    // User is logged in - show normal XP bar
+                    XPBarLoginOverlay.Visibility = Visibility.Collapsed;
+                    XPBarContent.Opacity = 1.0;
+                }
+                else
+                {
+                    // User is not logged in - show overlay and gray out XP bar
+                    XPBarLoginOverlay.Visibility = Visibility.Visible;
+                    XPBarContent.Opacity = 0.3;
+                }
+            }
         }
 
         private void UpdateUnlockablesVisibility(int level)
@@ -8028,7 +8080,11 @@ namespace ConditioningControlPanel
             public bool enabled { get; set; }
             public string? version { get; set; }
             public string? message { get; set; }
+            public string? url { get; set; }
         }
+
+        // Store the server-provided update URL for redirect
+        private string? _serverUpdateUrl;
 
         /// <summary>
         /// Check server for forced update banner configuration.
@@ -8058,6 +8114,9 @@ namespace ConditioningControlPanel
                             App.Logger?.Information("Server update banner enabled: version={Version}, message={Message}",
                                 result.version, result.message);
 
+                            // Store the URL if provided
+                            _serverUpdateUrl = result.url;
+
                             // Update the button on UI thread
                             Dispatcher.Invoke(() =>
                             {
@@ -8065,7 +8124,9 @@ namespace ConditioningControlPanel
                                 {
                                     BtnUpdateAvailable.Tag = "UrgentUpdate";
                                     BtnUpdateAvailable.Content = $"UPDATE AVAILABLE v{result.version}";
-                                    BtnUpdateAvailable.ToolTip = $"Version {result.version} is available - Click to update!";
+                                    BtnUpdateAvailable.ToolTip = !string.IsNullOrEmpty(result.url)
+                                        ? $"Version {result.version} is available - Click to visit download page!"
+                                        : $"Version {result.version} is available - Click to update!";
                                 }
                             });
                         }
@@ -10216,6 +10277,9 @@ namespace ConditioningControlPanel
                 e.Cancel = true;
                 _trayIcon?.MinimizeToTray();
                 HideAvatarTube();
+
+                // Stop bouncing text when minimizing to tray (user expects app to be "closed")
+                App.BouncingText?.Stop();
             }
             base.OnClosing(e);
         }
