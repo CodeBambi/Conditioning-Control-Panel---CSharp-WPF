@@ -470,6 +470,17 @@ namespace ConditioningControlPanel.Models
             set { _customAssetsPath = value ?? ""; OnPropertyChanged(); }
         }
 
+        private bool _firstRunAssetsPromptShown = false;
+        /// <summary>
+        /// Whether the first-run assets folder prompt has been shown.
+        /// Prevents repeatedly asking user to choose a folder.
+        /// </summary>
+        public bool FirstRunAssetsPromptShown
+        {
+            get => _firstRunAssetsPromptShown;
+            set { _firstRunAssetsPromptShown = value; OnPropertyChanged(); }
+        }
+
         #region Active Assets
 
         private HashSet<string> _activeAssetPaths = new();
@@ -1326,6 +1337,109 @@ namespace ConditioningControlPanel.Models
         {
             get => _awarenessReactionCooldownSeconds;
             set { _awarenessReactionCooldownSeconds = Math.Clamp(value, 10, 600); OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region Companion Leveling System (v5.3)
+
+        private int _activeCompanionId = 0;
+        /// <summary>
+        /// Currently active companion (0=OG Bambi Sprite, 1=Cult Bunny, 2=Brain Parasite, 3=Bambi Trainer).
+        /// XP is only awarded to the active companion.
+        /// </summary>
+        public int ActiveCompanionId
+        {
+            get => _activeCompanionId;
+            set { _activeCompanionId = Math.Clamp(value, 0, 3); OnPropertyChanged(); }
+        }
+
+        private Dictionary<int, CompanionProgress>? _companionProgressData;
+        /// <summary>
+        /// Progress data for each companion (keyed by CompanionId int value).
+        /// Each companion has their own independent level and XP.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<int, CompanionProgress> CompanionProgressData
+        {
+            get => _companionProgressData ??= new Dictionary<int, CompanionProgress>();
+            set { _companionProgressData = value ?? new Dictionary<int, CompanionProgress>(); OnPropertyChanged(); }
+        }
+
+        private List<string>? _installedCommunityPromptIds;
+        /// <summary>
+        /// IDs of installed community prompt presets.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> InstalledCommunityPromptIds
+        {
+            get => _installedCommunityPromptIds ??= new List<string>();
+            set { _installedCommunityPromptIds = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private string? _activeCommunityPromptId;
+        /// <summary>
+        /// Currently active community prompt ID (null = use built-in/custom).
+        /// </summary>
+        public string? ActiveCommunityPromptId
+        {
+            get => _activeCommunityPromptId;
+            set { _activeCommunityPromptId = value; OnPropertyChanged(); }
+        }
+
+        private Dictionary<int, string>? _companionPromptAssignments;
+        /// <summary>
+        /// Maps companion IDs to their assigned AI prompt IDs.
+        /// When a companion is activated, their assigned prompt is automatically loaded.
+        /// Key: CompanionId (0-3), Value: CommunityPromptId (or null for default)
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<int, string> CompanionPromptAssignments
+        {
+            get => _companionPromptAssignments ??= new Dictionary<int, string>();
+            set { _companionPromptAssignments = value ?? new Dictionary<int, string>(); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Gets the assigned prompt ID for a specific companion, or null if none assigned.
+        /// </summary>
+        public string? GetCompanionPromptId(int companionId)
+        {
+            return CompanionPromptAssignments.TryGetValue(companionId, out var promptId) ? promptId : null;
+        }
+
+        /// <summary>
+        /// Assigns a prompt to a companion. Pass null to clear assignment.
+        /// </summary>
+        public void SetCompanionPromptId(int companionId, string? promptId)
+        {
+            if (string.IsNullOrEmpty(promptId))
+            {
+                CompanionPromptAssignments.Remove(companionId);
+            }
+            else
+            {
+                CompanionPromptAssignments[companionId] = promptId;
+            }
+            OnPropertyChanged(nameof(CompanionPromptAssignments));
+        }
+
+        /// <summary>
+        /// Gets the progress for the currently active companion.
+        /// Creates default progress if not yet tracked.
+        /// </summary>
+        [JsonIgnore]
+        public CompanionProgress ActiveCompanionProgress
+        {
+            get
+            {
+                if (!CompanionProgressData.TryGetValue(ActiveCompanionId, out var progress))
+                {
+                    progress = CompanionProgress.CreateNew((CompanionId)ActiveCompanionId);
+                    CompanionProgressData[ActiveCompanionId] = progress;
+                }
+                return progress;
+            }
         }
 
         #endregion

@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
 {
@@ -323,7 +324,7 @@ namespace ConditioningControlPanel
             {
                 var xpAmount = (50 * _requiredRepeats) + 200;
                 if (_strictMode) xpAmount = (int)(xpAmount * 1.5);
-                App.Progression?.AddXP(xpAmount);
+                App.Progression?.AddXP(xpAmount, XPSource.LockCard);
             }
             catch { }
             

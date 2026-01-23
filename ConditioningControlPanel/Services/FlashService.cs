@@ -666,7 +666,7 @@ namespace ConditioningControlPanel.Services
             
             // Award XP for viewing
             var xpAmount = _soundPlayingForCurrentFlash ? 15 : 7;
-            App.Progression.AddXP(xpAmount);
+            App.Progression?.AddXP(xpAmount, XPSource.Flash);
             
             // Track for achievement
             App.Achievements?.TrackFlashImage();

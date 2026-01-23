@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
 {
@@ -169,7 +170,7 @@ namespace ConditioningControlPanel
             if (answer == _correctAnswer)
             {
                 // Correct!
-                App.Progression?.AddXP(250);
+                App.Progression?.AddXP(250, XPSource.BubbleCount);
                 ShowFeedbackOnAll("🎉 CORRECT! +250 XP 🎉", Color.FromRgb(50, 205, 50));
                 DisableInputOnAll();
                 

@@ -304,6 +304,13 @@ namespace ConditioningControlPanel
                 App.Progression.LevelUp += OnLevelUp;
             }
 
+            // Wire up companion events (v5.3 companion leveling)
+            if (App.Companion != null)
+            {
+                App.Companion.CompanionLevelUp += OnCompanionLevelUp;
+                App.Companion.CompanionSwitched += OnCompanionSwitched;
+            }
+
             // Wire up window awareness events (opt-in feature)
             if (App.WindowAwareness != null)
             {
@@ -512,6 +519,16 @@ namespace ConditioningControlPanel
                 App.Settings.Save();
             }
 
+            // Link avatar sets 4+ to companions (v5.3)
+            // Set 4: Level 50 → Companion 0 (Perfect Fuckpuppet)
+            // Set 5: Level 125 → Companion 2 (Brainwashed Slavedoll)
+            // Set 6: Level 150 → Companion 3 (Platinum Puppet)
+            var companionId = GetCompanionForAvatarSet(setNumber);
+            if (companionId.HasValue && App.Companion != null)
+            {
+                App.Companion.SwitchCompanion(companionId.Value);
+            }
+
             Action switchAction = () =>
             {
                 if (_useAnimatedAvatar)
@@ -564,14 +581,99 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Update the title and level display
+        /// Gets the companion ID that corresponds to an avatar set.
+        /// Returns null for sets 1-2 (pre-level 35 avatars without companions).
+        /// </summary>
+        private static Models.CompanionId? GetCompanionForAvatarSet(int setNumber)
+        {
+            return setNumber switch
+            {
+                3 => Models.CompanionId.OGBambiSprite,      // Level 50: Synthetic Blowdoll
+                4 => Models.CompanionId.CultBunny,          // Level 100: Perfect Fuckpuppet
+                5 => Models.CompanionId.BrainParasite,      // Level 125: Brainwashed Slavedoll
+                6 => Models.CompanionId.BambiTrainer,       // Level 150: Platinum Puppet
+                _ => null                                    // Sets 1-2 have no companion
+            };
+        }
+
+        /// <summary>
+        /// Gets the avatar set that corresponds to a companion.
+        /// Used when switching companions from the UI to update the avatar.
+        /// </summary>
+        public static int GetAvatarSetForCompanion(Models.CompanionId companionId)
+        {
+            return companionId switch
+            {
+                Models.CompanionId.OGBambiSprite => 3,   // Synthetic Blowdoll
+                Models.CompanionId.CultBunny => 4,       // Perfect Fuckpuppet
+                Models.CompanionId.BrainParasite => 5,   // Brainwashed Slavedoll
+                Models.CompanionId.BambiTrainer => 6,    // Platinum Puppet
+                _ => 1
+            };
+        }
+
+        /// <summary>
+        /// Update the title and level display.
+        /// Shows companion name based on current avatar set (v5.3).
         /// </summary>
         private void UpdateTitleDisplay(int level)
         {
-            // Get title for currently displayed avatar set
-            int titleIndex = Math.Clamp(_currentAvatarSet - 1, 0, AvatarTitles.Length - 1);
-            TxtAvatarTitle.Text = AvatarTitles[titleIndex];
-            TxtAvatarLevel.Text = $"Lv. {level}";
+            // v5.3: Show companion name based on current avatar set
+            var companionId = GetCompanionForAvatarSet(_currentAvatarSet);
+
+            if (companionId.HasValue && App.Companion != null)
+            {
+                var companionDef = Models.CompanionDefinition.GetById(companionId.Value);
+                var companionProgress = App.Companion.GetProgress(companionId.Value);
+
+                TxtAvatarTitle.Text = companionDef.Name.ToUpperInvariant();
+                TxtAvatarLevel.Text = companionProgress.IsMaxLevel
+                    ? "MAX!"
+                    : $"Lv. {companionProgress.Level}";
+            }
+            else
+            {
+                // For sets 1-3 (pre-level 50), use legacy avatar titles
+                int titleIndex = Math.Clamp(_currentAvatarSet - 1, 0, AvatarTitles.Length - 1);
+                TxtAvatarTitle.Text = AvatarTitles[titleIndex];
+                TxtAvatarLevel.Text = $"Lv. {level}";
+            }
+        }
+
+        /// <summary>
+        /// Refreshes the companion display when companion changes or levels up.
+        /// Called from CompanionService events.
+        /// </summary>
+        public void RefreshCompanionDisplay()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(RefreshCompanionDisplay);
+                return;
+            }
+
+            UpdateTitleDisplay(App.Settings?.Current?.PlayerLevel ?? 1);
+        }
+
+        /// <summary>
+        /// Switches to the avatar set corresponding to a companion.
+        /// Called when user clicks a companion in the Companion tab.
+        /// </summary>
+        public void SwitchToCompanionAvatar(Models.CompanionId companionId)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => SwitchToCompanionAvatar(companionId));
+                return;
+            }
+
+            int targetSet = GetAvatarSetForCompanion(companionId);
+
+            // Only switch if set is unlocked
+            if (targetSet <= _maxUnlockedSet)
+            {
+                SwitchToAvatarSet(targetSet, animate: true);
+            }
         }
 
         /// <summary>
@@ -2245,7 +2347,7 @@ namespace ConditioningControlPanel
             PlayBubblePopSound();
 
             // Award XP
-            App.Progression?.AddXP(5);
+            App.Progression?.AddXP(5, XPSource.AvatarInteraction);
 
             // Show reaction
             Giggle("Good girl! *giggles*");
@@ -3469,6 +3571,42 @@ namespace ConditioningControlPanel
         {
             var phrase = LevelUpPhrases[_random.Next(LevelUpPhrases.Length)];
             GigglePriority(phrase);
+        }
+
+        /// <summary>
+        /// React to companion level up (v5.3).
+        /// </summary>
+        private void OnCompanionLevelUp(object? sender, (Models.CompanionId Companion, int NewLevel) args)
+        {
+            RefreshCompanionDisplay();
+
+            // Special level-up phrases based on companion
+            var companionName = Models.CompanionDefinition.GetById(args.Companion).Name;
+            if (args.NewLevel == Models.CompanionProgress.MaxLevel)
+            {
+                GigglePriority($"{companionName} reached MAX LEVEL! *sparkles*");
+            }
+            else if (args.NewLevel % 10 == 0)
+            {
+                GigglePriority($"{companionName} is now level {args.NewLevel}! Keep going!");
+            }
+            else
+            {
+                // Regular level up - use standard phrases
+                var phrase = LevelUpPhrases[_random.Next(LevelUpPhrases.Length)];
+                GigglePriority(phrase);
+            }
+        }
+
+        /// <summary>
+        /// React to companion switch (v5.3).
+        /// </summary>
+        private void OnCompanionSwitched(object? sender, Models.CompanionId newCompanion)
+        {
+            RefreshCompanionDisplay();
+
+            var companionName = Models.CompanionDefinition.GetById(newCompanion).Name;
+            Giggle($"Hi! {companionName} is here now~");
         }
 
         /// <summary>

@@ -75,7 +75,8 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Import a session from a .session.json file
+        /// Import a session from a .session.json file.
+        /// Uses the file name as the session name (without .session.json extension).
         /// </summary>
         public SessionDefinition? ImportSession(string filePath)
         {
@@ -90,6 +91,15 @@ namespace ConditioningControlPanel.Services
                 {
                     session.Source = SessionSource.Imported;
                     session.SourceFilePath = filePath;
+
+                    // Use file name as session name (removes .session.json or .json extension)
+                    var fileName = Path.GetFileNameWithoutExtension(filePath);
+                    if (fileName.EndsWith(".session", StringComparison.OrdinalIgnoreCase))
+                    {
+                        fileName = fileName[..^8]; // Remove ".session"
+                    }
+
+                    session.Name = fileName;
                 }
                 return session;
             }

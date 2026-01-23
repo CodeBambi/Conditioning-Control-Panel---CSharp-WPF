@@ -270,7 +270,7 @@ public class BouncingTextService : IDisposable
         if (bounced)
         {
             _currentColor = GetRandomColor();
-            App.Progression?.AddXP(25);
+            App.Progression?.AddXP(25, XPSource.BouncingText);
             OnBounce?.Invoke(this, EventArgs.Empty);
 
             // Haptic pulse on bounce

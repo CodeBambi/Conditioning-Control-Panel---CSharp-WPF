@@ -211,7 +211,7 @@ public class BubbleService : IDisposable
         PlayPopSound();
         _bubbles.Remove(bubble);
         OnBubblePopped?.Invoke();
-        App.Progression?.AddXP(2);
+        App.Progression?.AddXP(2, XPSource.Bubble);
         
         // Track for achievement
         App.Achievements?.TrackBubblePopped();

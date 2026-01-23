@@ -147,12 +147,12 @@ namespace ConditioningControlPanel.Services
                 {
                     ScheduleBambiReset();
                 }
-                App.Progression?.AddXP(20);
+                App.Progression?.AddXP(20, XPSource.Subliminal);
             }
             else
             {
                 TriggerSubliminalWithHapticPattern(text);
-                App.Progression?.AddXP(10);
+                App.Progression?.AddXP(10, XPSource.Subliminal);
             }
         }
 

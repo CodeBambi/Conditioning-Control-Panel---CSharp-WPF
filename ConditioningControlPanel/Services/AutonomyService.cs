@@ -196,6 +196,12 @@ namespace ConditioningControlPanel.Services
         public bool IsRandomTimerRunning => _randomTimer?.IsEnabled == true;
 
         /// <summary>
+        /// True when autonomy is currently executing an action.
+        /// Used by XPContext to give Cult Bunny the +50% bonus.
+        /// </summary>
+        public bool IsActionInProgress { get; private set; }
+
+        /// <summary>
         /// Get diagnostic status string for debugging
         /// </summary>
         public string GetDiagnosticStatus()
@@ -939,6 +945,8 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
+                    // Mark that autonomy is triggering this action (for Cult Bunny XP bonus)
+                    IsActionInProgress = true;
                     App.Logger?.Information("AutonomyService: Executing action {Action}...", actionType);
 
                     switch (actionType)
@@ -1046,6 +1054,11 @@ namespace ConditioningControlPanel.Services
                 catch (Exception ex)
                 {
                     App.Logger?.Error(ex, "Autonomy: Failed to perform {Action}", actionType);
+                }
+                finally
+                {
+                    // Clear the flag after action completes (XP is awarded during service calls)
+                    IsActionInProgress = false;
                 }
             });
         }

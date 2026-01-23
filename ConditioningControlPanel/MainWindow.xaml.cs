@@ -159,6 +159,15 @@ namespace ConditioningControlPanel
             App.Progression.XPChanged += OnXPChanged;
             App.Progression.LevelUp += OnLevelUp;
 
+            // Subscribe to companion events for real-time UI updates (v5.3)
+            if (App.Companion != null)
+            {
+                App.Companion.XPAwarded += OnCompanionXPAwarded;
+                App.Companion.CompanionLevelUp += OnCompanionLevelUp;
+                App.Companion.XPDrained += OnCompanionXPDrained;
+                App.Companion.CompanionSwitched += OnCompanionSwitched;
+            }
+
             // Subscribe to cloud profile sync event to refresh UI when profile loads
             App.ProfileSync.ProfileLoaded += OnProfileLoaded;
 
@@ -248,7 +257,7 @@ namespace ConditioningControlPanel
 
         private void OnLevelUp(object? sender, int newLevel)
         {
-            Dispatcher.Invoke(() => 
+            Dispatcher.Invoke(() =>
             {
                 UpdateLevelDisplay();
                 // Show level up notification
@@ -259,6 +268,73 @@ namespace ConditioningControlPanel
                 _avatarTubeWindow?.UpdateAvatarForLevel(newLevel);
             });
         }
+
+        #region Companion Events (v5.3)
+
+        private void OnCompanionXPAwarded(object? sender, (Models.CompanionId Companion, double Amount, double Modifier) args)
+        {
+            // Update companion progress UI in real-time when XP is earned
+            Dispatcher.Invoke(() =>
+            {
+                // Only update if we're on the companion tab to avoid unnecessary work
+                if (CompanionTab.Visibility == Visibility.Visible)
+                {
+                    UpdateCompanionCardsUI();
+                }
+            });
+        }
+
+        private void OnCompanionLevelUp(object? sender, (Models.CompanionId Companion, int NewLevel) args)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                UpdateCompanionCardsUI();
+
+                var companionName = Models.CompanionDefinition.GetById(args.Companion).Name;
+
+                // Show notification for companion level up
+                if (args.NewLevel == Models.CompanionProgress.MaxLevel)
+                {
+                    _trayIcon?.ShowNotification("MAX LEVEL!",
+                        $"{companionName} has reached maximum level!",
+                        System.Windows.Forms.ToolTipIcon.Info);
+                }
+                else if (args.NewLevel % 10 == 0)
+                {
+                    _trayIcon?.ShowNotification("Companion Level Up!",
+                        $"{companionName} reached Level {args.NewLevel}!",
+                        System.Windows.Forms.ToolTipIcon.Info);
+                }
+
+                // Play level up sound for significant milestones
+                if (args.NewLevel % 10 == 0 || args.NewLevel == Models.CompanionProgress.MaxLevel)
+                {
+                    PlayLevelUpSound();
+                }
+            });
+        }
+
+        private void OnCompanionXPDrained(object? sender, double amount)
+        {
+            // Update UI when Brain Parasite drains XP
+            Dispatcher.Invoke(() =>
+            {
+                if (CompanionTab.Visibility == Visibility.Visible)
+                {
+                    UpdateCompanionCardsUI();
+                }
+            });
+        }
+
+        private void OnCompanionSwitched(object? sender, Models.CompanionId newCompanion)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                UpdateCompanionCardsUI();
+            });
+        }
+
+        #endregion
 
         private void PlayLevelUpSound()
         {
@@ -552,6 +628,9 @@ namespace ConditioningControlPanel
             // Auto-initialize browser on startup
             await InitializeBrowserAsync();
 
+            // Check if this is first run and prompt for assets folder
+            await CheckFirstRunAssetsPromptAsync();
+
             // Initialize Avatar Tube Window
             InitializeAvatarTube();
 
@@ -565,6 +644,86 @@ namespace ConditioningControlPanel
 
             // Initialize scrolling marquee banner
             InitializeMarqueeBanner();
+        }
+
+        /// <summary>
+        /// Checks if this is a first run (no assets) and prompts user to choose a content folder.
+        /// </summary>
+        private async Task CheckFirstRunAssetsPromptAsync()
+        {
+            try
+            {
+                // Skip if custom assets path is already set
+                if (!string.IsNullOrWhiteSpace(App.Settings?.Current?.CustomAssetsPath))
+                    return;
+
+                // Check if default assets folder has any content
+                var defaultImagesPath = System.IO.Path.Combine(App.UserAssetsPath, "images");
+                var defaultVideosPath = System.IO.Path.Combine(App.UserAssetsPath, "videos");
+
+                int imageCount = 0;
+                int videoCount = 0;
+
+                if (System.IO.Directory.Exists(defaultImagesPath))
+                {
+                    imageCount = System.IO.Directory.GetFiles(defaultImagesPath, "*.*")
+                        .Count(f => f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                                   f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                                   f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                                   f.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ||
+                                   f.EndsWith(".webp", StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (System.IO.Directory.Exists(defaultVideosPath))
+                {
+                    videoCount = System.IO.Directory.GetFiles(defaultVideosPath, "*.*")
+                        .Count(f => f.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+                                   f.EndsWith(".webm", StringComparison.OrdinalIgnoreCase) ||
+                                   f.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase));
+                }
+
+                // If user has content, don't bother them
+                if (imageCount > 5 || videoCount > 2)
+                    return;
+
+                // Check if there's a "first run shown" flag
+                if (App.Settings?.Current?.FirstRunAssetsPromptShown == true)
+                    return;
+
+                // Show first-run prompt after a brief delay
+                await Task.Delay(500);
+
+                var result = MessageBox.Show(
+                    "Welcome to Conditioning Control Panel!\n\n" +
+                    "Would you like to choose a custom folder for your content?\n\n" +
+                    "This folder will store:\n" +
+                    "  • Your images and videos\n" +
+                    "  • Downloaded content packs\n\n" +
+                    "Choosing a custom folder is recommended if you want to:\n" +
+                    "  • Keep content on a different drive\n" +
+                    "  • Preserve content across reinstalls\n\n" +
+                    "You can always change this later in Settings > Assets.",
+                    "Choose Content Folder",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                // Mark as shown regardless of choice
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.FirstRunAssetsPromptShown = true;
+                    App.Settings.Save();
+                }
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    // Open the assets folder selection dialog
+                    BtnPickAssetsFolder_Click(this, new RoutedEventArgs());
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Error in first-run assets prompt");
+            }
         }
 
         private const int WM_SYSCOMMAND = 0x0112;
@@ -1301,12 +1460,515 @@ namespace ConditioningControlPanel
                 var isDetached = _avatarTubeWindow?.IsDetached == true;
                 TxtDetachStatusCompanion.Text = isDetached ? "Floating freely" : "Anchored to window";
                 BtnDetachCompanionTab.Content = isDetached ? "Attach" : "Detach";
+
+                // Sync companion leveling UI (v5.3)
+                UpdateCompanionCardsUI();
             }
             finally
             {
                 _isLoading = false;
             }
         }
+
+        /// <summary>
+        /// Updates the companion selection cards UI with current progress and active state.
+        /// </summary>
+        private void UpdateCompanionCardsUI()
+        {
+            if (App.Companion == null || App.Settings?.Current == null) return;
+
+            var activeId = App.Companion.ActiveCompanion;
+            var playerLevel = App.Settings.Current.PlayerLevel;
+
+            // Update each companion card
+            var cards = new[] { CompanionCard0, CompanionCard1, CompanionCard2, CompanionCard3 };
+            var levelTexts = new[] { TxtCompanion0Level, TxtCompanion1Level, TxtCompanion2Level, TxtCompanion3Level };
+            var lockTexts = new[] { TxtCompanion0Lock, TxtCompanion1Lock, TxtCompanion2Lock, TxtCompanion3Lock };
+            var colors = new[] { "#FF69B4", "#9370DB", "#50C878", "#FF6B6B" };
+
+            for (int i = 0; i < 4; i++)
+            {
+                var companionId = (Models.CompanionId)i;
+                var def = Models.CompanionDefinition.GetById(companionId);
+                var progress = App.Companion.GetProgress(companionId);
+                var isUnlocked = playerLevel >= def.RequiredLevel;
+
+                // Update level text - show required level if locked
+                if (isUnlocked)
+                    levelTexts[i].Text = progress.IsMaxLevel ? "MAX" : $"Lv.{progress.Level}";
+                else
+                    levelTexts[i].Text = $"Lv.{def.RequiredLevel}";
+
+                // Highlight active companion with colored border
+                var isActive = companionId == activeId;
+                var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(colors[i]);
+                cards[i].BorderBrush = isActive
+                    ? new System.Windows.Media.SolidColorBrush(color)
+                    : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Transparent);
+
+                // Update lock visibility based on player level
+                lockTexts[i].Visibility = isUnlocked ? Visibility.Collapsed : Visibility.Visible;
+                cards[i].Opacity = isUnlocked ? 1.0 : 0.5;
+            }
+
+            // Update active companion details
+            var activeDef = Models.CompanionDefinition.GetById(activeId);
+            var activeProgress = App.Companion.ActiveProgress;
+
+            TxtActiveCompanionName.Text = activeDef.Name;
+            TxtActiveCompanionLevel.Text = activeProgress.IsMaxLevel ? " · MAX LEVEL" : $" · Level {activeProgress.Level}";
+            TxtActiveCompanionDesc.Text = activeDef.Description;
+            TxtActiveCompanionXP.Text = activeProgress.IsMaxLevel
+                ? "Complete!"
+                : $"{activeProgress.CurrentXP:F0} / {activeProgress.XPForNextLevel:F0} XP";
+
+            // Update main progress bar
+            PrgCompanion0.Value = activeProgress.LevelProgress * 100;
+            PrgCompanion0.Foreground = new System.Windows.Media.SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(colors[(int)activeId]));
+
+            // Update community prompts UI
+            UpdateCommunityPromptsUI();
+
+            // Update companion prompt labels
+            UpdateCompanionPromptLabels();
+        }
+
+        /// <summary>
+        /// Gets the display name for the currently active prompt.
+        /// </summary>
+        private string GetActivePromptDisplayName()
+        {
+            var activePromptId = App.Settings?.Current?.ActiveCommunityPromptId;
+
+            if (!string.IsNullOrEmpty(activePromptId))
+            {
+                var prompt = App.CommunityPrompts?.GetInstalledPrompt(activePromptId);
+                return prompt?.Name ?? "Unknown";
+            }
+            else if (App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
+            {
+                return "Custom";
+            }
+            return "Default";
+        }
+
+        /// <summary>
+        /// Updates the community prompts section UI.
+        /// </summary>
+        private void UpdateCommunityPromptsUI()
+        {
+            var activePromptId = App.Settings?.Current?.ActiveCommunityPromptId;
+            var installedIds = App.Settings?.Current?.InstalledCommunityPromptIds ?? new List<string>();
+
+            // Update the Customize button prompt name
+            TxtCustomizePromptName.Text = GetActivePromptDisplayName();
+
+            // Update active prompt display
+            if (string.IsNullOrEmpty(activePromptId))
+            {
+                if (App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
+                {
+                    TxtActivePromptName.Text = "Custom (Edited)";
+                }
+                else
+                {
+                    TxtActivePromptName.Text = "Default (Built-in)";
+                }
+                BtnDeactivatePrompt.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                var prompt = App.CommunityPrompts?.GetInstalledPrompt(activePromptId);
+                TxtActivePromptName.Text = prompt != null ? $"{prompt.Name} by {prompt.Author}" : "Custom";
+                BtnDeactivatePrompt.Visibility = Visibility.Visible;
+            }
+
+            // Update installed prompts list
+            InstalledPromptsPanel.Children.Clear();
+            if (installedIds.Count == 0)
+            {
+                InstalledPromptsPanel.Children.Add(new TextBlock
+                {
+                    Text = "No prompts installed",
+                    Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(80, 80, 80)),
+                    FontSize = 10,
+                    FontStyle = FontStyles.Italic,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                });
+            }
+            else
+            {
+                foreach (var id in installedIds)
+                {
+                    var prompt = App.CommunityPrompts?.GetInstalledPrompt(id);
+                    if (prompt == null) continue;
+
+                    var isActive = id == activePromptId;
+                    var row = CreatePromptRow(prompt, isActive);
+                    InstalledPromptsPanel.Children.Add(row);
+                }
+            }
+        }
+
+        private FrameworkElement CreatePromptRow(Models.CommunityPrompt prompt, bool isActive)
+        {
+            var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // Name + Author
+            var namePanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            if (isActive)
+            {
+                namePanel.Children.Add(new TextBlock
+                {
+                    Text = "● ",
+                    Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(147, 112, 219)),
+                    FontSize = 10
+                });
+            }
+            namePanel.Children.Add(new TextBlock
+            {
+                Text = prompt.Name,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White),
+                FontSize = 10,
+                FontWeight = isActive ? FontWeights.SemiBold : FontWeights.Normal
+            });
+            namePanel.Children.Add(new TextBlock
+            {
+                Text = $" by {prompt.Author}",
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(96, 96, 96)),
+                FontSize = 9
+            });
+            Grid.SetColumn(namePanel, 0);
+            grid.Children.Add(namePanel);
+
+            // Action buttons
+            var buttonPanel = new StackPanel { Orientation = Orientation.Horizontal };
+
+            if (!isActive)
+            {
+                var activateBtn = new Button
+                {
+                    Content = "Use",
+                    Background = System.Windows.Media.Brushes.Transparent,
+                    Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(147, 112, 219)),
+                    BorderThickness = new Thickness(0),
+                    FontSize = 9,
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    Tag = prompt.Id
+                };
+                activateBtn.Click += (s, e) =>
+                {
+                    if (s is Button btn && btn.Tag is string promptId)
+                    {
+                        App.CommunityPrompts?.ActivatePrompt(promptId);
+                        UpdateCommunityPromptsUI();
+                    }
+                };
+                buttonPanel.Children.Add(activateBtn);
+            }
+
+            var removeBtn = new Button
+            {
+                Content = "×",
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(128, 128, 128)),
+                BorderThickness = new Thickness(0),
+                FontSize = 12,
+                Padding = new Thickness(4, 0, 4, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Tag = prompt.Id,
+                ToolTip = "Remove"
+            };
+            removeBtn.Click += (s, e) =>
+            {
+                if (s is Button btn && btn.Tag is string promptId)
+                {
+                    App.CommunityPrompts?.RemovePrompt(promptId);
+                    UpdateCommunityPromptsUI();
+                }
+            };
+            buttonPanel.Children.Add(removeBtn);
+
+            Grid.SetColumn(buttonPanel, 1);
+            grid.Children.Add(buttonPanel);
+
+            return grid;
+        }
+
+        /// <summary>
+        /// Handles clicking on a companion card to switch companions.
+        /// Also switches the avatar to match the selected companion.
+        /// </summary>
+        private void CompanionCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement element || element.Tag == null) return;
+            if (!int.TryParse(element.Tag.ToString(), out int companionIndex)) return;
+
+            var companionId = (Models.CompanionId)companionIndex;
+            var def = Models.CompanionDefinition.GetById(companionId);
+            var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+
+            // Check level requirement
+            if (playerLevel < def.RequiredLevel)
+            {
+                System.Windows.MessageBox.Show(
+                    $"{def.Name} unlocks at Level {def.RequiredLevel}.\n\nYou're currently Level {playerLevel}. Keep training to unlock!",
+                    "Level Required",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            // Switch companion
+            if (App.Companion?.SwitchCompanion(companionId) == true)
+            {
+                UpdateCompanionCardsUI();
+
+                // Also switch the avatar to match the companion
+                _avatarTubeWindow?.SwitchToCompanionAvatar(companionId);
+
+                App.Logger?.Information("Switched to companion: {Name}", def.Name);
+            }
+        }
+
+        /// <summary>
+        /// Handles clicking the personality button on a companion card.
+        /// Opens a dialog to assign a prompt JSON to this companion.
+        /// </summary>
+        private void BtnCompanionPersonality_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true; // Prevent card click from also triggering
+
+            if (sender is not FrameworkElement element || element.Tag == null) return;
+            if (!int.TryParse(element.Tag.ToString(), out int companionIndex)) return;
+
+            var companionId = (Models.CompanionId)companionIndex;
+            var def = Models.CompanionDefinition.GetById(companionId);
+
+            // Check if companion is unlocked
+            if (!(App.Companion?.IsCompanionUnlocked(companionId) ?? false))
+            {
+                ShowStyledDialog("Locked", $"{def.Name} is not unlocked yet.\nUnlock it first to assign a personality.", "OK", "");
+                return;
+            }
+
+            // Show options: Import JSON, Choose from installed, or Clear
+            var currentPromptId = App.Settings?.Current?.GetCompanionPromptId(companionIndex);
+            var currentPromptName = Services.CompanionService.GetAssignedPromptName(companionId);
+            var hasAssigned = !string.IsNullOrEmpty(currentPromptName);
+
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = $"Select AI Personality for {def.Name}",
+                Filter = "Prompt JSON files (*.json)|*.json",
+                DefaultExt = ".json"
+            };
+
+            // Check for prompts folder
+            var promptsFolder = System.IO.Path.Combine(App.EffectiveAssetsPath, "prompts");
+            if (System.IO.Directory.Exists(promptsFolder))
+            {
+                dialog.InitialDirectory = promptsFolder;
+            }
+
+            if (dialog.ShowDialog() == true)
+            {
+                try
+                {
+                    // Import the prompt file if needed
+                    var prompt = App.CommunityPrompts?.ImportFromFile(dialog.FileName);
+                    if (prompt != null)
+                    {
+                        // Assign to companion
+                        App.Settings?.Current?.SetCompanionPromptId(companionIndex, prompt.Id);
+                        App.Settings?.Save();
+
+                        // Update UI
+                        UpdateCompanionPromptLabels();
+
+                        App.Logger?.Information("Assigned prompt '{Prompt}' to companion {Companion}",
+                            prompt.Name, def.Name);
+
+                        ShowStyledDialog("Personality Assigned",
+                            $"{def.Name} will now use \"{prompt.Name}\" personality.\n\nThis will activate automatically when you switch to this companion.",
+                            "OK", "");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to assign prompt to companion");
+                    ShowStyledDialog("Error", $"Failed to import prompt: {ex.Message}", "OK", "");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Updates the prompt labels on all companion cards.
+        /// </summary>
+        private void UpdateCompanionPromptLabels()
+        {
+            var promptTexts = new[] { TxtCompanion0Prompt, TxtCompanion1Prompt, TxtCompanion2Prompt, TxtCompanion3Prompt };
+
+            for (int i = 0; i < promptTexts.Length; i++)
+            {
+                var promptName = Services.CompanionService.GetAssignedPromptName((Models.CompanionId)i);
+                promptTexts[i].Text = promptName ?? "";
+                promptTexts[i].ToolTip = string.IsNullOrEmpty(promptName) ? null : $"AI Personality: {promptName}";
+            }
+        }
+
+        #region Community Prompts
+
+        private async void BtnRefreshPrompts_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                BtnRefreshPrompts.IsEnabled = false;
+                BtnRefreshPrompts.Content = "...";
+                await App.CommunityPrompts?.GetAvailablePromptsAsync(forceRefresh: true);
+                UpdateCommunityPromptsUI();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to refresh prompts: {Error}", ex.Message);
+            }
+            finally
+            {
+                BtnRefreshPrompts.IsEnabled = true;
+                BtnRefreshPrompts.Content = "Refresh";
+            }
+        }
+
+        private void BtnDeactivatePrompt_Click(object sender, RoutedEventArgs e)
+        {
+            App.CommunityPrompts?.DeactivatePrompt();
+            UpdateCommunityPromptsUI();
+        }
+
+        private async void BtnBrowsePrompts_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Fetch available prompts
+                var available = await App.CommunityPrompts?.GetAvailablePromptsAsync();
+                if (available == null || available.Count == 0)
+                {
+                    ShowStyledDialog("Community Prompts", "No community prompts available yet.\n\nCreate and export your own to share!", "OK", "");
+                    return;
+                }
+
+                // Build selection list
+                var installed = App.Settings?.Current?.InstalledCommunityPromptIds ?? new List<string>();
+                var notInstalled = available.Where(p => !installed.Contains(p.Id)).ToList();
+
+                if (notInstalled.Count == 0)
+                {
+                    ShowStyledDialog("Community Prompts", "You've installed all available prompts!", "OK", "");
+                    return;
+                }
+
+                // Show simple selection (first 5)
+                var message = "Available prompts:\n\n";
+                for (int i = 0; i < Math.Min(5, notInstalled.Count); i++)
+                {
+                    var p = notInstalled[i];
+                    message += $"• {p.Name} by {p.Author}\n  {p.Description}\n\n";
+                }
+
+                if (notInstalled.Count > 5)
+                    message += $"...and {notInstalled.Count - 5} more\n\n";
+
+                message += "Install the first one?";
+
+                var result = ShowStyledDialog("Browse Community Prompts", message, "Install", "Cancel");
+                if (result && notInstalled.Count > 0)
+                {
+                    var prompt = await App.CommunityPrompts?.InstallPromptAsync(notInstalled[0].Id);
+                    if (prompt != null)
+                    {
+                        ShowStyledDialog("Installed!", $"'{prompt.Name}' has been installed.\n\nUse the 'Use' button to activate it.", "OK", "");
+                        UpdateCommunityPromptsUI();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Error browsing prompts");
+                ShowStyledDialog("Error", $"Failed to browse prompts:\n{ex.Message}", "OK", "");
+            }
+        }
+
+        private void BtnImportPrompt_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dialog = new Microsoft.Win32.OpenFileDialog
+                {
+                    Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+                    Title = "Import Community Prompt"
+                };
+
+                if (dialog.ShowDialog() == true)
+                {
+                    var prompt = App.CommunityPrompts?.ImportFromFile(dialog.FileName);
+                    if (prompt != null)
+                    {
+                        ShowStyledDialog("Imported!", $"'{prompt.Name}' by {prompt.Author} has been imported.", "OK", "");
+                        UpdateCommunityPromptsUI();
+                    }
+                    else
+                    {
+                        ShowStyledDialog("Error", "Failed to import prompt. The file may be invalid.", "OK", "");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Error importing prompt");
+                ShowStyledDialog("Error", $"Failed to import prompt:\n{ex.Message}", "OK", "");
+            }
+        }
+
+        private async void BtnExportPrompt_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Create export dialog with name/author input
+                var name = "My Custom Personality";
+                var author = App.Patreon?.DisplayName ?? "Anonymous";
+
+                var prompt = App.CommunityPrompts?.ExportCurrentSettings(name, author, "A custom AI personality.");
+                if (prompt == null)
+                {
+                    ShowStyledDialog("Error", "Failed to export current settings.", "OK", "");
+                    return;
+                }
+
+                var dialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "JSON files (*.json)|*.json",
+                    Title = "Export Community Prompt",
+                    FileName = $"{name.Replace(" ", "_")}.json"
+                };
+
+                if (dialog.ShowDialog() == true)
+                {
+                    await App.CommunityPrompts?.SavePromptToFileAsync(prompt, dialog.FileName);
+                    ShowStyledDialog("Exported!", $"Prompt exported to:\n{dialog.FileName}\n\nShare this file with others!", "OK", "");
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Error exporting prompt");
+                ShowStyledDialog("Error", $"Failed to export prompt:\n{ex.Message}", "OK", "");
+            }
+        }
+
+        #endregion
 
         #region Patreon Exclusives Tab
 
@@ -1721,6 +2383,9 @@ namespace ConditioningControlPanel
                 Owner = this
             };
             dialog.ShowDialog();
+
+            // Refresh UI to reflect any prompt changes
+            UpdateCommunityPromptsUI();
         }
 
         private void ChkAiChat_Changed(object sender, RoutedEventArgs e)
@@ -3230,7 +3895,7 @@ namespace ConditioningControlPanel
             Dispatcher.Invoke(() =>
             {
                 // Award XP
-                App.Progression.AddXP(e.XPEarned);
+                App.Progression?.AddXP(e.XPEarned, XPSource.Session);
 
                 // Show completion window
                 var completeWindow = new SessionCompleteWindow(e.Session, e.Duration, e.XPEarned);

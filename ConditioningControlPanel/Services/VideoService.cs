@@ -579,70 +579,87 @@ namespace ConditioningControlPanel.Services
             // Safety check: ensure app is still running
             if (Application.Current == null) return;
 
-            // Ensure LibVLC is initialized (deferred from startup for faster launch)
-            EnsureLibVLCInitialized();
-
-            Application.Current.Dispatcher.Invoke(() =>
+            try
             {
-                var allScreens = App.GetAllScreensCached().ToList();
-                if (allScreens.Count == 0)
+                // Ensure LibVLC is initialized (deferred from startup for faster launch)
+                EnsureLibVLCInitialized();
+
+                Application.Current.Dispatcher.Invoke(() =>
                 {
-                    App.Logger?.Error("VideoService: No screens available - cannot play video");
-                    OnEnded();
-                    return;
-                }
-                var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
-                var secondaries = allScreens.Where(s => !s.Primary).ToList();
-
-                App.Logger?.Information("VideoService: Detected {Total} screens - Primary: {Primary}, Secondary: {SecCount} ({SecNames})",
-                    allScreens.Count, primary.DeviceName, secondaries.Count,
-                    string.Join(", ", secondaries.Select(s => s.DeviceName)));
-
-                // Use LibVLC if available (codec-independent), otherwise fall back to MediaElement
-                if (_libVLC != null)
-                {
-                    // Create primary screen with LibVLC VideoView (with audio)
-                    var primaryWin = CreateLibVLCVideoWindow(path, primary, strict, withAudio: true);
-                    _windows.Add(primaryWin);
-
-                    // Create secondary screens with their own LibVLC players (muted)
-                    if (App.Settings.Current.DualMonitorEnabled)
+                    try
                     {
-                        foreach (var scr in secondaries)
+                        var allScreens = App.GetAllScreensCached().ToList();
+                        if (allScreens.Count == 0)
                         {
-                            var win = CreateLibVLCVideoWindow(path, scr, strict, withAudio: false);
-                            _windows.Add(win);
+                            App.Logger?.Error("VideoService: No screens available - cannot play video");
+                            OnEnded();
+                            return;
                         }
-                    }
-                }
-                else
-                {
-                    // Fallback to MediaElement (requires Windows codecs)
-                    var (primaryWin, primaryMedia) = CreateMediaElementVideoWindow(path, primary, strict);
-                    _windows.Add(primaryWin);
+                        var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
+                        var secondaries = allScreens.Where(s => !s.Primary).ToList();
 
-                    if (App.Settings.Current.DualMonitorEnabled)
+                        App.Logger?.Information("VideoService: Detected {Total} screens - Primary: {Primary}, Secondary: {SecCount} ({SecNames})",
+                            allScreens.Count, primary.DeviceName, secondaries.Count,
+                            string.Join(", ", secondaries.Select(s => s.DeviceName)));
+
+                        // Use LibVLC if available (codec-independent), otherwise fall back to MediaElement
+                        if (_libVLC != null)
+                        {
+                            // Create primary screen with LibVLC VideoView (with audio)
+                            var primaryWin = CreateLibVLCVideoWindow(path, primary, strict, withAudio: true);
+                            _windows.Add(primaryWin);
+
+                            // Create secondary screens with their own LibVLC players (muted)
+                            if (App.Settings.Current.DualMonitorEnabled)
+                            {
+                                foreach (var scr in secondaries)
+                                {
+                                    var win = CreateLibVLCVideoWindow(path, scr, strict, withAudio: false);
+                                    _windows.Add(win);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Fallback to MediaElement (requires Windows codecs)
+                            var (primaryWin, primaryMedia) = CreateMediaElementVideoWindow(path, primary, strict);
+                            _windows.Add(primaryWin);
+
+                            if (App.Settings.Current.DualMonitorEnabled)
+                            {
+                                foreach (var scr in secondaries)
+                                {
+                                    var win = CreateMirrorVideoWindow(primaryMedia, scr, strict);
+                                    _windows.Add(win);
+                                }
+                            }
+
+                            primaryMedia.Play();
+                        }
+
+                        App.Logger?.Information("VideoService: Created {Count} video windows (DualMonitor={Enabled})",
+                            _windows.Count, App.Settings.Current.DualMonitorEnabled);
+
+                        if (App.Settings.Current.AttentionChecksEnabled)
+                            SetupAttention();
+                    }
+                    catch (Exception ex)
                     {
-                        foreach (var scr in secondaries)
-                        {
-                            var win = CreateMirrorVideoWindow(primaryMedia, scr, strict);
-                            _windows.Add(win);
-                        }
+                        App.Logger?.Error(ex, "VideoService: Error during video window creation");
+                        Cleanup();
                     }
+                });
 
-                    primaryMedia.Play();
-                }
-
-                App.Logger?.Information("VideoService: Created {Count} video windows (DualMonitor={Enabled})",
-                    _windows.Count, App.Settings.Current.DualMonitorEnabled);
-
-                if (App.Settings.Current.AttentionChecksEnabled)
-                    SetupAttention();
-            });
-
-            VideoStarted?.Invoke(this, EventArgs.Empty);
-            _ = App.Haptics?.StartVideoBackgroundVibeAsync();
-            App.Logger.Information("Playing: {File}", Path.GetFileName(path));
+                VideoStarted?.Invoke(this, EventArgs.Empty);
+                _ = App.Haptics?.StartVideoBackgroundVibeAsync();
+                App.Logger?.Information("Playing: {File}", Path.GetFileName(path));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "VideoService: Critical error in StartVideoPlayback");
+                _videoPlaying = false;
+                Cleanup();
+            }
         }
 
         /// <summary>
@@ -655,32 +672,37 @@ namespace ConditioningControlPanel.Services
         /// <param name="withAudio">Whether to play audio (primary monitor) or mute (secondary monitors)</param>
         private Window CreateLibVLCVideoWindow(string path, Screen screen, bool strict, bool withAudio)
         {
-            var win = new Window
-            {
-                WindowStyle = WindowStyle.None,
-                ResizeMode = ResizeMode.NoResize,
-                ShowInTaskbar = false,
-                ShowActivated = withAudio, // Only activate primary
-                Topmost = true,
-                Background = Brushes.Black,
-                WindowStartupLocation = WindowStartupLocation.Manual,
-                Left = screen.Bounds.X + 100,
-                Top = screen.Bounds.Y + 100,
-                Width = 400,
-                Height = 300
-            };
+            Window? win = null;
+            LibVLCSharp.Shared.MediaPlayer? mediaPlayer = null;
 
-            // Create LibVLC VideoView
-            var videoView = new VideoView
+            try
             {
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                Background = Brushes.Black
-            };
+                win = new Window
+                {
+                    WindowStyle = WindowStyle.None,
+                    ResizeMode = ResizeMode.NoResize,
+                    ShowInTaskbar = false,
+                    ShowActivated = withAudio, // Only activate primary
+                    Topmost = true,
+                    Background = Brushes.Black,
+                    WindowStartupLocation = WindowStartupLocation.Manual,
+                    Left = screen.Bounds.X + 100,
+                    Top = screen.Bounds.Y + 100,
+                    Width = 400,
+                    Height = 300
+                };
 
-            // Create media player for this video
-            var mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC!);
-            _mediaPlayers.Add(mediaPlayer);
+                // Create LibVLC VideoView
+                var videoView = new VideoView
+                {
+                    HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Stretch,
+                    Background = Brushes.Black
+                };
+
+                // Create media player for this video
+                mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC!);
+                _mediaPlayers.Add(mediaPlayer);
 
             // Only the primary player handles events (to avoid duplicate triggers)
             if (withAudio)
@@ -763,12 +785,52 @@ namespace ConditioningControlPanel.Services
                 mediaPlayer.Volume = 0;
             }
 
-            // Don't dispose media - let LibVLC manage it
-            // media.Dispose(); // Commented out - may cause audio issues
+                // Don't dispose media - let LibVLC manage it
+                // media.Dispose(); // Commented out - may cause audio issues
 
-            App.Logger?.Debug("LibVLC video window on: {Screen} (audio: {Audio}, vol: {Vol}, mute: {Mute})",
-                screen.DeviceName, withAudio, mediaPlayer.Volume, mediaPlayer.Mute);
-            return win;
+                App.Logger?.Debug("LibVLC video window on: {Screen} (audio: {Audio}, vol: {Vol}, mute: {Mute})",
+                    screen.DeviceName, withAudio, mediaPlayer.Volume, mediaPlayer.Mute);
+                return win;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "VideoService: Failed to create LibVLC video window on {Screen}", screen.DeviceName);
+
+                // Clean up on failure
+                try
+                {
+                    if (mediaPlayer != null)
+                    {
+                        _mediaPlayers.Remove(mediaPlayer);
+                        mediaPlayer.Dispose();
+                    }
+                    win?.Close();
+                }
+                catch { /* Ignore cleanup errors */ }
+
+                // Create a black placeholder window so we don't crash
+                var fallbackWin = new Window
+                {
+                    WindowStyle = WindowStyle.None,
+                    Background = Brushes.Black,
+                    Topmost = true,
+                    ShowInTaskbar = false,
+                    WindowStartupLocation = WindowStartupLocation.Manual,
+                    Left = screen.Bounds.X,
+                    Top = screen.Bounds.Y,
+                    Width = screen.Bounds.Width,
+                    Height = screen.Bounds.Height
+                };
+                fallbackWin.Show();
+                fallbackWin.WindowState = WindowState.Maximized;
+
+                // Auto-close after 3 seconds
+                var closeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+                closeTimer.Tick += (s, e) => { closeTimer.Stop(); OnEnded(); };
+                closeTimer.Start();
+
+                return fallbackWin;
+            }
         }
 
         /// <summary>
@@ -1080,7 +1142,7 @@ namespace ConditioningControlPanel.Services
 
                         _ = App.Haptics?.VideoTargetHitAsync();
                         _hits++;
-                        App.Progression?.AddXP(10);
+                        App.Progression?.AddXP(10, XPSource.Video);
 
                         // Destroy ALL targets from this spawn (user caught one, clear all on all monitors)
                         lock (_targets)
@@ -1229,7 +1291,7 @@ namespace ConditioningControlPanel.Services
                 {
                     var xpForPlays = (_penalties + 1) * 50;
                     var bonus = 200;
-                    App.Progression?.AddXP(xpForPlays + bonus);
+                    App.Progression?.AddXP(xpForPlays + bonus, XPSource.Video);
 
                     if (_random.NextDouble() < 0.1)
                     {
@@ -1241,6 +1303,8 @@ namespace ConditioningControlPanel.Services
                     loop = true;
                     // Track attention check failure for "Mercy Beggar" achievement
                     App.Achievements?.TrackAttentionCheckFailed();
+                    // Apply Trainer companion penalty (-25 XP)
+                    App.Companion?.OnAttentionCheckFailed();
                 }
             }
 

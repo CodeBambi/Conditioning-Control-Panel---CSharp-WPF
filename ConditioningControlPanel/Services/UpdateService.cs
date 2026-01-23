@@ -22,23 +22,22 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.2.4";
+        public const string AppVersion = "5.2.10";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.2.4
+        public const string CurrentPatchNotes = @"v5.2.10
 
-🔧 UPDATE IMPROVEMENTS
-• Fixed update detection for Inno Setup installations
-• Added browser fallback when automatic update fails
-• If update check fails but server says update exists, offers to open releases page
+🚀 FASTER STARTUP
+• Splash screen now renders immediately on launch
+• Fixed UI thread blocking during initialization
 
-📦 PREVIOUS FIXES (included)
-• Video scheduling fix - videos no longer slow down after 1-2 hours
-• Account linking (Patreon ↔ Discord)
-• Bandwidth/welcome banner work with Discord login";
+🔄 IMPROVED UPDATE EXPERIENCE
+• App hides during updates for cleaner experience
+• App auto-restarts after silent updates
+• Windows restore if update is cancelled or fails";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
@@ -520,8 +519,15 @@ namespace ConditioningControlPanel.Services
                         var apiUrl = $"https://api.github.com/repos/{GitHubOwner}/{GitHubRepo}/releases/tags/{tag}";
                         var response = await client.GetStringAsync(apiUrl);
 
-                        // Find the Setup.exe asset - look for common installer patterns
-                        var patterns = new[] { "Setup.exe", "-win-Setup.exe", "Installer.exe", "-Setup.exe" };
+                        // Find the Setup.exe asset - prefer versioned Inno Setup installer over Velopack
+                        // Pattern order matters: more specific patterns first
+                        var patterns = new[] {
+                            $"-{version}-Setup.exe",     // Inno Setup: ConditioningControlPanel-5.2.4-Setup.exe
+                            $"-{tag}-Setup.exe",         // Inno Setup with tag format
+                            "Installer.exe",              // Generic installer name
+                            "-win-Setup.exe",             // Velopack: ConditioningControlPanel-win-Setup.exe (fallback)
+                            "Setup.exe"                   // Any Setup.exe (last resort)
+                        };
                         foreach (var pattern in patterns)
                         {
                             var assetMatch = System.Text.RegularExpressions.Regex.Match(
@@ -564,39 +570,70 @@ namespace ConditioningControlPanel.Services
 
                 App.Logger?.Information("Downloading installer from {Url} to {Path}", downloadUrl, installerPath);
 
-                // Download with progress
-                using var downloadResponse = await client.GetAsync(downloadUrl, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, ct);
-                downloadResponse.EnsureSuccessStatusCode();
+                // Download with progress and retry logic for transient network errors
+                const int maxRetries = 3;
+                Exception? lastException = null;
 
-                var totalBytes = downloadResponse.Content.Headers.ContentLength ?? -1;
-                var downloadedBytes = 0L;
-
-                using var contentStream = await downloadResponse.Content.ReadAsStreamAsync();
-                using var fileStream = new FileStream(installerPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
-
-                var buffer = new byte[8192];
-                int bytesRead;
-                var lastProgress = -1;
-
-                while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, ct)) > 0)
+                for (int attempt = 1; attempt <= maxRetries; attempt++)
                 {
-                    await fileStream.WriteAsync(buffer, 0, bytesRead, ct);
-                    downloadedBytes += bytesRead;
-
-                    if (totalBytes > 0)
+                    try
                     {
-                        var progress = (int)(downloadedBytes * 100 / totalBytes);
-                        if (progress != lastProgress)
+                        if (attempt > 1)
                         {
-                            lastProgress = progress;
-                            progressCallback?.Invoke(progress);
-                            DownloadProgressChanged?.Invoke(this, progress);
+                            App.Logger?.Information("Retry attempt {Attempt}/{Max} after network error...", attempt, maxRetries);
+                            // Exponential backoff: 2s, 4s, 8s
+                            await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)), ct);
                         }
+
+                        using var downloadResponse = await client.GetAsync(downloadUrl, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, ct);
+                        downloadResponse.EnsureSuccessStatusCode();
+
+                        var totalBytes = downloadResponse.Content.Headers.ContentLength ?? -1;
+                        var downloadedBytes = 0L;
+
+                        using var contentStream = await downloadResponse.Content.ReadAsStreamAsync();
+                        using var fileStream = new FileStream(installerPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
+
+                        var buffer = new byte[8192];
+                        int bytesRead;
+                        var lastProgress = -1;
+
+                        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, ct)) > 0)
+                        {
+                            await fileStream.WriteAsync(buffer, 0, bytesRead, ct);
+                            downloadedBytes += bytesRead;
+
+                            if (totalBytes > 0)
+                            {
+                                var progress = (int)(downloadedBytes * 100 / totalBytes);
+                                if (progress != lastProgress)
+                                {
+                                    lastProgress = progress;
+                                    progressCallback?.Invoke(progress);
+                                    DownloadProgressChanged?.Invoke(this, progress);
+                                }
+                            }
+                        }
+
+                        App.Logger?.Information("Installer downloaded successfully: {Path} ({Size:F1} MB)",
+                            installerPath, downloadedBytes / (1024.0 * 1024.0));
+
+                        // Success - exit retry loop
+                        lastException = null;
+                        break;
+                    }
+                    catch (Exception ex) when (attempt < maxRetries && IsTransientNetworkError(ex))
+                    {
+                        lastException = ex;
+                        App.Logger?.Warning(ex, "Download attempt {Attempt} failed with transient error", attempt);
                     }
                 }
 
-                App.Logger?.Information("Installer downloaded successfully: {Path} ({Size:F1} MB)",
-                    installerPath, downloadedBytes / (1024.0 * 1024.0));
+                // If we exhausted retries, throw the last exception
+                if (lastException != null)
+                {
+                    throw new InvalidOperationException($"Failed to download installer after {maxRetries} attempts: {lastException.Message}", lastException);
+                }
 
                 return installerPath;
             }
@@ -646,6 +683,67 @@ namespace ConditioningControlPanel.Services
 
             // Exit the current application
             App.Logger?.Information("Exiting application for fresh install...");
+            Application.Current.Shutdown();
+        }
+
+        /// <summary>
+        /// Runs the downloaded Inno Setup installer silently to update in place.
+        /// Uses the current install path from registry to upgrade without user interaction.
+        /// </summary>
+        public void RunInstallerSilentlyAndExit(string installerPath)
+        {
+            if (!File.Exists(installerPath))
+            {
+                throw new FileNotFoundException("Installer not found", installerPath);
+            }
+
+            // Get the current install path from registry (set by Inno Setup)
+            var installPath = GetInstalledPath();
+            if (string.IsNullOrEmpty(installPath))
+            {
+                // Fallback: use the directory where the exe is running from
+                installPath = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
+            }
+
+            App.Logger?.Information("Launching installer for silent update: {Path}, InstallDir: {Dir}", installerPath, installPath);
+
+            // Save settings before exit
+            App.Settings?.Save();
+
+            // Clean up browser data and kill WebView2 processes to prevent file locks
+            CleanupBeforeFreshInstall();
+
+            // Small delay to ensure processes are terminated
+            System.Threading.Thread.Sleep(500);
+
+            // Build Inno Setup silent install arguments
+            // /VERYSILENT = No UI at all
+            // /SUPPRESSMSGBOXES = Don't show any message boxes
+            // /NORESTART = Don't restart after install (we'll handle that)
+            // /DIR="path" = Install to specific directory
+            // /CLOSEAPPLICATIONS = Close running apps that use files being updated
+            // /RESTARTAPPLICATIONS = Restart closed applications after install
+            var args = $"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS";
+
+            if (!string.IsNullOrEmpty(installPath))
+            {
+                args += $" /DIR=\"{installPath}\"";
+            }
+
+            App.Logger?.Information("Installer arguments: {Args}", args);
+
+            // Start the installer
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = installerPath,
+                Arguments = args,
+                UseShellExecute = true,
+            };
+
+            Process.Start(startInfo);
+
+            // Exit the current application
+            App.Logger?.Information("Exiting application for silent update...");
             Application.Current.Shutdown();
         }
 
@@ -1328,6 +1426,35 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("Failed to fetch release notes from GitHub: {Error}", ex.Message);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Determines if an exception is a transient network error that should be retried.
+        /// </summary>
+        private static bool IsTransientNetworkError(Exception ex)
+        {
+            // Check for common transient network errors
+            if (ex is System.Net.Http.HttpRequestException ||
+                ex is System.IO.IOException ||
+                ex is System.Net.Sockets.SocketException ||
+                ex is TaskCanceledException)
+            {
+                return true;
+            }
+
+            // Check inner exception
+            if (ex.InnerException != null)
+            {
+                return IsTransientNetworkError(ex.InnerException);
+            }
+
+            // Check message for common transient error patterns
+            var message = ex.Message.ToLowerInvariant();
+            return message.Contains("forcibly closed") ||
+                   message.Contains("connection was closed") ||
+                   message.Contains("network") ||
+                   message.Contains("timeout") ||
+                   message.Contains("transport");
         }
 
         public void Dispose()

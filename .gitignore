@@ -80,3 +80,4 @@ releases-*/
 releases/
 install-package-*/
 releases-test/
+installer-output/

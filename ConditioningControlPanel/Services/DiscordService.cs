@@ -80,9 +80,12 @@ namespace ConditioningControlPanel.Services
         public string? CustomDisplayName { get; private set; }
 
         /// <summary>
-        /// Whether this is the user's first login (no custom display name set yet)
+        /// Whether this is the user's first login (no display name set yet on ANY provider).
+        /// If Patreon already has a display name, this returns false to avoid re-prompting.
         /// </summary>
-        public bool IsFirstLogin => IsAuthenticated && string.IsNullOrEmpty(CustomDisplayName);
+        public bool IsFirstLogin => IsAuthenticated
+            && string.IsNullOrEmpty(CustomDisplayName)
+            && string.IsNullOrEmpty(App.Patreon?.DisplayName);
 
         /// <summary>
         /// Get the user's avatar URL
@@ -751,7 +754,8 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Load custom display name from server (called after successful auth)
+        /// Load custom display name from server (called after successful auth).
+        /// Falls back to Patreon's display name if Discord doesn't have one but Patreon does.
         /// </summary>
         public async Task LoadDisplayNameFromServerAsync()
         {
@@ -777,7 +781,22 @@ namespace ConditioningControlPanel.Services
                             _tokenStorage.StoreCachedState(cachedState);
                         }
                         App.Logger?.Information("Loaded display name from server: {Name}", CustomDisplayName);
+                        return;
                     }
+                }
+
+                // If no display name from Discord server, check if Patreon already has one
+                // This handles the case where user set their name via Patreon first
+                if (string.IsNullOrEmpty(CustomDisplayName) && !string.IsNullOrEmpty(App.Patreon?.DisplayName))
+                {
+                    CustomDisplayName = App.Patreon.DisplayName;
+                    var cachedState = _tokenStorage.RetrieveCachedState();
+                    if (cachedState != null)
+                    {
+                        cachedState.CustomDisplayName = CustomDisplayName;
+                        _tokenStorage.StoreCachedState(cachedState);
+                    }
+                    App.Logger?.Information("Adopted display name from Patreon: {Name}", CustomDisplayName);
                 }
             }
             catch (Exception ex)

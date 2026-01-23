@@ -972,25 +972,46 @@ namespace ConditioningControlPanel.Services
             try
             {
                 var gifPath = settings.CornerGifPath;
-                Uri gifUri;
-                System.Drawing.Image img = null;
+                Uri? gifUri = null;
+                System.Drawing.Image? img = null;
 
                 if (!string.IsNullOrEmpty(gifPath) && System.IO.File.Exists(gifPath))
                 {
-                    gifUri = new Uri(gifPath);
-                    img = System.Drawing.Image.FromFile(gifPath);
-                }
-                else
-                {
-                    gifUri = new Uri("pack://application:,,,/Resources/spiral.gif", UriKind.Absolute);
-                    var resourceStream = Application.GetResourceStream(gifUri).Stream;
-                    img = System.Drawing.Image.FromStream(resourceStream);
-                    App.Logger?.Information("Corner GIF not set or found, defaulting to spiral.gif resource");
+                    try
+                    {
+                        gifUri = new Uri(gifPath);
+                        img = System.Drawing.Image.FromFile(gifPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("Failed to load corner GIF from file: {Error}", ex.Message);
+                        gifUri = null;
+                        img = null;
+                    }
                 }
 
+                // Fallback to embedded resource if file loading failed
                 if (img == null)
                 {
-                    App.Logger?.Warning("Could not load corner GIF image.");
+                    try
+                    {
+                        gifUri = new Uri("pack://application:,,,/Resources/spiral.gif", UriKind.Absolute);
+                        var resourceInfo = Application.GetResourceStream(gifUri);
+                        if (resourceInfo?.Stream != null)
+                        {
+                            img = System.Drawing.Image.FromStream(resourceInfo.Stream);
+                            App.Logger?.Information("Corner GIF not set or found, defaulting to spiral.gif resource");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("Failed to load default corner GIF resource: {Error}", ex.Message);
+                    }
+                }
+
+                if (img == null || gifUri == null)
+                {
+                    App.Logger?.Warning("Could not load corner GIF image - skipping corner GIF display");
                     return;
                 }
 

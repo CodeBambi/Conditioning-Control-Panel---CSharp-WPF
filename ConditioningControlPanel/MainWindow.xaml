@@ -763,8 +763,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.2.4 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.2.4 - Update improvements!"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.2.10 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.2.5 - Seamless auto-updates!"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -3169,177 +3169,362 @@
             </ScrollViewer>
         </Border>
 
-        <!-- Companion Tab -->
+        <!-- Companion Tab (v5.3 - Larger, More Visible Layout) -->
         <Grid x:Name="CompanionTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
             <Border Style="{StaticResource SectionPanel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
 
-                        <!-- Companion Settings -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="Companion Settings" Foreground="#FF69B4" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <!-- ROW 1: Companions + Community Prompts -->
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                                <!-- Avatar Toggle -->
-                                <Grid Margin="0,0,0,10">
-                                    <StackPanel>
-                                        <TextBlock Text="Show Companion" Foreground="White" FontSize="13"/>
-                                        <TextBlock Text="Display the avatar companion window" Foreground="#808080" FontSize="11"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkAvatarEnabledCompanion" Style="{StaticResource ToggleStyle}"
-                                              HorizontalAlignment="Right" VerticalAlignment="Center"
-                                              IsChecked="True"
-                                              Checked="ChkAvatarEnabled_Changed" Unchecked="ChkAvatarEnabled_Changed"/>
-                                </Grid>
-
-                                <!-- Detach Button -->
-                                <Grid Margin="0,0,0,10">
-                                    <StackPanel>
-                                        <TextBlock Text="Floating Companion" Foreground="White" FontSize="13"/>
-                                        <TextBlock x:Name="TxtDetachStatusCompanion" Text="Anchored to window" Foreground="#808080" FontSize="11"/>
-                                    </StackPanel>
-                                    <Button x:Name="BtnDetachCompanionTab" HorizontalAlignment="Right"
-                                            Content="Detach"
-                                            Background="#252542" Foreground="White"
-                                            BorderBrush="{StaticResource PinkBrush}" BorderThickness="1"
-                                            Padding="12,6" FontSize="11"
-                                            Cursor="Hand"
-                                            Click="BtnDetachCompanion_Click"/>
-                                </Grid>
-
-                                <!-- Idle Interval Slider -->
+                            <!-- COMPANIONS BOX -->
+                            <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="10" Padding="15">
                                 <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                        <TextBlock Text="COMPANIONS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
+                                        <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="BETA" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- Companion Cards 2x2 - Unlock at levels 50, 100, 125, 150 -->
+                                    <UniformGrid Rows="2" Columns="2" Margin="0,0,0,12">
+                                        <Border x:Name="CompanionCard0" Background="#252542" CornerRadius="8" Margin="0,0,5,5"
+                                                Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="0"
+                                                BorderThickness="2" BorderBrush="Transparent">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="Synthetic Blowdoll" Foreground="#FF69B4" FontSize="12" FontWeight="SemiBold"/>
+                                                        <TextBlock x:Name="TxtCompanion0Lock" Text=" [50]" Foreground="#FFD700" FontSize="9"
+                                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
+                                                    </StackPanel>
+                                                    <TextBlock x:Name="TxtCompanion0Level" Text="Lv.1" Foreground="#AAAAAA" FontSize="12"
+                                                               HorizontalAlignment="Right"/>
+                                                </Grid>
+                                                <TextBlock Text="Pink filter XP bonus" Foreground="#606060" FontSize="10" Margin="0,4,0,0"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                    <Button x:Name="BtnCompanion0Personality" Content="🎭" FontSize="10" Padding="4,1"
+                                                            Background="#1A1A2E" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                            Click="BtnCompanionPersonality_Click" Tag="0" ToolTip="Assign AI personality"/>
+                                                    <TextBlock x:Name="TxtCompanion0Prompt" Text="" Foreground="#555" FontSize="9"
+                                                               VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
+                                                               MaxWidth="80"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border x:Name="CompanionCard1" Background="#252542" CornerRadius="8" Margin="5,0,0,5"
+                                                Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="1"
+                                                BorderThickness="2" BorderBrush="Transparent">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="Perfect Fuckpuppet" Foreground="#9370DB" FontSize="12" FontWeight="SemiBold"/>
+                                                        <TextBlock x:Name="TxtCompanion1Lock" Text=" [100]" Foreground="#FFD700" FontSize="9"
+                                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
+                                                    </StackPanel>
+                                                    <TextBlock x:Name="TxtCompanion1Level" Text="Lv.1" Foreground="#AAAAAA" FontSize="12"
+                                                               HorizontalAlignment="Right"/>
+                                                </Grid>
+                                                <TextBlock Text="Autonomy XP bonus" Foreground="#606060" FontSize="10" Margin="0,4,0,0"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                    <Button x:Name="BtnCompanion1Personality" Content="🎭" FontSize="10" Padding="4,1"
+                                                            Background="#1A1A2E" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                            Click="BtnCompanionPersonality_Click" Tag="1" ToolTip="Assign AI personality"/>
+                                                    <TextBlock x:Name="TxtCompanion1Prompt" Text="" Foreground="#555" FontSize="9"
+                                                               VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
+                                                               MaxWidth="80"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border x:Name="CompanionCard2" Background="#252542" CornerRadius="8" Margin="0,5,5,0"
+                                                Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="2"
+                                                BorderThickness="2" BorderBrush="Transparent">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="Brainwashed Slavedoll" Foreground="#50C878" FontSize="12" FontWeight="SemiBold"/>
+                                                        <TextBlock x:Name="TxtCompanion2Lock" Text=" [125]" Foreground="#FFD700" FontSize="9"
+                                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
+                                                    </StackPanel>
+                                                    <TextBlock x:Name="TxtCompanion2Level" Text="Lv.1" Foreground="#AAAAAA" FontSize="12"
+                                                               HorizontalAlignment="Right"/>
+                                                </Grid>
+                                                <TextBlock Text="Constant XP drain" Foreground="#606060" FontSize="10" Margin="0,4,0,0"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                    <Button x:Name="BtnCompanion2Personality" Content="🎭" FontSize="10" Padding="4,1"
+                                                            Background="#1A1A2E" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                            Click="BtnCompanionPersonality_Click" Tag="2" ToolTip="Assign AI personality"/>
+                                                    <TextBlock x:Name="TxtCompanion2Prompt" Text="" Foreground="#555" FontSize="9"
+                                                               VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
+                                                               MaxWidth="80"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border x:Name="CompanionCard3" Background="#252542" CornerRadius="8" Margin="5,5,0,0"
+                                                Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="3"
+                                                BorderThickness="2" BorderBrush="Transparent">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="Platinum Puppet" Foreground="#FF6B6B" FontSize="12" FontWeight="SemiBold"/>
+                                                        <TextBlock x:Name="TxtCompanion3Lock" Text=" [150]" Foreground="#FFD700" FontSize="9"
+                                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
+                                                    </StackPanel>
+                                                    <TextBlock x:Name="TxtCompanion3Level" Text="Lv.1" Foreground="#AAAAAA" FontSize="12"
+                                                               HorizontalAlignment="Right"/>
+                                                </Grid>
+                                                <TextBlock Text="Strict mode bonuses" Foreground="#606060" FontSize="10" Margin="0,4,0,0"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                    <Button x:Name="BtnCompanion3Personality" Content="🎭" FontSize="10" Padding="4,1"
+                                                            Background="#1A1A2E" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                            Click="BtnCompanionPersonality_Click" Tag="3" ToolTip="Assign AI personality"/>
+                                                    <TextBlock x:Name="TxtCompanion3Prompt" Text="" Foreground="#555" FontSize="9"
+                                                               VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
+                                                               MaxWidth="80"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </UniformGrid>
+
+                                    <!-- Active Companion Info -->
+                                    <Border Background="#16162B" CornerRadius="8" Padding="12">
+                                        <StackPanel>
+                                            <Grid>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock x:Name="TxtActiveCompanionName" Text="Bambi Sprite" Foreground="White"
+                                                               FontSize="14" FontWeight="Bold"/>
+                                                    <TextBlock x:Name="TxtActiveCompanionLevel" Text=" · Level 1" Foreground="#888"
+                                                               FontSize="14"/>
+                                                </StackPanel>
+                                                <TextBlock x:Name="TxtActiveCompanionXP" Text="0 / 550 XP" Foreground="#FF69B4"
+                                                           FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                                            </Grid>
+                                            <ProgressBar x:Name="PrgCompanion0" Height="6" Margin="0,8,0,0" Value="0"
+                                                         Background="#252542" Foreground="#FF69B4"/>
+                                            <TextBlock x:Name="TxtActiveCompanionDesc" Text="Gains bonus XP based on pink filter intensity"
+                                                       Foreground="#707070" FontSize="11" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <TextBlock x:Name="TxtCompanionStatus" Text="" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- COMMUNITY PROMPTS BOX -->
+                            <Border Grid.Column="2" Background="#1A1A2E" CornerRadius="10" Padding="15">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,12">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="COMMUNITY PROMPTS" Foreground="#9370DB" FontSize="14" FontWeight="Bold"/>
+                                            <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock Text="BETA" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <Button x:Name="BtnRefreshPrompts" Content="Refresh" HorizontalAlignment="Right"
+                                                Background="Transparent" Foreground="#808080" BorderThickness="0"
+                                                FontSize="11" Padding="8,2" Cursor="Hand" Click="BtnRefreshPrompts_Click"/>
+                                    </Grid>
+
+                                    <!-- Active Prompt -->
+                                    <Border Background="#16162B" CornerRadius="8" Padding="12" Margin="0,0,0,10">
+                                        <Grid>
+                                            <StackPanel>
+                                                <TextBlock Text="Active Personality" Foreground="#707070" FontSize="11"/>
+                                                <TextBlock x:Name="TxtActivePromptName" Text="Default (Built-in)" Foreground="White"
+                                                           FontSize="14" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                                            </StackPanel>
+                                            <Button x:Name="BtnDeactivatePrompt" Content="Reset" HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center"
+                                                    Background="#252542" Foreground="#808080" BorderThickness="0"
+                                                    FontSize="11" Padding="10,4" Cursor="Hand" Visibility="Collapsed"
+                                                    Click="BtnDeactivatePrompt_Click"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Installed List -->
+                                    <TextBlock Text="Installed Prompts" Foreground="#707070" FontSize="11" Margin="0,0,0,6"/>
+                                    <Border Background="#16162B" CornerRadius="8" Padding="10" MinHeight="80" MaxHeight="120"
+                                            Margin="0,0,0,12">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                            <StackPanel x:Name="InstalledPromptsPanel">
+                                                <TextBlock x:Name="TxtNoInstalledPrompts" Text="No prompts installed yet"
+                                                           Foreground="#505050" FontSize="12" FontStyle="Italic"
+                                                           HorizontalAlignment="Center" Margin="0,20,0,0"/>
+                                            </StackPanel>
+                                        </ScrollViewer>
+                                    </Border>
+
+                                    <!-- Buttons -->
                                     <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="BtnBrowsePrompts" Grid.Column="0" Content="Browse"
+                                                Background="#252542" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
+                                                FontSize="12" Padding="0,8" Margin="0,0,4,0" Cursor="Hand" Click="BtnBrowsePrompts_Click"/>
+                                        <Button x:Name="BtnImportPrompt" Grid.Column="1" Content="Import"
+                                                Background="#252542" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                                FontSize="12" Padding="0,8" Margin="4,0,4,0" Cursor="Hand" Click="BtnImportPrompt_Click"/>
+                                        <Button x:Name="BtnExportPrompt" Grid.Column="2" Content="Export"
+                                                Background="#252542" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                                FontSize="12" Padding="0,8" Margin="4,0,0,0" Cursor="Hand" Click="BtnExportPrompt_Click"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- ROW 2: Settings + Quick Controls -->
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- SETTINGS BOX -->
+                            <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="10" Padding="15">
+                                <StackPanel>
+                                    <TextBlock Text="COMPANION SETTINGS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
+
+                                    <!-- Show Companion -->
+                                    <Grid Margin="0,0,0,12">
+                                        <TextBlock Text="Show Companion" Foreground="White" FontSize="13" VerticalAlignment="Center"/>
+                                        <CheckBox x:Name="ChkAvatarEnabledCompanion" Style="{StaticResource ToggleStyle}"
+                                                  HorizontalAlignment="Right" IsChecked="True"
+                                                  Checked="ChkAvatarEnabled_Changed" Unchecked="ChkAvatarEnabled_Changed"/>
+                                    </Grid>
+
+                                    <!-- Detach -->
+                                    <Grid Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="Window Mode" Foreground="White" FontSize="13"/>
+                                            <TextBlock x:Name="TxtDetachStatusCompanion" Text="Anchored to main window"
+                                                       Foreground="#707070" FontSize="11" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <Button x:Name="BtnDetachCompanionTab" Content="Detach" HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Background="#252542" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                                Padding="15,6" FontSize="12" Cursor="Hand" Click="BtnDetachCompanion_Click"/>
+                                    </Grid>
+
+                                    <!-- Idle Interval -->
+                                    <Grid Margin="0,0,0,15">
                                         <StackPanel>
                                             <TextBlock Text="Idle Giggle Interval" Foreground="White" FontSize="13"/>
-                                            <TextBlock Text="How often the companion speaks when idle" Foreground="#808080" FontSize="11"/>
+                                            <TextBlock Text="How often companion speaks when idle" Foreground="#707070" FontSize="11" Margin="0,2,0,0"/>
                                         </StackPanel>
                                         <TextBlock x:Name="TxtIdleIntervalCompanion" Text="120s" Foreground="#FF69B4"
-                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                   FontSize="13" FontWeight="Bold"/>
+                                                   FontSize="14" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                                     </Grid>
-                                    <Slider x:Name="SliderIdleIntervalCompanion"
-                                            Style="{StaticResource PinkSlider}"
-                                            Minimum="5" Maximum="300" Value="120"
-                                            Margin="0,8,0,0"
+                                    <Slider x:Name="SliderIdleIntervalCompanion" Style="{StaticResource PinkSlider}"
+                                            Minimum="5" Maximum="300" Value="120" Margin="0,0,0,15"
                                             ValueChanged="SliderIdleInterval_ValueChanged"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
 
-                        <!-- AI Personality -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="AI Personality" Foreground="#9370DB" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
-
-                                <TextBlock Text="Customize your companion's personality, reactions, and knowledge base."
-                                           Foreground="#808080" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
-
-                                <Button x:Name="BtnCustomizeCompanion" Content="Customize AI Companion"
-                                        Background="#252542" Foreground="White"
-                                        BorderBrush="#9370DB" BorderThickness="1"
-                                        Padding="12,8" FontSize="12"
-                                        HorizontalAlignment="Left"
-                                        Cursor="Hand"
-                                        Click="BtnCustomizeCompanion_Click"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Trigger Mode -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="Trigger Mode" Foreground="#9370DB" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
-
-                                <!-- Trigger Mode Toggle -->
-                                <Grid Margin="0,0,0,10">
-                                    <StackPanel>
-                                        <TextBlock Text="Enable Triggers" Foreground="White" FontSize="13"/>
-                                        <TextBlock Text="Random conditioning phrases with audio" Foreground="#808080" FontSize="11"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkTriggerModeCompanion" Style="{StaticResource ToggleStyle}"
-                                              HorizontalAlignment="Right" VerticalAlignment="Center"
-                                              Checked="ChkTriggerMode_Changed" Unchecked="ChkTriggerMode_Changed"/>
-                                </Grid>
-
-                                <!-- Trigger Interval Slider -->
-                                <StackPanel x:Name="TriggerSettingsPanelCompanion" Visibility="Collapsed">
-                                    <Grid>
-                                        <StackPanel>
-                                            <TextBlock Text="Trigger Interval" Foreground="White" FontSize="13"/>
-                                            <TextBlock Text="Seconds between trigger phrases" Foreground="#808080" FontSize="11"/>
+                                    <!-- Customize Button -->
+                                    <Button x:Name="BtnCustomizeCompanion"
+                                            Background="#252542" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
+                                            Padding="10,10" FontSize="13" Cursor="Hand" Click="BtnCustomizeCompanion_Click">
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <TextBlock Text="Customize AI · " Foreground="White"/>
+                                            <TextBlock x:Name="TxtCustomizePromptName" Text="Default" Foreground="#9370DB" FontWeight="SemiBold"/>
                                         </StackPanel>
-                                        <TextBlock x:Name="TxtTriggerIntervalCompanion" Text="60s" Foreground="#9370DB"
-                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                   FontSize="13" FontWeight="Bold"/>
-                                    </Grid>
-                                    <Slider x:Name="SliderTriggerIntervalCompanion"
-                                            Style="{StaticResource PinkSlider}"
-                                            Minimum="10" Maximum="600" Value="60"
-                                            Margin="0,8,0,0"
-                                            ValueChanged="SliderTriggerInterval_ValueChanged"/>
-
-                                    <!-- Edit Triggers Button -->
-                                    <Button x:Name="BtnEditTriggersCompanion" Content="Edit Triggers"
-                                            Background="#252542" Foreground="White"
-                                            BorderBrush="#9370DB" BorderThickness="1"
-                                            Padding="12,6" Margin="0,12,0,0"
-                                            HorizontalAlignment="Left" FontSize="11"
-                                            Cursor="Hand"
-                                            Click="BtnEditTriggers_Click"/>
+                                    </Button>
                                 </StackPanel>
-                            </StackPanel>
-                        </Border>
+                            </Border>
 
-                        <!-- Quick Controls -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,10">
-                            <StackPanel>
-                                <TextBlock Text="Quick Controls" Foreground="#FF69B4" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
+                            <!-- QUICK CONTROLS BOX -->
+                            <Border Grid.Column="2" Background="#1A1A2E" CornerRadius="10" Padding="15">
+                                <StackPanel>
+                                    <TextBlock Text="QUICK CONTROLS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
 
-                                <!-- Mute Avatar -->
-                                <Grid Margin="0,0,0,8">
-                                    <StackPanel>
-                                        <TextBlock Text="Mute Avatar" Foreground="White" FontSize="13"/>
-                                        <TextBlock Text="Hide speech bubbles and sounds" Foreground="#808080" FontSize="11"/>
+                                    <!-- Mute Avatar -->
+                                    <Grid Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="Mute Avatar" Foreground="White" FontSize="13"/>
+                                            <TextBlock Text="Hide speech bubbles and sounds" Foreground="#707070" FontSize="11" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <CheckBox x:Name="ChkMuteAvatarCompanion" Style="{StaticResource ToggleStyle}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Checked="ChkMuteAvatar_Changed" Unchecked="ChkMuteAvatar_Changed"/>
+                                    </Grid>
+
+                                    <!-- Mute Whispers -->
+                                    <Grid Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="Mute Whispers" Foreground="White" FontSize="13"/>
+                                            <TextBlock Text="Mute subliminal audio" Foreground="#707070" FontSize="11" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <CheckBox x:Name="ChkMuteWhispersCompanion" Style="{StaticResource ToggleStyle}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Checked="ChkMuteWhispers_Changed" Unchecked="ChkMuteWhispers_Changed"/>
+                                    </Grid>
+
+                                    <!-- Pause Browser -->
+                                    <Grid Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="Pause Browser" Foreground="White" FontSize="13"/>
+                                            <TextBlock Text="Pause embedded browser audio" Foreground="#707070" FontSize="11" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <CheckBox x:Name="ChkPauseBrowserCompanion" Style="{StaticResource ToggleStyle}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Checked="ChkPauseBrowser_Changed" Unchecked="ChkPauseBrowser_Changed"/>
+                                    </Grid>
+
+                                    <!-- Tips -->
+                                    <Border Background="#16162B" CornerRadius="6" Padding="10" Margin="0,8,0,0">
+                                        <TextBlock Foreground="#606060" FontSize="11" TextWrapping="Wrap" TextAlignment="Center">
+                                            <Run Text="Click avatar for progress · Right-click for menu · Double-click to chat"/>
+                                        </TextBlock>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- ROW 3: Triggers -->
+                        <Border Background="#1A1A2E" CornerRadius="10" Padding="15">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="TRIGGER MODE" Foreground="#9370DB" FontSize="14" FontWeight="Bold"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text=" · Random conditioning phrases with audio" Foreground="#606060" FontSize="12"
+                                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
                                     </StackPanel>
-                                    <CheckBox x:Name="ChkMuteAvatarCompanion" Style="{StaticResource ToggleStyle}"
-                                              HorizontalAlignment="Right" VerticalAlignment="Center"
-                                              Checked="ChkMuteAvatar_Changed" Unchecked="ChkMuteAvatar_Changed"/>
-                                </Grid>
 
-                                <!-- Mute Whispers -->
-                                <Grid Margin="0,0,0,8">
-                                    <StackPanel>
-                                        <TextBlock Text="Mute Whispers" Foreground="White" FontSize="13"/>
-                                        <TextBlock Text="Mute subliminal audio" Foreground="#808080" FontSize="11"/>
+                                    <!-- Trigger Settings (shown when enabled) -->
+                                    <StackPanel x:Name="TriggerSettingsPanelCompanion" Orientation="Horizontal" Visibility="Collapsed"
+                                                Margin="0,12,0,0">
+                                        <TextBlock Text="Interval:" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
+                                        <Slider x:Name="SliderTriggerIntervalCompanion" Style="{StaticResource PinkSlider}"
+                                                Width="150" Minimum="10" Maximum="600" Value="60"
+                                                VerticalAlignment="Center" Margin="10,0,0,0"
+                                                ValueChanged="SliderTriggerInterval_ValueChanged"/>
+                                        <TextBlock x:Name="TxtTriggerIntervalCompanion" Text="60s" Foreground="#9370DB"
+                                                   FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                        <Button x:Name="BtnEditTriggersCompanion" Content="Edit Phrases"
+                                                Background="#252542" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                                Padding="12,4" FontSize="11" Margin="20,0,0,0" Cursor="Hand"
+                                                Click="BtnEditTriggers_Click"/>
                                     </StackPanel>
-                                    <CheckBox x:Name="ChkMuteWhispersCompanion" Style="{StaticResource ToggleStyle}"
-                                              HorizontalAlignment="Right" VerticalAlignment="Center"
-                                              Checked="ChkMuteWhispers_Changed" Unchecked="ChkMuteWhispers_Changed"/>
-                                </Grid>
+                                </StackPanel>
 
-                                <!-- Pause Browser -->
-                                <Grid>
-                                    <StackPanel>
-                                        <TextBlock Text="Pause Browser Audio" Foreground="White" FontSize="13"/>
-                                        <TextBlock Text="Pause/mute embedded browser" Foreground="#808080" FontSize="11"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkPauseBrowserCompanion" Style="{StaticResource ToggleStyle}"
-                                              HorizontalAlignment="Right" VerticalAlignment="Center"
-                                              Checked="ChkPauseBrowser_Changed" Unchecked="ChkPauseBrowser_Changed"/>
-                                </Grid>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Interaction Tips -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15"
-                                BorderBrush="#FF69B4" BorderThickness="1">
-                            <StackPanel>
-                                <TextBlock Text="Interaction Tips" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
-                                <TextBlock Text="• Click avatar for achievement progress" Foreground="#808080" FontSize="12" Margin="0,8,0,0"/>
-                                <TextBlock Text="• Right-click avatar for quick menu" Foreground="#808080" FontSize="12" Margin="0,3,0,0"/>
-                                <TextBlock Text="• Double-click to chat (Patreon)" Foreground="#808080" FontSize="12" Margin="0,3,0,0"/>
-                                <TextBlock Text="• Drag to reposition when detached" Foreground="#808080" FontSize="12" Margin="0,3,0,0"/>
-                            </StackPanel>
+                                <CheckBox x:Name="ChkTriggerModeCompanion" Grid.Column="1" Style="{StaticResource ToggleStyle}"
+                                          VerticalAlignment="Top" Margin="0,2,0,0"
+                                          Checked="ChkTriggerMode_Changed" Unchecked="ChkTriggerMode_Changed"/>
+                            </Grid>
                         </Border>
 
                     </StackPanel>

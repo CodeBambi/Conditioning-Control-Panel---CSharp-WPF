@@ -18,6 +18,47 @@ namespace ConditioningControlPanel
 
             _defaults = CompanionPromptSettings.GetDefaults();
             LoadCurrentSettings();
+            UpdateActivePromptDisplay();
+        }
+
+        /// <summary>
+        /// Updates the active prompt name display in the header.
+        /// </summary>
+        private void UpdateActivePromptDisplay()
+        {
+            var activePromptId = App.Settings?.Current?.ActiveCommunityPromptId;
+
+            if (!string.IsNullOrEmpty(activePromptId))
+            {
+                // Community prompt is active
+                var prompt = App.CommunityPrompts?.GetInstalledPrompt(activePromptId);
+                if (prompt != null)
+                {
+                    TxtActivePromptName.Text = prompt.Name;
+                    TxtActivePromptName.Foreground = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromRgb(147, 112, 219)); // Purple
+                }
+                else
+                {
+                    TxtActivePromptName.Text = "Unknown Prompt";
+                    TxtActivePromptName.Foreground = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromRgb(255, 107, 107)); // Red
+                }
+            }
+            else if (App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
+            {
+                // Custom prompt is active
+                TxtActivePromptName.Text = "Custom";
+                TxtActivePromptName.Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(255, 105, 180)); // Pink
+            }
+            else
+            {
+                // Default prompt
+                TxtActivePromptName.Text = "Default";
+                TxtActivePromptName.Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(112, 112, 112)); // Gray
+            }
         }
 
         private void LoadCurrentSettings()

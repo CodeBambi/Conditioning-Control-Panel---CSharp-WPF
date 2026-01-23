@@ -15,7 +15,13 @@ namespace ConditioningControlPanel.Services
         // Memoization cache for cumulative XP calculations
         private readonly Dictionary<int, double> _cumulativeXPCache = new();
 
-        public void AddXP(double amount)
+        /// <summary>
+        /// Awards XP to both the user (for feature unlocks) and the active companion (for companion leveling).
+        /// </summary>
+        /// <param name="amount">Base XP amount to award.</param>
+        /// <param name="source">What action generated this XP (for companion bonuses).</param>
+        /// <param name="context">Context about how the XP was earned (for companion modifiers).</param>
+        public void AddXP(double amount, XPSource source = XPSource.Other, XPContext? context = null)
         {
             // Require login for progression tracking (prevents JSON cheating)
             if (!App.IsLoggedIn)
@@ -28,6 +34,9 @@ namespace ConditioningControlPanel.Services
             var previousXP = settings.PlayerXP;
             settings.PlayerXP += amount;
             App.Logger?.Information("XP awarded: +{Amount} (was {Prev}, now {Now})", amount, previousXP, settings.PlayerXP);
+
+            // Route XP to the active companion (v5.3 companion leveling system)
+            App.Companion?.AddCompanionXP(amount, source, context);
             
             // Check for level up
             var xpNeeded = GetXPForLevel(settings.PlayerLevel);

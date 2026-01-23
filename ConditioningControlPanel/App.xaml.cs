@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Media;
 using System.Threading;
 using System.Threading.Tasks;
@@ -99,6 +100,8 @@ namespace ConditioningControlPanel
         public static AutonomyService Autonomy { get; private set; } = null!;
         public static InteractionQueueService InteractionQueue { get; private set; } = null!;
         public static ContentPackService ContentPacks { get; private set; } = null!;
+        public static CompanionService Companion { get; private set; } = null!;
+        public static CommunityPromptService CommunityPrompts { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with either Patreon or Discord (required for progression tracking)
@@ -265,6 +268,10 @@ namespace ConditioningControlPanel
             splash.Show();
             splash.SetProgress(0.05, "Initializing...");
 
+            // Force the splash to render before continuing with heavy initialization
+            // Without this, the UI thread may be blocked before the splash actually displays
+            splash.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => { }));
+
             // Global exception handlers to catch and log crashes instead of hard crashing
             bool errorDialogShown = false;
             DispatcherUnhandledException += (s, args) =>
@@ -356,6 +363,12 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.6, "Initializing effects...");
             Progression = new ProgressionService();
+
+            // Initialize companion leveling system (v5.3) - migrate existing users if needed
+            CompanionService.MigrateFromLegacy(Settings.Current);
+            Companion = new CompanionService();
+            CommunityPrompts = new CommunityPromptService();
+
             Subliminal = new SubliminalService();
             Overlay = new OverlayService();
             Bubbles = new BubbleService();
@@ -717,6 +730,22 @@ namespace ConditioningControlPanel
             {
                 Logger?.Information("Starting fresh install update - downloading installer...");
 
+                // Hide the main window during update for cleaner experience
+                var mainWindow = Current.MainWindow;
+                if (mainWindow != null)
+                {
+                    mainWindow.Hide();
+                    Logger?.Information("Main window hidden for update");
+                }
+
+                // Also hide the avatar tube window if it exists
+                try
+                {
+                    var avatarWindow = Current.Windows.OfType<Window>().FirstOrDefault(w => w.GetType().Name == "AvatarTubeWindow");
+                    avatarWindow?.Hide();
+                }
+                catch { }
+
                 progressDialog = new UpdateProgressDialog();
                 progressDialog.Topmost = true;
                 progressDialog.Show();
@@ -727,12 +756,19 @@ namespace ConditioningControlPanel
                 {
                     try
                     {
-                        progressDialog?.Dispatcher.BeginInvoke(() =>
+                        var dialog = progressDialog;
+                        if (dialog == null) return;
+
+                        dialog.Dispatcher.BeginInvoke(() =>
                         {
-                            if (progressDialog.IsVisible)
+                            try
                             {
-                                progressDialog.SetProgress(progress);
+                                if (dialog.IsVisible)
+                                {
+                                    dialog.SetProgress(progress);
+                                }
                             }
+                            catch { }
                         });
                     }
                     catch { }
@@ -750,20 +786,55 @@ namespace ConditioningControlPanel
                     throw new InvalidOperationException("Failed to download installer");
                 }
 
-                // Final confirmation before running installer
-                var result = MessageBox.Show(
-                    owner,
-                    "Installer downloaded successfully.\n\n" +
-                    "The app will now close and the installer will start.\n" +
-                    "Please follow the installer prompts to complete the update.\n\n" +
-                    "Continue?",
-                    "Ready to Install",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
+                // Check if this is an Inno Setup installation - if so, use silent update
+                var isInnoSetupInstall = UpdateService.IsInstalledViaInstaller;
 
-                if (result == MessageBoxResult.Yes)
+                if (isInnoSetupInstall)
                 {
-                    Update.RunInstallerAndExit(installerPath);
+                    // Silent update for Inno Setup installations
+                    var result = MessageBox.Show(
+                        owner,
+                        "Update downloaded successfully!\n\n" +
+                        "The app will now close and update automatically.\n" +
+                        "It will restart when complete.\n\n" +
+                        "Continue?",
+                        "Ready to Update",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        Logger?.Information("Starting silent update for Inno Setup installation");
+                        Update.RunInstallerSilentlyAndExit(installerPath);
+                    }
+                    else
+                    {
+                        // User cancelled - restore windows
+                        RestoreHiddenWindows();
+                    }
+                }
+                else
+                {
+                    // Fresh install flow - show installer UI
+                    var result = MessageBox.Show(
+                        owner,
+                        "Installer downloaded successfully.\n\n" +
+                        "The app will now close and the installer will start.\n" +
+                        "Please follow the installer prompts to complete the update.\n\n" +
+                        "Continue?",
+                        "Ready to Install",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        Update.RunInstallerAndExit(installerPath);
+                    }
+                    else
+                    {
+                        // User cancelled - restore windows
+                        RestoreHiddenWindows();
+                    }
                 }
             }
             catch (Exception ex)
@@ -772,12 +843,27 @@ namespace ConditioningControlPanel
 
                 try { progressDialog?.Close(); } catch { }
 
-                MessageBox.Show(
-                    owner,
-                    $"Failed to download installer: {ex.Message}",
-                    "Update Failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                // Restore the main window if update failed
+                RestoreHiddenWindows();
+
+                // Show error message - handle null owner
+                if (owner != null && owner.IsLoaded)
+                {
+                    MessageBox.Show(
+                        owner,
+                        $"Failed to download installer: {ex.Message}",
+                        "Update Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+                else
+                {
+                    MessageBox.Show(
+                        $"Failed to download installer: {ex.Message}",
+                        "Update Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
             }
             finally
             {
@@ -786,6 +872,29 @@ namespace ConditioningControlPanel
                     Update.DownloadProgressChanged -= progressHandler;
                 }
                 IsUpdateDialogActive = false;
+            }
+        }
+
+        /// <summary>
+        /// Restores windows that were hidden during the update process.
+        /// </summary>
+        private void RestoreHiddenWindows()
+        {
+            try
+            {
+                var mainWindow = Current.MainWindow;
+                if (mainWindow != null && !mainWindow.IsVisible)
+                {
+                    mainWindow.Show();
+                    mainWindow.Activate();
+                }
+                var avatarWindow = Current.Windows.OfType<Window>().FirstOrDefault(w => w.GetType().Name == "AvatarTubeWindow");
+                avatarWindow?.Show();
+                Logger?.Information("Restored hidden windows after update cancelled/failed");
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Failed to restore hidden windows");
             }
         }
 

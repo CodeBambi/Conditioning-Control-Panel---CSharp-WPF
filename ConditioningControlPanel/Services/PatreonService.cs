@@ -83,9 +83,12 @@ namespace ConditioningControlPanel.Services
         public bool NeedsDisplayNameMigration { get; private set; }
 
         /// <summary>
-        /// Whether this is the user's first login (no display name set yet)
+        /// Whether this is the user's first login (no display name set yet on ANY provider).
+        /// If Discord already has a display name, this returns false to avoid re-prompting.
         /// </summary>
-        public bool IsFirstLogin => IsAuthenticated && string.IsNullOrEmpty(DisplayName);
+        public bool IsFirstLogin => IsAuthenticated
+            && string.IsNullOrEmpty(DisplayName)
+            && string.IsNullOrEmpty(App.Discord?.CustomDisplayName);
 
         /// <summary>
         /// Whether the user is whitelisted (gets Tier 1 access regardless of subscription)
@@ -476,23 +479,35 @@ namespace ConditioningControlPanel.Services
                 UpdateTier(newTier, effectivelyActive, subscription.PatronName, subscription.PatronEmail);
 
                 // Use DisplayName from server if available, otherwise preserve existing local one
+                // Also check Discord as a fallback (for linked accounts)
                 var existingCache = _tokenStorage.RetrieveCachedState();
                 var serverDisplayName = subscription.DisplayName;
                 var localDisplayName = existingCache?.DisplayName ?? DisplayName;
+                var discordDisplayName = App.Discord?.CustomDisplayName;
+
+                // Priority: server > local > Discord
                 var effectiveDisplayName = !string.IsNullOrEmpty(serverDisplayName)
                     ? serverDisplayName
-                    : localDisplayName;
+                    : !string.IsNullOrEmpty(localDisplayName)
+                        ? localDisplayName
+                        : discordDisplayName;
 
                 // Check if we need to migrate a local name to server
                 // This happens when user has a local name but server doesn't have it yet
                 NeedsDisplayNameMigration = !string.IsNullOrEmpty(localDisplayName)
                     && string.IsNullOrEmpty(serverDisplayName);
 
-                // Update the DisplayName property if server returned one
+                // Update the DisplayName property
                 if (!string.IsNullOrEmpty(serverDisplayName))
                 {
                     DisplayName = serverDisplayName;
                     NeedsDisplayNameMigration = false; // Server already has it
+                }
+                else if (!string.IsNullOrEmpty(discordDisplayName) && string.IsNullOrEmpty(DisplayName))
+                {
+                    // Adopt Discord's display name if Patreon doesn't have one
+                    DisplayName = discordDisplayName;
+                    App.Logger?.Information("Adopted display name from Discord: {Name}", DisplayName);
                 }
 
                 // Cache result for 24 hours (use effective values for whitelisted users)

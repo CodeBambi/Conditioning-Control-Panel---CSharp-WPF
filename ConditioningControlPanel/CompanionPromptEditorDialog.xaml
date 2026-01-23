@@ -69,9 +69,25 @@
         <!-- Header -->
         <Border Grid.Row="0" Background="#252542" Padding="20,15">
             <StackPanel>
-                <TextBlock Text="Customize Your AI Companion"
-                           Foreground="{StaticResource PinkBrush}"
-                           FontSize="20" FontWeight="Bold"/>
+                <Grid>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Customize Your AI Companion"
+                                   Foreground="{StaticResource PinkBrush}"
+                                   FontSize="20" FontWeight="Bold"/>
+                        <Border Background="#FF6B6B" CornerRadius="3" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="BETA" Foreground="White" FontSize="10" FontWeight="Bold"/>
+                        </Border>
+                    </StackPanel>
+                    <!-- Active Prompt Badge -->
+                    <Border x:Name="ActivePromptBadge" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Background="#1A1A2E" CornerRadius="12" Padding="12,6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Active:" Foreground="#707070" FontSize="11" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtActivePromptName" Text="Default" Foreground="#9370DB"
+                                       FontSize="11" FontWeight="SemiBold" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
                 <TextBlock Text="Edit the prompts that control how your companion thinks and responds. Changes are saved automatically when you close this window."
                            Foreground="#808080" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
 
