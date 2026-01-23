@@ -800,6 +800,39 @@
                 border-radius: 12px;
             }
         }
+
+        /* Update Alert Banner */
+        .update-alert-banner {
+            background: linear-gradient(135deg, #ff69b4 0%, #9b59b6 100%);
+            color: white;
+            text-align: center;
+            padding: 12px 20px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            position: relative;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(255, 105, 180, 0.3);
+        }
+
+        .update-alert-banner a {
+            color: white;
+            text-decoration: underline;
+            font-weight: 600;
+        }
+
+        .update-alert-banner a:hover {
+            text-decoration: none;
+        }
+
+        .update-alert-banner .heart {
+            color: #fff;
+            animation: heartbeat 1.5s ease-in-out infinite;
+        }
+
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
     </style>
 </head>
 <body>
@@ -854,6 +887,11 @@
         <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases" target="_blank" onclick="toggleMenu()">Releases</a>
         <a href="https://discord.gg/YxVAMt4qaZ" target="_blank" onclick="toggleMenu()" style="background: #5865F2; padding: 0.75rem 1.5rem; border-radius: 25px;">Discord</a>
         <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/download/v5.3.1/ConditioningControlPanel-5.3.1-Setup.exe" class="btn btn-primary" onclick="toggleMenu()">Download v5.3.1</a>
+    </div>
+
+    <!-- Update Alert Banner -->
+    <div class="update-alert-banner">
+        <span class="heart">❤️</span> Every girl running versions earlier than 5.3 should <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/tag/v5.3.1">update manually</a> - Good girls condition daily <span class="heart">❤️</span>
     </div>
 
     <section class="hero">
