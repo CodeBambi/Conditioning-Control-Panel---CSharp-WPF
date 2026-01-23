@@ -229,10 +229,23 @@ namespace ConditioningControlPanel
                 Interval = TimeSpan.FromSeconds(30)
             };
             _schedulerTimer.Tick += SchedulerTimer_Tick;
-            _schedulerTimer.Start();
-            
-            // Check scheduler immediately on startup
-            CheckSchedulerOnStartup();
+
+            // Delay scheduler startup by 60 seconds to allow app to fully initialize
+            // This prevents issues when restarting after an update while in a scheduled time window
+            const int schedulerGracePeriodSeconds = 60;
+            App.Logger?.Information("Scheduler will start after {Seconds}s grace period", schedulerGracePeriodSeconds);
+
+            Task.Delay(TimeSpan.FromSeconds(schedulerGracePeriodSeconds)).ContinueWith(_ =>
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (Application.Current == null) return;
+
+                    _schedulerTimer.Start();
+                    CheckSchedulerOnStartup();
+                    App.Logger?.Information("Scheduler grace period complete - scheduler now active");
+                });
+            });
             
             // Initialize browser when window is loaded
             Loaded += MainWindow_Loaded;
