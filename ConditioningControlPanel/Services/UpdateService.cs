@@ -22,18 +22,24 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.2.14";
+        public const string AppVersion = "5.3.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.2.14
+        public const string CurrentPatchNotes = @"v5.3.0
 
-🔄 SEAMLESS UPDATE EXPERIENCE
-• Update splash screen stays visible during entire installation
+🎮 MULTI-TOY HAPTICS
+• All connected toys now vibrate together
+• No longer limited to single device
+
+🔄 SEAMLESS UPDATES
+• Update splash screen stays visible during installation
 • No more blank screen gap while app restarts
-• Leaderboard now supports 500 users";
+
+📊 LEADERBOARD
+• Now supports up to 500 users";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

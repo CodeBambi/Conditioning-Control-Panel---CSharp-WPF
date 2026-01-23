@@ -11,16 +11,17 @@ namespace ConditioningControlPanel.Services.Haptics
 {
     /// <summary>
     /// Buttplug.io provider via Intiface Central
+    /// Supports multiple devices - all connected vibrating devices receive commands
     /// </summary>
     public class ButtplugProvider : IHapticProvider
     {
         private string _serverUrl = "ws://127.0.0.1:12345";
         private ButtplugClient? _client;
-        private ButtplugClientDevice? _activeDevice;
+        private readonly List<ButtplugClientDevice> _activeDevices = new();
         private CancellationTokenSource? _vibrateCts;
 
         public string Name => "Buttplug.io (Intiface)";
-        public bool IsConnected => _client?.Connected == true && _activeDevice != null;
+        public bool IsConnected => _client?.Connected == true && _activeDevices.Count > 0;
         public List<string> ConnectedDevices { get; } = new();
 
         public event EventHandler<bool>? ConnectionChanged;
@@ -65,28 +66,30 @@ namespace ConditioningControlPanel.Services.Haptics
                 // Check if we have any devices
                 if (_client.Devices.Length > 0)
                 {
-                    // Use first device that can vibrate
+                    // Add ALL devices that can vibrate
+                    _activeDevices.Clear();
+                    ConnectedDevices.Clear();
+
                     foreach (var device in _client.Devices)
                     {
                         if (device.VibrateAttributes.Count > 0)
                         {
-                            _activeDevice = device;
-                            ConnectedDevices.Clear();
+                            _activeDevices.Add(device);
                             ConnectedDevices.Add($"{device.Name} (Vibrate)");
-                            Log.Information("ButtplugProvider: Using device {Name}", device.Name);
-                            break;
+                            Log.Information("ButtplugProvider: Added device {Name}", device.Name);
                         }
                     }
 
-                    if (_activeDevice == null)
+                    if (_activeDevices.Count == 0)
                     {
-                        // No vibrating device, just use first one
-                        _activeDevice = _client.Devices[0];
-                        ConnectedDevices.Clear();
-                        ConnectedDevices.Add(_activeDevice.Name);
-                        Log.Warning("ButtplugProvider: No vibrating device found, using {Name}", _activeDevice.Name);
+                        // No vibrating devices found, use first one anyway
+                        var firstDevice = _client.Devices[0];
+                        _activeDevices.Add(firstDevice);
+                        ConnectedDevices.Add(firstDevice.Name);
+                        Log.Warning("ButtplugProvider: No vibrating device found, using {Name}", firstDevice.Name);
                     }
 
+                    Log.Information("ButtplugProvider: {Count} device(s) ready", _activeDevices.Count);
                     ConnectionChanged?.Invoke(this, true);
                     return true;
                 }
@@ -111,12 +114,12 @@ namespace ConditioningControlPanel.Services.Haptics
             Log.Information("ButtplugProvider: Device added: {Name}", e.Device.Name);
             DeviceDiscovered?.Invoke(this, e.Device.Name);
 
-            // If we don't have an active device and this one can vibrate, use it
-            if (_activeDevice == null && e.Device.VibrateAttributes.Count > 0)
+            // Add this device if it can vibrate and isn't already in our list
+            if (e.Device.VibrateAttributes.Count > 0 && !_activeDevices.Any(d => d.Index == e.Device.Index))
             {
-                _activeDevice = e.Device;
-                ConnectedDevices.Clear();
+                _activeDevices.Add(e.Device);
                 ConnectedDevices.Add($"{e.Device.Name} (Vibrate)");
+                Log.Information("ButtplugProvider: Now have {Count} active device(s)", _activeDevices.Count);
                 ConnectionChanged?.Invoke(this, true);
             }
         }
@@ -125,18 +128,20 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             Log.Information("ButtplugProvider: Device removed: {Name}", e.Device.Name);
 
-            if (_activeDevice?.Index == e.Device.Index)
+            var deviceToRemove = _activeDevices.FirstOrDefault(d => d.Index == e.Device.Index);
+            if (deviceToRemove != null)
             {
-                _activeDevice = null;
-                ConnectedDevices.Clear();
-                ConnectionChanged?.Invoke(this, false);
+                _activeDevices.Remove(deviceToRemove);
+                ConnectedDevices.Remove($"{e.Device.Name} (Vibrate)");
+                Log.Information("ButtplugProvider: Now have {Count} active device(s)", _activeDevices.Count);
+                ConnectionChanged?.Invoke(this, _activeDevices.Count > 0);
             }
         }
 
         private void OnServerDisconnect(object? sender, EventArgs e)
         {
             Log.Warning("ButtplugProvider: Server disconnected");
-            _activeDevice = null;
+            _activeDevices.Clear();
             ConnectedDevices.Clear();
             ConnectionChanged?.Invoke(this, false);
         }
@@ -163,7 +168,7 @@ namespace ConditioningControlPanel.Services.Haptics
                     _client = null;
                 }
 
-                _activeDevice = null;
+                _activeDevices.Clear();
                 ConnectedDevices.Clear();
                 ConnectionChanged?.Invoke(this, false);
                 Log.Information("ButtplugProvider: Disconnected");
@@ -176,7 +181,7 @@ namespace ConditioningControlPanel.Services.Haptics
 
         public async Task VibrateAsync(double intensity, int durationMs)
         {
-            if (_activeDevice == null || _client?.Connected != true)
+            if (_activeDevices.Count == 0 || _client?.Connected != true)
                 return;
 
             try
@@ -189,10 +194,22 @@ namespace ConditioningControlPanel.Services.Haptics
                 // Clamp intensity to 0-1 range
                 var clampedIntensity = Math.Clamp(intensity, 0.0, 1.0);
 
-                // Send vibrate command
-                await _activeDevice.VibrateAsync(clampedIntensity);
+                // Send vibrate command to ALL connected devices
+                var tasks = _activeDevices.Select(device =>
+                {
+                    try
+                    {
+                        return device.VibrateAsync(clampedIntensity);
+                    }
+                    catch
+                    {
+                        return Task.CompletedTask;
+                    }
+                });
+                await Task.WhenAll(tasks);
 
-                Log.Debug("ButtplugProvider: Vibrate {Intensity:F2} for {Duration}ms", clampedIntensity, durationMs);
+                Log.Debug("ButtplugProvider: Vibrate {Intensity:F2} for {Duration}ms on {Count} device(s)",
+                    clampedIntensity, durationMs, _activeDevices.Count);
 
                 // Schedule stop after duration (fire-and-forget with cancellation)
                 _ = Task.Run(async () =>
@@ -200,10 +217,17 @@ namespace ConditioningControlPanel.Services.Haptics
                     try
                     {
                         await Task.Delay(durationMs, token);
-                        if (!token.IsCancellationRequested && _activeDevice != null && _client?.Connected == true)
+                        if (!token.IsCancellationRequested && _activeDevices.Count > 0 && _client?.Connected == true)
                         {
-                            await _activeDevice.Stop();
-                            Log.Debug("ButtplugProvider: Auto-stopped after {Duration}ms", durationMs);
+                            // Stop ALL devices
+                            var stopTasks = _activeDevices.Select(device =>
+                            {
+                                try { return device.Stop(); }
+                                catch { return Task.CompletedTask; }
+                            });
+                            await Task.WhenAll(stopTasks);
+                            Log.Debug("ButtplugProvider: Auto-stopped {Count} device(s) after {Duration}ms",
+                                _activeDevices.Count, durationMs);
                         }
                     }
                     catch (OperationCanceledException)
@@ -228,13 +252,19 @@ namespace ConditioningControlPanel.Services.Haptics
             _vibrateCts?.Cancel();
             _vibrateCts = null;
 
-            if (_activeDevice == null || _client?.Connected != true)
+            if (_activeDevices.Count == 0 || _client?.Connected != true)
                 return;
 
             try
             {
-                await _activeDevice.Stop();
-                Log.Debug("ButtplugProvider: Stopped");
+                // Stop ALL devices
+                var stopTasks = _activeDevices.Select(device =>
+                {
+                    try { return device.Stop(); }
+                    catch { return Task.CompletedTask; }
+                });
+                await Task.WhenAll(stopTasks);
+                Log.Debug("ButtplugProvider: Stopped {Count} device(s)", _activeDevices.Count);
             }
             catch (Exception ex)
             {
