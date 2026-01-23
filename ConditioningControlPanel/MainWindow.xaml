@@ -763,7 +763,7 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.2.10 IS OUT! 💖"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.2.14 IS OUT! 💖"
                             Click="BtnUpdateAvailable_Click" ToolTip="v5.2.5 - Seamless auto-updates!"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>

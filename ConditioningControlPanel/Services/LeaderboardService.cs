@@ -76,7 +76,7 @@ public class LeaderboardService : IDisposable
         {
             App.Logger?.Debug("Fetching leaderboard with sort_by={SortBy}", sortBy);
 
-            var response = await _httpClient.GetAsync($"{ProxyBaseUrl}/leaderboard?sort_by={sortBy}");
+            var response = await _httpClient.GetAsync($"{ProxyBaseUrl}/leaderboard?sort_by={sortBy}&limit=500");
 
             if (!response.IsSuccessStatusCode)
             {
