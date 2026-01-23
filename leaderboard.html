@@ -285,8 +285,8 @@
             </div>
 
             <div class="sort-controls">
-                <button class="sort-btn active" data-sort="xp">XP</button>
-                <button class="sort-btn" data-sort="level">Level</button>
+                <button class="sort-btn active" data-sort="level">Level</button>
+                <button class="sort-btn" data-sort="xp">XP</button>
                 <button class="sort-btn" data-sort="total_bubbles_popped">Bubbles</button>
                 <button class="sort-btn" data-sort="total_flashes">Flashes</button>
                 <button class="sort-btn" data-sort="total_video_minutes">Video Mins</button>
@@ -319,7 +319,7 @@
 
     <script>
         const API_URL = 'https://codebambi-proxy.vercel.app/leaderboard';
-        let currentSort = 'xp';
+        let currentSort = 'level';
 
         // Sort button handlers
         document.querySelectorAll('.sort-btn[data-sort]').forEach(btn => {
