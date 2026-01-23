@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Takeover Mode | CCP Guide</title>
+    <meta name="description" content="Learn about Takeover Mode - let your companion autonomously trigger effects.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Takeover Mode</span>
+            </div>
+            <h1>Takeover Mode</h1>
+            <p>Let your companion take control and autonomously trigger effects</p>
+            <div class="patreon-badge">Patreon Feature</div>
+        </div>
+
+        <div class="guide-content">
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#requirements">Requirements</a></li>
+                    <li><a href="#how-it-works">How It Works</a></li>
+                    <li><a href="#available-actions">Available Actions</a></li>
+                    <li><a href="#mood-system">Mood System</a></li>
+                    <li><a href="#settings">Settings</a></li>
+                    <li><a href="#cult-bunny">Cult Bunny Companion</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+                <p>Takeover Mode (also called Autonomy Mode) allows your companion to act independently, triggering flashes, videos, subliminals, and other effects on her own schedule. She becomes an active participant in your conditioning rather than just responding to your commands.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>🎲</span>
+                        <h5>Random Triggers</h5>
+                        <p>Actions at random intervals</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>😴</span>
+                        <h5>Idle Detection</h5>
+                        <p>Triggers when you're away</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🌙</span>
+                        <h5>Time-Aware</h5>
+                        <p>Behavior changes by time of day</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>💬</span>
+                        <h5>Announcements</h5>
+                        <p>Teasing messages before actions</p>
+                    </div>
+                </div>
+
+                <div class="warning-box">
+                    <h5>⚠️ Consent Required</h5>
+                    <p>Takeover Mode requires explicit consent before activation. The companion will trigger effects without your direct input. You can always disable it or use the panic key to stop.</p>
+                </div>
+            </section>
+
+            <section id="requirements">
+                <h2>Requirements</h2>
+                <ul>
+                    <li><strong>Patreon Supporter</strong> - Premium feature</li>
+                    <li><strong>Consent Given</strong> - Must accept the consent dialog</li>
+                    <li><strong>Mode Enabled</strong> - Toggle on in settings</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>💡 Cult Bunny Companion</h5>
+                    <p>The Cult Bunny companion (unlocks at Level 100) gains a +50% XP bonus when autonomy triggers actions. Perfect for players who want to embrace full takeover!</p>
+                </div>
+            </section>
+
+            <section id="how-it-works">
+                <h2>How It Works</h2>
+
+                <h3>Trigger Types</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Trigger</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Random Interval</strong></td>
+                            <td>Actions trigger at random intervals based on your settings (e.g., every 5-15 minutes)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Idle Detection</strong></td>
+                            <td>When you've been inactive, the companion may try to get your attention</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Context Awareness</strong></td>
+                            <td>With Window Awareness enabled, triggers based on what you're doing</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Action Flow</h3>
+                <ol>
+                    <li>Timer fires based on settings</li>
+                    <li>System checks if an action can be taken (not on cooldown, no active interaction)</li>
+                    <li>Companion selects an action based on weights and mood</li>
+                    <li>Optionally announces the action with a teasing message</li>
+                    <li>Executes the action (flash, video, etc.)</li>
+                    <li>Enters cooldown period before next action</li>
+                </ol>
+            </section>
+
+            <section id="available-actions">
+                <h2>Available Actions</h2>
+                <p>Each action can be individually enabled or disabled:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Level Required</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Flash Image</strong></td>
+                            <td>Any</td>
+                            <td>Triggers a random flash image popup</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Mandatory Video</strong></td>
+                            <td>Any</td>
+                            <td>Starts a video (never uses strict mode for safety)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Subliminal</strong></td>
+                            <td>Any</td>
+                            <td>Flashes a subliminal message</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Pink Filter Pulse</strong></td>
+                            <td>10+</td>
+                            <td>Temporarily enables/intensifies the pink filter for 30 seconds</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Start Bubbles</strong></td>
+                            <td>20+</td>
+                            <td>Starts a bubble popping game for 30 seconds</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Lock Card</strong></td>
+                            <td>35+</td>
+                            <td>Shows a lock card challenge</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Bouncing Text</strong></td>
+                            <td>60+</td>
+                            <td>Starts bouncing text overlay for 30 seconds</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Brain Drain Pulse</strong></td>
+                            <td>70+</td>
+                            <td>Temporarily increases blur intensity</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Mind Wipe</strong></td>
+                            <td>80+</td>
+                            <td>Triggers the mind wipe effect</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Comment</strong></td>
+                            <td>Any</td>
+                            <td>Avatar makes a teasing comment (uses AI if available)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="mood-system">
+                <h2>Mood System</h2>
+                <p>The companion's mood changes based on time of day, affecting which actions are more likely:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Mood</th>
+                            <th>Behavior</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>6 AM - 12 PM</strong></td>
+                            <td>Gentle</td>
+                            <td>Prefers comments, reduces disruptive actions</td>
+                        </tr>
+                        <tr>
+                            <td><strong>12 PM - 6 PM</strong></td>
+                            <td>Attentive</td>
+                            <td>Balanced behavior</td>
+                        </tr>
+                        <tr>
+                            <td><strong>6 PM - 10 PM</strong></td>
+                            <td>Playful</td>
+                            <td>More bubbles and flashes</td>
+                        </tr>
+                        <tr>
+                            <td><strong>10 PM - 6 AM</strong></td>
+                            <td>Mischievous</td>
+                            <td>More videos, brain drain, and subliminals</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box">
+                    <h5>💡 Time-Aware Mode</h5>
+                    <p>Enable "Time-Aware Intensity" in settings to let the mood system also affect action frequency, not just selection.</p>
+                </div>
+            </section>
+
+            <section id="settings">
+                <h2>Settings</h2>
+
+                <h3>Core Settings</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Enable Takeover Mode</strong></td>
+                            <td>Master toggle for autonomous behavior</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Random Trigger Interval</strong></td>
+                            <td>Base interval between random actions (actual time varies)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Idle Timeout</strong></td>
+                            <td>How long before idle triggers activate</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Cooldown</strong></td>
+                            <td>Minimum time between actions</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Intensity</strong></td>
+                            <td>Higher intensity = more disruptive actions become more likely</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Announcement Chance</strong></td>
+                            <td>Probability of announcing actions before executing</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Action Toggles</h3>
+                <p>Each action type can be individually enabled or disabled to customize your experience.</p>
+            </section>
+
+            <section id="cult-bunny">
+                <h2>Cult Bunny Companion</h2>
+                <p>The <strong>Cult Bunny</strong> companion (unlocks at Level 100) is designed specifically for Takeover Mode enthusiasts:</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>🐰</span>
+                        <h5>+50% XP Bonus</h5>
+                        <p>When autonomy triggers actions</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🎯</span>
+                        <h5>Passive Play</h5>
+                        <p>Rewards hands-off conditioning</p>
+                    </div>
+                </div>
+
+                <p>With Cult Bunny active and Takeover Mode enabled, every autonomous action earns 50% more companion XP. This makes it the ideal companion for players who want to surrender control and let the app guide their experience.</p>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-avatar.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Companion Avatar</span>
+                    </div>
+                </a>
+                <a href="guide-settings.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">System Settings</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

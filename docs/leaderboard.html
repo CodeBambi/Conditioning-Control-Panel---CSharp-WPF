@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard | Conditioning Control Panel</title>
+    <meta name="description" content="Live leaderboard for Conditioning Control Panel - see the top conditioned users!">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+    <style>
+        .leaderboard-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .leaderboard-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .leaderboard-header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #ff69b4 0%, #9b59b6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            background: rgba(37, 37, 66, 0.8);
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid rgba(255, 105, 180, 0.2);
+        }
+
+        .stat-item .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #ff69b4;
+        }
+
+        .stat-item .label {
+            font-size: 0.85rem;
+            color: #b0b0c0;
+        }
+
+        .sort-controls {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .sort-btn {
+            background: rgba(37, 37, 66, 0.8);
+            border: 1px solid rgba(255, 105, 180, 0.3);
+            color: #b0b0c0;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.85rem;
+            transition: all 0.3s;
+        }
+
+        .sort-btn:hover {
+            border-color: #ff69b4;
+            color: #ff69b4;
+        }
+
+        .sort-btn.active {
+            background: linear-gradient(135deg, #ff69b4 0%, #9b59b6 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .leaderboard-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(30, 30, 58, 0.8);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .leaderboard-table th {
+            background: rgba(37, 37, 66, 0.9);
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: #ff69b4;
+            border-bottom: 2px solid rgba(255, 105, 180, 0.3);
+        }
+
+        .leaderboard-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .leaderboard-table tr:hover {
+            background: rgba(255, 105, 180, 0.05);
+        }
+
+        .rank-cell {
+            font-weight: 700;
+            width: 60px;
+            text-align: center;
+        }
+
+        .rank-1 { color: #ffd700; }
+        .rank-2 { color: #c0c0c0; }
+        .rank-3 { color: #cd7f32; }
+
+        .user-cell {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ff69b4 0%, #9b59b6 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+
+        .user-name {
+            font-weight: 500;
+        }
+
+        .user-title {
+            font-size: 0.75rem;
+            color: #9b59b6;
+        }
+
+        .online-indicator {
+            width: 8px;
+            height: 8px;
+            background: #2ecc71;
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: 0.5rem;
+        }
+
+        .stat-cell {
+            text-align: right;
+            font-weight: 500;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #b0b0c0;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 105, 180, 0.2);
+            border-top-color: #ff69b4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            text-align: center;
+            padding: 2rem;
+            color: #e74c3c;
+            background: rgba(231, 76, 60, 0.1);
+            border-radius: 12px;
+            border: 1px solid rgba(231, 76, 60, 0.3);
+        }
+
+        .refresh-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 105, 180, 0.5);
+            color: #ff69b4;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            margin-left: 1rem;
+            transition: all 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: rgba(255, 105, 180, 0.1);
+        }
+
+        .last-updated {
+            text-align: center;
+            font-size: 0.8rem;
+            color: #707090;
+            margin-top: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .leaderboard-table {
+                font-size: 0.85rem;
+            }
+
+            .leaderboard-table th,
+            .leaderboard-table td {
+                padding: 0.5rem;
+            }
+
+            .user-avatar {
+                display: none;
+            }
+
+            .stats-bar {
+                gap: 1rem;
+            }
+
+            .stat-item {
+                padding: 0.75rem 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html">Guide</a></li>
+            <li><a href="leaderboard.html" class="active">Leaderboard</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="leaderboard.html" onclick="toggleMenu()">Leaderboard</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="leaderboard-container">
+            <div class="leaderboard-header">
+                <h1>🏆 Leaderboard</h1>
+                <p>Top conditioned users - updated live</p>
+            </div>
+
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <div class="value" id="totalUsers">-</div>
+                    <div class="label">Total Users</div>
+                </div>
+                <div class="stat-item">
+                    <div class="value" id="onlineUsers">-</div>
+                    <div class="label">Online Now</div>
+                </div>
+            </div>
+
+            <div class="sort-controls">
+                <button class="sort-btn active" data-sort="xp">XP</button>
+                <button class="sort-btn" data-sort="level">Level</button>
+                <button class="sort-btn" data-sort="total_bubbles_popped">Bubbles</button>
+                <button class="sort-btn" data-sort="total_flashes">Flashes</button>
+                <button class="sort-btn" data-sort="total_video_minutes">Video Mins</button>
+                <button class="sort-btn" data-sort="total_lock_cards_completed">Lock Cards</button>
+                <button class="refresh-btn" onclick="fetchLeaderboard()">↻ Refresh</button>
+            </div>
+
+            <div id="leaderboardContent">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading leaderboard...</p>
+                </div>
+            </div>
+
+            <div class="last-updated" id="lastUpdated"></div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        const API_URL = 'https://codebambi-proxy.vercel.app/leaderboard';
+        let currentSort = 'xp';
+
+        // Sort button handlers
+        document.querySelectorAll('.sort-btn[data-sort]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentSort = btn.dataset.sort;
+                fetchLeaderboard();
+            });
+        });
+
+        async function fetchLeaderboard() {
+            const content = document.getElementById('leaderboardContent');
+            content.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading leaderboard...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`${API_URL}?sort_by=${currentSort}&limit=500`);
+                if (!response.ok) throw new Error('Failed to fetch');
+
+                const data = await response.json();
+
+                // Update stats
+                document.getElementById('totalUsers').textContent = data.total_users?.toLocaleString() || '-';
+                document.getElementById('onlineUsers').textContent = data.online_users?.toLocaleString() || '-';
+
+                // Render table
+                renderLeaderboard(data.entries || []);
+
+                // Update timestamp
+                document.getElementById('lastUpdated').textContent =
+                    `Last updated: ${new Date().toLocaleTimeString()}`;
+
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="error-message">
+                        <p>Failed to load leaderboard. Please try again later.</p>
+                        <button class="refresh-btn" onclick="fetchLeaderboard()">Try Again</button>
+                    </div>
+                `;
+            }
+        }
+
+        function renderLeaderboard(entries) {
+            if (!entries.length) {
+                document.getElementById('leaderboardContent').innerHTML = `
+                    <div class="error-message">
+                        <p>No entries found.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const sortLabel = {
+                'xp': 'XP',
+                'level': 'Level',
+                'total_bubbles_popped': 'Bubbles',
+                'total_flashes': 'Flashes',
+                'total_video_minutes': 'Video Mins',
+                'total_lock_cards_completed': 'Lock Cards'
+            }[currentSort] || 'XP';
+
+            let html = `
+                <table class="leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>User</th>
+                            <th style="text-align: right">${sortLabel}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            entries.forEach(entry => {
+                const rankClass = entry.rank <= 3 ? `rank-${entry.rank}` : '';
+                const initial = (entry.display_name || 'A')[0].toUpperCase();
+                const onlineIndicator = entry.is_online ? '<span class="online-indicator"></span>' : '';
+
+                let statValue = entry[currentSort] || entry.xp || 0;
+                if (currentSort === 'total_video_minutes') {
+                    statValue = Math.round(statValue);
+                }
+                statValue = statValue.toLocaleString();
+
+                html += `
+                    <tr>
+                        <td class="rank-cell ${rankClass}">#${entry.rank}</td>
+                        <td>
+                            <div class="user-cell">
+                                <div class="user-avatar">${initial}</div>
+                                <div>
+                                    <div class="user-name">${escapeHtml(entry.display_name || 'Anonymous')}${onlineIndicator}</div>
+                                    <div class="user-title">${escapeHtml(entry.title || `Level ${entry.level}`)}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="stat-cell">${statValue}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('leaderboardContent').innerHTML = html;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+
+        // Initial load
+        fetchLeaderboard();
+
+        // Auto-refresh every 2 minutes
+        setInterval(fetchLeaderboard, 120000);
+    </script>
+</body>
+</html>
