@@ -22,24 +22,22 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.3.0";
+        public const string AppVersion = "5.3.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.3.0
+        public const string CurrentPatchNotes = @"v5.3.1
 
-🎮 MULTI-TOY HAPTICS
-• All connected toys now vibrate together
-• No longer limited to single device
+🐛 BUG FIXES
+• Fixed Videos and Lock Cards randomly stopping mid-session
+• Added auto-recovery for stuck interaction queue
+• Added fallback safety timer for video playback
 
-🔄 SEAMLESS UPDATES
-• Update splash screen stays visible during installation
-• No more blank screen gap while app restarts
-
-📊 LEADERBOARD
-• Now supports up to 500 users";
+🔒 XP BAR
+• XP bar now shows login prompt when not authenticated
+• Grayed out until you login with Discord or Patreon";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
