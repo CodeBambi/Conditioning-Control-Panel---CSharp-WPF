@@ -8268,7 +8268,31 @@ namespace ConditioningControlPanel
 
         private void BtnTestVideo_Click(object sender, RoutedEventArgs e)
         {
-            App.Video.TriggerVideo();
+            try
+            {
+                // Check if video is already playing
+                if (App.Video.IsPlaying)
+                {
+                    MessageBox.Show("A video is already playing. Please wait for it to finish.",
+                        "Video Playing", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // Check if another interaction is blocking
+                if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
+                {
+                    MessageBox.Show($"Another interaction is in progress ({App.InteractionQueue.CurrentInteraction}).\n\nPlease wait for it to complete, or restart the app if it seems stuck.",
+                        "Please Wait", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                App.Video.TriggerVideo();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Error in BtnTestVideo_Click");
+                MessageBox.Show($"Error triggering video: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void TriggerStartupVideo()

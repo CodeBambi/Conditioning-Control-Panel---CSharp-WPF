@@ -259,10 +259,14 @@ namespace ConditioningControlPanel.Services
 
         public void TriggerVideo()
         {
+            App.Logger?.Information("VideoService: TriggerVideo called");
+
             // Check if another fullscreen interaction is active (bubble count, lock card)
             // If so, queue this video for later
             if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
             {
+                App.Logger?.Information("VideoService: Queueing video - another interaction is active: {Type}",
+                    App.InteractionQueue.CurrentInteraction);
                 App.InteractionQueue.TryStart(
                     InteractionQueueService.InteractionType.Video,
                     () => TriggerVideo(),
@@ -284,11 +288,13 @@ namespace ConditioningControlPanel.Services
             }
 
             var path = GetNextVideo();
+            App.Logger?.Information("VideoService: GetNextVideo returned: {Path}", path ?? "(null)");
+
             if (string.IsNullOrEmpty(path))
             {
                 // No video to play - release the queue lock
                 App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
-                System.Windows.MessageBox.Show($"No videos in:\n{_videosPath}", "No Videos");
+                System.Windows.MessageBox.Show($"No videos found in:\n{_videosPath}\n\nPlease add .mp4, .mov, .avi, .wmv, .mkv, or .webm files to this folder.", "No Videos");
                 return;
             }
 
@@ -304,11 +310,25 @@ namespace ConditioningControlPanel.Services
                 App.Subliminal?.TriggerBambiFreeze(deferReset: true);
 
                 // Small delay to let the freeze effect register before video starts
+                App.Logger?.Debug("VideoService: Starting 800ms freeze delay before PlayVideo");
                 Task.Delay(800).ContinueWith(_ =>
                 {
                     try
                     {
-                        if (Application.Current?.Dispatcher == null) return;
+                        if (Application.Current?.Dispatcher == null)
+                        {
+                            App.Logger?.Warning("VideoService: Dispatcher is null after freeze delay, cannot play video");
+                            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
+                            return;
+                        }
+
+                        if (Application.Current.Dispatcher.HasShutdownStarted)
+                        {
+                            App.Logger?.Warning("VideoService: Dispatcher is shutting down, cannot play video");
+                            return;
+                        }
+
+                        App.Logger?.Debug("VideoService: Freeze delay complete, calling PlayVideo on UI thread");
                         Application.Current.Dispatcher.Invoke(() =>
                         {
                             PlayVideo(path, App.Settings.Current.StrictLockEnabled);
@@ -316,13 +336,15 @@ namespace ConditioningControlPanel.Services
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Warning("VideoService: Delayed video play failed - {Error}", ex.Message);
+                        App.Logger?.Error(ex, "VideoService: Delayed video play failed");
+                        App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
                     }
                 });
             }
             else
             {
                 // Attention checks or minigame active - play video without freeze
+                App.Logger?.Debug("VideoService: Playing video immediately (skipFreeze=true)");
                 PlayVideo(path, App.Settings.Current.StrictLockEnabled);
             }
         }
@@ -369,11 +391,25 @@ namespace ConditioningControlPanel.Services
                 App.Subliminal?.TriggerBambiFreeze(deferReset: true);
 
                 // Small delay to let the freeze effect register before video starts
+                App.Logger?.Debug("VideoService: Starting 800ms freeze delay before specific video");
                 Task.Delay(800).ContinueWith(_ =>
                 {
                     try
                     {
-                        if (Application.Current?.Dispatcher == null) return;
+                        if (Application.Current?.Dispatcher == null)
+                        {
+                            App.Logger?.Warning("VideoService: Dispatcher is null, cannot play specific video");
+                            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
+                            return;
+                        }
+
+                        if (Application.Current.Dispatcher.HasShutdownStarted)
+                        {
+                            App.Logger?.Warning("VideoService: Dispatcher is shutting down, cannot play specific video");
+                            return;
+                        }
+
+                        App.Logger?.Debug("VideoService: Freeze delay complete, calling PlayVideo for specific video");
                         Application.Current.Dispatcher.Invoke(() =>
                         {
                             PlayVideo(videoPath, strictMode);
@@ -381,13 +417,15 @@ namespace ConditioningControlPanel.Services
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Warning("VideoService: Delayed specific video play failed - {Error}", ex.Message);
+                        App.Logger?.Error(ex, "VideoService: Delayed specific video play failed");
+                        App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
                     }
                 });
             }
             else
             {
                 // Attention checks enabled - play immediately without freeze
+                App.Logger?.Debug("VideoService: Playing specific video immediately (attention checks enabled)");
                 PlayVideo(videoPath, strictMode);
             }
         }
@@ -552,6 +590,8 @@ namespace ConditioningControlPanel.Services
 
         private void PlayVideo(string path, bool strict)
         {
+            App.Logger?.Information("VideoService: PlayVideo called for {File}", Path.GetFileName(path));
+
             _videoPlaying = true;
             _strictActive = strict;
             _retryPath = path;
@@ -573,10 +613,12 @@ namespace ConditioningControlPanel.Services
                 App.Audio?.Duck(App.Settings.Current.DuckingLevel);
 
             // Delay video start by 1.3 seconds to allow avatar to announce
+            App.Logger?.Debug("VideoService: Starting 1.3s delay before playback");
             var delayTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.3) };
             delayTimer.Tick += (s, e) =>
             {
                 delayTimer.Stop();
+                App.Logger?.Debug("VideoService: Delay complete, calling StartVideoPlayback");
                 StartVideoPlayback(path, strict);
             };
             delayTimer.Start();
@@ -584,8 +626,14 @@ namespace ConditioningControlPanel.Services
 
         private void StartVideoPlayback(string path, bool strict)
         {
+            App.Logger?.Information("VideoService: StartVideoPlayback called for {File}", Path.GetFileName(path));
+
             // Safety check: ensure app is still running
-            if (Application.Current == null) return;
+            if (Application.Current == null)
+            {
+                App.Logger?.Warning("VideoService: Application.Current is null, aborting playback");
+                return;
+            }
 
             try
             {
@@ -596,6 +644,8 @@ namespace ConditioningControlPanel.Services
 
                 // Ensure LibVLC is initialized (deferred from startup for faster launch)
                 EnsureLibVLCInitialized();
+                App.Logger?.Information("VideoService: LibVLC initialized = {Initialized}, LibVLC instance = {HasInstance}",
+                    _libVLCInitialized, _libVLC != null);
 
                 Application.Current.Dispatcher.Invoke(() =>
                 {
