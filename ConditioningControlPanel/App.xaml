@@ -9,6 +9,7 @@
         <ResourceDictionary Source="Resources/Theme/Colors.xaml"/>
         <ResourceDictionary Source="Resources/Theme/Brushes.xaml"/>
         <ResourceDictionary Source="Resources/Theme/Controls.xaml"/>
+        <ResourceDictionary Source="Resources/Theme/Converters.xaml"/>
 
         <!-- Keep any existing app-level dictionaries below -->
       </ResourceDictionary.MergedDictionaries>

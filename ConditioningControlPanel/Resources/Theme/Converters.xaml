@@ -1,0 +1,9 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers">
+
+    <!-- Global converters - defined at Application level to ensure availability in all DataTemplates -->
+    <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+
+</ResourceDictionary>

@@ -26,9 +26,8 @@
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
-        <!-- Global converters -->
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-        <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
+        <!-- Note: BoolToVisibility and InverseBoolToVisibility converters are defined in
+             Application.Resources (Converters.xaml) to ensure availability in all DataTemplates -->
 
         <!-- Custom Tooltip Style -->
         <Style TargetType="ToolTip">
