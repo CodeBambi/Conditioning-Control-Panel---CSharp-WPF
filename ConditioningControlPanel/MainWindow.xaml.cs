@@ -878,6 +878,15 @@ namespace ConditioningControlPanel
             ShowTab("companion");
         }
 
+        private void BtnCompanionHelp_Click(object sender, RoutedEventArgs e)
+        {
+            var tutorial = new CompanionTutorialWindow
+            {
+                Owner = this
+            };
+            tutorial.ShowDialog();
+        }
+
         private void BtnLeaderboard_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("leaderboard");

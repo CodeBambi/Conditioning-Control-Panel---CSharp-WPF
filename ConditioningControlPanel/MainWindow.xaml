@@ -3196,12 +3196,19 @@
                             <!-- COMPANIONS BOX -->
                             <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="10" Padding="15">
                                 <StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                        <TextBlock Text="COMPANIONS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
-                                        <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                                            <TextBlock Text="BETA" Foreground="White" FontSize="9" FontWeight="Bold"/>
-                                        </Border>
-                                    </StackPanel>
+                                    <Grid Margin="0,0,0,12">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="COMPANIONS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
+                                            <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock Text="BETA" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <Button x:Name="BtnCompanionHelp" Content="?" HorizontalAlignment="Right"
+                                                Background="#252542" Foreground="#9370DB" BorderThickness="0"
+                                                FontSize="14" FontWeight="Bold" Width="24" Height="24"
+                                                Cursor="Hand" ToolTip="Companion Guide"
+                                                Click="BtnCompanionHelp_Click"/>
+                                    </Grid>
 
                                     <!-- Companion Cards 2x2 - Unlock at levels 50, 100, 125, 150 -->
                                     <UniformGrid Rows="2" Columns="2" Margin="0,0,0,12">
