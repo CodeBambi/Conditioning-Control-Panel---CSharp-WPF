@@ -151,6 +151,30 @@
             color: #9b59b6;
         }
 
+        .patreon-badge {
+            height: 16px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        .discord-dm {
+            display: inline-block;
+            margin-left: 6px;
+            vertical-align: middle;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .discord-dm:hover {
+            opacity: 1;
+        }
+
+        .discord-dm img {
+            height: 18px;
+            vertical-align: middle;
+        }
+
         .online-indicator {
             width: 8px;
             height: 8px;
@@ -291,6 +315,7 @@
                 <button class="sort-btn" data-sort="total_flashes">Flashes</button>
                 <button class="sort-btn" data-sort="total_video_minutes">Video Mins</button>
                 <button class="sort-btn" data-sort="total_lock_cards_completed">Lock Cards</button>
+                <button class="sort-btn" data-sort="is_patreon">Patreon</button>
                 <button class="refresh-btn" onclick="fetchLeaderboard()">↻ Refresh</button>
             </div>
 
@@ -383,7 +408,8 @@
                 'total_bubbles_popped': 'Bubbles',
                 'total_flashes': 'Flashes',
                 'total_video_minutes': 'Video Mins',
-                'total_lock_cards_completed': 'Lock Cards'
+                'total_lock_cards_completed': 'Lock Cards',
+                'is_patreon': 'Patreon'
             }[currentSort] || 'XP';
 
             let html = `
@@ -403,11 +429,21 @@
                 const initial = (entry.display_name || 'A')[0].toUpperCase();
                 const onlineIndicator = entry.is_online ? '<span class="online-indicator"></span>' : '';
 
-                let statValue = entry[currentSort] || entry.xp || 0;
-                if (currentSort === 'total_video_minutes') {
-                    statValue = Math.round(statValue);
+                let statValue;
+                if (currentSort === 'is_patreon') {
+                    // When sorted by Patreon, show level as the stat
+                    statValue = `Lvl ${entry.level}`;
+                } else {
+                    statValue = entry[currentSort] || entry.xp || 0;
+                    if (currentSort === 'total_video_minutes') {
+                        statValue = Math.round(statValue);
+                    }
+                    statValue = statValue.toLocaleString();
                 }
-                statValue = statValue.toLocaleString();
+
+                const discordDm = entry.discord_id
+                    ? `<a href="discord://users/${entry.discord_id}" class="discord-dm" title="Send Discord DM"><img src="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a69f118df70ad7828d4_icon_clyde_blurple_RGB.svg" alt="Discord"></a>`
+                    : '';
 
                 html += `
                     <tr>
@@ -416,7 +452,7 @@
                             <div class="user-cell">
                                 <div class="user-avatar">${initial}</div>
                                 <div>
-                                    <div class="user-name">${escapeHtml(entry.display_name || 'Anonymous')}${onlineIndicator}</div>
+                                    <div class="user-name">${escapeHtml(entry.display_name || 'Anonymous')}${entry.is_patreon ? '<img src="patreon-supporter.png" alt="Patreon Supporter" class="patreon-badge">' : ''}${discordDm}${onlineIndicator}</div>
                                     <div class="user-title">${escapeHtml(entry.title || `Level ${entry.level}`)}</div>
                                 </div>
                             </div>
