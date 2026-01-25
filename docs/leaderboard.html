@@ -151,6 +151,12 @@
             color: #9b59b6;
         }
 
+        .patreon-badge {
+            height: 14px;
+            margin-top: 2px;
+            display: block;
+        }
+
         .online-indicator {
             width: 8px;
             height: 8px;
@@ -418,6 +424,7 @@
                                 <div>
                                     <div class="user-name">${escapeHtml(entry.display_name || 'Anonymous')}${onlineIndicator}</div>
                                     <div class="user-title">${escapeHtml(entry.title || `Level ${entry.level}`)}</div>
+                                    ${entry.is_patreon ? '<img src="patreon-supporter.png" alt="Patreon Supporter" class="patreon-badge">' : ''}
                                 </div>
                             </div>
                         </td>
