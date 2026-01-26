@@ -201,31 +201,59 @@ namespace ConditioningControlPanel.Services
                 PackDownloadStarted?.Invoke(this, pack);
                 App.Logger?.Information("Starting download of pack: {Name}", pack.Name);
 
-                // Download ZIP file from signed URL
-                using var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
-                response.EnsureSuccessStatusCode();
+                // Download ZIP file from signed URL with retry logic
+                var maxRetries = 3;
+                var retryDelay = TimeSpan.FromSeconds(2);
 
-                var totalBytes = response.Content.Headers.ContentLength ?? pack.SizeBytes;
-                var downloadedBytes = 0L;
-
-                using (var contentStream = await response.Content.ReadAsStreamAsync())
-                using (var fileStream = new FileStream(tempZipPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                for (int attempt = 1; attempt <= maxRetries; attempt++)
                 {
-                    var buffer = new byte[81920]; // 80KB buffer for faster downloads
-                    int bytesRead;
-
-                    while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                    try
                     {
-                        await fileStream.WriteAsync(buffer, 0, bytesRead);
-                        downloadedBytes += bytesRead;
+                        using var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+                        response.EnsureSuccessStatusCode();
 
-                        if (totalBytes > 0)
+                        var totalBytes = response.Content.Headers.ContentLength ?? pack.SizeBytes;
+                        var downloadedBytes = 0L;
+
+                        using (var contentStream = await response.Content.ReadAsStreamAsync())
+                        using (var fileStream = new FileStream(tempZipPath, FileMode.Create, FileAccess.Write, FileShare.None))
                         {
-                            var progressPercent = (int)(downloadedBytes * 100 / totalBytes);
-                            progress?.Report(progressPercent);
-                            pack.DownloadProgress = progressPercent;
-                            PackDownloadProgress?.Invoke(this, (pack, progressPercent));
+                            var buffer = new byte[81920]; // 80KB buffer for faster downloads
+                            int bytesRead;
+
+                            while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                            {
+                                await fileStream.WriteAsync(buffer, 0, bytesRead);
+                                downloadedBytes += bytesRead;
+
+                                if (totalBytes > 0)
+                                {
+                                    var progressPercent = (int)(downloadedBytes * 100 / totalBytes);
+                                    progress?.Report(progressPercent);
+                                    pack.DownloadProgress = progressPercent;
+                                    PackDownloadProgress?.Invoke(this, (pack, progressPercent));
+                                }
+                            }
                         }
+
+                        // Download completed successfully
+                        break;
+                    }
+                    catch (Exception ex) when (attempt < maxRetries && (ex is HttpRequestException || ex is TaskCanceledException || ex is IOException))
+                    {
+                        App.Logger?.Warning("Download attempt {Attempt}/{Max} failed: {Error}. Retrying in {Delay}s...",
+                            attempt, maxRetries, ex.Message, retryDelay.TotalSeconds);
+
+                        // Clean up partial download
+                        if (File.Exists(tempZipPath))
+                        {
+                            try { File.Delete(tempZipPath); } catch { }
+                        }
+
+                        pack.DownloadProgress = 0;
+                        PackInstallStatus?.Invoke(this, (pack, $"Retrying ({attempt}/{maxRetries})..."));
+                        await Task.Delay(retryDelay);
+                        retryDelay *= 2; // Exponential backoff
                     }
                 }
 
