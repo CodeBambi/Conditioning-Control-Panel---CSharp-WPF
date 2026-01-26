@@ -1155,9 +1155,24 @@ namespace ConditioningControlPanel.Services
                             ? _random.Next(1, maxTargets + 1)  // Random from 1 to max (inclusive)
                             : maxTargets;
 
+                        // Generate spawn times with minimum gap to prevent simultaneous targets
+                        var minGap = 3.0; // Minimum 3 seconds between targets
+                        var availableWindow = Math.Max(1, dur - 8); // Stop spawning ~5s before end
                         for (int i = 0; i < _total; i++)
-                            _spawnTimes.Add(3 + _random.NextDouble() * Math.Max(1, dur - 8)); // Stop spawning ~5s before end
+                        {
+                            var spawnTime = 3 + _random.NextDouble() * availableWindow;
+                            _spawnTimes.Add(spawnTime);
+                        }
                         _spawnTimes.Sort();
+
+                        // Ensure minimum gap between targets (adjust times if too close)
+                        for (int i = 1; i < _spawnTimes.Count; i++)
+                        {
+                            if (_spawnTimes[i] - _spawnTimes[i - 1] < minGap)
+                            {
+                                _spawnTimes[i] = _spawnTimes[i - 1] + minGap;
+                            }
+                        }
 
                         _attentionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(20) };
                         _attentionTimer.Tick += CheckSpawnTargets;

@@ -64,8 +64,6 @@ namespace ConditioningControlPanel
         private bool _isMouseOverSpeechBubble = false; // Track mouse over speech bubble to keep it open
         private readonly DateTime _startupTime = DateTime.Now; // Track startup to prevent race conditions
         private const double StartupCooldownSeconds = 3.0; // Don't allow non-greeting speech for 3 seconds
-        private DateTime _lastFocusSwitchComment = DateTime.MinValue; // Track last focus switch comment
-        private const double FocusSwitchCooldownSeconds = 15.0; // 15-second cooldown between focus switch comments
 
         // Speech source for priority/delay calculation
         private enum SpeechSource
@@ -3072,12 +3070,11 @@ namespace ConditioningControlPanel
             if (!App.WindowAwareness?.IsCategoryEnabled(e.Category) ?? true)
                 return;
 
-            // 5-second cooldown between focus switch comments
-            if ((DateTime.Now - _lastFocusSwitchComment).TotalSeconds < FocusSwitchCooldownSeconds)
+            // Check user-configured cooldown from settings
+            if (!App.WindowAwareness?.CanReact() ?? true)
                 return;
 
-            // Mark that we're reacting
-            _lastFocusSwitchComment = DateTime.Now;
+            // Mark that we're reacting (resets cooldown timer)
             App.WindowAwareness?.MarkReaction();
 
             // Always use the currently focused window's full context
@@ -3142,7 +3139,11 @@ namespace ConditioningControlPanel
             if (!App.WindowAwareness?.IsCategoryEnabled(e.Category) ?? true)
                 return;
 
-            // Mark that we're reacting
+            // Check user-configured cooldown from settings
+            if (!App.WindowAwareness?.CanStillOnReact() ?? true)
+                return;
+
+            // Mark that we're reacting (resets cooldown timer)
             App.WindowAwareness?.MarkStillOnReaction();
 
             // Get duration from the awareness service
@@ -3569,8 +3570,10 @@ namespace ConditioningControlPanel
 
         private void OnLevelUp(object? sender, int newLevel)
         {
+            // Use regular Giggle instead of GigglePriority to avoid cutting off current speech
+            // Level up is exciting but shouldn't interrupt active triggers/speech
             var phrase = LevelUpPhrases[_random.Next(LevelUpPhrases.Length)];
-            GigglePriority(phrase);
+            Giggle(phrase);
         }
 
         /// <summary>

@@ -19,6 +19,7 @@ namespace ConditioningControlPanel.Services;
         private NotifyIcon? _notifyIcon;
         private readonly Window _mainWindow;
         private bool _isDisposed;
+        private bool _hasShownFirstMinimizeNotification;
 
         public event Action? OnShowRequested;
         public event Action? OnExitRequested;
@@ -132,17 +133,30 @@ namespace ConditioningControlPanel.Services;
     {
         _mainWindow.Hide();
         Show();
-        _notifyIcon?.ShowBalloonTip(2000, "Conditioning Control Panel", 
-            "Running in background. Double-click to restore.", ToolTipIcon.Info);
+
+        // Only show the balloon tip notification on first minimize
+        // This prevents annoying repeated notifications (which can stay visible indefinitely on some systems)
+        if (!_hasShownFirstMinimizeNotification)
+        {
+            _hasShownFirstMinimizeNotification = true;
+            _notifyIcon?.ShowBalloonTip(2000, "Conditioning Control Panel",
+                "Running in background. Double-click to restore.", ToolTipIcon.Info);
+        }
     }
 
     public void ShowWindow()
     {
+        // Dismiss any active balloon tip by hiding the icon (this clears balloon notifications)
+        if (_notifyIcon != null)
+        {
+            _notifyIcon.Visible = false;
+        }
+
         _mainWindow.Show();
         _mainWindow.WindowState = WindowState.Normal;
         var windowHandle = new System.Windows.Interop.WindowInteropHelper(_mainWindow).Handle;
         SetForegroundWindow(windowHandle);
-        Hide();
+        // Hide() is now redundant since we already set Visible = false above
         OnShowRequested?.Invoke();
     }
 

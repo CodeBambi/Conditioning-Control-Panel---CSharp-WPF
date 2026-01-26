@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Threading;
@@ -506,22 +504,9 @@ namespace ConditioningControlPanel.Services
                 _lastWindowTitle = windowTitle;
                 _lastActivityChange = DateTime.Now;
 
-                // First try to categorize by window title
+                // Categorize by window title only (not background processes)
+                // Background process detection was causing false positives (e.g., Steam running while browsing)
                 var (category, detectedName, serviceName, pageTitle) = CategorizeWindow(windowTitle);
-
-                // If unknown, check running processes for games
-                if (category == ActivityCategory.Unknown)
-                {
-                    var processResult = CheckRunningProcesses();
-                    if (processResult.HasValue)
-                    {
-                        category = processResult.Value.Item1;
-                        detectedName = processResult.Value.Item2;
-                        serviceName = processResult.Value.Item2; // For games, service = detected name
-                        pageTitle = "";
-                        App.Logger?.Debug("WindowAwareness: Detected via process: {Name}", detectedName);
-                    }
-                }
 
                 if (category != _currentCategory || detectedName != _currentDetectedName)
                 {
@@ -569,51 +554,6 @@ namespace ConditioningControlPanel.Services
             var sb = new StringBuilder(512);
             GetWindowText(handle, sb, 512);
             return sb.ToString();
-        }
-
-        /// <summary>
-        /// Check running processes for known games/apps (catches things even when not focused)
-        /// </summary>
-        private (ActivityCategory, string)? CheckRunningProcesses()
-        {
-            try
-            {
-                // Process names to look for (without .exe)
-                var gameProcesses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    { "RiotClientServices", "Riot Client" },
-                    { "RiotClientUx", "Riot Client" },
-                    { "LeagueClient", "League of Legends" },
-                    { "League of Legends", "League of Legends" },
-                    { "VALORANT-Win64-Shipping", "Valorant" },
-                    { "VALORANT", "Valorant" },
-                    { "cs2", "Counter-Strike 2" },
-                    { "csgo", "CS:GO" },
-                    { "dota2", "Dota 2" },
-                    { "GenshinImpact", "Genshin Impact" },
-                    { "steam", "Steam" },
-                    { "EpicGamesLauncher", "Epic Games" },
-                    { "Battle.net", "Battle.net" },
-                };
-
-                var runningProcesses = Process.GetProcesses()
-                    .Select(p => p.ProcessName)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var kvp in gameProcesses)
-                {
-                    if (runningProcesses.Contains(kvp.Key))
-                    {
-                        return (ActivityCategory.Gaming, kvp.Value);
-                    }
-                }
-            }
-            catch
-            {
-                // Ignore errors from process enumeration
-            }
-
-            return null;
         }
 
         /// <summary>

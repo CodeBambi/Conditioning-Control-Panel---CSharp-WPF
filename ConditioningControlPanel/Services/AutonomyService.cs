@@ -1123,6 +1123,14 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void PulseSpiralOverlay()
         {
+            // Skip if session engine is running - it controls overlays itself
+            // (Flash service running indicates the engine is active)
+            if (App.Flash?.IsRunning == true)
+            {
+                App.Logger?.Information("AutonomyService: Spiral pulse skipped - session engine is running");
+                return;
+            }
+
             // Prevent overlapping spiral pulses
             if (_spiralPulseActive)
             {
@@ -1223,6 +1231,14 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void PulsePinkFilter()
         {
+            // Skip if session engine is running - it controls overlays itself
+            // (Flash service running indicates the engine is active)
+            if (App.Flash?.IsRunning == true)
+            {
+                App.Logger?.Information("AutonomyService: Pink filter pulse skipped - session engine is running");
+                return;
+            }
+
             // Prevent overlapping pink filter pulses
             if (_pinkFilterPulseActive)
             {
