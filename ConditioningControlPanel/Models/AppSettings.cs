@@ -313,7 +313,7 @@ namespace ConditioningControlPanel.Models
             set { _audioDuckingEnabled = value; OnPropertyChanged(); }
         }
 
-        private int _duckingLevel = 100; // 0-100%
+        private int _duckingLevel = 80; // 0-100% (80% = reduce other audio to 20%)
         public int DuckingLevel
         {
             get => _duckingLevel;
@@ -707,6 +707,17 @@ namespace ConditioningControlPanel.Models
         {
             get => _discordUseAnonymousName;
             set { _discordUseAnonymousName = value; OnPropertyChanged(); }
+        }
+
+        private bool _allowDiscordDm = false;
+        /// <summary>
+        /// Allow other users to send Discord DMs via the leaderboard.
+        /// When enabled, your Discord ID is shown on the leaderboard for direct messaging.
+        /// </summary>
+        public bool AllowDiscordDm
+        {
+            get => _allowDiscordDm;
+            set { _allowDiscordDm = value; OnPropertyChanged(); }
         }
 
         private bool _offlineMode = false;

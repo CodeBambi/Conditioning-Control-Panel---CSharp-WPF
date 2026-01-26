@@ -8337,20 +8337,48 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Check if video is already playing
+                // Check if video is already playing - offer force reset if stuck
                 if (App.Video.IsPlaying)
                 {
-                    MessageBox.Show("A video is already playing. Please wait for it to finish.",
-                        "Video Playing", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
+                    var result = MessageBox.Show(
+                        "A video appears to be playing.\n\nIf you don't see a video, it may be stuck. Click Yes to force reset and try again.",
+                        "Video Playing",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        App.Logger?.Warning("User requested force reset of stuck video state");
+                        App.Video.ForceCleanup();
+                        App.InteractionQueue?.ForceReset();
+                        // Continue to trigger video below
+                    }
+                    else
+                    {
+                        return;
+                    }
                 }
 
-                // Check if another interaction is blocking
+                // Check if another interaction is blocking - offer force reset if stuck
                 if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
                 {
-                    MessageBox.Show($"Another interaction is in progress ({App.InteractionQueue.CurrentInteraction}).\n\nPlease wait for it to complete, or restart the app if it seems stuck.",
-                        "Please Wait", MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
+                    var result = MessageBox.Show(
+                        $"Another interaction is in progress ({App.InteractionQueue.CurrentInteraction}).\n\nIf this seems stuck, click Yes to force reset and try again.",
+                        "Please Wait",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        App.Logger?.Warning("User requested force reset of stuck interaction queue");
+                        App.Video.ForceCleanup();
+                        App.InteractionQueue.ForceReset();
+                        // Continue to trigger video below
+                    }
+                    else
+                    {
+                        return;
+                    }
                 }
 
                 App.Video.TriggerVideo();
