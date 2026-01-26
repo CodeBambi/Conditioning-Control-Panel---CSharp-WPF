@@ -67,7 +67,9 @@ namespace ConditioningControlPanel.Services
                     {
                         App.Logger?.Information("Settings loaded from {Path} (Triggers: {TriggerCount})",
                             _settingsPath, settings.CustomTriggers?.Count ?? 0);
-                        ValidateLevelLockedFeatures(settings);
+                        // NOTE: Don't validate level-locked features here - cloud sync hasn't happened yet.
+                        // The cloud level may be higher than the local level, and we don't want to
+                        // incorrectly disable features. Validation happens after cloud sync completes.
                         return settings;
                     }
                 }

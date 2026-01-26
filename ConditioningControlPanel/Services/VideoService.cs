@@ -294,7 +294,25 @@ namespace ConditioningControlPanel.Services
             {
                 // No video to play - release the queue lock
                 App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
-                System.Windows.MessageBox.Show($"No videos found in:\n{_videosPath}\n\nPlease add .mp4, .mov, .avi, .wmv, .mkv, or .webm files to this folder.", "No Videos");
+
+                // Build helpful error message
+                var activePackCount = App.ContentPacks?.GetActivePackIds()?.Count ?? 0;
+                var installedPackCount = App.ContentPacks?.InstalledPacks?.Count ?? 0;
+                var message = $"No videos found in:\n{_videosPath}\n\n";
+
+                if (installedPackCount > 0 && activePackCount == 0)
+                {
+                    message += $"You have {installedPackCount} content pack(s) installed but none are active.\n";
+                    message += "Go to Assets tab and enable your content packs, or select an Asset Preset.\n\n";
+                }
+                else if (activePackCount > 0)
+                {
+                    message += $"You have {activePackCount} active pack(s) but none contain videos.\n\n";
+                }
+
+                message += "Please add .mp4, .mov, .avi, .wmv, .mkv, or .webm files to your assets folder.";
+
+                System.Windows.MessageBox.Show(message, "No Videos");
                 return;
             }
 

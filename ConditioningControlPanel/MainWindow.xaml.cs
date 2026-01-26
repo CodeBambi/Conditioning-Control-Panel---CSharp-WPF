@@ -741,6 +741,20 @@ namespace ConditioningControlPanel
 
         private const int WM_SYSCOMMAND = 0x0112;
         private const int SC_MINIMIZE = 0xF020;
+        private const int WM_GETMINMAXINFO = 0x0024;
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct POINT { public int X; public int Y; }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct MINMAXINFO
+        {
+            public POINT ptReserved;
+            public POINT ptMaxSize;
+            public POINT ptMaxPosition;
+            public POINT ptMinTrackSize;
+            public POINT ptMaxTrackSize;
+        }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
@@ -751,6 +765,24 @@ namespace ConditioningControlPanel
                 // Hide avatar tube FIRST to avoid event handler issues
                 HideAvatarTube();
                 _trayIcon?.MinimizeToTray();
+            }
+            // Fix maximized window extending behind taskbar (buttons cut off)
+            else if (msg == WM_GETMINMAXINFO)
+            {
+                var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(lParam);
+
+                // Get the monitor this window is on
+                var monitor = System.Windows.Forms.Screen.FromHandle(hwnd);
+                var workingArea = monitor.WorkingArea;
+
+                // Constrain maximized size to working area (excludes taskbar)
+                mmi.ptMaxPosition.X = workingArea.Left;
+                mmi.ptMaxPosition.Y = workingArea.Top;
+                mmi.ptMaxSize.X = workingArea.Width;
+                mmi.ptMaxSize.Y = workingArea.Height;
+
+                System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, lParam, true);
+                handled = true;
             }
             return IntPtr.Zero;
         }
@@ -1353,6 +1385,7 @@ namespace ConditioningControlPanel
                     "GIFs" => "total_flashes",
                     "Video Min" => "total_video_minutes",
                     "Lock Cards" => "total_lock_cards_completed",
+                    "Patreon" => "is_patreon",
                     "Name" => null, // Client-side sort
                     "Online" => null, // Client-side sort
                     "Achievements" => null, // Client-side sort
@@ -1399,6 +1432,26 @@ namespace ConditioningControlPanel
         private async void BtnRefreshLeaderboard_Click(object sender, RoutedEventArgs e)
         {
             await RefreshLeaderboardAsync();
+        }
+
+        private void BtnLeaderboardDiscord_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string discordId && !string.IsNullOrEmpty(discordId))
+            {
+                try
+                {
+                    // Open Discord DM with user
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = $"discord://users/{discordId}",
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to open Discord DM for user {DiscordId}", discordId);
+                }
+            }
         }
 
         private async Task RefreshLeaderboardAsync(string? sortBy = null)
@@ -2301,6 +2354,19 @@ namespace ConditioningControlPanel
                 App.Settings.Current.DiscordShowLevelInPresence = ChkShowLevelInPresence.IsChecked == true;
                 // Update presence immediately to reflect change
                 App.DiscordRpc?.UpdateLevel(App.Settings.Current.PlayerLevel);
+            }
+        }
+
+        private async void ChkAllowDiscordDm_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.AllowDiscordDm = ChkAllowDiscordDm.IsChecked == true;
+                // Sync immediately so the setting takes effect on the leaderboard
+                if (App.ProfileSync != null)
+                {
+                    await App.ProfileSync.SyncProfileAsync();
+                }
             }
         }
 
@@ -6449,6 +6515,7 @@ namespace ConditioningControlPanel
             ChkShareLevelUps.IsChecked = s.DiscordShareLevelUps;
             ChkUseAnonymousName.IsChecked = s.DiscordUseAnonymousName;
             ChkShowLevelInPresence.IsChecked = s.DiscordShowLevelInPresence;
+            ChkAllowDiscordDm.IsChecked = s.AllowDiscordDm;
 
             // Update Discord UI (both main tab and Patreon tab)
             UpdateQuickDiscordUI();
