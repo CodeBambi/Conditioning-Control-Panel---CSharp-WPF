@@ -932,9 +932,13 @@ namespace ConditioningControlPanel
             if (App.Patreon.IsAuthenticated)
             {
                 // Logout
+                App.ProfileSync?.StopHeartbeat();
                 App.Patreon.Logout();
+                App.Patreon.UnifiedUserId = null;
+                App.UnifiedUserId = null;
                 UpdateQuickPatreonUI();
                 UpdatePatreonUI();
+                UpdateBannerWelcomeMessage();
             }
             else
             {
@@ -945,8 +949,16 @@ namespace ConditioningControlPanel
                 try
                 {
                     await App.Patreon.StartOAuthFlowAsync();
-                    UpdateQuickPatreonUI();
-                    UpdatePatreonUI();
+
+                    // Use unified account flow - handles lookup, registration, and linking
+                    var success = await AccountService.HandlePostAuthAsync(this, "patreon");
+
+                    if (success)
+                    {
+                        UpdateQuickPatreonUI();
+                        UpdatePatreonUI();
+                        UpdateBannerWelcomeMessage();
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -997,6 +1009,8 @@ namespace ConditioningControlPanel
             {
                 // Logout
                 App.Discord.Logout();
+                App.Discord.UnifiedUserId = null;
+                App.UnifiedUserId = null;
                 UpdateQuickDiscordUI();
                 UpdateBannerWelcomeMessage();
             }
@@ -1010,87 +1024,17 @@ namespace ConditioningControlPanel
                 {
                     await App.Discord.StartOAuthFlowAsync();
 
-                    // Check if this is a first-time login (no display name set)
-                    if (App.Discord.IsFirstLogin)
+                    // Use unified account flow - handles lookup, registration, and linking
+                    var success = await AccountService.HandlePostAuthAsync(this, "discord");
+
+                    if (success)
                     {
-                        // Prompt user to choose their display name (loop until valid or cancelled)
-                        bool nameSet = false;
-                        while (!nameSet)
-                        {
-                            var dialog = new DisplayNameDialog
-                            {
-                                Owner = this,
-                                Topmost = true
-                            };
+                        UpdateQuickDiscordUI();
+                        UpdateBannerWelcomeMessage();
 
-                            // Ensure dialog appears on top
-                            dialog.Activated += (s, args) => dialog.Topmost = false;
-
-                            if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.DisplayName))
-                            {
-                                var result = await App.Discord.SetDisplayNameAsync(dialog.DisplayName);
-                                if (result.Success)
-                                {
-                                    nameSet = true;
-                                }
-                                else if (result.CanClaim)
-                                {
-                                    // Name belongs to a Patreon account - ask if user wants to claim it
-                                    var claimResult = MessageBox.Show(
-                                        $"The name \"{dialog.DisplayName}\" belongs to a Patreon account.\n\n" +
-                                        "If this is your Patreon account, click Yes to link it with your Discord login.\n\n" +
-                                        "This will allow you to use the same name and keep your Patreon benefits.",
-                                        "Claim Existing Name?",
-                                        MessageBoxButton.YesNo,
-                                        MessageBoxImage.Question);
-
-                                    if (claimResult == MessageBoxResult.Yes)
-                                    {
-                                        // Try again with claim flag
-                                        var claimSetResult = await App.Discord.SetDisplayNameAsync(dialog.DisplayName, claimExisting: true);
-                                        if (claimSetResult.Success)
-                                        {
-                                            nameSet = true;
-                                            MessageBox.Show(
-                                                $"Successfully linked to your Patreon account!\n\nYou can now use Discord login and keep your Patreon benefits.",
-                                                "Account Linked",
-                                                MessageBoxButton.OK,
-                                                MessageBoxImage.Information);
-                                        }
-                                        else
-                                        {
-                                            MessageBox.Show(
-                                                claimSetResult.Error ?? "Failed to claim the name. Please try again.",
-                                                "Claim Failed",
-                                                MessageBoxButton.OK,
-                                                MessageBoxImage.Warning);
-                                        }
-                                    }
-                                    // If No, loop continues and user can choose another name
-                                }
-                                else
-                                {
-                                    // Name taken by another Discord user - show message and let user try again
-                                    MessageBox.Show(
-                                        result.Error ?? "This name is already taken. Please choose another.",
-                                        "Name Unavailable",
-                                        MessageBoxButton.OK,
-                                        MessageBoxImage.Warning);
-                                }
-                            }
-                            else
-                            {
-                                // User cancelled
-                                break;
-                            }
-                        }
+                        // Update bandwidth display (Discord users can inherit Patreon benefits via linked display name)
+                        _ = UpdateBandwidthDisplayAsync();
                     }
-
-                    UpdateQuickDiscordUI();
-                    UpdateBannerWelcomeMessage();
-
-                    // Update bandwidth display (Discord users can inherit Patreon benefits via linked display name)
-                    _ = UpdateBandwidthDisplayAsync();
                 }
                 catch (OperationCanceledException)
                 {
@@ -2159,6 +2103,8 @@ namespace ConditioningControlPanel
                 // Logout
                 App.ProfileSync?.StopHeartbeat();
                 App.Patreon.Logout();
+                App.Patreon.UnifiedUserId = null;
+                App.UnifiedUserId = null;
                 UpdatePatreonUI();
                 UpdateBannerWelcomeMessage();
             }
@@ -2172,69 +2118,14 @@ namespace ConditioningControlPanel
                 {
                     await App.Patreon.StartOAuthFlowAsync();
 
-                    // Start heartbeat to keep user showing as online
-                    App.ProfileSync?.StartHeartbeat();
+                    // Use unified account flow - handles lookup, registration, and linking
+                    var success = await AccountService.HandlePostAuthAsync(this, "patreon");
 
-                    // Check if we need to migrate an existing local name to server
-                    if (App.Patreon.NeedsDisplayNameMigration)
+                    if (success)
                     {
-                        var migrationResult = await App.Patreon.TryMigrateDisplayNameAsync();
-                        if (!migrationResult.Success)
-                        {
-                            // Name was taken - notify user and let them pick a new one
-                            MessageBox.Show(
-                                migrationResult.Error ?? "Your previous display name is already taken. Please choose a new one.",
-                                "Name Already Taken",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Information);
-                            // Fall through to show the name picker dialog
-                        }
+                        // Update banner with welcome message
+                        UpdateBannerWelcomeMessage();
                     }
-
-                    // Check if this is a first-time login (no display name set)
-                    if (App.Patreon.IsFirstLogin)
-                    {
-                        // Prompt user to choose their display name (loop until valid or cancelled)
-                        bool nameSet = false;
-                        while (!nameSet)
-                        {
-                            var dialog = new DisplayNameDialog
-                            {
-                                Owner = this,
-                                Topmost = true
-                            };
-
-                            // Ensure dialog appears on top
-                            dialog.Activated += (s, args) => dialog.Topmost = false;
-
-                            if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.DisplayName))
-                            {
-                                var result = await App.Patreon.SetDisplayNameAsync(dialog.DisplayName);
-                                if (result.Success)
-                                {
-                                    nameSet = true;
-                                    UpdatePatreonUI();
-                                }
-                                else
-                                {
-                                    // Name taken or error - show message and let user try again
-                                    MessageBox.Show(
-                                        result.Error ?? "This name is already taken. Please choose another.",
-                                        "Name Unavailable",
-                                        MessageBoxButton.OK,
-                                        MessageBoxImage.Warning);
-                                }
-                            }
-                            else
-                            {
-                                // User cancelled
-                                break;
-                            }
-                        }
-                    }
-
-                    // Update banner with welcome message
-                    UpdateBannerWelcomeMessage();
                 }
                 catch (OperationCanceledException)
                 {
@@ -2265,6 +2156,8 @@ namespace ConditioningControlPanel
             {
                 // Logout
                 App.Discord.Logout();
+                App.Discord.UnifiedUserId = null;
+                App.UnifiedUserId = null;
                 UpdateDiscordUI();
                 UpdateBannerWelcomeMessage();
             }
@@ -2277,11 +2170,18 @@ namespace ConditioningControlPanel
                 try
                 {
                     await App.Discord.StartOAuthFlowAsync();
-                    UpdateDiscordUI();
-                    UpdateBannerWelcomeMessage();
 
-                    // Update bandwidth display (Discord users can inherit Patreon benefits via linked display name)
-                    _ = UpdateBandwidthDisplayAsync();
+                    // Use unified account flow - handles lookup, registration, and linking
+                    var success = await AccountService.HandlePostAuthAsync(this, "discord");
+
+                    if (success)
+                    {
+                        UpdateDiscordUI();
+                        UpdateBannerWelcomeMessage();
+
+                        // Update bandwidth display (Discord users can inherit Patreon benefits via linked display name)
+                        _ = UpdateBandwidthDisplayAsync();
+                    }
                 }
                 catch (OperationCanceledException)
                 {

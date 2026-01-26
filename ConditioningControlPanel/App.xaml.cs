@@ -210,6 +210,11 @@ namespace ConditioningControlPanel
         public static bool IsLoggedIn => (Patreon?.IsAuthenticated == true) || (Discord?.IsAuthenticated == true);
 
         /// <summary>
+        /// Unified user ID that links Patreon and Discord accounts together
+        /// </summary>
+        public static string? UnifiedUserId { get; set; }
+
+        /// <summary>
         /// Get the user's display name (from Patreon or Discord)
         /// </summary>
         public static string? UserDisplayName =>

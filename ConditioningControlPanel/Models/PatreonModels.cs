@@ -109,6 +109,20 @@ namespace ConditioningControlPanel.Models
         [JsonPropertyName("is_whitelisted")]
         public bool IsWhitelisted { get; set; }
 
+        /// <summary>
+        /// Unified user ID for cross-provider account linking
+        /// </summary>
+        [JsonProperty("unified_id")]
+        [JsonPropertyName("unified_id")]
+        public string? UnifiedId { get; set; }
+
+        /// <summary>
+        /// Whether this user needs to register (choose display name)
+        /// </summary>
+        [JsonProperty("needs_registration")]
+        [JsonPropertyName("needs_registration")]
+        public bool NeedsRegistration { get; set; }
+
         [JsonProperty("error")]
         [JsonPropertyName("error")]
         public string? Error { get; set; }
@@ -148,6 +162,12 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         [JsonProperty("is_whitelisted")]
         public bool IsWhitelisted { get; set; }
+
+        /// <summary>
+        /// Unified user ID for cross-provider account linking
+        /// </summary>
+        [JsonProperty("unified_id")]
+        public string? UnifiedId { get; set; }
 
         /// <summary>
         /// Check if the cache has expired (older than 24 hours)

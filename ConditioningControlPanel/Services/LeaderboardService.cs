@@ -193,8 +193,27 @@ public class LeaderboardEntry
     [JsonProperty("total_bubbles_popped")]
     public int BubblesPopped { get; set; }
 
+    /// <summary>
+    /// Formatted bubbles display (e.g., "100.3k" or "1.2M")
+    /// </summary>
+    public string BubblesPoppedDisplay => FormatLargeNumber(BubblesPopped);
+
     [JsonProperty("total_flashes")]
     public int GifsSpawned { get; set; }
+
+    /// <summary>
+    /// Formatted GIFs display (e.g., "100.3k" or "1.2M")
+    /// </summary>
+    public string GifsSpawnedDisplay => FormatLargeNumber(GifsSpawned);
+
+    private static string FormatLargeNumber(int value)
+    {
+        if (value >= 1_000_000)
+            return $"{value / 1_000_000.0:F1}M";
+        if (value >= 1_000)
+            return $"{value / 1_000.0:F1}k";
+        return value.ToString();
+    }
 
     [JsonProperty("total_video_minutes")]
     public double VideoMinutes { get; set; }
@@ -207,6 +226,17 @@ public class LeaderboardEntry
 
     [JsonProperty("is_online")]
     public bool IsOnline { get; set; }
+
+    [JsonProperty("is_patreon")]
+    public bool IsPatreon { get; set; }
+
+    [JsonProperty("discord_id")]
+    public string? DiscordId { get; set; }
+
+    /// <summary>
+    /// Whether this user has a Discord ID available for DM
+    /// </summary>
+    public bool HasDiscord => !string.IsNullOrEmpty(DiscordId);
 
     /// <summary>
     /// Display string for achievements (X / Y format)

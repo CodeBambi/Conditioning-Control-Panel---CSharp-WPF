@@ -27,6 +27,11 @@ namespace ConditioningControlPanel.Services
         private Dictionary<string, InstalledPackManifest> _installedManifests = new();
         private bool _disposed;
 
+        /// <summary>
+        /// Get the list of installed pack IDs
+        /// </summary>
+        public IReadOnlyCollection<string> InstalledPacks => _installedManifests.Keys;
+
         // Server-controlled packs manifest (allows enable/disable without app update)
         private const string PacksManifestUrl = "https://codebambi-proxy.vercel.app/packs/manifest";
 
@@ -204,6 +209,7 @@ namespace ConditioningControlPanel.Services
                 // Download ZIP file from signed URL with retry logic
                 var maxRetries = 3;
                 var retryDelay = TimeSpan.FromSeconds(2);
+                var downloadedBytes = 0L;
 
                 for (int attempt = 1; attempt <= maxRetries; attempt++)
                 {
@@ -213,7 +219,7 @@ namespace ConditioningControlPanel.Services
                         response.EnsureSuccessStatusCode();
 
                         var totalBytes = response.Content.Headers.ContentLength ?? pack.SizeBytes;
-                        var downloadedBytes = 0L;
+                        downloadedBytes = 0L;
 
                         using (var contentStream = await response.Content.ReadAsStreamAsync())
                         using (var fileStream = new FileStream(tempZipPath, FileMode.Create, FileAccess.Write, FileShare.None))

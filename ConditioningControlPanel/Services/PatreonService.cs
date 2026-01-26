@@ -75,7 +75,12 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Custom display name chosen by user on first login
         /// </summary>
-        public string? DisplayName { get; private set; }
+        public string? DisplayName { get; set; }
+
+        /// <summary>
+        /// Unified user ID from the server (links Patreon and Discord accounts)
+        /// </summary>
+        public string? UnifiedUserId { get; set; }
 
         /// <summary>
         /// True if user has a local display name that needs to be synced to server
@@ -469,6 +474,25 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("Server whitelist check: Email={Email}, Name={Name}, Whitelisted={Whitelisted}",
                     subscription.PatronEmail, subscription.PatronName, userIsWhitelisted);
 
+                // Set unified user ID for cross-provider account linking
+                // Only set App.UnifiedUserId if not already set by another provider (to allow conflict detection)
+                if (!string.IsNullOrEmpty(subscription.UnifiedId))
+                {
+                    UnifiedUserId = subscription.UnifiedId;
+                    // Don't overwrite App.UnifiedUserId if another provider already set it
+                    // AccountService.HandlePostAuthAsync will handle conflict detection
+                    if (string.IsNullOrEmpty(App.UnifiedUserId))
+                    {
+                        App.UnifiedUserId = subscription.UnifiedId;
+                        App.Logger?.Information("Set UnifiedUserId from Patreon validate: {UnifiedId}", subscription.UnifiedId);
+                    }
+                    else
+                    {
+                        App.Logger?.Information("Patreon has UnifiedUserId {PatreonId} but App already has {AppId} - deferring to AccountService for conflict check",
+                            subscription.UnifiedId, App.UnifiedUserId);
+                    }
+                }
+
                 // Update state and cache
                 // If active but tier is 0, default to Level1 (proxy may not return tier correctly)
                 // Also treat whitelisted users as active with Level1
@@ -520,7 +544,8 @@ namespace ConditioningControlPanel.Services
                     PatronName = subscription.PatronName,
                     PatronEmail = subscription.PatronEmail,
                     DisplayName = effectiveDisplayName,
-                    IsWhitelisted = userIsWhitelisted
+                    IsWhitelisted = userIsWhitelisted,
+                    UnifiedId = subscription.UnifiedId
                 });
 
                 // If user has premium access, extend the 2-week grace period
@@ -788,6 +813,17 @@ namespace ConditioningControlPanel.Services
                     PatronName = cachedState.PatronName;
                     PatronEmail = cachedState.PatronEmail;
                     DisplayName = cachedState.DisplayName;
+
+                    // Restore unified user ID (don't overwrite if another provider already set it)
+                    if (!string.IsNullOrEmpty(cachedState.UnifiedId))
+                    {
+                        UnifiedUserId = cachedState.UnifiedId;
+                        if (string.IsNullOrEmpty(App.UnifiedUserId))
+                        {
+                            App.UnifiedUserId = cachedState.UnifiedId;
+                            App.Logger?.Information("Restored UnifiedUserId from cache: {UnifiedId}", cachedState.UnifiedId);
+                        }
+                    }
                 }
             }
             catch (Exception ex)

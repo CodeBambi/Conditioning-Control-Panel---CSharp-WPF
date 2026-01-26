@@ -77,7 +77,12 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Custom display name chosen by the user (for leaderboards/community)
         /// </summary>
-        public string? CustomDisplayName { get; private set; }
+        public string? CustomDisplayName { get; set; }
+
+        /// <summary>
+        /// Unified user ID from the server (links Patreon and Discord accounts)
+        /// </summary>
+        public string? UnifiedUserId { get; set; }
 
         /// <summary>
         /// Whether this is the user's first login (no display name set yet on ANY provider).
@@ -555,7 +560,8 @@ namespace ConditioningControlPanel.Services
                     type = "achievement",
                     display_name = name,
                     achievement_name = achievement.Name,
-                    achievement_requirement = achievement.Requirement
+                    achievement_requirement = achievement.Requirement,
+                image_name = achievement.ImageName
                 };
 
                 var response = await _httpClient.PostAsJsonAsync("/discord/community-webhook", payload);
@@ -588,11 +594,24 @@ namespace ConditioningControlPanel.Services
             {
                 var name = displayName ?? App.Patreon?.DisplayName ?? App.Discord?.DisplayName ?? "Someone";
 
+                // Determine image based on level milestone
+                var imageName = level switch
+                {
+                    >= 150 => "PlatinumPuppet.png",
+                    >= 125 => "BrainwashedSlavedoll.png",
+                    >= 100 => "perfect_plastic_puppet.png",
+                    >= 50 => "lv_50.png",
+                    >= 20 => "Dumb_Bimbo.png",
+                    >= 10 => "lv_10.png",
+                    _ => null
+                };
+
                 var payload = new
                 {
                     type = "level_up",
                     display_name = name,
-                    level = level
+                    level = level,
+                    image_name = imageName
                 };
 
                 var response = await _httpClient.PostAsJsonAsync("/discord/community-webhook", payload);
