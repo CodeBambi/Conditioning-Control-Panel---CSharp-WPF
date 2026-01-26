@@ -1604,27 +1604,24 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Now stop and dispose all LibVLC media players (on a background thread to avoid blocking)
+            // Stop all LibVLC media players BEFORE closing windows (synchronously)
+            // This prevents race conditions where LibVLC accesses window handles after they're destroyed
             var playersCopy = _mediaPlayers.ToList();
             _mediaPlayers.Clear();
 
-            Task.Run(() =>
+            foreach (var player in playersCopy)
             {
-                foreach (var player in playersCopy)
+                try
                 {
-                    try
-                    {
-                        player.Stop();
-                        player.Dispose();
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning("CloseAll: Failed to stop LibVLC player - {Error}", ex.Message);
-                    }
+                    player.Stop();
                 }
-            });
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("CloseAll: Failed to stop LibVLC player - {Error}", ex.Message);
+                }
+            }
 
-            // Close video windows
+            // Close video windows AFTER media players are stopped
             foreach (var w in _windows.ToList())
             {
                 try
@@ -1643,6 +1640,26 @@ namespace ConditioningControlPanel.Services
                 }
             }
             _windows.Clear();
+
+            // Dispose media players asynchronously AFTER windows are closed
+            // This is safe now because players are already stopped and detached
+            if (playersCopy.Count > 0)
+            {
+                Task.Run(() =>
+                {
+                    foreach (var player in playersCopy)
+                    {
+                        try
+                        {
+                            player.Dispose();
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("CloseAll: Failed to dispose LibVLC player - {Error}", ex.Message);
+                        }
+                    }
+                });
+            }
 
             // Also close any lingering message windows
             CloseMessageWindows();
