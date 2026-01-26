@@ -8,7 +8,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>5.3.1</Version>
+    <Version>5.3.2</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -118,6 +118,7 @@
     <Resource Include="Resources\speechbubble2.png" />
     <Resource Include="Resources\discord.png" />
     <Resource Include="Resources\spiral.gif" />
+    <Resource Include="Resources\Patreon supporter.png" />
 
     <!-- Content Pack preview images -->
     <Resource Include="Resources\pack1.png" />

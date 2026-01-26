@@ -762,8 +762,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.3.1 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.2.5 - Seamless auto-updates!"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.3.2 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.3.2 - Bug fixes and stability improvements"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -4391,8 +4391,16 @@
                                     </StackPanel>
                                 </Grid>
 
+                                <!-- Allow Discord DM from Leaderboard -->
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <CheckBox x:Name="ChkAllowDiscordDm" Style="{StaticResource ToggleStyle}"
+                                              Checked="ChkAllowDiscordDm_Changed" Unchecked="ChkAllowDiscordDm_Changed"/>
+                                    <TextBlock Text="Allow Discord DMs from Leaderboard" Foreground="White" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
+                                               ToolTip="Show your Discord icon on the leaderboard so others can send you DMs"/>
+                                </StackPanel>
+
                                 <TextBlock Text="All sharing is opt-in. Nothing is shared without your consent."
-                                           Foreground="#5865F2" FontSize="10" FontStyle="Italic"/>
+                                           Foreground="#5865F2" FontSize="10" FontStyle="Italic" Margin="0,8,0,0"/>
                             </StackPanel>
                         </Border>
 
@@ -4495,10 +4503,49 @@
                             <GridView>
                                 <GridViewColumn Header="Rank" Width="80" DisplayMemberBinding="{Binding Rank}"/>
                                 <GridViewColumn Header="Name" Width="280" DisplayMemberBinding="{Binding DisplayName}"/>
+                                <GridViewColumn Header="Patreon" Width="120">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Image Source="/Resources/Patreon supporter.png" Height="42" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <Image.Style>
+                                                    <Style TargetType="Image">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsPatreon}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Image.Style>
+                                            </Image>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Disc." Width="60">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Click="BtnLeaderboardDiscord_Click" Cursor="Hand"
+                                                    Tag="{Binding DiscordId}" Background="Transparent" BorderThickness="0"
+                                                    ToolTip="Send Discord DM">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasDiscord}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                                <Image Source="/Resources/discord.png" Height="36" VerticalAlignment="Center"/>
+                                            </Button>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
                                 <GridViewColumn Header="Level" Width="100" DisplayMemberBinding="{Binding Level}"/>
                                 <GridViewColumn Header="XP" Width="100" DisplayMemberBinding="{Binding XpDisplay}"/>
-                                <GridViewColumn Header="Bubbles" Width="120" DisplayMemberBinding="{Binding BubblesPopped}"/>
-                                <GridViewColumn Header="GIFs" Width="110" DisplayMemberBinding="{Binding GifsSpawned}"/>
+                                <GridViewColumn Header="Bubbles" Width="100" DisplayMemberBinding="{Binding BubblesPoppedDisplay}"/>
+                                <GridViewColumn Header="GIFs" Width="90" DisplayMemberBinding="{Binding GifsSpawnedDisplay}"/>
                                 <GridViewColumn Header="Video Min" Width="120">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
@@ -4509,7 +4556,7 @@
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
-                                <GridViewColumn Header="Lock Cards" Width="130" DisplayMemberBinding="{Binding LockCardsCompleted}"/>
+                                <GridViewColumn Header="Lock Cards" Width="90" DisplayMemberBinding="{Binding LockCardsCompleted}"/>
                                 <GridViewColumn Header="Achievements" Width="130" DisplayMemberBinding="{Binding AchievementsDisplay}"/>
                                 <GridViewColumn Header="Online" Width="80">
                                     <GridViewColumn.CellTemplate>
