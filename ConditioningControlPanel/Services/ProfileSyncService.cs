@@ -272,7 +272,9 @@ namespace ConditioningControlPanel.Services
                         ["total_video_minutes"] = Math.Round(achievementProgress?.TotalVideoMinutes ?? 0, 1),
                         ["total_lock_cards_completed"] = achievementProgress?.TotalLockCardsCompleted ?? 0
                     },
-                    LastSession = DateTime.Now.ToString("o")
+                    LastSession = DateTime.Now.ToString("o"),
+                    AllowDiscordDm = settings.AllowDiscordDm,
+                    DiscordId = App.Discord?.UserId  // Include Discord ID even when syncing via Patreon
                 };
 
                 // Use appropriate endpoint based on auth type
@@ -340,7 +342,36 @@ namespace ConditioningControlPanel.Services
 
             if (settings.PlayerLevel != cloudProfile.Level || Math.Abs(settings.PlayerXP - currentLevelXp) > 0.01)
             {
-                if (settings.PlayerLevel > cloudProfile.Level)
+                // SAFEGUARD: If cloud level is significantly lower than local, log a warning
+                // This could indicate a cloud profile corruption or migration issue
+                var levelDifference = settings.PlayerLevel - cloudProfile.Level;
+                if (levelDifference >= 10)
+                {
+                    App.Logger?.Warning("POTENTIAL DATA LOSS: Local level ({Local}) is {Diff} levels higher than cloud ({Cloud}). " +
+                        "This could indicate cloud profile corruption. Cloud data will be used as source of truth for anti-cheat.",
+                        settings.PlayerLevel, levelDifference, cloudProfile.Level);
+
+                    // Store a backup of local progress in case user needs to recover
+                    try
+                    {
+                        var backupPath = System.IO.Path.Combine(App.UserDataPath, $"progress_backup_{DateTime.Now:yyyyMMdd_HHmmss}.json");
+                        var backup = new
+                        {
+                            LocalLevel = settings.PlayerLevel,
+                            LocalXP = settings.PlayerXP,
+                            CloudLevel = cloudProfile.Level,
+                            CloudXP = cloudProfile.Xp,
+                            Timestamp = DateTime.Now
+                        };
+                        System.IO.File.WriteAllText(backupPath, Newtonsoft.Json.JsonConvert.SerializeObject(backup, Newtonsoft.Json.Formatting.Indented));
+                        App.Logger?.Information("Backed up local progress to {Path}", backupPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("Failed to backup local progress: {Error}", ex.Message);
+                    }
+                }
+                else if (settings.PlayerLevel > cloudProfile.Level)
                 {
                     App.Logger?.Warning("Local level ({Local}) higher than cloud ({Cloud}) - resetting to cloud (anti-cheat)",
                         settings.PlayerLevel, cloudProfile.Level);
@@ -497,6 +528,12 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("last_session")]
             public string? LastSession { get; set; }
+
+            [JsonProperty("allow_discord_dm")]
+            public bool AllowDiscordDm { get; set; }
+
+            [JsonProperty("discord_id")]
+            public string? DiscordId { get; set; }
         }
 
         #endregion
