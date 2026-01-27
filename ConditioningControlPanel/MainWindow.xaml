@@ -4507,7 +4507,7 @@
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
                                             <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                <!-- Tier 1 Badge -->
+                                                <!-- Tier 1 Badge (also fallback for IsPatreon with tier 0) -->
                                                 <Image Source="/Resources/Patreon tier1.png" Height="42">
                                                     <Image.Style>
                                                         <Style TargetType="Image">
@@ -4516,6 +4516,14 @@
                                                                 <DataTrigger Binding="{Binding PatreonTier}" Value="1">
                                                                     <Setter Property="Visibility" Value="Visible"/>
                                                                 </DataTrigger>
+                                                                <!-- Fallback: show tier1 for patrons with tier 0 -->
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding IsPatreon}" Value="True"/>
+                                                                        <Condition Binding="{Binding PatreonTier}" Value="0"/>
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </MultiDataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </Image.Style>
