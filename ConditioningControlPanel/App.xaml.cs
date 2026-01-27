@@ -471,6 +471,7 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.5, "Initializing video service...");
             Video = new VideoService();
+            Video.PreloadLibVLC(); // Pre-load LibVLC in background for faster first video
 
             splash.SetProgress(0.6, "Initializing effects...");
             Progression = new ProgressionService();

@@ -769,8 +769,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.3.3 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.3.3 - Video freeze fix and unified login"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.4.3 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.4.3 - Video stability fix and faster first video"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
