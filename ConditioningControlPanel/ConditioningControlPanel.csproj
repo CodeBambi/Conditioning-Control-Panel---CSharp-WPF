@@ -118,7 +118,9 @@
     <Resource Include="Resources\speechbubble2.png" />
     <Resource Include="Resources\discord.png" />
     <Resource Include="Resources\spiral.gif" />
-    <Resource Include="Resources\Patreon supporter.png" />
+    <Resource Include="Resources\Patreon tier1.png" />
+    <Resource Include="Resources\Patreon tier2.png" />
+    <Resource Include="Resources\Patreon tier3.png" />
 
     <!-- Content Pack preview images -->
     <Resource Include="Resources\pack1.png" />

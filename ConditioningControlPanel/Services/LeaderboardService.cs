@@ -230,6 +230,9 @@ public class LeaderboardEntry
     [JsonProperty("is_patreon")]
     public bool IsPatreon { get; set; }
 
+    [JsonProperty("patreon_tier")]
+    public int PatreonTier { get; set; }
+
     [JsonProperty("discord_id")]
     public string? DiscordId { get; set; }
 
