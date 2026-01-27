@@ -22,38 +22,20 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.0";
+        public const string AppVersion = "5.4.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.0
+        public const string CurrentPatchNotes = @"v5.4.1
 
-🎮 DISCORD TAB & PROFILE VIEWER
-• New dedicated Discord tab in main navigation
-• Full profile viewer with bigger 100px avatar
-• Discord button opens user's profile in browser
-• Level AND Rank display with gold styling
-• Stats grid with achievement image thumbnails
-• Achievement showcase with 80x80 thumbnails
-• Patreon tier banners (Pink Filter / Prime Subject)
-• Search bar pre-fills with your display name
-• Auto-displays your profile when opening tab
-• DM toggle immediately updates profile viewer
-
-🔗 CLICKABLE AVATAR LINKS
-• Avatar companion can now open links in browser
-• Links mentioned by AI are now clickable
-
-🎬 HYPNOTUBE TAKEOVER
-• Takeover mode plays curated HypnoTube videos
-• Curated selection for immersive sessions
-
-🐛 BUG FIXES
-• Fixed crash when searching leaderboard profiles
-• Fixed scheduler not showing tray icon
-• Fixed Discord settings not syncing between tabs";
+🐛 HOTFIX: VIDEO CRASH FIX
+• Fixed crash when Bambi Takeover video ends
+• Video windows no longer stay black after playback
+• Added error handling for LibVLC event dispatching
+• Improved cleanup reliability for video playback
+• Better logging to diagnose video issues";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

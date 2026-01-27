@@ -542,13 +542,54 @@ namespace ConditioningControlPanel.Services
                 mediaPlayer.EndReached += (s, e) =>
                 {
                     // CRITICAL: Detach from LibVLC thread immediately to prevent deadlocks
+                    App.Logger?.Information("VideoService: LibVLC URL EndReached fired");
                     Task.Run(() =>
                     {
-                        Application.Current?.Dispatcher.BeginInvoke(() =>
+                        try
                         {
-                            _videoPlaying = false;
-                            CloseAll();
-                        });
+                            var dispatcher = Application.Current?.Dispatcher;
+                            if (dispatcher == null || dispatcher.HasShutdownStarted)
+                            {
+                                App.Logger?.Warning("VideoService: Dispatcher unavailable in URL EndReached");
+                                return;
+                            }
+                            dispatcher.BeginInvoke(() =>
+                            {
+                                _videoPlaying = false;
+                                CloseAll();
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Error(ex, "VideoService: Failed to dispatch CloseAll from URL EndReached");
+                            try
+                            {
+                                Application.Current?.Dispatcher?.Invoke(() => ForceCleanup());
+                            }
+                            catch { /* Last resort failed */ }
+                        }
+                    });
+                };
+
+                mediaPlayer.EncounteredError += (s, e) =>
+                {
+                    App.Logger?.Error("VideoService: LibVLC URL playback error");
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            var dispatcher = Application.Current?.Dispatcher;
+                            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+                            dispatcher.BeginInvoke(() =>
+                            {
+                                _videoPlaying = false;
+                                CloseAll();
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Error(ex, "VideoService: Failed to dispatch CloseAll from URL EncounteredError");
+                        }
                     });
                 };
             }
@@ -796,7 +837,23 @@ namespace ConditioningControlPanel.Services
                 mediaPlayer.LengthChanged += (s, e) =>
                 {
                     _duration = e.Length / 1000.0; // Convert ms to seconds
-                    Application.Current?.Dispatcher.BeginInvoke(() => StartSafetyTimer(_duration));
+                    App.Logger?.Information("VideoService: LibVLC LengthChanged fired, duration={Duration}s", _duration);
+                    try
+                    {
+                        var dispatcher = Application.Current?.Dispatcher;
+                        if (dispatcher != null && !dispatcher.HasShutdownStarted)
+                        {
+                            dispatcher.BeginInvoke(() => StartSafetyTimer(_duration));
+                        }
+                        else
+                        {
+                            App.Logger?.Warning("VideoService: Dispatcher unavailable in LengthChanged");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Error(ex, "VideoService: Failed to start safety timer from LengthChanged");
+                    }
                 };
 
                 mediaPlayer.EndReached += (s, e) =>
@@ -805,18 +862,64 @@ namespace ConditioningControlPanel.Services
                     // LibVLC waits for event handlers to complete before returning, and if we
                     // try to Stop/Dispose the player while waiting, it deadlocks.
                     // Using Task.Run ensures we return from the event handler immediately.
+                    App.Logger?.Information("VideoService: LibVLC EndReached fired");
                     Task.Run(() =>
                     {
-                        Application.Current?.Dispatcher.BeginInvoke(OnEnded);
+                        try
+                        {
+                            var dispatcher = Application.Current?.Dispatcher;
+                            if (dispatcher == null)
+                            {
+                                App.Logger?.Warning("VideoService: Dispatcher is null in EndReached, cannot cleanup properly");
+                                return;
+                            }
+                            if (dispatcher.HasShutdownStarted)
+                            {
+                                App.Logger?.Warning("VideoService: Dispatcher shutting down in EndReached");
+                                return;
+                            }
+                            dispatcher.BeginInvoke(OnEnded);
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Error(ex, "VideoService: Failed to dispatch OnEnded from EndReached");
+                            // Try direct cleanup as last resort - windows may stay open otherwise
+                            try
+                            {
+                                Application.Current?.Dispatcher?.Invoke(() => ForceCleanup());
+                            }
+                            catch (Exception ex2)
+                            {
+                                App.Logger?.Error(ex2, "VideoService: Even ForceCleanup failed in EndReached");
+                            }
+                        }
                     });
                 };
 
                 mediaPlayer.EncounteredError += (s, e) =>
                 {
-                    App.Logger?.Error("LibVLC playback error");
+                    App.Logger?.Error("VideoService: LibVLC playback error");
                     Task.Run(() =>
                     {
-                        Application.Current?.Dispatcher.BeginInvoke(OnEnded);
+                        try
+                        {
+                            var dispatcher = Application.Current?.Dispatcher;
+                            if (dispatcher == null || dispatcher.HasShutdownStarted)
+                            {
+                                App.Logger?.Warning("VideoService: Dispatcher unavailable in EncounteredError");
+                                return;
+                            }
+                            dispatcher.BeginInvoke(OnEnded);
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Error(ex, "VideoService: Failed to dispatch OnEnded from EncounteredError");
+                            try
+                            {
+                                Application.Current?.Dispatcher?.Invoke(() => ForceCleanup());
+                            }
+                            catch { /* Last resort failed */ }
+                        }
                     });
                 };
             }
@@ -1388,7 +1491,14 @@ namespace ConditioningControlPanel.Services
 
         private void OnEnded()
         {
-            if (!_videoPlaying) return;
+            App.Logger?.Information("VideoService: OnEnded() called, _videoPlaying={Playing}, _windows={WinCount}",
+                _videoPlaying, _windows.Count);
+
+            if (!_videoPlaying)
+            {
+                App.Logger?.Information("VideoService: OnEnded() early return - video already marked as not playing");
+                return;
+            }
 
             var settings = App.Settings.Current;
             bool loop = false, troll = false;
@@ -1686,11 +1796,16 @@ namespace ConditioningControlPanel.Services
 
         private void Cleanup()
         {
+            App.Logger?.Information("VideoService: Cleanup() called, _videoPlaying={Playing}, _windows={WinCount}",
+                _videoPlaying, _windows.Count);
+
             _safetyTimer?.Stop();
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
             _videoPlaying = false;
             CloseAll();
+
+            App.Logger?.Information("VideoService: Cleanup() - CloseAll completed, _windows now={WinCount}", _windows.Count);
             App.Audio?.Unduck();
             _strictActive = false;
             _penalties = 0;
