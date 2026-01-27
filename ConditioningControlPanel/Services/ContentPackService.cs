@@ -206,35 +206,71 @@ namespace ConditioningControlPanel.Services
                 PackDownloadStarted?.Invoke(this, pack);
                 App.Logger?.Information("Starting download of pack: {Name}", pack.Name);
 
-                // Download ZIP file from signed URL with retry logic
-                var maxRetries = 3;
-                var retryDelay = TimeSpan.FromSeconds(2);
-                var downloadedBytes = 0L;
+                // Download ZIP file with RESUMABLE retry logic using HTTP Range headers
+                // This allows recovery from connection drops without losing progress
+                var maxRetries = 10; // More retries since we don't lose progress
+                var retryDelay = TimeSpan.FromSeconds(3);
+                var totalBytes = pack.SizeBytes;
+                var downloadComplete = false;
 
-                for (int attempt = 1; attempt <= maxRetries; attempt++)
+                for (int attempt = 1; attempt <= maxRetries && !downloadComplete; attempt++)
                 {
                     try
                     {
-                        using var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
-                        response.EnsureSuccessStatusCode();
+                        // Check if we have a partial download to resume from
+                        long resumeFromByte = 0;
+                        if (File.Exists(tempZipPath))
+                        {
+                            resumeFromByte = new FileInfo(tempZipPath).Length;
+                            if (resumeFromByte > 0)
+                            {
+                                App.Logger?.Information("Resuming download from byte {Byte} (attempt {Attempt})", resumeFromByte, attempt);
+                            }
+                        }
 
-                        var totalBytes = response.Content.Headers.ContentLength ?? pack.SizeBytes;
-                        downloadedBytes = 0L;
+                        // Create request with Range header for resume support
+                        using var request = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
+                        if (resumeFromByte > 0)
+                        {
+                            request.Headers.Range = new RangeHeaderValue(resumeFromByte, null);
+                        }
+
+                        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+                        // 206 = Partial Content (resume), 200 = Full content
+                        if (response.StatusCode != HttpStatusCode.OK && response.StatusCode != HttpStatusCode.PartialContent)
+                        {
+                            response.EnsureSuccessStatusCode(); // Will throw with details
+                        }
+
+                        // Get total size from Content-Range header or Content-Length
+                        if (response.Content.Headers.ContentRange?.Length != null)
+                        {
+                            totalBytes = response.Content.Headers.ContentRange.Length.Value;
+                        }
+                        else if (response.Content.Headers.ContentLength != null)
+                        {
+                            totalBytes = resumeFromByte + response.Content.Headers.ContentLength.Value;
+                        }
+
+                        // Open file in append mode if resuming, create mode if starting fresh
+                        var fileMode = resumeFromByte > 0 ? FileMode.Append : FileMode.Create;
 
                         using (var contentStream = await response.Content.ReadAsStreamAsync())
-                        using (var fileStream = new FileStream(tempZipPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                        using (var fileStream = new FileStream(tempZipPath, fileMode, FileAccess.Write, FileShare.None))
                         {
-                            var buffer = new byte[81920]; // 80KB buffer for faster downloads
+                            var buffer = new byte[65536]; // 64KB buffer
                             int bytesRead;
+                            var downloadedThisSession = resumeFromByte;
 
                             while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                             {
                                 await fileStream.WriteAsync(buffer, 0, bytesRead);
-                                downloadedBytes += bytesRead;
+                                downloadedThisSession += bytesRead;
 
                                 if (totalBytes > 0)
                                 {
-                                    var progressPercent = (int)(downloadedBytes * 100 / totalBytes);
+                                    var progressPercent = (int)(downloadedThisSession * 100 / totalBytes);
                                     progress?.Report(progressPercent);
                                     pack.DownloadProgress = progressPercent;
                                     PackDownloadProgress?.Invoke(this, (pack, progressPercent));
@@ -242,28 +278,42 @@ namespace ConditioningControlPanel.Services
                             }
                         }
 
-                        // Download completed successfully
-                        break;
+                        // Verify download is complete
+                        var finalSize = new FileInfo(tempZipPath).Length;
+                        if (totalBytes > 0 && finalSize < totalBytes * 0.99) // Allow 1% tolerance
+                        {
+                            App.Logger?.Warning("Download incomplete: got {Got} of {Expected} bytes", finalSize, totalBytes);
+                            throw new IOException($"Download incomplete: received {finalSize} of {totalBytes} bytes");
+                        }
+
+                        downloadComplete = true;
+                        App.Logger?.Information("Download completed successfully: {Bytes} bytes", finalSize);
                     }
                     catch (Exception ex) when (attempt < maxRetries && (ex is HttpRequestException || ex is TaskCanceledException || ex is IOException))
                     {
-                        App.Logger?.Warning("Download attempt {Attempt}/{Max} failed: {Error}. Retrying in {Delay}s...",
-                            attempt, maxRetries, ex.Message, retryDelay.TotalSeconds);
+                        // Log detailed error including inner exception
+                        var innerMsg = ex.InnerException?.Message ?? "none";
+                        var currentSize = File.Exists(tempZipPath) ? new FileInfo(tempZipPath).Length : 0;
+                        var pct = totalBytes > 0 ? (currentSize * 100 / totalBytes) : 0;
 
-                        // Clean up partial download
-                        if (File.Exists(tempZipPath))
-                        {
-                            try { File.Delete(tempZipPath); } catch { }
-                        }
+                        App.Logger?.Warning("Download attempt {Attempt}/{Max} failed at {Pct}% ({Bytes} bytes): {Error} (Inner: {Inner})",
+                            attempt, maxRetries, pct, currentSize, ex.Message, innerMsg);
 
-                        pack.DownloadProgress = 0;
-                        PackInstallStatus?.Invoke(this, (pack, $"Retrying ({attempt}/{maxRetries})..."));
+                        // DON'T delete partial file - we'll resume from it!
+                        PackInstallStatus?.Invoke(this, (pack, $"Connection lost at {pct}%, resuming..."));
                         await Task.Delay(retryDelay);
-                        retryDelay *= 2; // Exponential backoff
+                        retryDelay = TimeSpan.FromSeconds(Math.Min(retryDelay.TotalSeconds * 1.5, 30)); // Cap at 30s
                     }
                 }
 
-                App.Logger?.Debug("Download complete ({Bytes} bytes), extracting and encrypting...", downloadedBytes);
+                // Validate download completed
+                var finalFileSize = File.Exists(tempZipPath) ? new FileInfo(tempZipPath).Length : 0;
+                if (finalFileSize < 1000)
+                {
+                    throw new IOException($"Download failed after {maxRetries} attempts. File is missing or incomplete.");
+                }
+
+                App.Logger?.Debug("Download complete ({Bytes} bytes), extracting and encrypting...", finalFileSize);
 
                 // Ensure we show 100% briefly before switching to extracting
                 pack.DownloadProgress = 100;
