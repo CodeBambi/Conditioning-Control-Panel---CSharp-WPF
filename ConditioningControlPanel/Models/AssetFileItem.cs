@@ -37,6 +37,7 @@ namespace ConditioningControlPanel.Models
                 Name = Path.GetFileName(value);
                 Extension = Path.GetExtension(value).ToLowerInvariant();
                 IsVideo = IsVideoExtension(Extension);
+                IsGif = Extension == ".gif";
             }
         }
 
@@ -66,6 +67,13 @@ namespace ConditioningControlPanel.Models
         {
             get => _isVideo;
             set { _isVideo = value; OnPropertyChanged(); OnPropertyChanged(nameof(TypeIcon)); }
+        }
+
+        private bool _isGif;
+        public bool IsGif
+        {
+            get => _isGif;
+            set { _isGif = value; OnPropertyChanged(); }
         }
 
         private ImageSource? _thumbnail;

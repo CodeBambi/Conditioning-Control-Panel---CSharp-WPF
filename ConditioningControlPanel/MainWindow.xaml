@@ -4615,7 +4615,7 @@
         <Grid x:Name="AssetsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto" MaxHeight="340"/>
+                <RowDefinition Height="Auto" MaxHeight="290"/>
                 <RowDefinition Height="5"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>

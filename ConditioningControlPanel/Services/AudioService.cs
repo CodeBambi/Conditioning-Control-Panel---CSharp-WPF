@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading.Tasks;
 using NAudio.Wave;
 using NAudio.CoreAudioApi;
+using Newtonsoft.Json;
 using Serilog;
 
 namespace ConditioningControlPanel.Services
@@ -29,6 +30,11 @@ namespace ConditioningControlPanel.Services
 
         private bool _disposed;
 
+        // Crash recovery file for ducking state
+        private static readonly string DuckingRecoveryFile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ConditioningControlPanel", "ducking_recovery.json");
+
         #endregion
 
         #region Constructor
@@ -38,11 +44,106 @@ namespace ConditioningControlPanel.Services
             try
             {
                 _deviceEnumerator = new MMDeviceEnumerator();
+
+                // Check for crash recovery - restore volumes if app was killed while ducked
+                RecoverFromCrash();
+
                 App.Logger?.Information("Audio service initialized with ducking support");
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning("Audio ducking not available: {Error}", ex.Message);
+            }
+        }
+
+        #endregion
+
+        #region Crash Recovery
+
+        /// <summary>
+        /// Check if the app crashed while audio was ducked and restore volumes.
+        /// </summary>
+        private void RecoverFromCrash()
+        {
+            try
+            {
+                if (!File.Exists(DuckingRecoveryFile)) return;
+
+                App.Logger?.Information("Detected ducking recovery file - restoring audio from previous crash");
+
+                var json = File.ReadAllText(DuckingRecoveryFile);
+                var savedVolumes = JsonConvert.DeserializeObject<Dictionary<int, float>>(json);
+
+                if (savedVolumes != null && savedVolumes.Count > 0 && _deviceEnumerator != null)
+                {
+                    var device = _deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                    var sessionManager = device.AudioSessionManager;
+                    var sessions = sessionManager.Sessions;
+
+                    int restoredCount = 0;
+                    for (int i = 0; i < sessions.Count; i++)
+                    {
+                        try
+                        {
+                            var session = sessions[i];
+                            var processId = (int)session.GetProcessID;
+
+                            if (savedVolumes.TryGetValue(processId, out var originalVolume))
+                            {
+                                session.SimpleAudioVolume.Volume = originalVolume;
+                                restoredCount++;
+                            }
+                        }
+                        catch { /* Session may have ended */ }
+                    }
+
+                    App.Logger?.Information("Restored {Count} audio sessions from crash recovery", restoredCount);
+                }
+
+                // Delete recovery file after restore
+                File.Delete(DuckingRecoveryFile);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to recover ducking state: {Error}", ex.Message);
+                // Try to delete the file anyway to avoid repeated failures
+                try { File.Delete(DuckingRecoveryFile); } catch { }
+            }
+        }
+
+        /// <summary>
+        /// Save current ducking state for crash recovery.
+        /// </summary>
+        private void SaveDuckingState()
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(DuckingRecoveryFile);
+                if (!string.IsNullOrEmpty(dir))
+                    Directory.CreateDirectory(dir);
+
+                var json = JsonConvert.SerializeObject(_originalVolumes);
+                File.WriteAllText(DuckingRecoveryFile, json);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to save ducking state: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Clear crash recovery file (called on successful unduck).
+        /// </summary>
+        private void ClearDuckingState()
+        {
+            try
+            {
+                if (File.Exists(DuckingRecoveryFile))
+                    File.Delete(DuckingRecoveryFile);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to clear ducking state: {Error}", ex.Message);
             }
         }
 
@@ -185,6 +286,10 @@ namespace ConditioningControlPanel.Services
                     }
 
                     _isDucked = true;
+
+                    // Save state for crash recovery
+                    SaveDuckingState();
+
                     App.Logger?.Debug("Ducked {Count} audio sessions by {Amount}%", _originalVolumes.Count, strength);
                 }
                 catch (Exception ex)
@@ -232,6 +337,10 @@ namespace ConditioningControlPanel.Services
 
                     _originalVolumes.Clear();
                     _isDucked = false;
+
+                    // Clear crash recovery file
+                    ClearDuckingState();
+
                     App.Logger?.Debug("Audio unducked");
                 }
                 catch (Exception ex)
@@ -239,6 +348,7 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Debug("Audio unducking failed: {Error}", ex.Message);
                     _originalVolumes.Clear();
                     _isDucked = false;
+                    ClearDuckingState();
                 }
             }
         }
