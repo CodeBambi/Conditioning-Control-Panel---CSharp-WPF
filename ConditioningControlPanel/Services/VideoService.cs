@@ -541,10 +541,14 @@ namespace ConditioningControlPanel.Services
             {
                 mediaPlayer.EndReached += (s, e) =>
                 {
-                    Application.Current?.Dispatcher.BeginInvoke(() =>
+                    // CRITICAL: Detach from LibVLC thread immediately to prevent deadlocks
+                    Task.Run(() =>
                     {
-                        _videoPlaying = false;
-                        CloseAll();
+                        Application.Current?.Dispatcher.BeginInvoke(() =>
+                        {
+                            _videoPlaying = false;
+                            CloseAll();
+                        });
                     });
                 };
             }
@@ -796,14 +800,23 @@ namespace ConditioningControlPanel.Services
 
                 mediaPlayer.EndReached += (s, e) =>
                 {
-                    // Must be invoked on UI thread
-                    Application.Current?.Dispatcher.BeginInvoke(OnEnded);
+                    // CRITICAL: Must detach from LibVLC thread IMMEDIATELY to prevent deadlocks
+                    // LibVLC waits for event handlers to complete before returning, and if we
+                    // try to Stop/Dispose the player while waiting, it deadlocks.
+                    // Using Task.Run ensures we return from the event handler immediately.
+                    Task.Run(() =>
+                    {
+                        Application.Current?.Dispatcher.BeginInvoke(OnEnded);
+                    });
                 };
 
                 mediaPlayer.EncounteredError += (s, e) =>
                 {
                     App.Logger?.Error("LibVLC playback error");
-                    Application.Current?.Dispatcher.BeginInvoke(OnEnded);
+                    Task.Run(() =>
+                    {
+                        Application.Current?.Dispatcher.BeginInvoke(OnEnded);
+                    });
                 };
             }
 
@@ -1101,6 +1114,20 @@ namespace ConditioningControlPanel.Services
                 win.Closing += (s, e) => { if (_videoPlaying) e.Cancel = true; };
                 win.PreviewKeyDown += (s, e) =>
                 {
+                    // Allow ESC if panic key is enabled (safety feature)
+                    if (e.Key == Key.Escape && App.Settings.Current.PanicKeyEnabled)
+                    {
+                        try
+                        {
+                            Cleanup();
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Error(ex, "Error during video cleanup on escape (strict)");
+                        }
+                        return; // Don't block this key
+                    }
+
                     if (e.Key == Key.Escape || e.Key == Key.System ||
                         (e.Key == Key.F4 && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)))
                         e.Handled = true;
@@ -1642,11 +1669,15 @@ namespace ConditioningControlPanel.Services
             _windows.Clear();
 
             // Dispose media players asynchronously AFTER windows are closed
-            // This is safe now because players are already stopped and detached
+            // Add a small delay to ensure LibVLC event handlers have fully detached
+            // This prevents deadlocks when Dispose() waits for event completion
             if (playersCopy.Count > 0)
             {
-                Task.Run(() =>
+                Task.Run(async () =>
                 {
+                    // Wait for any pending EndReached events to complete their Task.Run dispatch
+                    await Task.Delay(100);
+
                     foreach (var player in playersCopy)
                     {
                         try
