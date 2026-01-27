@@ -1385,16 +1385,16 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Open Discord DM with user
+                    // Open Discord user profile (where they can click Message to DM)
                     Process.Start(new ProcessStartInfo
                     {
-                        FileName = $"discord://users/{discordId}",
+                        FileName = $"https://discord.com/users/{discordId}",
                         UseShellExecute = true
                     });
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Warning(ex, "Failed to open Discord DM for user {DiscordId}", discordId);
+                    App.Logger?.Warning(ex, "Failed to open Discord profile for user {DiscordId}", discordId);
                 }
             }
         }
