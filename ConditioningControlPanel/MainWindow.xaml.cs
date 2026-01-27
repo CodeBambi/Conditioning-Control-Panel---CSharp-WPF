@@ -1385,11 +1385,13 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Open Discord user profile in browser - user can click "Open Discord" from there
+                    // Use explorer.exe to force opening in default browser, bypassing Discord's URL handler
+                    var url = $"https://discord.com/users/{discordId}";
                     Process.Start(new ProcessStartInfo
                     {
-                        FileName = $"https://discord.com/users/{discordId}",
-                        UseShellExecute = true
+                        FileName = "explorer.exe",
+                        Arguments = $"\"{url}\"",
+                        UseShellExecute = false
                     });
                 }
                 catch (Exception ex)
