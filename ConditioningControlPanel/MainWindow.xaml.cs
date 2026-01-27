@@ -5430,6 +5430,7 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Injects JavaScript to find the video element, play it, and request fullscreen.
+        /// Also adds handlers for: video ended (exit fullscreen), double-click (exit fullscreen).
         /// </summary>
         private async Task AutoPlayAndFullscreenVideoAsync()
         {
@@ -5440,14 +5441,41 @@ namespace ConditioningControlPanel
                 // Wait a moment for the page to fully render
                 await Task.Delay(1500);
 
-                // JavaScript to find video, play it, and request fullscreen
+                // JavaScript to find video, play it, request fullscreen, and add event handlers
                 var script = @"
                     (function() {
                         const video = document.querySelector('video');
                         if (video) {
+                            // Exit fullscreen helper
+                            const exitFullscreen = () => {
+                                if (document.exitFullscreen) {
+                                    document.exitFullscreen();
+                                } else if (document.webkitExitFullscreen) {
+                                    document.webkitExitFullscreen();
+                                } else if (document.msExitFullscreen) {
+                                    document.msExitFullscreen();
+                                }
+                            };
+
+                            // When video ends, exit fullscreen
+                            video.addEventListener('ended', () => {
+                                console.log('Video ended, exiting fullscreen');
+                                exitFullscreen();
+                            }, { once: true });
+
+                            // Double-click to exit fullscreen
+                            video.addEventListener('dblclick', (e) => {
+                                if (document.fullscreenElement || document.webkitFullscreenElement) {
+                                    console.log('Double-click, exiting fullscreen');
+                                    exitFullscreen();
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                }
+                            });
+
+                            // Start playing and go fullscreen
                             video.muted = false;
                             video.play().then(() => {
-                                // Request fullscreen on the video element
                                 if (video.requestFullscreen) {
                                     video.requestFullscreen();
                                 } else if (video.webkitRequestFullscreen) {
@@ -5461,12 +5489,18 @@ namespace ConditioningControlPanel
                 ";
 
                 await _browser.WebView.CoreWebView2.ExecuteScriptAsync(script);
-                App.Logger?.Debug("Auto-play and fullscreen script injected");
+                App.Logger?.Debug("Auto-play and fullscreen script injected with exit handlers");
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to auto-play/fullscreen video");
             }
+        }
+
+        private void BtnDiscordTab_Click(object sender, RoutedEventArgs e)
+        {
+            // Discord community tab - placeholder for future implementation
+            App.Logger?.Information("Discord tab clicked");
         }
 
         private void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)

@@ -2143,7 +2143,11 @@ namespace ConditioningControlPanel
             if (string.IsNullOrEmpty(text))
                 return;
 
-            // First, clean up any malformed markdown like [Url] or (url)
+            // Strip any markdown links the AI generates - keep only the link text, discard URLs
+            // This handles cases like [Naughty Bambi](https://youtube.com/...) -> Naughty Bambi
+            text = Regex.Replace(text, @"\[([^\]]+)\]\([^)]+\)", "$1");
+
+            // Also clean up any malformed markdown like [Url] or (url)
             text = Regex.Replace(text, @"\s*\[Url\]|\s*\(url\)", "", RegexOptions.IgnoreCase);
 
             // Try to find known video names in the text and make them clickable
