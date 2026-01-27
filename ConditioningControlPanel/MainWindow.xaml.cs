@@ -5370,8 +5370,9 @@ namespace ConditioningControlPanel
         /// Called by speech bubble links in AvatarTubeWindow.
         /// </summary>
         /// <param name="url">The URL to navigate to</param>
+        /// <param name="fullscreen">If true, opens the browser in fullscreen mode</param>
         /// <returns>True if navigation was initiated, false if browser unavailable</returns>
-        public bool NavigateToUrlInBrowser(string url)
+        public bool NavigateToUrlInBrowser(string url, bool fullscreen = false)
         {
             if (_browser == null || !_browserInitialized)
             {
@@ -5393,12 +5394,25 @@ namespace ConditioningControlPanel
                     RbHypnoTube.IsChecked = true;
                 }
 
-                // Set zoom and navigate
-                _browser.ZoomFactor = 0.5;
+                // Navigate first
                 _browser.Navigate(url);
 
-                App.Logger?.Information("Speech link navigated to: {Url} (Site: {Site})",
-                    url, lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube");
+                // Then go fullscreen if requested
+                if (fullscreen)
+                {
+                    // Small delay to let navigation start before fullscreen
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        EnterBrowserFullscreen();
+                    }), System.Windows.Threading.DispatcherPriority.Background);
+                }
+                else
+                {
+                    _browser.ZoomFactor = 0.5;
+                }
+
+                App.Logger?.Information("Speech link navigated to: {Url} (Site: {Site}, Fullscreen: {Fullscreen})",
+                    url, lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube", fullscreen);
 
                 return true;
             }
@@ -5529,7 +5543,7 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void EnterBrowserFullscreen()
+        public void EnterBrowserFullscreen()
         {
             if (_browser?.WebView == null) return;
 

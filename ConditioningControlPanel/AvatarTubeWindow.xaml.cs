@@ -2141,17 +2141,21 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Handles clicks on hyperlinks in the speech bubble.
         /// Routes to the embedded browser with correct tab selection (BambiCloud/HypnoTube).
+        /// Opens in fullscreen mode for immersive viewing.
         /// </summary>
         private void SpeechBubbleHyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
         {
             try
             {
                 var url = e.Uri.AbsoluteUri;
-                var mainWindow = Application.Current.MainWindow as MainWindow;
 
-                if (mainWindow?.NavigateToUrlInBrowser(url) == true)
+                // Find MainWindow - it might not be Application.Current.MainWindow if AvatarTube is detached
+                var mainWindow = _parentWindow as MainWindow
+                    ?? Application.Current.Windows.OfType<MainWindow>().FirstOrDefault();
+
+                if (mainWindow?.NavigateToUrlInBrowser(url, fullscreen: true) == true)
                 {
-                    App.Logger?.Information("Speech bubble link opened in browser: {Url}", url);
+                    App.Logger?.Information("Speech bubble link opened in fullscreen browser: {Url}", url);
                 }
                 else
                 {
