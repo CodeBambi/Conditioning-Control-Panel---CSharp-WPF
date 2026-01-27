@@ -1140,8 +1140,7 @@
                                     <CheckBox x:Name="ChkVideoEnabled" Style="{StaticResource ToggleStyle}"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable" Margin="6,0,15,0"/>
                                 </StackPanel>
-                                <!-- CUSTOM BUILD: Strict lock hidden (always enabled) -->
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Visibility="Collapsed">
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" ToolTip="Strict mode: videos cannot be skipped, must watch entirely">
                                     <CheckBox x:Name="ChkStrictLock" Style="{StaticResource ToggleStyle}" Checked="ChkStrictLock_Checked"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="⚠ Strict" Foreground="#FFB347" Margin="6,0,15,0"/>
                                 </StackPanel>
@@ -1337,13 +1336,12 @@
                                         ToolTip="Clear selection (use random)"/>
                             </StackPanel>
 
-                            <!-- Gaming Tip (CUSTOM BUILD: Panic key removed) -->
+                            <!-- Gaming Tip -->
                             <Grid Margin="0,8,0,0">
                                 <TextBlock Text="💡 Use Borderless Windowed for overlays" Foreground="#808090" FontSize="10" VerticalAlignment="Center"
                                            ToolTip="Exclusive fullscreen games block overlays.&#x0a;Use Borderless Windowed mode instead."/>
-                                <!-- CUSTOM BUILD: Panic key hidden -->
                                 <Button x:Name="BtnPanicKey" Content="🔑 Escape" Style="{StaticResource OutlineButton}"
-                                        HorizontalAlignment="Right" Padding="10,4" Click="BtnPanicKey_Click" Visibility="Collapsed"/>
+                                        HorizontalAlignment="Right" Padding="10,4" Click="BtnPanicKey_Click" ToolTip="Click to change panic key"/>
                             </Grid>
                         </StackPanel>
                     </Border>
