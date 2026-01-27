@@ -555,10 +555,11 @@ namespace ConditioningControlPanel.Services
 
             win.Content = videoView;
 
-            // Allow Escape to close
+            // Allow panic key to close (only if enabled and key matches)
             win.KeyDown += (s, e) =>
             {
-                if (e.Key == System.Windows.Input.Key.Escape)
+                if (App.Settings.Current.PanicKeyEnabled &&
+                    e.Key.ToString() == App.Settings.Current.PanicKey)
                 {
                     _videoPlaying = false;
                     CloseAll();
@@ -1114,21 +1115,8 @@ namespace ConditioningControlPanel.Services
                 win.Closing += (s, e) => { if (_videoPlaying) e.Cancel = true; };
                 win.PreviewKeyDown += (s, e) =>
                 {
-                    // Allow ESC if panic key is enabled (safety feature)
-                    if (e.Key == Key.Escape && App.Settings.Current.PanicKeyEnabled)
-                    {
-                        try
-                        {
-                            Cleanup();
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Error(ex, "Error during video cleanup on escape (strict)");
-                        }
-                        return; // Don't block this key
-                    }
-
-                    if (e.Key == Key.Escape || e.Key == Key.System ||
+                    // In strict mode, block panic key, Alt+F4, and system keys
+                    if (e.Key.ToString() == App.Settings.Current.PanicKey || e.Key == Key.System ||
                         (e.Key == Key.F4 && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)))
                         e.Handled = true;
                 };
@@ -1146,7 +1134,7 @@ namespace ConditioningControlPanel.Services
             {
                 win.KeyDown += (s, e) =>
                 {
-                    if (e.Key == Key.Escape && App.Settings.Current.PanicKeyEnabled)
+                    if (App.Settings.Current.PanicKeyEnabled && e.Key.ToString() == App.Settings.Current.PanicKey)
                     {
                         try
                         {
