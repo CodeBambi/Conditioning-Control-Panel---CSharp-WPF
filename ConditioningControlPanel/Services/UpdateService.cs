@@ -22,29 +22,23 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.3.2";
+        public const string AppVersion = "5.3.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.3.2
+        public const string CurrentPatchNotes = @"v5.3.3
 
 🐛 BUG FIXES
-• Fixed potential BSOD/crash from LibVLC race condition
-• Fixed ducking default value (now 80% instead of 100%)
-• Fixed video test button getting stuck - added force reset option
-• Fixed content pack downloads failing at 3% - added retry logic
-• Fixed level up cutting off avatar speech
-• Fixed minimized notification showing repeatedly
-• Fixed Bambi Takeover causing double overlay during Engine
-• Fixed Window Awareness detecting background processes (Steam etc)
-• Fixed reaction timer not respecting cooldown setting
-• Fixed video mini-game showing multiple targets at once
+• Fixed app freeze/hang when videos end (LibVLC deadlock)
+• Fixed ESC key not closing videos in strict mode
+• Fixed account conflict when logging in with different providers
 
-☁️ CLOUD SYNC
-• Added safeguard backup when significant level difference detected
-• Now syncs Discord DM preferences with cloud profile";
+🔐 UNIFIED LOGIN
+• Added unified account system - one display name across Patreon & Discord
+• Prevents accidentally logging into two different accounts
+• Auto-links second provider to existing account";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

@@ -6,7 +6,7 @@
         Title="Conditioning Control Panel"
         Height="943" Width="1385"
         MinHeight="620" MinWidth="978"
-        Background="#1A1A2E"
+        Background="#0D0D18"
         WindowStartupLocation="Manual"
         WindowStyle="None"
         AllowsTransparency="False"
@@ -122,7 +122,7 @@
 
         <!-- Small Pink Button Style (for tutorial guide buttons) -->
         <Style x:Key="SmallPinkButton" TargetType="Button">
-            <Setter Property="Background" Value="#FF69B4"/>
+            <Setter Property="Background" Value="#CC55AA"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -238,7 +238,7 @@
 
         <!-- Patreon (purple) variant -->
         <Style x:Key="ExpandableIconButtonPatreon" TargetType="Button" BasedOn="{StaticResource ExpandableIconButtonBase}">
-            <Setter Property="Background" Value="#9B59B6"/>
+            <Setter Property="Background" Value="#8B4DAB"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderBrush" Value="#E0B0FF"/>
             <Setter Property="FontSize" Value="18"/>
@@ -625,10 +625,10 @@
                 <!-- Title + Player Title + App Name + Version -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="⭐" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="TxtPlayerTitle" Text="Basic Bimbo" Foreground="#FF69B4"
+                    <TextBlock x:Name="TxtPlayerTitle" Text="Basic Bimbo" Foreground="#CC55AA"
                                FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0">
                         <TextBlock.Effect>
-                            <DropShadowEffect Color="#FF69B4" BlurRadius="8" ShadowDepth="0" Opacity="0.6"/>
+                            <DropShadowEffect Color="#CC55AA" BlurRadius="8" ShadowDepth="0" Opacity="0.6"/>
                         </TextBlock.Effect>
                     </TextBlock>
                     <Border Background="{StaticResource PinkBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,20,0">
@@ -686,7 +686,7 @@
                                                               Focusable="False" ClickMode="Press">
                                                     <ToggleButton.Template>
                                                         <ControlTemplate TargetType="ToggleButton">
-                                                            <Border Background="#1E1E3A" BorderBrush="{StaticResource PinkBrush}"
+                                                            <Border Background="#151528" BorderBrush="{StaticResource PinkBrush}"
                                                                     BorderThickness="1" CornerRadius="4" Cursor="Hand">
                                                                 <Grid>
                                                                     <Grid.ColumnDefinitions>
@@ -716,7 +716,7 @@
                                                 <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}"
                                                        Placement="Bottom" AllowsTransparency="True" Focusable="False"
                                                        PopupAnimation="Slide">
-                                                    <Border Background="#1E1E3A" BorderBrush="{StaticResource PinkBrush}"
+                                                    <Border Background="#151528" BorderBrush="{StaticResource PinkBrush}"
                                                             BorderThickness="1" CornerRadius="4" Margin="0,2,0,0"
                                                             MinWidth="{TemplateBinding ActualWidth}">
                                                         <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
@@ -762,13 +762,13 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.3.2 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.3.2 - Bug fixes and stability improvements"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.3.3 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.3.3 - Video freeze fix and unified login"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
                                 <Setter Property="Background" Value="#3D1A3D"/>
-                                <Setter Property="Foreground" Value="#FF69B4"/>
+                                <Setter Property="Foreground" Value="#CC55AA"/>
                                 <Setter Property="MinWidth" Value="130"/>
                                 <Setter Property="Height" Value="32"/>
                                 <Setter Property="Padding" Value="12,6"/>
@@ -788,7 +788,7 @@
                                                 </Trigger>
                                                 <Trigger Property="Tag" Value="UpdateAvailable">
                                                     <Setter TargetName="border" Property="Background" Value="#FF1493"/>
-                                                    <Setter TargetName="border" Property="BorderBrush" Value="#FF69B4"/>
+                                                    <Setter TargetName="border" Property="BorderBrush" Value="#CC55AA"/>
                                                     <Setter TargetName="border" Property="BorderThickness" Value="2"/>
                                                     <Setter Property="Foreground" Value="White"/>
                                                     <Setter Property="FontSize" Value="13"/>
@@ -822,7 +822,7 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Banner -->
-                <Border Grid.Column="0" Background="#1E1E3A" CornerRadius="8" Padding="12,8" Margin="0,0,6,0">
+                <Border Grid.Column="0" Background="#151528" CornerRadius="8" Padding="12,8" Margin="0,0,6,0">
                     <Grid>
                         <TextBlock x:Name="TxtBannerPrimary" Foreground="{StaticResource PinkBrush}"
                                    FontSize="14" FontStyle="Italic"
@@ -925,7 +925,7 @@
                             Width="28" Height="28" ToolTip="How to use the app" Margin="3,0">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="#FF69B4" CornerRadius="14" Width="28" Height="28" Cursor="Hand">
+                                <Border Background="#CC55AA" CornerRadius="14" Width="28" Height="28" Cursor="Hand">
                                     <TextBlock Text="?" Foreground="White" FontWeight="Bold" FontSize="16"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
@@ -963,7 +963,7 @@
             <!-- Login overlay - shown when not logged in -->
             <Border x:Name="XPBarLoginOverlay" Background="#CC1A1A2E" CornerRadius="4" Visibility="Collapsed">
                 <TextBlock Text="Login with Discord or Patreon to track your XP!"
-                           Foreground="#FF69B4" FontSize="11" FontWeight="SemiBold"
+                           Foreground="#CC55AA" FontSize="11" FontWeight="SemiBold"
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            Opacity="0.9"/>
             </Border>
@@ -1140,8 +1140,8 @@
                                     <CheckBox x:Name="ChkVideoEnabled" Style="{StaticResource ToggleStyle}"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable" Margin="6,0,15,0"/>
                                 </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                            ToolTip="⚠ STRICT MODE: Videos cannot be skipped!&#x0a;You must watch the entire video.&#x0a;Use with caution.">
+                                <!-- CUSTOM BUILD: Strict lock hidden (always enabled) -->
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Visibility="Collapsed">
                                     <CheckBox x:Name="ChkStrictLock" Style="{StaticResource ToggleStyle}" Checked="ChkStrictLock_Checked"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="⚠ Strict" Foreground="#FFB347" Margin="6,0,15,0"/>
                                 </StackPanel>
@@ -1151,7 +1151,7 @@
                             </Grid>
 
                             <!-- Mini-Game Sub-Section -->
-                            <Border Background="#1E1E3A" CornerRadius="6" Padding="10,10" Margin="0,10,0,0"
+                            <Border Background="#151528" CornerRadius="6" Padding="10,10" Margin="0,10,0,0"
                                     ToolTip="Attention check during videos.&#x0a;Click targets that appear to prove you're watching.&#x0a;Failing in Strict mode restarts the video!">
                                 <StackPanel>
                                     <Grid>
@@ -1337,13 +1337,13 @@
                                         ToolTip="Clear selection (use random)"/>
                             </StackPanel>
 
-                            <!-- Gaming Tip + Panic Key -->
+                            <!-- Gaming Tip (CUSTOM BUILD: Panic key removed) -->
                             <Grid Margin="0,8,0,0">
                                 <TextBlock Text="💡 Use Borderless Windowed for overlays" Foreground="#808090" FontSize="10" VerticalAlignment="Center"
                                            ToolTip="Exclusive fullscreen games block overlays.&#x0a;Use Borderless Windowed mode instead."/>
-                                <Button x:Name="BtnPanicKey" Content="🔑 Escape" Style="{StaticResource OutlineButton}" 
-                                        HorizontalAlignment="Right" Padding="10,4" Click="BtnPanicKey_Click"
-                                        ToolTip="Click to change panic key.&#x0a;Press once to stop, twice to exit."/>
+                                <!-- CUSTOM BUILD: Panic key hidden -->
+                                <Button x:Name="BtnPanicKey" Content="🔑 Escape" Style="{StaticResource OutlineButton}"
+                                        HorizontalAlignment="Right" Padding="10,4" Click="BtnPanicKey_Click" Visibility="Collapsed"/>
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -1383,7 +1383,7 @@
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsChecked" Value="True">
-                                                        <Setter TargetName="border" Property="Background" Value="#FF69B4"/>
+                                                        <Setter TargetName="border" Property="Background" Value="#CC55AA"/>
                                                         <Setter Property="Foreground" Value="White"/>
                                                         <Setter Property="FontWeight" Value="SemiBold"/>
                                                     </Trigger>
@@ -1411,7 +1411,7 @@
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsChecked" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="#FF69B4"/>
+                                                    <Setter TargetName="border" Property="Background" Value="#CC55AA"/>
                                                     <Setter Property="Foreground" Value="White"/>
                                                     <Setter Property="FontWeight" Value="SemiBold"/>
                                                 </Trigger>
@@ -1442,7 +1442,7 @@
                                     FontSize="9" Padding="6,3" VerticalAlignment="Center">
                                 <Button.Style>
                                     <Style TargetType="Button">
-                                        <Setter Property="Background" Value="#FF69B4"/>
+                                        <Setter Property="Background" Value="#CC55AA"/>
                                         <Setter Property="Foreground" Value="White"/>
                                         <Setter Property="FontWeight" Value="SemiBold"/>
                                         <Setter Property="BorderThickness" Value="0"/>
@@ -1471,7 +1471,7 @@
                         </Grid>
 
                         <!-- Browser Container -->
-                        <Border Background="#1E1E3A" CornerRadius="6" ClipToBounds="True" Height="395">
+                        <Border Background="#151528" CornerRadius="6" ClipToBounds="True" Height="395">
                             <Grid x:Name="BrowserContainer">
                                 <!-- WebView2 will be added here programmatically -->
                                 <TextBlock x:Name="BrowserLoadingText"
@@ -1695,7 +1695,7 @@
                     <TextBlock x:Name="MarqueeText"
                                Text="v5.2.1 IS OUT - THANKS TO ALL THE 100+ PATREONS AND TO ALL THE SUPPORTERS/TESTERS 💖🔒"
                                FontFamily="Impact" FontSize="28" FontWeight="Bold"
-                               Foreground="#FF69B4" Canvas.Top="8">
+                               Foreground="#CC55AA" Canvas.Top="8">
                         <TextBlock.Effect>
                             <DropShadowEffect Color="#FF1493" BlurRadius="8" ShadowDepth="0" Opacity="0.8"/>
                         </TextBlock.Effect>
@@ -1957,7 +1957,7 @@
                                 </Border>
 
                                 <!-- Custom/Imported Sessions Section -->
-                                <TextBlock x:Name="TxtCustomSessionsHeader" Text="Your Sessions:" Foreground="#FF69B4"
+                                <TextBlock x:Name="TxtCustomSessionsHeader" Text="Your Sessions:" Foreground="#CC55AA"
                                            FontSize="13" FontWeight="SemiBold" Margin="0,16,0,10" Visibility="Collapsed"/>
                                 <StackPanel x:Name="CustomSessionsPanel"/>
                             </StackPanel>
@@ -1973,7 +1973,7 @@
                             <!-- Left: Drop Zone -->
                             <Border Grid.Column="0"
                                     x:Name="SessionDropZone"
-                                    Background="#1E1E3A"
+                                    Background="#151528"
                                     BorderBrush="#404060"
                                     BorderThickness="2"
                                     CornerRadius="8"
@@ -2006,7 +2006,7 @@
 
                             <!-- Right: Session Editor Panel -->
                             <Border Grid.Column="1"
-                                    Background="#1E1E3A"
+                                    Background="#151528"
                                     BorderBrush="#404060"
                                     BorderThickness="2"
                                     CornerRadius="8"
@@ -2014,13 +2014,13 @@
                                 <Grid>
                                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                         <TextBlock Text="Session Editor" FontSize="13" FontWeight="SemiBold"
-                                                   Foreground="#FF69B4" HorizontalAlignment="Center"/>
+                                                   Foreground="#CC55AA" HorizontalAlignment="Center"/>
                                         <TextBlock Text="Create custom sessions" FontSize="11"
                                                    Foreground="#707090" HorizontalAlignment="Center" Margin="0,4,0,0"/>
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
                                             <Button x:Name="BtnCreateSession" Content="+ Create New"
                                                     Click="BtnCreateSession_Click"
-                                                    Background="#FF69B4" Foreground="White"
+                                                    Background="#CC55AA" Foreground="White"
                                                     BorderThickness="0"
                                                     Padding="12,6" FontSize="11" FontWeight="SemiBold" Cursor="Hand"
                                                     Margin="0,0,8,0">
@@ -2128,7 +2128,7 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" x:Name="SessionDetailScroller" Visibility="Collapsed">
                         <StackPanel x:Name="SessionDetailPanel">
                             <!-- Session Duration & Difficulty -->
-                            <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,0,0,12">
+                            <Border Background="#151528" CornerRadius="8" Padding="12" Margin="0,0,0,12">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
@@ -2317,7 +2317,7 @@
                                ToolTip="Level-gated features - higher levels unlock more!"/>
                     
                     <!-- Spiral Overlay - Lvl 10 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                    <Border Background="#151528" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Hypnotic spiral animation overlay.&#x0a;Covers all screens with customizable opacity.&#x0a;Unlocks at Level 10.">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -2382,7 +2382,7 @@
                     </Border>
 
                     <!-- Pink Filter - Lvl 10 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                    <Border Background="#151528" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Pink color tint overlay for all screens.&#x0a;Subtle or intense, you choose!&#x0a;Unlocks at Level 10.">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -2441,7 +2441,7 @@
                     </Border>
 
                     <!-- Bubble Pop - Lvl 20 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                    <Border Background="#151528" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Pop floating bubbles to earn XP!&#x0a;Fun mini-game that spawns periodically.&#x0a;Unlocks at Level 20.">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -2500,7 +2500,7 @@
                     </Border>
 
                     <!-- Lock Card - Lvl 35 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                    <Border Background="#151528" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Screen lock that requires typing phrases.&#x0a;Reinforces conditioning through repetition.&#x0a;Unlocks at Level 35.">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -2597,7 +2597,7 @@
                     </Border>
 
                     <!-- Bubble Count Game - Lvl 50 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                    <Border Background="#151528" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Count the bubbles challenge!&#x0a;Memory and attention test for bonus XP.&#x0a;Unlocks at Level 50.">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -2651,7 +2651,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Style="{StaticResource SettingLabel}" Text="Difficulty"/>
                                         <ComboBox x:Name="CmbBubbleCountDifficulty" Grid.Column="1" 
-                                                  Width="100" Background="#1E1E3A" Foreground="White"
+                                                  Width="100" Background="#151528" Foreground="White"
                                                   SelectionChanged="CmbBubbleCountDifficulty_Changed">
                                             <ComboBoxItem Content="Easy" Tag="0"/>
                                             <ComboBoxItem Content="Medium" Tag="1" IsSelected="True"/>
@@ -2688,7 +2688,7 @@
                     </Border>
 
                     <!-- Bouncing Text - Lvl 60 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                    <Border Background="#151528" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="DVD screensaver-style bouncing text!&#x0a;Customizable phrases bounce across screen.&#x0a;Unlocks at Level 60.">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -2773,7 +2773,7 @@
                     </Border>
 
                     <!-- Brain Drain - DISABLED FOR REWORK -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5" Opacity="0.5"
+                    <Border Background="#151528" CornerRadius="8" Padding="12" Margin="0,5" Opacity="0.5"
                             ToolTip="This feature is temporarily disabled while we improve performance.">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -2815,7 +2815,7 @@
                     </Border>
 
                     <!-- Mind Wipe - Lvl 75 -->
-                    <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
+                    <Border Background="#151528" CornerRadius="8" Padding="12" Margin="0,5"
                             ToolTip="Random mind wipe audio effects!&#x0a;Escalates in frequency during sessions.&#x0a;Unlocks at Level 75.">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -2927,11 +2927,11 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtStartTime" Grid.Column="0" Text="16:00" Background="#1E1E3A" 
+                            <TextBox x:Name="TxtStartTime" Grid.Column="0" Text="16:00" Background="#151528" 
                                      Foreground="White" BorderBrush="{StaticResource PinkBrush}" 
                                      Padding="6,4" FontSize="12" TextAlignment="Center"/>
                             <TextBlock Grid.Column="1" Text="→" Foreground="White" FontSize="12" Margin="5,0" VerticalAlignment="Center"/>
-                            <TextBox x:Name="TxtEndTime" Grid.Column="2" Text="22:00" Background="#1E1E3A" 
+                            <TextBox x:Name="TxtEndTime" Grid.Column="2" Text="22:00" Background="#151528" 
                                      Foreground="White" BorderBrush="{StaticResource PinkBrush}" 
                                      Padding="6,4" FontSize="12" TextAlignment="Center"/>
                         </Grid>
@@ -2994,7 +2994,7 @@
                         
                         <!-- Ramp Links -->
                         <TextBlock Text="Link to Ramp" Foreground="{StaticResource PinkBrush}" FontSize="11" Margin="0,5,0,2"/>
-                        <Border Background="#1E1E3A" CornerRadius="4" Padding="6,4">
+                        <Border Background="#151528" CornerRadius="4" Padding="6,4">
                             <WrapPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,8,2">
                                     <CheckBox x:Name="ChkRampLinkFlash" Style="{StaticResource ToggleStyle}"/>
@@ -3083,9 +3083,9 @@
                                 <ControlTemplate TargetType="CheckBox">
                                     <StackPanel Orientation="Horizontal" Cursor="Hand">
                                         <Border x:Name="checkBorder" Width="14" Height="14"
-                                                Background="#353550" BorderBrush="#FF69B4" BorderThickness="1.5"
+                                                Background="#353550" BorderBrush="#CC55AA" BorderThickness="1.5"
                                                 CornerRadius="3" VerticalAlignment="Center">
-                                            <TextBlock x:Name="checkMark" Text="✓" Foreground="#FF69B4"
+                                            <TextBlock x:Name="checkMark" Text="✓" Foreground="#CC55AA"
                                                        FontSize="10" FontWeight="Bold"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                                        Visibility="Collapsed" Margin="0,-1,0,0"/>
@@ -3134,7 +3134,7 @@
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
                                                         <Setter TargetName="border" Property="Background" Value="#353560"/>
-                                                        <Setter TargetName="border" Property="BorderBrush" Value="#FF69B4"/>
+                                                        <Setter TargetName="border" Property="BorderBrush" Value="#CC55AA"/>
                                                     </Trigger>
                                                     <Trigger Property="IsEnabled" Value="False">
                                                         <Setter TargetName="border" Property="Opacity" Value="0.5"/>
@@ -3194,10 +3194,10 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- COMPANIONS BOX -->
-                            <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="10" Padding="15">
+                            <Border Grid.Column="0" Background="#0D0D18" CornerRadius="10" Padding="15">
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                        <TextBlock Text="COMPANIONS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
+                                        <TextBlock Text="COMPANIONS" Foreground="#CC55AA" FontSize="14" FontWeight="Bold"/>
                                         <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
                                             <TextBlock Text="BETA" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                         </Border>
@@ -3205,13 +3205,13 @@
 
                                     <!-- Companion Cards 2x2 - Unlock at levels 50, 100, 125, 150 -->
                                     <UniformGrid Rows="2" Columns="2" Margin="0,0,0,12">
-                                        <Border x:Name="CompanionCard0" Background="#252542" CornerRadius="8" Margin="0,0,5,5"
+                                        <Border x:Name="CompanionCard0" Background="#1A1A32" CornerRadius="8" Margin="0,0,5,5"
                                                 Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="0"
                                                 BorderThickness="2" BorderBrush="Transparent">
                                             <StackPanel>
                                                 <Grid>
                                                     <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="Synthetic Blowdoll" Foreground="#FF69B4" FontSize="12" FontWeight="SemiBold"/>
+                                                        <TextBlock Text="Synthetic Blowdoll" Foreground="#CC55AA" FontSize="12" FontWeight="SemiBold"/>
                                                         <TextBlock x:Name="TxtCompanion0Lock" Text=" [50]" Foreground="#FFD700" FontSize="9"
                                                                    VerticalAlignment="Center" Visibility="Collapsed"/>
                                                     </StackPanel>
@@ -3221,7 +3221,7 @@
                                                 <TextBlock Text="Pink filter XP bonus" Foreground="#606060" FontSize="10" Margin="0,4,0,0"/>
                                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                                     <Button x:Name="BtnCompanion0Personality" Content="🎭" FontSize="10" Padding="4,1"
-                                                            Background="#1A1A2E" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                            Background="#0D0D18" Foreground="#888" BorderThickness="0" Cursor="Hand"
                                                             Click="BtnCompanionPersonality_Click" Tag="0" ToolTip="Assign AI personality"/>
                                                     <TextBlock x:Name="TxtCompanion0Prompt" Text="" Foreground="#555" FontSize="9"
                                                                VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
@@ -3229,7 +3229,7 @@
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
-                                        <Border x:Name="CompanionCard1" Background="#252542" CornerRadius="8" Margin="5,0,0,5"
+                                        <Border x:Name="CompanionCard1" Background="#1A1A32" CornerRadius="8" Margin="5,0,0,5"
                                                 Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="1"
                                                 BorderThickness="2" BorderBrush="Transparent">
                                             <StackPanel>
@@ -3245,7 +3245,7 @@
                                                 <TextBlock Text="Autonomy XP bonus" Foreground="#606060" FontSize="10" Margin="0,4,0,0"/>
                                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                                     <Button x:Name="BtnCompanion1Personality" Content="🎭" FontSize="10" Padding="4,1"
-                                                            Background="#1A1A2E" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                            Background="#0D0D18" Foreground="#888" BorderThickness="0" Cursor="Hand"
                                                             Click="BtnCompanionPersonality_Click" Tag="1" ToolTip="Assign AI personality"/>
                                                     <TextBlock x:Name="TxtCompanion1Prompt" Text="" Foreground="#555" FontSize="9"
                                                                VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
@@ -3253,7 +3253,7 @@
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
-                                        <Border x:Name="CompanionCard2" Background="#252542" CornerRadius="8" Margin="0,5,5,0"
+                                        <Border x:Name="CompanionCard2" Background="#1A1A32" CornerRadius="8" Margin="0,5,5,0"
                                                 Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="2"
                                                 BorderThickness="2" BorderBrush="Transparent">
                                             <StackPanel>
@@ -3269,7 +3269,7 @@
                                                 <TextBlock Text="Constant XP drain" Foreground="#606060" FontSize="10" Margin="0,4,0,0"/>
                                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                                     <Button x:Name="BtnCompanion2Personality" Content="🎭" FontSize="10" Padding="4,1"
-                                                            Background="#1A1A2E" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                            Background="#0D0D18" Foreground="#888" BorderThickness="0" Cursor="Hand"
                                                             Click="BtnCompanionPersonality_Click" Tag="2" ToolTip="Assign AI personality"/>
                                                     <TextBlock x:Name="TxtCompanion2Prompt" Text="" Foreground="#555" FontSize="9"
                                                                VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
@@ -3277,7 +3277,7 @@
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
-                                        <Border x:Name="CompanionCard3" Background="#252542" CornerRadius="8" Margin="5,5,0,0"
+                                        <Border x:Name="CompanionCard3" Background="#1A1A32" CornerRadius="8" Margin="5,5,0,0"
                                                 Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="3"
                                                 BorderThickness="2" BorderBrush="Transparent">
                                             <StackPanel>
@@ -3293,7 +3293,7 @@
                                                 <TextBlock Text="Strict mode bonuses" Foreground="#606060" FontSize="10" Margin="0,4,0,0"/>
                                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                                     <Button x:Name="BtnCompanion3Personality" Content="🎭" FontSize="10" Padding="4,1"
-                                                            Background="#1A1A2E" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                            Background="#0D0D18" Foreground="#888" BorderThickness="0" Cursor="Hand"
                                                             Click="BtnCompanionPersonality_Click" Tag="3" ToolTip="Assign AI personality"/>
                                                     <TextBlock x:Name="TxtCompanion3Prompt" Text="" Foreground="#555" FontSize="9"
                                                                VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
@@ -3313,11 +3313,11 @@
                                                     <TextBlock x:Name="TxtActiveCompanionLevel" Text=" · Level 1" Foreground="#888"
                                                                FontSize="14"/>
                                                 </StackPanel>
-                                                <TextBlock x:Name="TxtActiveCompanionXP" Text="0 / 550 XP" Foreground="#FF69B4"
+                                                <TextBlock x:Name="TxtActiveCompanionXP" Text="0 / 550 XP" Foreground="#CC55AA"
                                                            FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"/>
                                             </Grid>
                                             <ProgressBar x:Name="PrgCompanion0" Height="6" Margin="0,8,0,0" Value="0"
-                                                         Background="#252542" Foreground="#FF69B4"/>
+                                                         Background="#1A1A32" Foreground="#CC55AA"/>
                                             <TextBlock x:Name="TxtActiveCompanionDesc" Text="Gains bonus XP based on pink filter intensity"
                                                        Foreground="#707070" FontSize="11" Margin="0,8,0,0"/>
                                         </StackPanel>
@@ -3327,7 +3327,7 @@
                             </Border>
 
                             <!-- COMMUNITY PROMPTS BOX -->
-                            <Border Grid.Column="2" Background="#1A1A2E" CornerRadius="10" Padding="15">
+                            <Border Grid.Column="2" Background="#0D0D18" CornerRadius="10" Padding="15">
                                 <StackPanel>
                                     <Grid Margin="0,0,0,12">
                                         <StackPanel Orientation="Horizontal">
@@ -3351,7 +3351,7 @@
                                             </StackPanel>
                                             <Button x:Name="BtnDeactivatePrompt" Content="Reset" HorizontalAlignment="Right"
                                                     VerticalAlignment="Center"
-                                                    Background="#252542" Foreground="#808080" BorderThickness="0"
+                                                    Background="#1A1A32" Foreground="#808080" BorderThickness="0"
                                                     FontSize="11" Padding="10,4" Cursor="Hand" Visibility="Collapsed"
                                                     Click="BtnDeactivatePrompt_Click"/>
                                         </Grid>
@@ -3378,13 +3378,13 @@
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
                                         <Button x:Name="BtnBrowsePrompts" Grid.Column="0" Content="Browse"
-                                                Background="#252542" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
+                                                Background="#1A1A32" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
                                                 FontSize="12" Padding="0,8" Margin="0,0,4,0" Cursor="Hand" Click="BtnBrowsePrompts_Click"/>
                                         <Button x:Name="BtnImportPrompt" Grid.Column="1" Content="Import"
-                                                Background="#252542" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                                Background="#1A1A32" Foreground="White" BorderBrush="#505050" BorderThickness="1"
                                                 FontSize="12" Padding="0,8" Margin="4,0,4,0" Cursor="Hand" Click="BtnImportPrompt_Click"/>
                                         <Button x:Name="BtnExportPrompt" Grid.Column="2" Content="Export"
-                                                Background="#252542" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                                Background="#1A1A32" Foreground="White" BorderBrush="#505050" BorderThickness="1"
                                                 FontSize="12" Padding="0,8" Margin="4,0,0,0" Cursor="Hand" Click="BtnExportPrompt_Click"/>
                                     </Grid>
                                 </StackPanel>
@@ -3400,9 +3400,9 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- SETTINGS BOX -->
-                            <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="10" Padding="15">
+                            <Border Grid.Column="0" Background="#0D0D18" CornerRadius="10" Padding="15">
                                 <StackPanel>
-                                    <TextBlock Text="COMPANION SETTINGS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
+                                    <TextBlock Text="COMPANION SETTINGS" Foreground="#CC55AA" FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
 
                                     <!-- Show Companion -->
                                     <Grid Margin="0,0,0,12">
@@ -3421,7 +3421,7 @@
                                         </StackPanel>
                                         <Button x:Name="BtnDetachCompanionTab" Content="Detach" HorizontalAlignment="Right"
                                                 VerticalAlignment="Center"
-                                                Background="#252542" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                                Background="#1A1A32" Foreground="White" BorderBrush="#505050" BorderThickness="1"
                                                 Padding="15,6" FontSize="12" Cursor="Hand" Click="BtnDetachCompanion_Click"/>
                                     </Grid>
 
@@ -3431,7 +3431,7 @@
                                             <TextBlock Text="Idle Giggle Interval" Foreground="White" FontSize="13"/>
                                             <TextBlock Text="How often companion speaks when idle" Foreground="#707070" FontSize="11" Margin="0,2,0,0"/>
                                         </StackPanel>
-                                        <TextBlock x:Name="TxtIdleIntervalCompanion" Text="120s" Foreground="#FF69B4"
+                                        <TextBlock x:Name="TxtIdleIntervalCompanion" Text="120s" Foreground="#CC55AA"
                                                    FontSize="14" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                                     </Grid>
                                     <Slider x:Name="SliderIdleIntervalCompanion" Style="{StaticResource PinkSlider}"
@@ -3440,7 +3440,7 @@
 
                                     <!-- Customize Button -->
                                     <Button x:Name="BtnCustomizeCompanion"
-                                            Background="#252542" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
+                                            Background="#1A1A32" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
                                             Padding="10,10" FontSize="13" Cursor="Hand" Click="BtnCustomizeCompanion_Click">
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                             <TextBlock Text="Customize AI · " Foreground="White"/>
@@ -3451,9 +3451,9 @@
                             </Border>
 
                             <!-- QUICK CONTROLS BOX -->
-                            <Border Grid.Column="2" Background="#1A1A2E" CornerRadius="10" Padding="15">
+                            <Border Grid.Column="2" Background="#0D0D18" CornerRadius="10" Padding="15">
                                 <StackPanel>
-                                    <TextBlock Text="QUICK CONTROLS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
+                                    <TextBlock Text="QUICK CONTROLS" Foreground="#CC55AA" FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
 
                                     <!-- Mute Avatar -->
                                     <Grid Margin="0,0,0,12">
@@ -3499,7 +3499,7 @@
                         </Grid>
 
                         <!-- ROW 3: Triggers -->
-                        <Border Background="#1A1A2E" CornerRadius="10" Padding="15">
+                        <Border Background="#0D0D18" CornerRadius="10" Padding="15">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -3525,7 +3525,7 @@
                                         <TextBlock x:Name="TxtTriggerIntervalCompanion" Text="60s" Foreground="#9370DB"
                                                    FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0"/>
                                         <Button x:Name="BtnEditTriggersCompanion" Content="Edit Phrases"
-                                                Background="#252542" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                                Background="#1A1A32" Foreground="White" BorderBrush="#505050" BorderThickness="1"
                                                 Padding="12,4" FontSize="11" Margin="20,0,0,0" Cursor="Hand"
                                                 Click="BtnEditTriggers_Click"/>
                                     </StackPanel>
@@ -3550,7 +3550,7 @@
                         <TextBlock Style="{StaticResource SectionHeader}" Text="Patreon Exclusives" FontSize="18" Margin="0,0,0,15"/>
 
                         <!-- Patreon Login Status -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,15"
+                        <Border Background="#0D0D18" CornerRadius="8" Padding="15" Margin="0,0,0,15"
                                 BorderBrush="#FF424D" BorderThickness="1">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -3574,7 +3574,7 @@
                         </Border>
 
                         <!-- Discord Login Status -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,15"
+                        <Border Background="#0D0D18" CornerRadius="8" Padding="15" Margin="0,0,0,15"
                                 BorderBrush="#5865F2" BorderThickness="1">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -3606,7 +3606,7 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- LEVEL 1: AI Chatbot Feature Box -->
-                            <Border Grid.Column="0" Background="#1E1E3A" CornerRadius="8" Padding="15">
+                            <Border Grid.Column="0" Background="#151528" CornerRadius="8" Padding="15">
                                 <StackPanel>
                                     <!-- Locked State -->
                                     <StackPanel x:Name="AiChatLocked" Visibility="Collapsed">
@@ -3641,13 +3641,13 @@
                             </Border>
 
                             <!-- Window Awareness Feature Box (Patreon) -->
-                            <Border Grid.Column="2" Background="#1E1E3A" CornerRadius="8" Padding="15">
+                            <Border Grid.Column="2" Background="#151528" CornerRadius="8" Padding="15">
                                 <StackPanel>
                                     <!-- Locked State -->
                                     <StackPanel x:Name="AwarenessLocked" Visibility="Collapsed">
                                         <Grid>
                                             <TextBlock Text="Window Awareness" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                            <TextBlock Text="🔒 Patreon" Foreground="#9B59B6" HorizontalAlignment="Right" FontSize="12"/>
+                                            <TextBlock Text="🔒 Patreon" Foreground="#8B4DAB" HorizontalAlignment="Right" FontSize="12"/>
                                         </Grid>
                                         <TextBlock Text="Support on Patreon to unlock smart activity detection"
                                                    Foreground="{StaticResource PinkBrush}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
@@ -3696,16 +3696,16 @@
                         </Grid>
 
                         <!-- Awareness Settings (shown when enabled) -->
-                        <Border x:Name="AwarenessSettingsPanel" Background="#1E1E3A" CornerRadius="8" Padding="15" Margin="0,0,0,10" Visibility="Collapsed">
+                        <Border x:Name="AwarenessSettingsPanel" Background="#151528" CornerRadius="8" Padding="15" Margin="0,0,0,10" Visibility="Collapsed">
                             <StackPanel>
-                                <TextBlock Text="Awareness Settings" Foreground="#FF69B4" FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
+                                <TextBlock Text="Awareness Settings" Foreground="#CC55AA" FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
 
                                 <!-- Reaction Cooldown -->
-                                <Border Background="#252542" CornerRadius="6" Padding="10">
+                                <Border Background="#1A1A32" CornerRadius="6" Padding="10">
                                     <StackPanel>
                                         <Grid>
                                             <TextBlock Text="Reaction Cooldown" Foreground="White" FontSize="11"/>
-                                            <TextBlock x:Name="TxtAwarenessCooldown" Text="90s" Foreground="#FF69B4"
+                                            <TextBlock x:Name="TxtAwarenessCooldown" Text="90s" Foreground="#CC55AA"
                                                        HorizontalAlignment="Right" FontSize="11" FontWeight="Bold"/>
                                         </Grid>
                                         <Slider x:Name="SliderAwarenessCooldown"
@@ -3719,7 +3719,7 @@
                         </Border>
 
                         <!-- Slut Mode (Patreon Only) -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0">
+                        <Border Background="#0D0D18" CornerRadius="8" Padding="15" Margin="0,10,0,0">
                             <Grid>
                                 <StackPanel>
                                     <TextBlock Text="Slut Mode" Foreground="#FF6B6B" FontSize="13" FontWeight="Bold"/>
@@ -3732,8 +3732,8 @@
                                 <Border x:Name="SlutModeLocked" Background="#F01A1A2E" CornerRadius="10"
                                         HorizontalAlignment="Right" VerticalAlignment="Center"
                                         Visibility="Collapsed" IsHitTestVisible="True"
-                                        BorderBrush="#9B59B6" BorderThickness="1" Padding="8,3">
-                                    <TextBlock Text="🔒 Patreon" Foreground="#9B59B6" FontSize="10"/>
+                                        BorderBrush="#8B4DAB" BorderThickness="1" Padding="8,3">
+                                    <TextBlock Text="🔒 Patreon" Foreground="#8B4DAB" FontSize="10"/>
                                 </Border>
                             </Grid>
                         </Border>
@@ -3750,13 +3750,13 @@
 
                             <!-- Left Box: Connection Settings -->
                             <Grid Grid.Column="0">
-                                <Border x:Name="HapticsConnectionBox" Background="#1E1E3A" CornerRadius="8" Padding="15"
-                                        BorderBrush="#9B59B6" BorderThickness="1">
+                                <Border x:Name="HapticsConnectionBox" Background="#151528" CornerRadius="8" Padding="15"
+                                        BorderBrush="#8B4DAB" BorderThickness="1">
                                     <StackPanel>
                                     <Grid>
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="Haptic Connection" Foreground="#9B59B6" FontSize="14" FontWeight="Bold"/>
-                                            <TextBlock Text=" (Patreon)" Foreground="#9B59B6" FontSize="12" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Haptic Connection" Foreground="#8B4DAB" FontSize="14" FontWeight="Bold"/>
+                                            <TextBlock Text=" (Patreon)" Foreground="#8B4DAB" FontSize="12" VerticalAlignment="Center"/>
                                         </StackPanel>
                                         <CheckBox x:Name="ChkHapticsEnabled" Style="{StaticResource ToggleStyle}"
                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -3766,7 +3766,7 @@
                                         <TextBlock Text="Connect to Lovense or Buttplug.io devices" Foreground="#808080" FontSize="11"/>
                                         <Button x:Name="BtnHapticsHelp" Content="Need help setting up?"
                                                 HorizontalAlignment="Right" Background="Transparent"
-                                                Foreground="#FF69B4" BorderThickness="0" FontSize="10"
+                                                Foreground="#CC55AA" BorderThickness="0" FontSize="10"
                                                 Cursor="Hand" Click="BtnHapticsHelp_Click" Padding="0">
                                             <Button.Style>
                                                 <Style TargetType="Button">
@@ -3795,13 +3795,13 @@
 
                                     <TextBlock Text="Provider:" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
                                     <ComboBox x:Name="CmbHapticProvider" Grid.Column="1" Margin="10,0"
-                                              Background="#252542" Foreground="Black" BorderThickness="0"
+                                              Background="#1A1A32" Foreground="Black" BorderThickness="0"
                                               SelectionChanged="CmbHapticProvider_SelectionChanged">
                                         <ComboBoxItem Content="Lovense Connect" Tag="Lovense" Foreground="Black"/>
                                         <ComboBoxItem Content="Buttplug.io (Intiface)" Tag="Buttplug" Foreground="Black"/>
                                     </ComboBox>
                                     <Button x:Name="BtnHapticConnect" Grid.Column="2" Content="Connect"
-                                            Background="#FF69B4" Foreground="White"
+                                            Background="#CC55AA" Foreground="White"
                                             BorderThickness="0" Padding="12,6"
                                             FontSize="11" Cursor="Hand"
                                             Click="BtnHapticConnect_Click"/>
@@ -3818,24 +3818,24 @@
                                              BorderBrush="#404060" Padding="8,4" FontSize="11"
                                              TextChanged="TxtHapticUrl_TextChanged">
                                         <TextBox.ToolTip>
-                                            <ToolTip Background="#1E1E3A" BorderBrush="#9B59B6" BorderThickness="1" Padding="12">
+                                            <ToolTip Background="#151528" BorderBrush="#8B4DAB" BorderThickness="1" Padding="12">
                                                 <StackPanel MaxWidth="280">
-                                                    <TextBlock Text="Connection Guide" Foreground="#FF69B4" FontSize="13" FontWeight="Bold" Margin="0,0,0,8"/>
+                                                    <TextBlock Text="Connection Guide" Foreground="#CC55AA" FontSize="13" FontWeight="Bold" Margin="0,0,0,8"/>
 
-                                                    <TextBlock Text="Lovense Connect:" Foreground="#9B59B6" FontSize="11" FontWeight="Bold"/>
+                                                    <TextBlock Text="Lovense Connect:" Foreground="#8B4DAB" FontSize="11" FontWeight="Bold"/>
                                                     <TextBlock Foreground="#CCCCCC" FontSize="10" TextWrapping="Wrap" Margin="0,2,0,6">
                                                         <Run Text="1."/><Run Text=" Open Lovense Remote app" Foreground="White"/>
                                                         <LineBreak/><Run Text="2."/><Run Text=" Go to Settings → Game Mode" Foreground="White"/>
                                                         <LineBreak/><Run Text="3."/><Run Text=" Enable Game Mode, note the IP" Foreground="White"/>
-                                                        <LineBreak/><Run Text="4."/><Run Text=" Enter: http://[IP]:30010" Foreground="#FF69B4"/>
+                                                        <LineBreak/><Run Text="4."/><Run Text=" Enter: http://[IP]:30010" Foreground="#CC55AA"/>
                                                     </TextBlock>
 
-                                                    <TextBlock Text="Buttplug.io (Intiface):" Foreground="#9B59B6" FontSize="11" FontWeight="Bold"/>
+                                                    <TextBlock Text="Buttplug.io (Intiface):" Foreground="#8B4DAB" FontSize="11" FontWeight="Bold"/>
                                                     <TextBlock Foreground="#CCCCCC" FontSize="10" TextWrapping="Wrap" Margin="0,2,0,0">
                                                         <Run Text="1."/><Run Text=" Open Intiface Central" Foreground="White"/>
                                                         <LineBreak/><Run Text="2."/><Run Text=" Click 'Start Server'" Foreground="White"/>
                                                         <LineBreak/><Run Text="3."/><Run Text=" Click 'Start Scanning' for devices" Foreground="White"/>
-                                                        <LineBreak/><Run Text="4."/><Run Text=" Use: ws://localhost:12345" Foreground="#FF69B4"/>
+                                                        <LineBreak/><Run Text="4."/><Run Text=" Use: ws://localhost:12345" Foreground="#CC55AA"/>
                                                     </TextBlock>
                                                 </StackPanel>
                                             </ToolTip>
@@ -3847,7 +3847,7 @@
                                            Foreground="#808080" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
 
                                 <!-- Connection Status -->
-                                <Border Background="#252542" CornerRadius="6" Padding="10" Margin="0,10,0,0">
+                                <Border Background="#1A1A32" CornerRadius="6" Padding="10" Margin="0,10,0,0">
                                     <StackPanel>
                                         <Grid>
                                             <TextBlock Text="Status:" Foreground="#808080" FontSize="11"/>
@@ -3872,13 +3872,13 @@
                                             Minimum="0" Maximum="100" Value="70" Margin="10,0"
                                             ValueChanged="SliderHapticIntensity_ValueChanged"/>
                                     <TextBlock x:Name="TxtHapticIntensity" Grid.Column="2" Text="70%"
-                                               Foreground="#FF69B4" FontSize="11" FontWeight="Bold"/>
+                                               Foreground="#CC55AA" FontSize="11" FontWeight="Bold"/>
                                 </Grid>
 
                                 <!-- Test Button -->
                                 <Button x:Name="BtnHapticTest" Content="Test Vibration"
-                                        Background="#252542" Foreground="White"
-                                        BorderBrush="#9B59B6" BorderThickness="1"
+                                        Background="#1A1A32" Foreground="White"
+                                        BorderBrush="#8B4DAB" BorderThickness="1"
                                         Padding="12,6" Margin="0,10,0,0"
                                         HorizontalAlignment="Left" FontSize="11" Cursor="Hand"
                                         Click="BtnHapticTest_Click"/>
@@ -3888,20 +3888,20 @@
                                 <Border x:Name="HapticsConnectionLock" Background="#80000000" CornerRadius="8" Visibility="Collapsed">
                                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                         <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Patreon Only" Foreground="#9B59B6" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Patreon Only" Foreground="#8B4DAB" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
                             </Grid>
 
                             <!-- Right Box: Feature Sliders -->
                             <Grid Grid.Column="2">
-                                <Border x:Name="HapticsFeatureBox" Background="#1E1E3A" CornerRadius="8" Padding="15"
-                                        BorderBrush="#9B59B6" BorderThickness="1">
+                                <Border x:Name="HapticsFeatureBox" Background="#151528" CornerRadius="8" Padding="15"
+                                        BorderBrush="#8B4DAB" BorderThickness="1">
                                     <StackPanel>
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="Feature Intensity" Foreground="#9B59B6" FontSize="14" FontWeight="Bold"/>
-                                        <TextBlock Text=" (Patreon)" Foreground="#9B59B6" FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Feature Intensity" Foreground="#8B4DAB" FontSize="14" FontWeight="Bold"/>
+                                        <TextBlock Text=" (Patreon)" Foreground="#8B4DAB" FontSize="12" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Grid>
                                 <TextBlock Text="Adjust vibration strength per feature" Foreground="#808080" FontSize="11" Margin="0,4,0,8"/>
@@ -3923,14 +3923,14 @@
                                                     ValueChanged="SliderHapticFeature_Changed" Tag="Bubble"/>
                                             <TextBlock x:Name="TxtHapticBubble" Grid.Column="3" Text="50%" Foreground="#808080" FontSize="10" VerticalAlignment="Center"/>
                                             <ComboBox x:Name="CmbHapticBubbleMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
-                                                      Background="#252542" Foreground="#FF69B4" BorderBrush="#9B59B6"
+                                                      Background="#1A1A32" Foreground="#CC55AA" BorderBrush="#8B4DAB"
                                                       SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Bubble">
-                                                <ComboBoxItem Content="Constant" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Pulse" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Wave" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Heartbeat" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Escalate" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Earthquake" Foreground="#FF69B4"/>
+                                                <ComboBoxItem Content="Constant" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Pulse" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Wave" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Heartbeat" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Escalate" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Earthquake" Foreground="#CC55AA"/>
                                             </ComboBox>
                                         </Grid>
 
@@ -3951,14 +3951,14 @@
                                                     ValueChanged="SliderHapticFeature_Changed" Tag="FlashDisplay"/>
                                             <TextBlock x:Name="TxtHapticFlashDisplay" Grid.Column="3" Text="50%" Foreground="#808080" FontSize="10" VerticalAlignment="Center"/>
                                             <ComboBox x:Name="CmbHapticFlashDisplayMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
-                                                      Background="#252542" Foreground="#FF69B4" BorderBrush="#9B59B6"
+                                                      Background="#1A1A32" Foreground="#CC55AA" BorderBrush="#8B4DAB"
                                                       SelectionChanged="CmbHapticMode_SelectionChanged" Tag="FlashDisplay">
-                                                <ComboBoxItem Content="Constant" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Pulse" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Wave" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Heartbeat" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Escalate" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Earthquake" Foreground="#FF69B4"/>
+                                                <ComboBoxItem Content="Constant" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Pulse" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Wave" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Heartbeat" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Escalate" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Earthquake" Foreground="#CC55AA"/>
                                             </ComboBox>
                                         </Grid>
 
@@ -3979,14 +3979,14 @@
                                                     ValueChanged="SliderHapticFeature_Changed" Tag="FlashClick"/>
                                             <TextBlock x:Name="TxtHapticFlashClick" Grid.Column="3" Text="50%" Foreground="#808080" FontSize="10" VerticalAlignment="Center"/>
                                             <ComboBox x:Name="CmbHapticFlashClickMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
-                                                      Background="#252542" Foreground="#FF69B4" BorderBrush="#9B59B6"
+                                                      Background="#1A1A32" Foreground="#CC55AA" BorderBrush="#8B4DAB"
                                                       SelectionChanged="CmbHapticMode_SelectionChanged" Tag="FlashClick">
-                                                <ComboBoxItem Content="Constant" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Pulse" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Wave" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Heartbeat" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Escalate" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Earthquake" Foreground="#FF69B4"/>
+                                                <ComboBoxItem Content="Constant" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Pulse" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Wave" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Heartbeat" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Escalate" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Earthquake" Foreground="#CC55AA"/>
                                             </ComboBox>
                                         </Grid>
 
@@ -4007,14 +4007,14 @@
                                                     ValueChanged="SliderHapticFeature_Changed" Tag="Video"/>
                                             <TextBlock x:Name="TxtHapticVideo" Grid.Column="3" Text="50%" Foreground="#808080" FontSize="10" VerticalAlignment="Center"/>
                                             <ComboBox x:Name="CmbHapticVideoMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
-                                                      Background="#252542" Foreground="#FF69B4" BorderBrush="#9B59B6"
+                                                      Background="#1A1A32" Foreground="#CC55AA" BorderBrush="#8B4DAB"
                                                       SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Video">
-                                                <ComboBoxItem Content="Constant" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Pulse" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Wave" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Heartbeat" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Escalate" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Earthquake" Foreground="#FF69B4"/>
+                                                <ComboBoxItem Content="Constant" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Pulse" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Wave" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Heartbeat" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Escalate" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Earthquake" Foreground="#CC55AA"/>
                                             </ComboBox>
                                         </Grid>
 
@@ -4035,14 +4035,14 @@
                                                     ValueChanged="SliderHapticFeature_Changed" Tag="TargetHit"/>
                                             <TextBlock x:Name="TxtHapticTargetHit" Grid.Column="3" Text="70%" Foreground="#808080" FontSize="10" VerticalAlignment="Center"/>
                                             <ComboBox x:Name="CmbHapticTargetHitMode" Grid.Column="4" SelectedIndex="1" FontSize="9"
-                                                      Background="#252542" Foreground="#FF69B4" BorderBrush="#9B59B6"
+                                                      Background="#1A1A32" Foreground="#CC55AA" BorderBrush="#8B4DAB"
                                                       SelectionChanged="CmbHapticMode_SelectionChanged" Tag="TargetHit">
-                                                <ComboBoxItem Content="Constant" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Pulse" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Wave" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Heartbeat" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Escalate" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Earthquake" Foreground="#FF69B4"/>
+                                                <ComboBoxItem Content="Constant" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Pulse" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Wave" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Heartbeat" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Escalate" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Earthquake" Foreground="#CC55AA"/>
                                             </ComboBox>
                                         </Grid>
 
@@ -4063,14 +4063,14 @@
                                                     ValueChanged="SliderHapticFeature_Changed" Tag="Subliminal"/>
                                             <TextBlock x:Name="TxtHapticSubliminal" Grid.Column="3" Text="50%" Foreground="#808080" FontSize="10" VerticalAlignment="Center"/>
                                             <ComboBox x:Name="CmbHapticSubliminalMode" Grid.Column="4" SelectedIndex="1" FontSize="9"
-                                                      Background="#252542" Foreground="#FF69B4" BorderBrush="#9B59B6"
+                                                      Background="#1A1A32" Foreground="#CC55AA" BorderBrush="#8B4DAB"
                                                       SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Subliminal">
-                                                <ComboBoxItem Content="Constant" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Pulse" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Wave" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Heartbeat" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Escalate" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Earthquake" Foreground="#FF69B4"/>
+                                                <ComboBoxItem Content="Constant" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Pulse" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Wave" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Heartbeat" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Escalate" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Earthquake" Foreground="#CC55AA"/>
                                             </ComboBox>
                                         </Grid>
 
@@ -4091,14 +4091,14 @@
                                                     ValueChanged="SliderHapticFeature_Changed" Tag="LevelUp"/>
                                             <TextBlock x:Name="TxtHapticLevelUp" Grid.Column="3" Text="50%" Foreground="#808080" FontSize="10" VerticalAlignment="Center"/>
                                             <ComboBox x:Name="CmbHapticLevelUpMode" Grid.Column="4" SelectedIndex="4" FontSize="9"
-                                                      Background="#252542" Foreground="#FF69B4" BorderBrush="#9B59B6"
+                                                      Background="#1A1A32" Foreground="#CC55AA" BorderBrush="#8B4DAB"
                                                       SelectionChanged="CmbHapticMode_SelectionChanged" Tag="LevelUp">
-                                                <ComboBoxItem Content="Constant" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Pulse" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Wave" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Heartbeat" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Escalate" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Earthquake" Foreground="#FF69B4"/>
+                                                <ComboBoxItem Content="Constant" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Pulse" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Wave" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Heartbeat" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Escalate" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Earthquake" Foreground="#CC55AA"/>
                                             </ComboBox>
                                         </Grid>
 
@@ -4119,14 +4119,14 @@
                                                     ValueChanged="SliderHapticFeature_Changed" Tag="Achievement"/>
                                             <TextBlock x:Name="TxtHapticAchievement" Grid.Column="3" Text="50%" Foreground="#808080" FontSize="10" VerticalAlignment="Center"/>
                                             <ComboBox x:Name="CmbHapticAchievementMode" Grid.Column="4" SelectedIndex="3" FontSize="9"
-                                                      Background="#252542" Foreground="#FF69B4" BorderBrush="#9B59B6"
+                                                      Background="#1A1A32" Foreground="#CC55AA" BorderBrush="#8B4DAB"
                                                       SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Achievement">
-                                                <ComboBoxItem Content="Constant" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Pulse" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Wave" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Heartbeat" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Escalate" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Earthquake" Foreground="#FF69B4"/>
+                                                <ComboBoxItem Content="Constant" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Pulse" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Wave" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Heartbeat" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Escalate" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Earthquake" Foreground="#CC55AA"/>
                                             </ComboBox>
                                         </Grid>
                                         <!-- Bouncing Text -->
@@ -4146,14 +4146,14 @@
                                                     ValueChanged="SliderHapticFeature_Changed" Tag="BouncingText"/>
                                             <TextBlock x:Name="TxtHapticBouncingText" Grid.Column="3" Text="50%" Foreground="#808080" FontSize="10" VerticalAlignment="Center"/>
                                             <ComboBox x:Name="CmbHapticBouncingTextMode" Grid.Column="4" SelectedIndex="1" FontSize="9"
-                                                      Background="#252542" Foreground="#FF69B4" BorderBrush="#9B59B6"
+                                                      Background="#1A1A32" Foreground="#CC55AA" BorderBrush="#8B4DAB"
                                                       SelectionChanged="CmbHapticMode_SelectionChanged" Tag="BouncingText">
-                                                <ComboBoxItem Content="Constant" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Pulse" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Wave" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Heartbeat" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Escalate" Foreground="#FF69B4"/>
-                                                <ComboBoxItem Content="Earthquake" Foreground="#FF69B4"/>
+                                                <ComboBoxItem Content="Constant" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Pulse" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Wave" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Heartbeat" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Escalate" Foreground="#CC55AA"/>
+                                                <ComboBoxItem Content="Earthquake" Foreground="#CC55AA"/>
                                             </ComboBox>
                                         </Grid>
                                     </StackPanel>
@@ -4162,7 +4162,7 @@
                                 <Border x:Name="HapticsFeatureLock" Background="#80000000" CornerRadius="8" Visibility="Collapsed">
                                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                         <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Patreon Only" Foreground="#9B59B6" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="Patreon Only" Foreground="#8B4DAB" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
                             </Grid>
@@ -4171,15 +4171,15 @@
                             <!-- Patreon Only Overlay (hidden for Patreon supporters) -->
                             <Border x:Name="HapticsComingSoonOverlay" Background="#CC1A1A2E" CornerRadius="8">
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock Text="Patreon Only" Foreground="#FF69B4" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center">
+                                    <TextBlock Text="Patreon Only" Foreground="#CC55AA" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center">
                                         <TextBlock.Effect>
-                                            <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                                            <DropShadowEffect Color="#CC55AA" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
                                         </TextBlock.Effect>
                                     </TextBlock>
                                     <TextBlock Text="Unlock haptic feedback by supporting on Patreon"
                                                Foreground="#AAAAAA" FontSize="13" HorizontalAlignment="Center" Margin="0,8,0,0"/>
                                     <TextBlock Text="Lovense &amp; Buttplug.io support"
-                                               Foreground="#9B59B6" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                               Foreground="#8B4DAB" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
@@ -4194,13 +4194,13 @@
 
                             <!-- Left Box: Controls -->
                             <Grid Grid.Column="0">
-                                <Border Background="#1E1E3A" CornerRadius="8" Padding="12" BorderBrush="#FF69B4" BorderThickness="1">
+                                <Border Background="#151528" CornerRadius="8" Padding="12" BorderBrush="#CC55AA" BorderThickness="1">
                                     <Grid>
                                         <!-- Locked State -->
                                         <StackPanel x:Name="AutonomyLocked" Visibility="Visible">
                                             <Grid>
                                                 <TextBlock Text="🤖 Bambi Takeover" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                                <TextBlock x:Name="TxtAutonomyLockStatus" Text="🔒 Patreon Only" Foreground="#9B59B6" HorizontalAlignment="Right" FontSize="11"/>
+                                                <TextBlock x:Name="TxtAutonomyLockStatus" Text="🔒 Patreon Only" Foreground="#8B4DAB" HorizontalAlignment="Right" FontSize="11"/>
                                             </Grid>
                                             <TextBlock x:Name="TxtAutonomyLockMessage" Text="Support on Patreon to unlock" Foreground="{StaticResource PinkBrush}" FontSize="11" Margin="0,4,0,0"/>
                                         </StackPanel>
@@ -4211,8 +4211,8 @@
                                             <Grid>
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="🤖 Bambi Takeover" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
-                                                    <Border Background="#2A1A3A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" BorderBrush="#FF69B4" BorderThickness="1">
-                                                        <TextBlock Text="No engine needed" Foreground="#FF69B4" FontSize="9"/>
+                                                    <Border Background="#2A1A3A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" BorderBrush="#CC55AA" BorderThickness="1">
+                                                        <TextBlock Text="No engine needed" Foreground="#CC55AA" FontSize="9"/>
                                                     </Border>
                                                 </StackPanel>
                                             </Grid>
@@ -4231,19 +4231,19 @@
                                                         <RowDefinition Height="Auto"/>
                                                     </Grid.RowDefinitions>
                                                     <StackPanel Grid.Row="0" Grid.Column="0">
-                                                        <Grid><TextBlock Text="Interval" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyInterval" Text="60s" Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                                        <Grid><TextBlock Text="Interval" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyInterval" Text="60s" Foreground="#CC55AA" FontSize="10" HorizontalAlignment="Right"/></Grid>
                                                         <Slider x:Name="SliderAutonomyInterval" Minimum="30" Maximum="300" Value="60" Height="18" ValueChanged="SliderAutonomyInterval_Changed"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Row="0" Grid.Column="2">
-                                                        <Grid><TextBlock Text="Cooldown" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyCooldown" Text="30s" Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                                        <Grid><TextBlock Text="Cooldown" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyCooldown" Text="30s" Foreground="#CC55AA" FontSize="10" HorizontalAlignment="Right"/></Grid>
                                                         <Slider x:Name="SliderAutonomyCooldown" Minimum="10" Maximum="300" Value="30" Height="18" ValueChanged="SliderAutonomyCooldown_Changed"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Row="2" Grid.Column="0">
-                                                        <Grid><TextBlock Text="Intensity" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyIntensity" Text="5" Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                                        <Grid><TextBlock Text="Intensity" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyIntensity" Text="5" Foreground="#CC55AA" FontSize="10" HorizontalAlignment="Right"/></Grid>
                                                         <Slider x:Name="SliderAutonomyIntensity" Minimum="1" Maximum="10" Value="5" Height="18" ValueChanged="SliderAutonomyIntensity_Changed"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Row="2" Grid.Column="2">
-                                                        <Grid><TextBlock Text="Announce" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyAnnounce" Text="50%" Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                                        <Grid><TextBlock Text="Announce" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyAnnounce" Text="50%" Foreground="#CC55AA" FontSize="10" HorizontalAlignment="Right"/></Grid>
                                                         <Slider x:Name="SliderAutonomyAnnounce" Minimum="0" Maximum="100" Value="50" Height="18" ValueChanged="SliderAutonomyAnnounce_Changed"/>
                                                     </StackPanel>
                                                 </Grid>
@@ -4259,14 +4259,14 @@
                                                     </Grid.ColumnDefinitions>
                                                     <!-- Triggers -->
                                                     <StackPanel Grid.Column="0">
-                                                        <TextBlock Text="Triggers" Foreground="#FF69B4" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="Triggers" Foreground="#CC55AA" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
                                                         <Grid Margin="0,1"><TextBlock Text="Idle" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyIdle" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyIdle_Changed" Unchecked="ChkAutonomyIdle_Changed"/></Grid>
                                                         <Grid Margin="0,1"><TextBlock Text="Random" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyRandom" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyRandom_Changed" Unchecked="ChkAutonomyRandom_Changed"/></Grid>
                                                         <Grid Margin="0,1"><TextBlock Text="Time-Aware" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyTimeAware" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyTimeAware_Changed" Unchecked="ChkAutonomyTimeAware_Changed"/></Grid>
                                                     </StackPanel>
                                                     <!-- Basic -->
                                                     <StackPanel Grid.Column="2">
-                                                        <TextBlock Text="Basic" Foreground="#FF69B4" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="Basic" Foreground="#CC55AA" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
                                                         <Grid Margin="0,1"><TextBlock Text="Flashes" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                         <Grid Margin="0,1"><TextBlock Text="Videos" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                         <Grid Margin="0,1"><TextBlock Text="Subliminals" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
@@ -4274,7 +4274,7 @@
                                                     </StackPanel>
                                                     <!-- Advanced -->
                                                     <StackPanel Grid.Column="4">
-                                                        <TextBlock Text="Advanced" Foreground="#FF69B4" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="Advanced" Foreground="#CC55AA" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
                                                         <Grid Margin="0,1"><TextBlock Text="Bubbles" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBubbles" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                         <Grid Margin="0,1"><TextBlock Text="Pink Filter" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyPinkFilter" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                         <Grid Margin="0,1"><TextBlock Text="Lock Cards" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyLockCard" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
@@ -4293,7 +4293,7 @@
                                                     <Button x:Name="BtnAutonomyStartStop" Grid.Column="0" Content="▶ Start" Background="#2A1A3A" Foreground="#90EE90"
                                                             FontWeight="Bold" FontSize="12" Padding="12,6"
                                                             Click="BtnAutonomyStartStop_Click" ToolTip="Start/Stop Bambi Takeover"/>
-                                                    <Button Grid.Column="2" Content="Test" Background="#FF69B4" Foreground="White" FontWeight="Bold" FontSize="11"
+                                                    <Button Grid.Column="2" Content="Test" Background="#CC55AA" Foreground="White" FontWeight="Bold" FontSize="11"
                                                             Padding="12,6" Click="BtnTestAutonomy_Click" ToolTip="Test action"/>
                                                 </Grid>
 
@@ -4310,7 +4310,7 @@
 
                             <!-- Right Box: Feature Image -->
                             <Grid Grid.Column="2">
-                                <Border Background="#1E1E3A" CornerRadius="8" Padding="12" BorderBrush="#FF69B4" BorderThickness="1">
+                                <Border Background="#151528" CornerRadius="8" Padding="12" BorderBrush="#CC55AA" BorderThickness="1">
                                     <StackPanel>
                                         <TextBlock Text="Let Her Take Control" Foreground="{StaticResource PinkBrush}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
                                         <TextBlock Text="She will autonomously trigger effects based on your settings"
@@ -4326,15 +4326,15 @@
                         </Grid>
 
                         <!-- Patreon Info Box -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0"
-                                BorderBrush="#9B59B6" BorderThickness="1">
+                        <Border Background="#0D0D18" CornerRadius="8" Padding="15" Margin="0,10,0,0"
+                                BorderBrush="#8B4DAB" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock Text="Support Development" Foreground="#9B59B6" FontSize="14" FontWeight="Bold"/>
+                                <TextBlock Text="Support Development" Foreground="#8B4DAB" FontSize="14" FontWeight="Bold"/>
                                 <TextBlock TextWrapping="Wrap" Foreground="#808080" FontSize="12" Margin="0,8,0,0">
                                     <Run Text="Patreon unlocks:"/> <Run Text="AI Chat, Window Awareness, Slut Mode, Bambi Takeover" Foreground="White"/>
                                 </TextBlock>
                                 <Button x:Name="BtnVisitPatreon" Content="Visit Patreon"
-                                        Background="#9B59B6" Foreground="White"
+                                        Background="#8B4DAB" Foreground="White"
                                         BorderThickness="0" Padding="15,8" Margin="0,12,0,0"
                                         HorizontalAlignment="Left" FontSize="12"
                                         Cursor="Hand"
@@ -4343,7 +4343,7 @@
                         </Border>
 
                         <!-- Discord Sharing Settings -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0"
+                        <Border Background="#0D0D18" CornerRadius="8" Padding="15" Margin="0,10,0,0"
                                 BorderBrush="#5865F2" BorderThickness="1">
                             <StackPanel>
                                 <TextBlock Text="Discord Community Sharing" Foreground="#5865F2" FontSize="14" FontWeight="Bold"/>
@@ -4405,9 +4405,9 @@
                         </Border>
 
                         <!-- Patreon Status -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0">
+                        <Border Background="#0D0D18" CornerRadius="8" Padding="15" Margin="0,10,0,0">
                             <StackPanel>
-                                <TextBlock Text="Connection Status" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
+                                <TextBlock Text="Connection Status" Foreground="#CC55AA" FontSize="14" FontWeight="Bold"/>
                                 <TextBlock x:Name="TxtAiStatus" Text="Not connected" Foreground="#808080" FontSize="12" Margin="0,5,0,0"/>
                             </StackPanel>
                         </Border>
@@ -4448,14 +4448,14 @@
                                            Foreground="#80000000" Margin="2,2,0,0"/>
                                 <!-- Main text -->
                                 <TextBlock Text="LEADERBOARD" FontSize="38" FontWeight="ExtraBold" FontFamily="Segoe Print"
-                                           Foreground="#FF69B4"/>
+                                           Foreground="#CC55AA"/>
                             </Grid>
 
                             <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                <TextBlock x:Name="TxtLeaderboardStatus" Foreground="#FF69B4" VerticalAlignment="Center"
+                                <TextBlock x:Name="TxtLeaderboardStatus" Foreground="#CC55AA" VerticalAlignment="Center"
                                            Margin="0,0,15,0" FontSize="13"/>
                                 <Button x:Name="BtnRefreshLeaderboard" Content="Refresh" Padding="15,8"
-                                        Background="#FF69B4" Foreground="White" FontSize="13" FontWeight="SemiBold"
+                                        Background="#CC55AA" Foreground="White" FontSize="13" FontWeight="SemiBold"
                                         Click="BtnRefreshLeaderboard_Click" Cursor="Hand">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
@@ -4476,7 +4476,7 @@
 
                     <!-- Leaderboard list -->
                     <ListView x:Name="LstLeaderboard" Grid.Row="1" Background="Transparent"
-                              BorderThickness="0" Margin="10,5,10,10" Foreground="#FF69B4"
+                              BorderThickness="0" Margin="10,5,10,10" Foreground="#CC55AA"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               FontSize="21" FontFamily="Segoe Print" FontWeight="ExtraBold"
                               GridViewColumnHeader.Click="LeaderboardColumnHeader_Click">
@@ -4484,13 +4484,13 @@
                             <!-- Header style for dark theme - clickable for sorting -->
                             <Style TargetType="GridViewColumnHeader">
                                 <Setter Property="Background" Value="#352545"/>
-                                <Setter Property="Foreground" Value="#FF69B4"/>
+                                <Setter Property="Foreground" Value="#CC55AA"/>
                                 <Setter Property="FontWeight" Value="ExtraBold"/>
                                 <Setter Property="FontSize" Value="18"/>
                                 <Setter Property="FontFamily" Value="Segoe Print"/>
                                 <Setter Property="Padding" Value="12,10"/>
                                 <Setter Property="BorderThickness" Value="0,0,1,2"/>
-                                <Setter Property="BorderBrush" Value="#FF69B4"/>
+                                <Setter Property="BorderBrush" Value="#CC55AA"/>
                                 <Setter Property="Cursor" Value="Hand"/>
                                 <Style.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
@@ -4606,11 +4606,11 @@
                                                         <Setter Property="StrokeThickness" Value="2"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding IsOnline}" Value="True">
-                                                                <Setter Property="Fill" Value="#FF69B4"/>
+                                                                <Setter Property="Fill" Value="#CC55AA"/>
                                                                 <Setter Property="Stroke" Value="#FF85C1"/>
                                                                 <Setter Property="Effect">
                                                                     <Setter.Value>
-                                                                        <DropShadowEffect Color="#FF69B4" BlurRadius="12" ShadowDepth="0"/>
+                                                                        <DropShadowEffect Color="#CC55AA" BlurRadius="12" ShadowDepth="0"/>
                                                                     </Setter.Value>
                                                                 </Setter>
                                                             </DataTrigger>
@@ -4625,7 +4625,7 @@
                         </ListView.View>
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">
-                                <Setter Property="Foreground" Value="#FF69B4"/>
+                                <Setter Property="Foreground" Value="#CC55AA"/>
                                 <Setter Property="Background" Value="Transparent"/>
                                 <Setter Property="Padding" Value="8"/>
                                 <Setter Property="Margin" Value="0,2"/>
@@ -4696,11 +4696,11 @@
                                     Visibility="Collapsed">
                             <TextBlock x:Name="TxtBandwidthLabel" Text="Bandwidth:"
                                        Foreground="#888" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <Border Background="#1A1A2E" CornerRadius="4" Width="150" Height="16" VerticalAlignment="Center">
+                            <Border Background="#0D0D18" CornerRadius="4" Width="150" Height="16" VerticalAlignment="Center">
                                 <Grid>
                                     <ProgressBar x:Name="BandwidthProgressBar"
                                                  Minimum="0" Maximum="100" Value="0"
-                                                 Foreground="#FF69B4" Background="Transparent"
+                                                 Foreground="#CC55AA" Background="Transparent"
                                                  BorderThickness="0"/>
                                     <TextBlock x:Name="TxtBandwidthUsage" Text="0 / 10 GB"
                                                Foreground="White" FontSize="10" FontWeight="SemiBold"
@@ -4729,7 +4729,7 @@
                                                 <Border Background="#403949" CornerRadius="7" Opacity="0.5" Margin="2"/>
                                                 <Track x:Name="PART_Track" IsDirectionReversed="False">
                                                     <Track.Thumb>
-                                                        <Thumb Background="#FF69B4" Cursor="Hand">
+                                                        <Thumb Background="#CC55AA" Cursor="Hand">
                                                             <Thumb.Template>
                                                                 <ControlTemplate TargetType="Thumb">
                                                                     <Border Background="{TemplateBinding Background}"
@@ -4756,7 +4756,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Width="240" Height="300" Margin="0,0,12,0" CornerRadius="8"
-                                                Background="#252542" BorderBrush="#404060" BorderThickness="1">
+                                                Background="#1A1A32" BorderBrush="#404060" BorderThickness="1">
                                             <Grid>
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="90"/>
@@ -4764,7 +4764,7 @@
                                                 </Grid.RowDefinitions>
 
                                                 <!-- Preview Image (rotating for installed packs, static otherwise) -->
-                                                <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True" Background="#1A1A2E">
+                                                <Border Grid.Row="0" CornerRadius="8,8,0,0" ClipToBounds="True" Background="#0D0D18">
                                                     <Grid>
                                                         <!-- Rotating preview image from pack content (for installed packs with loaded previews) -->
                                                         <Image Source="{Binding CurrentPreviewImage}"
@@ -4779,7 +4779,7 @@
                                                                    HorizontalAlignment="Center" VerticalAlignment="Center"
                                                                    Visibility="{Binding HasAnyPreview, Converter={StaticResource InverseBoolToVisibility}}"/>
                                                         <!-- Size badge -->
-                                                        <Border Background="#FF69B4" CornerRadius="4" Padding="8,3"
+                                                        <Border Background="#CC55AA" CornerRadius="4" Padding="8,3"
                                                                 HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
                                                             <TextBlock Text="{Binding SizeDisplay}" FontSize="11" FontWeight="Bold" Foreground="White"/>
                                                         </Border>
@@ -4811,7 +4811,7 @@
                                                                MaxHeight="92"
                                                                VerticalAlignment="Top"
                                                                ToolTip="{Binding Description}"/>
-                                                    <TextBlock Grid.Row="2" Foreground="#FF69B4" FontSize="9" Margin="0,2,0,4" FontWeight="SemiBold">
+                                                    <TextBlock Grid.Row="2" Foreground="#CC55AA" FontSize="9" Margin="0,2,0,4" FontWeight="SemiBold">
                                                         <TextBlock.Text>
                                                             <MultiBinding StringFormat="{}{0} images, {1} videos">
                                                                 <Binding Path="ImageCount"/>
@@ -4830,7 +4830,7 @@
                                                     <!-- Progress bar -->
                                                     <ProgressBar Grid.Row="4" Height="4" Margin="0,6,0,0"
                                                                  Minimum="0" Maximum="100" Value="{Binding DownloadProgress}"
-                                                                 Foreground="#FF69B4" Background="#1A1A2E"
+                                                                 Foreground="#CC55AA" Background="#0D0D18"
                                                                  Visibility="{Binding IsDownloading, Converter={StaticResource BoolToVisibility}}"/>
                                                 </Grid>
                                             </Grid>
@@ -4841,7 +4841,7 @@
 
                             <!-- Creator Card: Join Discord -->
                             <Border Width="220" Height="300" Margin="0,0,12,0" CornerRadius="8"
-                                    Background="#252542" BorderBrush="#5865F2" BorderThickness="2">
+                                    Background="#1A1A32" BorderBrush="#5865F2" BorderThickness="2">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="90"/>
@@ -4976,7 +4976,7 @@
                         </Grid.ColumnDefinitions>
 
                         <!-- LEFT: Folder TreeView -->
-                        <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="6" Padding="4">
+                        <Border Grid.Column="0" Background="#0D0D18" CornerRadius="6" Padding="4">
                             <TreeView x:Name="AssetTreeView" Background="Transparent" BorderThickness="0"
                                       SelectedItemChanged="AssetTreeView_SelectedItemChanged"
                                       VirtualizingPanel.IsVirtualizing="True"
@@ -4995,7 +4995,7 @@
                                                         <Border Background="#403949" CornerRadius="7" Opacity="0.5" Margin="2"/>
                                                         <Track x:Name="PART_Track" IsDirectionReversed="True">
                                                             <Track.Thumb>
-                                                                <Thumb Background="#FF69B4" Cursor="Hand">
+                                                                <Thumb Background="#CC55AA" Cursor="Hand">
                                                                     <Thumb.Template>
                                                                         <ControlTemplate TargetType="Thumb">
                                                                             <Border Background="{TemplateBinding Background}"
@@ -5055,7 +5055,7 @@
                                       Background="Transparent" Cursor="SizeWE"/>
 
                         <!-- RIGHT: Thumbnail Preview Grid -->
-                        <Border Grid.Column="2" Background="#1A1A2E" CornerRadius="6" Padding="4">
+                        <Border Grid.Column="2" Background="#0D0D18" CornerRadius="6" Padding="4">
                             <Grid>
                                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <ItemsControl x:Name="ThumbnailsItemsControl">
@@ -5067,7 +5067,7 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Border Width="100" Height="120" Margin="4" CornerRadius="6"
-                                                        Background="#252542" BorderBrush="#404060" BorderThickness="2" Cursor="Hand"
+                                                        Background="#1A1A32" BorderBrush="#404060" BorderThickness="2" Cursor="Hand"
                                                         MouseLeftButtonDown="ThumbnailItem_Click">
                                                     <Grid>
                                                         <Grid.RowDefinitions>
@@ -5076,7 +5076,7 @@
                                                         </Grid.RowDefinitions>
 
                                                         <!-- Thumbnail image -->
-                                                        <Border Grid.Row="0" CornerRadius="6,6,0,0" ClipToBounds="True" Background="#1A1A2E">
+                                                        <Border Grid.Row="0" CornerRadius="6,6,0,0" ClipToBounds="True" Background="#0D0D18">
                                                             <Grid>
                                                                 <!-- Video placeholder icon (shows when IsVideo and no thumbnail) -->
                                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -5213,12 +5213,12 @@
 
         <!-- Global Drop Overlay (shown when dragging files anywhere) -->
         <Border x:Name="GlobalDropOverlay" Grid.RowSpan="5" Visibility="Collapsed" Background="#D0000000" IsHitTestVisible="False">
-            <Border Background="#1E1E3A" CornerRadius="16" BorderBrush="#FF69B4" BorderThickness="3"
+            <Border Background="#151528" CornerRadius="16" BorderBrush="#CC55AA" BorderThickness="3"
                     MaxWidth="450" MaxHeight="220" VerticalAlignment="Center" HorizontalAlignment="Center"
                     Padding="40,30">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                     <TextBlock x:Name="DropOverlayIcon" Text="📂" FontSize="48" HorizontalAlignment="Center"/>
-                    <TextBlock x:Name="DropOverlayTitle" Text="Drop to Import" Foreground="#FF69B4" FontSize="20" FontWeight="Bold"
+                    <TextBlock x:Name="DropOverlayTitle" Text="Drop to Import" Foreground="#CC55AA" FontSize="20" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,15,0,5"/>
                     <TextBlock x:Name="DropOverlaySubtitle" Text="Images, Videos, ZIPs, Folders" Foreground="#909090" FontSize="14"
                                HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
@@ -5230,7 +5230,7 @@
         <Border x:Name="MainTutorialOverlay" Grid.RowSpan="5" Panel.ZIndex="1000" Visibility="Collapsed" Background="#E8000000">
             <Grid>
                 <Border Background="Transparent" MouseLeftButtonDown="MainTutorial_Close"/>
-                <Border Background="#1E1E3A" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2"
+                <Border Background="#151528" CornerRadius="12" BorderBrush="#CC55AA" BorderThickness="2"
                         MaxWidth="700" MaxHeight="600" VerticalAlignment="Center" HorizontalAlignment="Center"
                         Margin="40" MouseLeftButtonDown="MainTutorial_ContentClick">
                     <Grid>
@@ -5241,9 +5241,9 @@
                         </Grid.RowDefinitions>
 
                         <!-- Header -->
-                        <Border Grid.Row="0" Background="#252542" CornerRadius="10,10,0,0" Padding="20,15">
+                        <Border Grid.Row="0" Background="#1A1A32" CornerRadius="10,10,0,0" Padding="20,15">
                             <Grid>
-                                <TextBlock Text="📖 How to Use the App" Foreground="#FF69B4" FontSize="18" FontWeight="Bold"
+                                <TextBlock Text="📖 How to Use the App" Foreground="#CC55AA" FontSize="18" FontWeight="Bold"
                                            HorizontalAlignment="Center"/>
                                 <Button Content="✕" Click="MainTutorial_Close" HorizontalAlignment="Right" VerticalAlignment="Top"
                                         Background="Transparent" Foreground="#888" FontSize="14" BorderThickness="0" Cursor="Hand"
@@ -5255,7 +5255,7 @@
                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20,15">
                             <StackPanel>
                                 <!-- Quick Tip -->
-                                <Border Background="#3A2542" CornerRadius="8" Padding="12" Margin="0,0,0,15" BorderBrush="#FF69B4" BorderThickness="1">
+                                <Border Background="#3A2542" CornerRadius="8" Padding="12" Margin="0,0,0,15" BorderBrush="#CC55AA" BorderThickness="1">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="💡" FontSize="16" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                         <TextBlock Text="Hover over any control for tooltips! Click a guide below to start an interactive tutorial."
@@ -5264,7 +5264,7 @@
                                 </Border>
 
                                 <!-- Getting Started -->
-                                <Border Background="#252542" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
+                                <Border Background="#1A1A32" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -5273,7 +5273,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="🚀" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Getting Started" Foreground="#FF69B4" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Getting Started" Foreground="#CC55AA" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="Quick overview of the basics - START button, adding content, essential tips" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="Start Guide" Click="BtnTutorialGettingStarted_Click"
@@ -5282,7 +5282,7 @@
                                 </Border>
 
                                 <!-- Settings Tab -->
-                                <Border Background="#252542" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
+                                <Border Background="#1A1A32" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -5291,7 +5291,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="⚙️" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Settings Tab" Foreground="#FF69B4" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Settings Tab" Foreground="#CC55AA" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="Flash images, videos, subliminals, overlays, audio, and all effect settings" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="Start Guide" Click="BtnTutorialSettings_Click"
@@ -5300,7 +5300,7 @@
                                 </Border>
 
                                 <!-- Presets Tab -->
-                                <Border Background="#252542" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
+                                <Border Background="#1A1A32" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -5309,7 +5309,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="💾" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Presets &amp; Sessions" Foreground="#FF69B4" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Presets &amp; Sessions" Foreground="#CC55AA" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="Save configurations, run timed sessions, create custom sessions with the editor" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="Start Guide" Click="BtnTutorialPresets_Click"
@@ -5318,7 +5318,7 @@
                                 </Border>
 
                                 <!-- Progression Tab -->
-                                <Border Background="#252542" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
+                                <Border Background="#1A1A32" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -5327,7 +5327,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="📊" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Progression" Foreground="#FF69B4" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Progression" Foreground="#CC55AA" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="XP system, level unlocks, scheduler, and intensity ramp settings" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="Start Guide" Click="BtnTutorialProgression_Click"
@@ -5336,7 +5336,7 @@
                                 </Border>
 
                                 <!-- Achievements Tab -->
-                                <Border Background="#252542" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
+                                <Border Background="#1A1A32" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -5345,7 +5345,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="🏆" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Achievements" Foreground="#FF69B4" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Achievements" Foreground="#CC55AA" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="Unlock achievements by reaching milestones and using features" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="Start Guide" Click="BtnTutorialAchievements_Click"
@@ -5354,7 +5354,7 @@
                                 </Border>
 
                                 <!-- Companion Tab -->
-                                <Border Background="#252542" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
+                                <Border Background="#1A1A32" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -5363,7 +5363,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="💬" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Companion Settings" Foreground="#FF69B4" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Companion Settings" Foreground="#CC55AA" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="Speech bubbles, trigger messages, and AI personality configuration" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="Start Guide" Click="BtnTutorialCompanion_Click"
@@ -5372,7 +5372,7 @@
                                 </Border>
 
                                 <!-- Patreon Tab -->
-                                <Border Background="#252542" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
+                                <Border Background="#1A1A32" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -5381,7 +5381,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="💎" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Patreon Exclusives" Foreground="#FF69B4" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Patreon Exclusives" Foreground="#CC55AA" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="AI chat, window awareness, slut mode, and premium features" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="Start Guide" Click="BtnTutorialPatreon_Click"
@@ -5390,7 +5390,7 @@
                                 </Border>
 
                                 <!-- Avatar -->
-                                <Border Background="#252542" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
+                                <Border Background="#1A1A32" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -5399,7 +5399,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="💗" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="Avatar Companion" Foreground="#FF69B4" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Avatar Companion" Foreground="#CC55AA" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="Interacting, detaching, resizing, evolution stages, and animations" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="Start Guide" Click="BtnTutorialAvatar_Click"
@@ -5408,9 +5408,9 @@
                                 </Border>
 
                                 <!-- Pro Tips -->
-                                <Border Background="#3A2542" CornerRadius="8" Padding="12" BorderBrush="#FF69B4" BorderThickness="1" Margin="0,8,0,0">
+                                <Border Background="#3A2542" CornerRadius="8" Padding="12" BorderBrush="#CC55AA" BorderThickness="1" Margin="0,8,0,0">
                                     <StackPanel>
-                                        <TextBlock Text="💡 Pro Tips" Foreground="#FF69B4" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <TextBlock Text="💡 Pro Tips" Foreground="#CC55AA" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
                                         <TextBlock Foreground="#D0B0C0" FontSize="11" TextWrapping="Wrap">
                                             <Run Text="•"/><Run Text=" assets/images" FontWeight="SemiBold"/><Run Text=" - Add your flash images here"/>
                                         </TextBlock>
@@ -5429,10 +5429,10 @@
                         </ScrollViewer>
 
                         <!-- Footer -->
-                        <Border Grid.Row="2" Background="#252542" CornerRadius="0,0,10,10" Padding="20,15">
+                        <Border Grid.Row="2" Background="#1A1A32" CornerRadius="0,0,10,10" Padding="20,15">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <Button Content="Start Interactive Tutorial" Click="BtnStartTutorial_Click" Margin="0,0,15,0"
-                                        Background="Transparent" Foreground="#FF69B4" BorderBrush="#FF69B4" BorderThickness="1"
+                                        Background="Transparent" Foreground="#CC55AA" BorderBrush="#CC55AA" BorderThickness="1"
                                         Padding="20,10" FontWeight="SemiBold" Cursor="Hand">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
