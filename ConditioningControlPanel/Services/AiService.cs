@@ -27,7 +27,7 @@ namespace ConditioningControlPanel.Services
         private int _dailyRequestCount;
         private DateTime _lastResetDate;
         private const int DailyLimit = 1000;
-        private const int MaxTokensHardCap = 60; // Hard cap on response tokens to control costs (~30 words)
+        private const int MaxTokensHardCap = 100; // Hard cap on response tokens to control costs (~50 words, enough for video names)
 
         // Fallback response when API unavailable or limit reached
         private const string FallbackResponse = "Bambi's head is so empty right now~ *giggles*";

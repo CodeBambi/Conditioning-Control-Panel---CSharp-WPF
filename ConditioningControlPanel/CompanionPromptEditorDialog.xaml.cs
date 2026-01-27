@@ -98,6 +98,13 @@ namespace ConditioningControlPanel
             settings.ContextReactions = TxtContextReactions.Text;
             settings.OutputRules = TxtOutputRules.Text;
 
+            // Auto-disable slut mode when custom prompts are enabled (they override it)
+            if (settings.UseCustomPrompt && App.Settings.Current.SlutModeEnabled)
+            {
+                App.Settings.Current.SlutModeEnabled = false;
+                App.Logger?.Information("Auto-disabled Slut Mode because custom prompts were enabled");
+            }
+
             App.Settings.Save();
             _hasUnsavedChanges = false;
 

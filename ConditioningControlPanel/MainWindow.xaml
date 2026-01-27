@@ -982,7 +982,6 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="TxtLevelLabel" Grid.Column="0" Text="LVL 1" Foreground="{StaticResource PinkBrush}"
                            FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
@@ -992,104 +991,6 @@
                 </Border>
                 <TextBlock x:Name="TxtXP" Grid.Column="2" Text="0 / 70 XP" Foreground="{StaticResource TextMutedBrush}"
                            FontSize="11" VerticalAlignment="Center" Margin="0,0,15,0"/>
-                <!-- Preset Dropdown moved here -->
-                <ComboBox x:Name="CmbPresetsXP" Grid.Column="3" Width="140"
-                          SelectionChanged="CmbPresets_SelectionChanged"
-                          ToolTip="Select a preset configuration">
-                    <ComboBox.Style>
-                        <Style TargetType="ComboBox">
-                            <Setter Property="Background" Value="#1E1E3A"/>
-                            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
-                            <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
-                            <Setter Property="BorderThickness" Value="1"/>
-                            <Setter Property="Padding" Value="6,4"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="ComboBox">
-                                        <Grid>
-                                            <ToggleButton x:Name="ToggleButton"
-                                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                                          Focusable="False" ClickMode="Press">
-                                                <ToggleButton.Template>
-                                                    <ControlTemplate TargetType="ToggleButton">
-                                                        <Border Background="#1E1E3A" BorderBrush="{StaticResource PinkBrush}"
-                                                                BorderThickness="1" CornerRadius="4" Cursor="Hand">
-                                                            <Grid>
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="*"/>
-                                                                    <ColumnDefinition Width="18"/>
-                                                                </Grid.ColumnDefinitions>
-                                                                <Path Grid.Column="1" Fill="#E0E0E0" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                      Data="M 0 0 L 4 4 L 8 0 Z"/>
-                                                            </Grid>
-                                                        </Border>
-                                                    </ControlTemplate>
-                                                </ToggleButton.Template>
-                                            </ToggleButton>
-                                            <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False"
-                                                              Content="{TemplateBinding SelectionBoxItem}"
-                                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                                              Margin="6,4,20,4" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                                <ContentPresenter.Resources>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
-                                                        <Setter Property="FontSize" Value="11"/>
-                                                    </Style>
-                                                </ContentPresenter.Resources>
-                                            </ContentPresenter>
-                                            <TextBlock x:Name="Watermark" Text="Preset" Foreground="#808090" FontSize="11"
-                                                       Margin="6,4,20,4" VerticalAlignment="Center" IsHitTestVisible="False"
-                                                       Visibility="Collapsed"/>
-                                            <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}"
-                                                   Placement="Bottom" AllowsTransparency="True" Focusable="False"
-                                                   PopupAnimation="Slide">
-                                                <Border Background="#1E1E3A" BorderBrush="{StaticResource PinkBrush}"
-                                                        BorderThickness="1" CornerRadius="4" Margin="0,2,0,0"
-                                                        MinWidth="{TemplateBinding ActualWidth}">
-                                                    <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
-                                                        <ItemsPresenter/>
-                                                    </ScrollViewer>
-                                                </Border>
-                                            </Popup>
-                                        </Grid>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="SelectedItem" Value="{x:Null}">
-                                                <Setter TargetName="Watermark" Property="Visibility" Value="Visible"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </ComboBox.Style>
-                    <ComboBox.ItemContainerStyle>
-                        <Style TargetType="ComboBoxItem">
-                            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
-                            <Setter Property="Background" Value="#1E1E3A"/>
-                            <Setter Property="Padding" Value="6,4"/>
-                            <Setter Property="FontSize" Value="11"/>
-                            <Setter Property="Cursor" Value="Hand"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="ComboBoxItem">
-                                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{StaticResource TransparentPinkBrush}"/>
-                                            </Trigger>
-                                            <Trigger Property="IsSelected" Value="True">
-                                                <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
-                                                <Setter Property="Foreground" Value="White"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </ComboBox.ItemContainerStyle>
-                </ComboBox>
             </Grid>
 
             <!-- Login overlay - shown when not logged in -->
@@ -5207,12 +5108,26 @@
                                                         </TextBlock.Text>
                                                     </TextBlock>
 
-                                                    <!-- Action Button -->
-                                                    <Button Grid.Row="3" Content="{Binding DownloadButtonText}"
-                                                            Tag="{Binding}"
-                                                            Style="{StaticResource SmallPinkButton}"
-                                                            Padding="8,4" Click="BtnPackDownload_Click"
-                                                            IsEnabled="{Binding IsNotDownloading}"/>
+                                                    <!-- Action Buttons -->
+                                                    <Grid Grid.Row="3">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="4"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <!-- Install/Uninstall Button -->
+                                                        <Button Grid.Column="0" Content="{Binding DownloadButtonText}"
+                                                                Tag="{Binding}"
+                                                                Style="{StaticResource SmallPinkButton}"
+                                                                Padding="4,4" Click="BtnPackDownload_Click"
+                                                                IsEnabled="{Binding IsNotDownloading}"/>
+                                                        <!-- Activate/Deactivate Button (only visible when downloaded) -->
+                                                        <Button Grid.Column="2" Content="{Binding ActivateButtonText}"
+                                                                Tag="{Binding}"
+                                                                Style="{StaticResource SmallPinkButton}"
+                                                                Padding="4,4" Click="BtnPackActivate_Click"
+                                                                Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVisibility}}"/>
+                                                    </Grid>
 
                                                     <!-- Progress bar -->
                                                     <ProgressBar Grid.Row="4" Height="4" Margin="0,6,0,0"

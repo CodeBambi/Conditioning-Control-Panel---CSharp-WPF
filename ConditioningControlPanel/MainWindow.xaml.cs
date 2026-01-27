@@ -33,10 +33,24 @@ namespace ConditioningControlPanel
         private const int DWMWCP_ROUND = 2;
         private const int DWMWCP_ROUNDSMALL = 3;
 
+        // Win32 API for forcing window to foreground
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        private static extern bool BringWindowToTop(IntPtr hWnd);
+
+        private const int SW_RESTORE = 9;
+        private const int SW_SHOW = 5;
+
         private bool _isRunning = false;
         private bool _isLoading = true;
         private BrowserService? _browser;
         private bool _browserInitialized = false;
+        private bool _skipSiteToggleNavigation = false;
         private List<Window> _browserFullscreenWindows = new();
         private Window? _browserPopoutWindow = null;
         private bool _isDualMonitorPlaybackActive = false;
@@ -63,6 +77,7 @@ namespace ConditioningControlPanel
         // Avatar Tube Window
         private AvatarTubeWindow? _avatarTubeWindow;
         private bool _avatarWasAttachedBeforeMaximize = false;
+        private bool _avatarWasAttachedBeforeBrowserFullscreen = false;
 
         // Auto-pause state when minimized with attached avatar
         private bool _autonomyWasPausedOnMinimize = false;
@@ -2058,9 +2073,13 @@ namespace ConditioningControlPanel
             AwarenessLocked.Visibility = level2Unlocked ? Visibility.Collapsed : Visibility.Visible;
             AwarenessUnlocked.Visibility = level2Unlocked ? Visibility.Visible : Visibility.Collapsed;
 
-            // Slut Mode lock overlay
+            // Slut Mode lock overlay (disabled when custom prompts are active)
+            var customPromptsActive = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
             SlutModeLocked.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
-            ChkSlutMode.IsEnabled = hasPremiumAccess;
+            ChkSlutMode.IsEnabled = hasPremiumAccess && !customPromptsActive;
+            ChkSlutMode.ToolTip = customPromptsActive
+                ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
+                : "Enable explicit AI responses (Patreon only)";
 
             // Haptics - unlock for all Patreon supporters
             var hasHapticsAccess = hasPremiumAccess;
@@ -2360,9 +2379,14 @@ namespace ConditioningControlPanel
             TxtTriggerIntervalCompanion.Text = $"{settings.TriggerIntervalSeconds}s";
             TriggerSettingsPanelCompanion.Visibility = settings.TriggerModeEnabled ? Visibility.Visible : Visibility.Collapsed;
 
-            // Slut Mode settings (Patreon only)
+            // Slut Mode settings (Patreon only, disabled when custom prompts active)
             var slutModeAvailable = App.Patreon?.HasPremiumAccess == true;
-            ChkSlutMode.IsChecked = slutModeAvailable && settings.SlutModeEnabled;
+            var customPromptsActiveForSlut = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
+            ChkSlutMode.IsChecked = slutModeAvailable && settings.SlutModeEnabled && !customPromptsActiveForSlut;
+            ChkSlutMode.IsEnabled = slutModeAvailable && !customPromptsActiveForSlut;
+            ChkSlutMode.ToolTip = customPromptsActiveForSlut
+                ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
+                : null;
             SlutModeLocked.Visibility = slutModeAvailable ? Visibility.Collapsed : Visibility.Visible;
 
             // Hide avatar if disabled
@@ -2423,6 +2447,22 @@ namespace ConditioningControlPanel
 
             // Refresh UI to reflect any prompt changes
             UpdateCommunityPromptsUI();
+
+            // Sync slut mode checkbox (custom prompts may have auto-disabled it)
+            _isLoading = true;
+            try
+            {
+                var customActive = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
+                ChkSlutMode.IsChecked = App.Settings?.Current?.SlutModeEnabled == true && !customActive;
+                ChkSlutMode.IsEnabled = (App.Patreon?.HasPremiumAccess == true) && !customActive;
+                ChkSlutMode.ToolTip = customActive
+                    ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
+                    : null;
+            }
+            finally
+            {
+                _isLoading = false;
+            }
         }
 
         private void ChkAiChat_Changed(object sender, RoutedEventArgs e)
@@ -2546,6 +2586,13 @@ namespace ConditioningControlPanel
                     "Patreon Only",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
+                return;
+            }
+
+            // Block when custom prompts are active
+            if (isEnabled && App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
+            {
+                ChkSlutMode.IsChecked = false;
                 return;
             }
 
@@ -5393,6 +5440,13 @@ namespace ConditioningControlPanel
         {
             if (_browser == null || !_browserInitialized) return;
 
+            // Skip navigation if we're already navigating to a specific URL (from speech bubble link)
+            if (_skipSiteToggleNavigation)
+            {
+                _skipSiteToggleNavigation = false;
+                return;
+            }
+
             var isBambiCloud = RbBambiCloud.IsChecked == true;
             var url = isBambiCloud
                 ? "https://bambicloud.com/"
@@ -5431,12 +5485,15 @@ namespace ConditioningControlPanel
                 var lowerUrl = url.ToLowerInvariant();
 
                 // Switch to correct site tab based on URL
+                // Set flag to skip the homepage navigation in the toggle handler
                 if (lowerUrl.Contains("bambicloud.com") && RbBambiCloud.IsChecked != true)
                 {
+                    _skipSiteToggleNavigation = true;
                     RbBambiCloud.IsChecked = true;
                 }
                 else if (lowerUrl.Contains("hypnotube.com") && RbHypnoTube.IsChecked != true)
                 {
+                    _skipSiteToggleNavigation = true;
                     RbHypnoTube.IsChecked = true;
                 }
 
@@ -5578,8 +5635,9 @@ namespace ConditioningControlPanel
                 if (message.Contains("\"type\":\"videoEnded\""))
                 {
                     // Video ended or fullscreen exited - notify AutonomyService
-                    App.Logger?.Information("Web video playback ended, notifying AutonomyService");
+                    App.Logger?.Information("Web video playback ended");
                     App.Autonomy?.OnWebVideoEnded();
+                    ExitBrowserFullscreen();
                 }
             }
             catch (Exception ex)
@@ -6313,6 +6371,9 @@ namespace ConditioningControlPanel
 
             try
             {
+                // Save avatar attached state before entering fullscreen
+                _avatarWasAttachedBeforeBrowserFullscreen = _avatarTubeWindow != null && !_avatarTubeWindow.IsDetached;
+
                 var allScreens = System.Windows.Forms.Screen.AllScreens.ToList();
                 if (allScreens.Count == 0)
                 {
@@ -6413,6 +6474,8 @@ namespace ConditioningControlPanel
                         _browser.ZoomFactor = 0.5;
                     }
                 }
+
+                _avatarWasAttachedBeforeBrowserFullscreen = false;
 
                 App.Logger?.Information("Browser exited fullscreen");
             }
@@ -9698,6 +9761,8 @@ namespace ConditioningControlPanel
                 if (packsNode.Children.Count > 0)
                 {
                     packsNode.FileCount = packsNode.Children.Sum(c => c.FileCount);
+                    packsNode.CheckedFileCount = packsNode.Children.Sum(c => c.GetTotalCheckedFileCount());
+                    packsNode.IsChecked = packsNode.CheckedFileCount > 0;
                     _assetTree.Add(packsNode);
                 }
             }
@@ -9731,6 +9796,10 @@ namespace ConditioningControlPanel
             var imageFiles = packFiles.Where(f => f.FileType == "image").ToList();
             if (imageFiles.Count > 0)
             {
+                // Count active images (not in DisabledAssetPaths)
+                var activeImageCount = imageFiles.Count(f =>
+                    !App.Settings.Current.DisabledAssetPaths.Contains($"pack:{packId}/{f.OriginalName}"));
+
                 var imagesNode = new AssetTreeItem
                 {
                     Name = "images",
@@ -9738,9 +9807,9 @@ namespace ConditioningControlPanel
                     IsPackFolder = true,
                     PackId = packId,
                     PackFileType = "image",
-                    IsChecked = true,
+                    IsChecked = activeImageCount > 0,
                     FileCount = imageFiles.Count,
-                    CheckedFileCount = imageFiles.Count,
+                    CheckedFileCount = activeImageCount,
                     Parent = packNode
                 };
                 packNode.Children.Add(imagesNode);
@@ -9750,6 +9819,10 @@ namespace ConditioningControlPanel
             var videoFiles = packFiles.Where(f => f.FileType == "video").ToList();
             if (videoFiles.Count > 0)
             {
+                // Count active videos (not in DisabledAssetPaths)
+                var activeVideoCount = videoFiles.Count(f =>
+                    !App.Settings.Current.DisabledAssetPaths.Contains($"pack:{packId}/{f.OriginalName}"));
+
                 var videosNode = new AssetTreeItem
                 {
                     Name = "videos",
@@ -9757,15 +9830,16 @@ namespace ConditioningControlPanel
                     IsPackFolder = true,
                     PackId = packId,
                     PackFileType = "video",
-                    IsChecked = true,
+                    IsChecked = activeVideoCount > 0,
                     FileCount = videoFiles.Count,
-                    CheckedFileCount = videoFiles.Count,
+                    CheckedFileCount = activeVideoCount,
                     Parent = packNode
                 };
                 packNode.Children.Add(videosNode);
             }
 
             packNode.FileCount = packFiles.Count;
+            packNode.IsChecked = packNode.Children.Any(c => c.IsChecked);
             return packNode;
         }
 
@@ -10230,19 +10304,7 @@ namespace ConditioningControlPanel
         {
             if (sender is CheckBox cb && cb.DataContext is AssetFileItem file)
             {
-                // Use DisabledAssetPaths (blacklist): unchecked items are in the set
-                if (file.IsChecked)
-                {
-                    App.Settings.Current.DisabledAssetPaths.Remove(file.RelativePath);
-                }
-                else
-                {
-                    App.Settings.Current.DisabledAssetPaths.Add(file.RelativePath);
-                }
-
-                // Update parent folder state
-                UpdateParentFolderCheckState();
-                UpdateAssetCounts();
+                UpdateFileCheckState(file);
             }
         }
 
@@ -10252,7 +10314,36 @@ namespace ConditioningControlPanel
             if (sender is Border border && border.DataContext is AssetFileItem file)
             {
                 file.IsChecked = !file.IsChecked;
-                ThumbnailCheckBox_Changed(sender, e);
+                UpdateFileCheckState(file);
+            }
+        }
+
+        /// <summary>
+        /// Update DisabledAssetPaths and folder state when a single file's check state changes.
+        /// </summary>
+        private void UpdateFileCheckState(AssetFileItem file)
+        {
+            // Use DisabledAssetPaths (blacklist): unchecked items are in the set
+            if (file.IsChecked)
+            {
+                App.Settings.Current.DisabledAssetPaths.Remove(file.RelativePath);
+            }
+            else
+            {
+                App.Settings.Current.DisabledAssetPaths.Add(file.RelativePath);
+            }
+
+            // Update parent folder state - set flag to prevent FolderCheckBox_Changed from
+            // propagating changes to all children when the folder's IsChecked changes
+            _isUpdatingFolderCheckState = true;
+            try
+            {
+                UpdateParentFolderCheckState();
+                UpdateAssetCounts();
+            }
+            finally
+            {
+                _isUpdatingFolderCheckState = false;
             }
         }
 
@@ -10268,43 +10359,63 @@ namespace ConditioningControlPanel
 
         private void BtnSelectAllAssets_Click(object sender, RoutedEventArgs e)
         {
-            // Update DisabledAssetPaths (clear all = everything enabled)
-            foreach (var folder in _assetTree)
+            if (_selectedFolder == null) return;
+
+            _isUpdatingFolderCheckState = true;
+            try
             {
-                UpdateFolderFilesCheckState(folder, true);
+                // Update DisabledAssetPaths only for selected folder and subfolders
+                UpdateFolderFilesCheckState(_selectedFolder, true);
+
+                // Update visual state for selected folder and children
+                SetFolderAndChildrenChecked(_selectedFolder, true);
+
+                // Propagate changes up to parent folders
+                _selectedFolder.Parent?.UpdateCheckStateFromChildren();
+
+                // Sync thumbnail checkboxes
+                RefreshThumbnailCheckboxes();
+                UpdateAssetCounts();
             }
-
-            // Recalculate all folder check states from DisabledAssetPaths
-            RecalculateAllFolderCheckStates();
-
-            // Sync thumbnail checkboxes
-            RefreshThumbnailCheckboxes();
-            UpdateAssetCounts();
+            finally
+            {
+                _isUpdatingFolderCheckState = false;
+            }
         }
 
         private void BtnDeselectAllAssets_Click(object sender, RoutedEventArgs e)
         {
-            // Update DisabledAssetPaths (add all = everything disabled)
-            foreach (var folder in _assetTree)
+            if (_selectedFolder == null) return;
+
+            _isUpdatingFolderCheckState = true;
+            try
             {
-                UpdateFolderFilesCheckState(folder, false);
+                // Update DisabledAssetPaths only for selected folder and subfolders
+                UpdateFolderFilesCheckState(_selectedFolder, false);
+
+                // Update visual state for selected folder and children
+                SetFolderAndChildrenChecked(_selectedFolder, false);
+
+                // Propagate changes up to parent folders
+                _selectedFolder.Parent?.UpdateCheckStateFromChildren();
+
+                // Sync thumbnail checkboxes
+                RefreshThumbnailCheckboxes();
+                UpdateAssetCounts();
             }
-
-            // Recalculate all folder check states from DisabledAssetPaths
-            RecalculateAllFolderCheckStates();
-
-            // Sync thumbnail checkboxes
-            RefreshThumbnailCheckboxes();
-            UpdateAssetCounts();
+            finally
+            {
+                _isUpdatingFolderCheckState = false;
+            }
         }
 
         private void BtnSaveAssetSelection_Click(object sender, RoutedEventArgs e)
         {
             App.Settings.Save();
 
-            // Clear caches so services pick up new selection
-            App.Flash?.ClearFileCache();
-            App.Video?.RefreshVideosPath();
+            // Fully reload asset pools so services pick up new selection
+            App.Flash?.LoadAssets();
+            App.Video?.ReloadAssets();
 
             var disabledCount = App.Settings.Current.DisabledAssetPaths.Count;
             var message = disabledCount > 0
@@ -10788,8 +10899,9 @@ namespace ConditioningControlPanel
                         pack.PreviewImages.Clear(); // Clear preview images
 
                         // UI updates automatically via data binding
-
                         RefreshAssetTree();
+                        App.Flash?.LoadAssets();
+                        App.Video?.ReloadAssets();
                         MessageBox.Show($"'{pack.Name}' has been uninstalled.", "Uninstalled", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (Exception ex)
@@ -10823,8 +10935,9 @@ namespace ConditioningControlPanel
 
                         // UI updates automatically via data binding
                         // Preview images are loaded by OnPackDownloadCompleted event handler
-
                         RefreshAssetTree();
+                        App.Flash?.LoadAssets();
+                        App.Video?.ReloadAssets();
                         MessageBox.Show($"'{pack.Name}' installed successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (UnauthorizedAccessException)
@@ -10848,6 +10961,38 @@ namespace ConditioningControlPanel
                         pack.IsDownloading = false;
                         pack.DownloadProgress = 0;
                     }
+                }
+            }
+        }
+
+        private void BtnPackActivate_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is ContentPack pack && pack.IsDownloaded)
+            {
+                try
+                {
+                    if (pack.IsActive)
+                    {
+                        // Deactivate pack (hide but keep downloaded)
+                        App.ContentPacks?.DeactivatePack(pack.Id);
+                        pack.IsActive = false;
+                    }
+                    else
+                    {
+                        // Activate pack (show in assets)
+                        App.ContentPacks?.ActivatePack(pack.Id);
+                        pack.IsActive = true;
+                    }
+
+                    // Refresh asset tree UI and reload asset pools
+                    RefreshAssetTree();
+                    App.Flash?.LoadAssets();
+                    App.Video?.ReloadAssets();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Failed to toggle pack activation: {Name}", pack.Name);
+                    MessageBox.Show($"Failed to update pack: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }

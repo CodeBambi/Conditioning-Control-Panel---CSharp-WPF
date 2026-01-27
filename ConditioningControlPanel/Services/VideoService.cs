@@ -181,7 +181,23 @@ namespace ConditioningControlPanel.Services
             _videosPath = Path.Combine(App.EffectiveAssetsPath, "videos");
             Directory.CreateDirectory(_videosPath);
             _videoQueue.Clear();
+            _packVideoQueue.Clear();
             App.Logger?.Information("VideoService: Videos path refreshed to {Path}", _videosPath);
+        }
+
+        /// <summary>
+        /// Reloads all video assets (regular and pack videos).
+        /// Call this when pack activation state changes.
+        /// </summary>
+        public void ReloadAssets()
+        {
+            var beforeRegular = _videoQueue.Count;
+            var beforePack = _packVideoQueue.Count;
+            _videoQueue.Clear();
+            _packVideoQueue.Clear();
+            CleanupTempPackFiles();
+            App.Logger?.Information("VideoService: Assets reloaded - cleared queues (was {RegularCount} regular, {PackCount} pack)",
+                beforeRegular, beforePack);
         }
 
         /// <summary>
@@ -2028,6 +2044,14 @@ namespace ConditioningControlPanel.Services
 
             // Load pack videos from active packs
             var packVideos = App.ContentPacks?.GetAllActivePackVideos() ?? new List<(string, PackFileEntry)>();
+
+            // Log which packs the videos are coming from
+            var packVideosByPack = packVideos.GroupBy(v => v.PackId).ToList();
+            foreach (var group in packVideosByPack)
+            {
+                App.Logger?.Information("VideoService: Pack '{PackId}' contributing {Count} videos", group.Key, group.Count());
+            }
+
             _packVideoQueue = new Queue<(string, PackFileEntry)>(packVideos.OrderBy(_ => _random.Next()));
 
             App.Logger?.Information("VideoService: Queues refilled - {RegularCount} regular videos, {PackCount} pack videos (path: {Path})",

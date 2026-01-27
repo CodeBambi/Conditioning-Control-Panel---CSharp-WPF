@@ -639,7 +639,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void ActivatePack(string packId)
         {
-            if (!App.Settings.Current.ActivePackIds.Contains(packId))
+            var wasAlreadyActive = App.Settings.Current.ActivePackIds.Contains(packId);
+            if (!wasAlreadyActive)
             {
                 App.Settings.Current.ActivePackIds.Add(packId);
                 App.Settings.Save();
@@ -651,7 +652,8 @@ namespace ConditioningControlPanel.Services
                 pack.IsActive = true;
             }
 
-            App.Logger?.Information("Pack activated: {Id}", packId);
+            App.Logger?.Information("Pack activated: {Id}, WasAlreadyActive={WasAlreadyActive}, Total={Total}",
+                packId, wasAlreadyActive, App.Settings.Current.ActivePackIds.Count);
         }
 
         /// <summary>
@@ -659,7 +661,9 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void DeactivatePack(string packId)
         {
-            App.Settings.Current.ActivePackIds.Remove(packId);
+            var beforeCount = App.Settings.Current.ActivePackIds.Count;
+            var wasRemoved = App.Settings.Current.ActivePackIds.Remove(packId);
+            var afterCount = App.Settings.Current.ActivePackIds.Count;
             App.Settings.Save();
 
             var pack = _availablePacks.FirstOrDefault(p => p.Id == packId);
@@ -668,7 +672,8 @@ namespace ConditioningControlPanel.Services
                 pack.IsActive = false;
             }
 
-            App.Logger?.Information("Pack deactivated: {Id}", packId);
+            App.Logger?.Information("Pack deactivated: {Id}, WasRemoved={WasRemoved}, Before={Before}, After={After}, Remaining={Remaining}",
+                packId, wasRemoved, beforeCount, afterCount, string.Join(",", App.Settings.Current.ActivePackIds));
         }
 
         /// <summary>
@@ -834,7 +839,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public List<string> GetActivePackIds()
         {
-            return App.Settings?.Current?.ActivePackIds?.ToList() ?? new List<string>();
+            var ids = App.Settings?.Current?.ActivePackIds?.ToList() ?? new List<string>();
+            App.Logger?.Information("ContentPackService.GetActivePackIds: Returning {Count} active packs: [{Ids}]",
+                ids.Count, string.Join(", ", ids));
+            return ids;
         }
 
         /// <summary>
@@ -844,11 +852,18 @@ namespace ConditioningControlPanel.Services
         public List<(string PackId, PackFileEntry File)> GetAllActivePackVideos()
         {
             var result = new List<(string, PackFileEntry)>();
+            var disabledPaths = App.Settings?.Current?.DisabledAssetPaths;
             foreach (var packId in GetActivePackIds())
             {
                 var videos = GetPackFiles(packId, "video");
                 foreach (var video in videos)
                 {
+                    // Filter out individually disabled pack files
+                    if (disabledPaths != null && disabledPaths.Contains($"pack:{packId}/{video.OriginalName}"))
+                    {
+                        App.Logger?.Debug("ContentPacks: Skipping disabled pack video: pack:{PackId}/{Name}", packId, video.OriginalName);
+                        continue;
+                    }
                     result.Add((packId, video));
                 }
             }
@@ -862,11 +877,18 @@ namespace ConditioningControlPanel.Services
         public List<(string PackId, PackFileEntry File)> GetAllActivePackImages()
         {
             var result = new List<(string, PackFileEntry)>();
+            var disabledPaths = App.Settings?.Current?.DisabledAssetPaths;
             foreach (var packId in GetActivePackIds())
             {
                 var images = GetPackFiles(packId, "image");
                 foreach (var image in images)
                 {
+                    // Filter out individually disabled pack files
+                    if (disabledPaths != null && disabledPaths.Contains($"pack:{packId}/{image.OriginalName}"))
+                    {
+                        App.Logger?.Debug("ContentPacks: Skipping disabled pack image: pack:{PackId}/{Name}", packId, image.OriginalName);
+                        continue;
+                    }
                     result.Add((packId, image));
                 }
             }
