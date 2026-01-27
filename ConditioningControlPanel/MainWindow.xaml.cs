@@ -1385,10 +1385,10 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Open Discord user profile using the correct protocol format
+                    // Open Discord user profile in browser - user can click "Open Discord" from there
                     Process.Start(new ProcessStartInfo
                     {
-                        FileName = $"discord://-/users/{discordId}",
+                        FileName = $"https://discord.com/users/{discordId}",
                         UseShellExecute = true
                     });
                 }
