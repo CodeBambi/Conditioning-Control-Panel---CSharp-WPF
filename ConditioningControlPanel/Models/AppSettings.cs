@@ -1834,6 +1834,17 @@ namespace ConditioningControlPanel.Models
             set { _autonomyCanTriggerBubbleCount = value; OnPropertyChanged(); }
         }
 
+        private bool _autonomyCanTriggerWebVideo = false;
+        /// <summary>
+        /// Allow autonomous web video playback from HypnoTube (plays fullscreen in browser)
+        /// </summary>
+        [JsonProperty]
+        public bool AutonomyCanTriggerWebVideo
+        {
+            get => _autonomyCanTriggerWebVideo;
+            set { _autonomyCanTriggerWebVideo = value; OnPropertyChanged(); }
+        }
+
         private int _autonomyAnnouncementChance = 50;
         /// <summary>
         /// Chance (0-100%) that she announces before triggering an action

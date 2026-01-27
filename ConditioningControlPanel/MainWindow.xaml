@@ -889,7 +889,39 @@
                             <TextBlock Text="Assets" FontSize="10"/>
                         </StackPanel>
                     </Button>
-                    <Button Grid.Column="4" x:Name="BtnPatreonExclusives" Tag="Patreon" Click="BtnPatreonExclusives_Click"
+                    <Button Grid.Column="4" x:Name="BtnDiscordTab" Tag="Discord" Click="BtnDiscordTab_Click"
+                            ToolTip="Discord Community Features" Cursor="Hand" Height="28" Margin="2,0">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="#5865F2"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                                <Setter Property="FontSize" Value="10"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                    CornerRadius="6" BorderThickness="2" BorderBrush="#4752C4"
+                                                    Padding="8,4">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="#4752C4"/>
+                                                    <Setter TargetName="border" Property="BorderBrush" Value="#5865F2"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="💬" FontSize="11" Margin="0,0,4,0"/>
+                            <TextBlock Text="Discord" FontSize="10"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="5" x:Name="BtnPatreonExclusives" Tag="Patreon" Click="BtnPatreonExclusives_Click"
                             ToolTip="View Patreon exclusive features" Cursor="Hand" Height="28" Margin="2,0">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -921,7 +953,7 @@
                             <TextBlock Text="Patreon Exclusives" FontSize="10"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="BtnMainHelp" Grid.Column="5" Content="?" Click="BtnMainHelp_Click"
+                    <Button x:Name="BtnMainHelp" Grid.Column="6" Content="?" Click="BtnMainHelp_Click"
                             Width="28" Height="28" ToolTip="How to use the app" Margin="3,0">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
@@ -4267,6 +4299,7 @@
                                                         <TextBlock Text="Basic" Foreground="#CC55AA" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
                                                         <Grid Margin="0,1"><TextBlock Text="Flashes" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                         <Grid Margin="0,1"><TextBlock Text="Videos" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                        <Grid Margin="0,1"><TextBlock Text="Web Videos" FontSize="10" Foreground="#CCC" ToolTip="Auto-plays HypnoTube videos fullscreen"/><CheckBox x:Name="ChkAutonomyWebVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                         <Grid Margin="0,1"><TextBlock Text="Subliminals" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                         <Grid Margin="0,1"><TextBlock Text="Comments" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyComment" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                     </StackPanel>
@@ -4414,6 +4447,69 @@
             </Border>
         </Grid>
 
+<!-- Discord Tab -->        <Grid x:Name="DiscordTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="10"/><RowDefinition Height="*"/></Grid.RowDefinitions>            <Border Grid.Column="0" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1"><Grid>
+                <!-- Not logged in state -->
+                <StackPanel x:Name="DiscordProfileNotLoggedIn" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="Player Profile" Foreground="#5865F2" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <Border Background="#1A1A32" CornerRadius="8" Padding="30" Margin="0,30,0,0">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="Not Connected" Foreground="#5865F2" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Login with Discord to see your profile" Foreground="#808080" FontSize="13" TextWrapping="Wrap" TextAlignment="Center" Margin="0,15,0,0" MaxWidth="280"/>
+                            <Button Content="Login with Discord" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="20,10" Margin="0,20,0,0" FontWeight="Bold" FontSize="12" Cursor="Hand" Click="BtnDiscordTabLogin_Click"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+                <!-- Logged in state - actual profile -->
+                <StackPanel x:Name="DiscordProfileLoggedIn" Visibility="Collapsed" Margin="20">
+                    <TextBlock Text="Player Profile" Foreground="#5865F2" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+                    <!-- Avatar and name -->
+                    <StackPanel HorizontalAlignment="Center">
+                        <Border Width="120" Height="120" CornerRadius="60" BorderBrush="#5865F2" BorderThickness="3" HorizontalAlignment="Center">
+                            <Border.Background>
+                                <ImageBrush x:Name="DiscordAvatarBrush" Stretch="UniformToFill"/>
+                            </Border.Background>
+                        </Border>
+                        <TextBlock x:Name="TxtDiscordProfileName" Text="Username" Foreground="White" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,15,0,0"/>
+                        <TextBlock x:Name="TxtDiscordProfileHandle" Text="@handle" Foreground="#808080" FontSize="13" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <!-- Level display -->
+                    <Border Background="#1A1A32" CornerRadius="12" Padding="20" Margin="0,25,0,0">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="LEVEL" Foreground="#5865F2" FontSize="14" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtDiscordProfileLevel" Grid.Column="1" Text="1" Foreground="#5865F2" FontSize="28" FontWeight="ExtraBold" Margin="0,-5,0,0"/>
+                            </Grid>
+                            <Border Background="#252545" CornerRadius="4" Height="8" Margin="0,10,0,5">
+                                <Border x:Name="DiscordProfileXpBar" Background="#5865F2" CornerRadius="4" HorizontalAlignment="Left" Width="0"/>
+                            </Border>
+                            <TextBlock x:Name="TxtDiscordProfileXp" Text="0 / 100 XP" Foreground="#808080" FontSize="11" HorizontalAlignment="Right"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- Stats -->
+                    <Border Background="#1A1A32" CornerRadius="12" Padding="15" Margin="0,15,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtDiscordProfileAchievements" Text="0" Foreground="#5865F2" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Achievements" Foreground="#808080" FontSize="11" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtDiscordProfileTime" Text="0h" Foreground="#5865F2" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Total Time" Foreground="#808080" FontSize="11" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <!-- Logout button -->
+                    <Button Content="Logout" Background="#404060" Foreground="White" BorderThickness="0" Padding="15,8" Margin="0,20,0,0" FontWeight="Bold" FontSize="11" Cursor="Hand" HorizontalAlignment="Center" Click="BtnDiscordTabLogin_Click"/>
+                </StackPanel>
+            </Grid></Border>            <Border Grid.Column="2" Grid.Row="0" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="10"><TextBlock Text="Community Settings" Foreground="#5865F2" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/><Border Background="#0D0D18" CornerRadius="8" Padding="15" Margin="0,0,0,12" BorderBrush="#5865F2" BorderThickness="1"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock x:Name="TxtDiscordTabStatus" Text="Not Connected" Foreground="White" FontSize="14" FontWeight="Bold"/><TextBlock x:Name="TxtDiscordTabInfo" Text="Link Discord for community features" Foreground="#808080" FontSize="11" Margin="0,2,0,0"/></StackPanel><Button x:Name="BtnDiscordTabLogin" Grid.Column="1" Content="Login with Discord" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,8" FontWeight="Bold" FontSize="11" Cursor="Hand" Click="BtnDiscordTabLogin_Click"/></Grid></Border><Border Background="#151528" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Discord Rich Presence" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Show your activity status" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabRichPresence" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"/></Grid></Border><Border Background="#151528" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Show Level in Status" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Display your level" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShowLevel" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkShowLevelInPresence_Changed" Unchecked="ChkShowLevelInPresence_Changed"/></Grid></Border><TextBlock Text="Community Sharing" Foreground="#5865F2" FontSize="13" FontWeight="Bold" Margin="0,12,0,10"/><Border Background="#151528" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Achievements" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post achievements to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareAchievements" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareAchievements_Changed" Unchecked="ChkShareAchievements_Changed"/></Grid></Border><Border Background="#151528" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Level Milestones" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post level ups to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareLevelUps" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareLevelUps_Changed" Unchecked="ChkShareLevelUps_Changed"/></Grid></Border><Border Background="#151528" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Use Display Name" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Privacy option" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabAnonymous" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkUseAnonymousName_Changed" Unchecked="ChkUseAnonymousName_Changed"/></Grid></Border><Border Background="#151528" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Allow DMs from Leaderboard" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Let others message you" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabAllowDm" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkAllowDiscordDm_Changed" Unchecked="ChkAllowDiscordDm_Changed"/></Grid></Border><TextBlock Text="All sharing is opt-in." Foreground="#5865F2" FontSize="10" FontStyle="Italic" Margin="0,10,0,0"/><Button Content="Join Discord Server" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,12" Margin="0,15,0,0" FontWeight="Bold" FontSize="12" Cursor="Hand" Click="BtnDiscord_Click"/></StackPanel></ScrollViewer></Border>            <Border Grid.Column="2" Grid.Row="2" Style="{StaticResource SectionPanel}" BorderBrush="#404060" BorderThickness="1"><StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"><TextBlock Text="More Coming Soon" Foreground="#606080" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center"/><TextBlock Text="Additional Discord features will appear here" Foreground="#505060" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" Margin="0,10,0,0"/></StackPanel></Border>        </Grid>
         <!-- Leaderboard Tab -->
         <Grid x:Name="LeaderboardTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
             <Border CornerRadius="12">

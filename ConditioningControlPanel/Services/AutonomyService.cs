@@ -23,7 +23,8 @@ namespace ConditioningControlPanel.Services
         SpiralPulse,
         PinkFilterPulse,
         BouncingText,
-        BubbleCount
+        BubbleCount,
+        WebVideo
     }
 
     /// <summary>
@@ -94,6 +95,7 @@ namespace ConditioningControlPanel.Services
         private bool _pinkFilterPulseActive = false;
         private bool _bubblesPulseActive = false;
         private bool _bouncingTextPulseActive = false;
+        private bool _webVideoActive = false; // Blocks all actions while web video plays fullscreen
         // Separate generation counters for each pulse type to avoid cross-invalidation
         private int _spiralPulseGeneration = 0;
         private int _pinkFilterPulseGeneration = 0;
@@ -188,6 +190,13 @@ namespace ConditioningControlPanel.Services
                 "How many bubbles?",
                 "Test your focus~",
                 "Counting game time~"
+            }},
+            { AutonomyActionType.WebVideo, new[] {
+                "Time to watch something special~",
+                "I picked a video just for you~",
+                "Sit back and let it sink in~",
+                "Watch and absorb~",
+                "Fullscreen time~"
             }}
         };
 
@@ -714,6 +723,13 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
+            // Don't take actions while web video is playing fullscreen
+            if (_webVideoActive)
+            {
+                App.Logger?.Debug("AutonomyService: CanTakeAction=false - web video playing fullscreen");
+                return false;
+            }
+
             // Don't interrupt active fullscreen interaction (video, bubble count, lock card)
             if (App.InteractionQueue?.IsBusy == true)
             {
@@ -834,6 +850,10 @@ namespace ConditioningControlPanel.Services
 
             if (settings.AutonomyCanTriggerBouncingText && settings.PlayerLevel >= 60)
                 candidates.Add((AutonomyActionType.BouncingText, 15));
+
+            // Web video - plays random HypnoTube video fullscreen in browser
+            if (settings.AutonomyCanTriggerWebVideo && !_webVideoActive)
+                candidates.Add((AutonomyActionType.WebVideo, 20));
 
             // Note: BubbleCount removed from autonomy - too disruptive and unreliable
 
@@ -1046,6 +1066,10 @@ namespace ConditioningControlPanel.Services
                             // forceTest: true bypasses running/level checks
                             App.BubbleCount?.TriggerGame(forceTest: true);
                             break;
+
+                        case AutonomyActionType.WebVideo:
+                            TriggerWebVideoFullscreen();
+                            break;
                     }
 
                     App.Logger?.Information("Autonomy: Performed {Action} (Source: {Source})",
@@ -1091,6 +1115,63 @@ namespace ConditioningControlPanel.Services
                     }
                 });
             });
+        }
+
+        /// <summary>
+        /// Trigger a random web video from HypnoTube to play fullscreen in the browser
+        /// </summary>
+        private void TriggerWebVideoFullscreen()
+        {
+            if (_webVideoActive)
+            {
+                App.Logger?.Information("AutonomyService: Web video already active, skipping");
+                return;
+            }
+
+            var videoLinks = AvatarTubeWindow.KnownVideoLinks;
+            if (videoLinks == null || videoLinks.Count == 0)
+            {
+                App.Logger?.Warning("AutonomyService: No known video links available");
+                return;
+            }
+
+            // Pick a random video
+            var videoList = videoLinks.ToList();
+            var randomVideo = videoList[_random.Next(videoList.Count)];
+            var videoName = randomVideo.Key;
+            var videoUrl = randomVideo.Value;
+
+            App.Logger?.Information("AutonomyService: Playing web video '{Name}' fullscreen", videoName);
+
+            // Mark video as active - blocks other autonomy actions
+            _webVideoActive = true;
+
+            // Navigate to video with fullscreen autoplay
+            var mainWindow = Application.Current?.MainWindow as MainWindow;
+            if (mainWindow?.NavigateToUrlInBrowser(videoUrl, autoPlayFullscreen: true) == true)
+            {
+                // Announce what we're playing via avatar
+                App.AvatarWindow?.GigglePriority($"Watch {videoName}~", false);
+            }
+            else
+            {
+                // Navigation failed - reset state
+                _webVideoActive = false;
+                App.Logger?.Warning("AutonomyService: Failed to navigate to web video");
+            }
+        }
+
+        /// <summary>
+        /// Called by MainWindow when a web video finishes or exits fullscreen.
+        /// Resets the web video active state to allow other autonomy actions.
+        /// </summary>
+        public void OnWebVideoEnded()
+        {
+            if (_webVideoActive)
+            {
+                _webVideoActive = false;
+                App.Logger?.Information("AutonomyService: Web video ended, autonomy actions resumed");
+            }
         }
 
         /// <summary>

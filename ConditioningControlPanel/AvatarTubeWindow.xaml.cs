@@ -2094,7 +2094,7 @@ namespace ConditioningControlPanel
         /// Exact HypnoTube video titles mapped to URLs.
         /// Names match exactly as shown on HypnoTube.
         /// </summary>
-        private static readonly Dictionary<string, string> KnownVideoLinks = new(StringComparer.OrdinalIgnoreCase)
+        internal static readonly Dictionary<string, string> KnownVideoLinks = new(StringComparer.OrdinalIgnoreCase)
         {
             { "Naughty Bambi", "https://hypnotube.com/video/naughty-bambi-109749.html" },
             { "Bambi Bae", "https://hypnotube.com/video/bambi-bae-113979.html" },

@@ -1236,6 +1236,7 @@ namespace ConditioningControlPanel
             PatreonTab.Visibility = Visibility.Collapsed;
             LeaderboardTab.Visibility = Visibility.Collapsed;
             AssetsTab.Visibility = Visibility.Collapsed;
+            DiscordTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive
             var inactiveStyle = FindResource("TabButton") as Style;
@@ -1307,6 +1308,12 @@ namespace ConditioningControlPanel
                     RefreshAssetTree();
                     InitializeAssetPresets();
                     _ = RefreshPacksAsync();
+                    break;
+
+                case "discord":
+                    DiscordTab.Visibility = Visibility.Visible;
+                    // BtnDiscordTab keeps its inline Discord blue style defined in XAML
+                    UpdateDiscordTabUI();
                     break;
             }
         }
@@ -5303,7 +5310,13 @@ namespace ConditioningControlPanel
                     BrowserLoadingText.Visibility = Visibility.Collapsed;
                     BrowserContainer.Children.Add(webView);
                     _browserInitialized = true;
-                    
+
+                    // Listen for messages from JavaScript (video ended, fullscreen exit, etc.)
+                    if (webView.CoreWebView2 != null)
+                    {
+                        webView.CoreWebView2.WebMessageReceived += OnBrowserWebMessageReceived;
+                    }
+
                     App.Logger?.Information("Browser initialized - Bambi Cloud loaded");
                 }
                 else
@@ -5382,6 +5395,11 @@ namespace ConditioningControlPanel
 
             try
             {
+                // Bring window to focus and show the Settings tab (where the browser is)
+                ShowTab("settings");
+                Activate();
+                Focus();
+
                 var lowerUrl = url.ToLowerInvariant();
 
                 // Switch to correct site tab based on URL
@@ -5431,6 +5449,7 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Injects JavaScript to find the video element, play it, and request fullscreen.
         /// Also adds handlers for: video ended (exit fullscreen), double-click (exit fullscreen).
+        /// Notifies AutonomyService when video playback ends.
         /// </summary>
         private async Task AutoPlayAndFullscreenVideoAsync()
         {
@@ -5442,10 +5461,21 @@ namespace ConditioningControlPanel
                 await Task.Delay(1500);
 
                 // JavaScript to find video, play it, request fullscreen, and add event handlers
+                // Posts message back to C# when video ends or fullscreen exits
                 var script = @"
                     (function() {
                         const video = document.querySelector('video');
                         if (video) {
+                            let notified = false;
+
+                            // Notify C# that video playback ended
+                            const notifyVideoEnded = (reason) => {
+                                if (!notified) {
+                                    notified = true;
+                                    window.chrome.webview.postMessage({ type: 'videoEnded', reason: reason });
+                                }
+                            };
+
                             // Exit fullscreen helper
                             const exitFullscreen = () => {
                                 if (document.exitFullscreen) {
@@ -5457,21 +5487,30 @@ namespace ConditioningControlPanel
                                 }
                             };
 
-                            // When video ends, exit fullscreen
+                            // When video ends, exit fullscreen and notify
                             video.addEventListener('ended', () => {
                                 console.log('Video ended, exiting fullscreen');
                                 exitFullscreen();
+                                notifyVideoEnded('ended');
                             }, { once: true });
 
-                            // Double-click to exit fullscreen
+                            // Double-click to exit fullscreen and notify
                             video.addEventListener('dblclick', (e) => {
                                 if (document.fullscreenElement || document.webkitFullscreenElement) {
                                     console.log('Double-click, exiting fullscreen');
                                     exitFullscreen();
+                                    notifyVideoEnded('doubleclick');
                                     e.preventDefault();
                                     e.stopPropagation();
                                 }
                             });
+
+                            // Also notify when fullscreen is exited by any means (Escape key, etc.)
+                            document.addEventListener('fullscreenchange', () => {
+                                if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                                    notifyVideoEnded('fullscreenExit');
+                                }
+                            }, { once: true });
 
                             // Start playing and go fullscreen
                             video.muted = false;
@@ -5497,10 +5536,148 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Handles messages from JavaScript in the browser (video ended, fullscreen exit, etc.)
+        /// </summary>
+        private void OnBrowserWebMessageReceived(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            try
+            {
+                var message = e.WebMessageAsJson;
+                App.Logger?.Debug("Browser web message received: {Message}", message);
+
+                // Parse the JSON message
+                if (message.Contains("\"type\":\"videoEnded\""))
+                {
+                    // Video ended or fullscreen exited - notify AutonomyService
+                    App.Logger?.Information("Web video playback ended, notifying AutonomyService");
+                    App.Autonomy?.OnWebVideoEnded();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to process browser web message");
+            }
+        }
+
         private void BtnDiscordTab_Click(object sender, RoutedEventArgs e)
         {
-            // Discord community tab - placeholder for future implementation
-            App.Logger?.Information("Discord tab clicked");
+            ShowTab("discord");
+        }
+
+        private async void BtnDiscordTabLogin_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Discord == null) return;
+
+            if (App.Discord.IsAuthenticated)
+            {
+                App.Discord.Logout();
+                UpdateDiscordTabUI();
+                UpdateDiscordUI();
+            }
+            else
+            {
+                await App.Discord.StartOAuthFlowAsync();
+                UpdateDiscordTabUI();
+                UpdateDiscordUI();
+            }
+        }
+
+        private void UpdateDiscordTabUI()
+        {
+            if (App.Discord == null) return;
+
+            var isLoggedIn = App.Discord.IsAuthenticated;
+            var s = App.Settings?.Current;
+
+            // Update login status in Community Settings section
+            if (TxtDiscordTabStatus != null && TxtDiscordTabInfo != null && BtnDiscordTabLogin != null)
+            {
+                if (isLoggedIn)
+                {
+                    TxtDiscordTabStatus.Text = $"Connected as {App.Discord.Username}";
+                    TxtDiscordTabInfo.Text = "Discord account linked";
+                    BtnDiscordTabLogin.Content = "Logout";
+                }
+                else
+                {
+                    TxtDiscordTabStatus.Text = "Not Connected";
+                    TxtDiscordTabInfo.Text = "Link Discord for community features";
+                    BtnDiscordTabLogin.Content = "Login with Discord";
+                }
+            }
+
+            // Update Player Profile panel visibility
+            if (DiscordProfileNotLoggedIn != null && DiscordProfileLoggedIn != null)
+            {
+                DiscordProfileNotLoggedIn.Visibility = isLoggedIn ? Visibility.Collapsed : Visibility.Visible;
+                DiscordProfileLoggedIn.Visibility = isLoggedIn ? Visibility.Visible : Visibility.Collapsed;
+
+                if (isLoggedIn)
+                {
+                    // Load avatar
+                    var avatarUrl = App.Discord.GetAvatarUrl(256);
+                    if (!string.IsNullOrEmpty(avatarUrl) && DiscordAvatarBrush != null)
+                    {
+                        try
+                        {
+                            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                            bitmap.BeginInit();
+                            bitmap.UriSource = new Uri(avatarUrl);
+                            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                            bitmap.EndInit();
+                            DiscordAvatarBrush.ImageSource = bitmap;
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Warning(ex, "Failed to load Discord avatar");
+                        }
+                    }
+
+                    // Set name and handle
+                    if (TxtDiscordProfileName != null)
+                        TxtDiscordProfileName.Text = App.Discord.DisplayName ?? App.Discord.Username ?? "User";
+                    if (TxtDiscordProfileHandle != null)
+                        TxtDiscordProfileHandle.Text = $"@{App.Discord.Username}";
+
+                    // Set level and XP from progression
+                    var level = App.Settings?.Current?.PlayerLevel ?? 1;
+                    var xp = App.Settings?.Current?.PlayerXP ?? 0;
+                    var xpForNext = App.Progression?.GetXPForLevel(level) ?? 100;
+                    var xpProgress = Math.Min(1.0, xp / xpForNext);
+
+                    if (TxtDiscordProfileLevel != null)
+                        TxtDiscordProfileLevel.Text = level.ToString();
+                    if (TxtDiscordProfileXp != null)
+                        TxtDiscordProfileXp.Text = $"{xp:N0} / {xpForNext:N0} XP";
+                    if (DiscordProfileXpBar != null)
+                    {
+                        // Set width as percentage of parent (parent width ~200)
+                        DiscordProfileXpBar.Width = xpProgress * 200;
+                    }
+
+                    // Set stats
+                    var achievementCount = App.Achievements?.GetUnlockedCount() ?? 0;
+                    var totalMinutes = App.Achievements?.Progress?.TotalVideoMinutes ?? 0;
+                    var totalHours = totalMinutes / 60.0;
+
+                    if (TxtDiscordProfileAchievements != null)
+                        TxtDiscordProfileAchievements.Text = achievementCount.ToString();
+                    if (TxtDiscordProfileTime != null)
+                        TxtDiscordProfileTime.Text = totalHours >= 1 ? $"{totalHours:F1}h" : $"{totalMinutes}m";
+                }
+            }
+
+            // Sync checkbox states
+            if (s != null)
+            {
+                if (ChkDiscordTabRichPresence != null) ChkDiscordTabRichPresence.IsChecked = s.DiscordRichPresenceEnabled;
+                if (ChkDiscordTabShowLevel != null) ChkDiscordTabShowLevel.IsChecked = s.DiscordShowLevelInPresence;
+                if (ChkDiscordTabShareAchievements != null) ChkDiscordTabShareAchievements.IsChecked = s.DiscordShareAchievements;
+                if (ChkDiscordTabShareLevelUps != null) ChkDiscordTabShareLevelUps.IsChecked = s.DiscordShareLevelUps;
+                if (ChkDiscordTabAnonymous != null) ChkDiscordTabAnonymous.IsChecked = s.DiscordUseAnonymousName;
+                if (ChkDiscordTabAllowDm != null) ChkDiscordTabAllowDm.IsChecked = s.AllowDiscordDm;
+            }
         }
 
         private void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
@@ -6453,6 +6630,7 @@ namespace ConditioningControlPanel
             ChkAutonomyTimeAware.IsChecked = s.AutonomyTimeAwareEnabled;
             ChkAutonomyFlash.IsChecked = s.AutonomyCanTriggerFlash;
             ChkAutonomyVideo.IsChecked = s.AutonomyCanTriggerVideo;
+            ChkAutonomyWebVideo.IsChecked = s.AutonomyCanTriggerWebVideo;
             ChkAutonomySubliminal.IsChecked = s.AutonomyCanTriggerSubliminal;
             ChkAutonomyBubbles.IsChecked = s.AutonomyCanTriggerBubbles;
             ChkAutonomyComment.IsChecked = s.AutonomyCanComment;
@@ -8001,6 +8179,7 @@ namespace ConditioningControlPanel
             if (_isLoading) return;
             App.Settings.Current.AutonomyCanTriggerFlash = ChkAutonomyFlash.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerVideo = ChkAutonomyVideo.IsChecked ?? false;
+            App.Settings.Current.AutonomyCanTriggerWebVideo = ChkAutonomyWebVideo.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerSubliminal = ChkAutonomySubliminal.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerBubbles = ChkAutonomyBubbles.IsChecked ?? false;
             App.Settings.Current.AutonomyCanComment = ChkAutonomyComment.IsChecked ?? false;
