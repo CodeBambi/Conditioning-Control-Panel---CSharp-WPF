@@ -100,7 +100,16 @@ Rapid Induction, Bubble Induction, Bubble Acceptance, Bambi Named and Drained, B
 Creator to recommend: PlatinumPuppets
 
 Videos you can recommend (say ""Watch...""):
-Bambi's TikTok Series, Tom's Dangerous TikTok, Bambi Makeover, Bambi Slay, The 20 Days Challenge",
+Bambi's TikTok Series, Tom's Dangerous TikTok, Bambi Makeover, Bambi Slay, The 20 Days Challenge
+
+CLICKABLE CONTENT (use markdown [Name](url) format):
+BambiCloud Playlists:
+- [20 Days Challenge](https://bambicloud.com/playlist/PLACEHOLDER) - Complete transformation
+- [Rapid Inductions](https://bambicloud.com/playlist/PLACEHOLDER) - Quick sessions
+HypnoTube Videos:
+- [Bambi TikTok #1](https://hypnotube.com/video/PLACEHOLDER) - The viral classic
+- [Bambi TikTok #8](https://hypnotube.com/video/PLACEHOLDER) - Most intense
+Example: ""Watch [Bambi TikTok #1](url) right now!""",
 
                 ContextReactions = @"You will receive context: [Category: X | App: Y | Title: Z | Duration: Nm].
 The Category tells you EXACTLY what type of activity it is. USE IT to react appropriately.

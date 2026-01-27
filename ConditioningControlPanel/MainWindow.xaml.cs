@@ -5365,6 +5365,50 @@ namespace ConditioningControlPanel
                 isBambiCloud ? "BambiCloud" : "HypnoTube");
         }
 
+        /// <summary>
+        /// Navigates to a URL in the embedded browser, automatically selecting the correct tab.
+        /// Called by speech bubble links in AvatarTubeWindow.
+        /// </summary>
+        /// <param name="url">The URL to navigate to</param>
+        /// <returns>True if navigation was initiated, false if browser unavailable</returns>
+        public bool NavigateToUrlInBrowser(string url)
+        {
+            if (_browser == null || !_browserInitialized)
+            {
+                App.Logger?.Warning("Browser not available for navigation: {Url}", url);
+                return false;
+            }
+
+            try
+            {
+                var lowerUrl = url.ToLowerInvariant();
+
+                // Switch to correct site tab based on URL
+                if (lowerUrl.Contains("bambicloud.com") && RbBambiCloud.IsChecked != true)
+                {
+                    RbBambiCloud.IsChecked = true;
+                }
+                else if (lowerUrl.Contains("hypnotube.com") && RbHypnoTube.IsChecked != true)
+                {
+                    RbHypnoTube.IsChecked = true;
+                }
+
+                // Set zoom and navigate
+                _browser.ZoomFactor = 0.5;
+                _browser.Navigate(url);
+
+                App.Logger?.Information("Speech link navigated to: {Url} (Site: {Site})",
+                    url, lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube");
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Browser navigation failed for URL: {Url}", url);
+                return false;
+            }
+        }
+
         private void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
         {
             if (_browser?.WebView == null) return;

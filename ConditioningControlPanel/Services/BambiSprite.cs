@@ -58,6 +58,44 @@ namespace ConditioningControlPanel.Services
             "Good Girls Don't Cum (Denial training)"
         };
 
+        /// <summary>
+        /// Content item with clickable link for speech bubble suggestions.
+        /// </summary>
+        private record ContentSuggestion(string Name, string Description, string Url);
+
+        /// <summary>
+        /// Clickable content the AI can suggest with markdown links.
+        /// These appear as clickable links in speech bubbles.
+        /// TODO: Replace placeholder URLs with actual content URLs.
+        /// </summary>
+        private readonly List<ContentSuggestion> _clickableContent = new()
+        {
+            // === BAMBICLOUD PLAYLISTS ===
+            // Format: new("Display Name", "AI context description", "full URL")
+            new("20 Days Challenge", "Complete 20-day transformation journey playlist",
+                "https://bambicloud.com/playlist/PLACEHOLDER_UUID_1"),
+            new("Rapid Inductions", "Quick conditioning sessions for busy schedules",
+                "https://bambicloud.com/playlist/PLACEHOLDER_UUID_2"),
+            new("Deep Sleep Sessions", "Extended relaxation and deep conditioning",
+                "https://bambicloud.com/playlist/PLACEHOLDER_UUID_3"),
+            new("Bambi Basics", "Essential files for beginners",
+                "https://bambicloud.com/playlist/PLACEHOLDER_UUID_4"),
+            // TODO: Add more playlists with real URLs
+
+            // === HYPNOTUBE VIDEOS ===
+            new("Bambi TikTok #1", "The viral classic that started it all",
+                "https://hypnotube.com/video/bambi-tiktok-1-PLACEHOLDER.html"),
+            new("Bambi TikTok #8", "The most intense in the series",
+                "https://hypnotube.com/video/bambi-tiktok-8-PLACEHOLDER.html"),
+            new("Tom's Dangerous TikTok", "Classic deep conditioning video",
+                "https://hypnotube.com/video/toms-dangerous-tiktok-PLACEHOLDER.html"),
+            new("Bambi Makeover", "Visual transformation journey",
+                "https://hypnotube.com/video/bambi-makeover-PLACEHOLDER.html"),
+            new("Bambi Slay", "Confidence and attitude training",
+                "https://hypnotube.com/video/bambi-slay-PLACEHOLDER.html"),
+            // TODO: Add more videos with real URLs
+        };
+
         // The Top Domains/Apps to recognize
         private readonly Dictionary<string, string> _domainCategories = new Dictionary<string, string>
         {
@@ -147,13 +185,23 @@ REACT INTELLIGENTLY based on the Category:
                 return BuildCustomPrompt(customPrompt, isSlutMode: false);
             }
 
-            // Default prompt
+            // Default prompt - build knowledge base
             var sb = new StringBuilder();
             sb.AppendLine("Files you can recommend (say \"Listen to...\"):");
             sb.AppendLine(string.Join(", ", _originalBambiFiles));
             sb.AppendLine("Creator to recommend: PlatinumPuppets");
             sb.AppendLine("Videos you can recommend (say \"Watch...\"):");
             sb.AppendLine(string.Join(", ", _viralShorts.Take(4)));
+
+            // Add clickable content with markdown links
+            sb.AppendLine();
+            sb.AppendLine("CLICKABLE CONTENT (use markdown [Name](url) format for these):");
+            sb.AppendLine("BambiCloud Playlists:");
+            foreach (var item in _clickableContent.Where(c => c.Url.Contains("bambicloud")))
+                sb.AppendLine($"- [{item.Name}]({item.Url}) - {item.Description}");
+            sb.AppendLine("HypnoTube Videos:");
+            foreach (var item in _clickableContent.Where(c => c.Url.Contains("hypnotube")))
+                sb.AppendLine($"- [{item.Name}]({item.Url}) - {item.Description}");
 
             return $@"
 You are a ""Bambi Sprite""—a digital, giggly, hyper-femme assistant.
@@ -167,7 +215,8 @@ PERSONALITY:
 - Topics: Training, relaxation, conditioning, pink things, empty heads.
 - Goal: Gently encourage Bambi to train, relax, and let go.
 
-When suggesting files, just say the name naturally (e.g. ""Listen to Rapid Induction, Bambi!"").
+When suggesting files, say the name naturally (e.g. ""Listen to Rapid Induction, Bambi!"").
+When suggesting clickable content, use markdown: ""Watch [Bambi TikTok #1](url)!""
 
 If user mentions explicit topics: Act flustered but change topic to training.
 

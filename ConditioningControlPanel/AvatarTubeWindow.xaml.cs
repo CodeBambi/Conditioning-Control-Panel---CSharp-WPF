@@ -2,13 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using System.Windows.Navigation;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
@@ -58,6 +61,14 @@ namespace ConditioningControlPanel
         private bool _isInputVisible = false;
         private readonly Random _random = new();
         private bool _mainWindowClosed = false;
+
+        /// <summary>
+        /// Regex to match markdown-style links: [Link Text](url)
+        /// Used for clickable links in speech bubbles.
+        /// </summary>
+        private static readonly Regex MarkdownLinkRegex = new Regex(
+            @"\[([^\]]+)\]\((https?://[^\)]+)\)",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private int _presetGiggleCounter = 0; // Counter for 1-in-5 giggle sound on presets
         private readonly List<DateTime> _rapidClickTimestamps = new(); // Track clicks for 50-in-1-minute trigger
         private bool _isMuted = false; // Mute avatar speech and sounds
@@ -1953,12 +1964,14 @@ namespace ConditioningControlPanel
                 PlayFallbackBubbleSound();
             }
 
-            // Format text for bubble shape (shorter first/last lines for 6+ line messages)
-            var formattedText = FormatTextForBubble(text);
-            TxtSpeech.Text = formattedText;
+            // Populate bubble with text and clickable hyperlinks
+            PopulateSpeechBubble(text);
+
+            // Strip markdown links for size calculation (use plain text length)
+            var plainText = MarkdownLinkRegex.Replace(text ?? "", "$1");
 
             // Adjust bubble size based on text length
-            AdjustBubbleSize(formattedText);
+            AdjustBubbleSize(plainText);
 
             // Force layout update before showing to prevent flickering
             SpeechBubble.UpdateLayout();
@@ -2074,13 +2087,85 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Formats text to fit the speech bubble.
-        /// Simply returns text as-is - the TextBlock handles wrapping.
+        /// Populates the speech bubble with text and clickable hyperlinks.
+        /// Parses markdown-style [text](url) links and creates Hyperlink inlines.
         /// </summary>
-        private string FormatTextForBubble(string text)
+        private void PopulateSpeechBubble(string text)
         {
-            // Just return text as-is - TextBlock handles wrapping naturally
-            return text ?? string.Empty;
+            TxtSpeech.Inlines.Clear();
+
+            if (string.IsNullOrEmpty(text))
+                return;
+
+            int lastIndex = 0;
+            foreach (Match match in MarkdownLinkRegex.Matches(text))
+            {
+                // Add plain text before the link
+                if (match.Index > lastIndex)
+                {
+                    TxtSpeech.Inlines.Add(new Run(text.Substring(lastIndex, match.Index - lastIndex)));
+                }
+
+                // Extract link text and URL
+                var linkText = match.Groups[1].Value;
+                var url = match.Groups[2].Value;
+
+                try
+                {
+                    // Create clickable hyperlink with light pink color
+                    var hyperlink = new Hyperlink(new Run(linkText))
+                    {
+                        NavigateUri = new Uri(url),
+                        Foreground = new SolidColorBrush(Color.FromRgb(255, 176, 224)), // Light pink
+                        TextDecorations = TextDecorations.Underline
+                    };
+                    hyperlink.RequestNavigate += SpeechBubbleHyperlink_RequestNavigate;
+                    TxtSpeech.Inlines.Add(hyperlink);
+                }
+                catch (UriFormatException)
+                {
+                    // Invalid URL - just show as plain text
+                    TxtSpeech.Inlines.Add(new Run($"[{linkText}]"));
+                }
+
+                lastIndex = match.Index + match.Length;
+            }
+
+            // Add remaining text after last link
+            if (lastIndex < text.Length)
+            {
+                TxtSpeech.Inlines.Add(new Run(text.Substring(lastIndex)));
+            }
+        }
+
+        /// <summary>
+        /// Handles clicks on hyperlinks in the speech bubble.
+        /// Routes to the embedded browser with correct tab selection (BambiCloud/HypnoTube).
+        /// </summary>
+        private void SpeechBubbleHyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+        {
+            try
+            {
+                var url = e.Uri.AbsoluteUri;
+                var mainWindow = Application.Current.MainWindow as MainWindow;
+
+                if (mainWindow?.NavigateToUrlInBrowser(url) == true)
+                {
+                    App.Logger?.Information("Speech bubble link opened in browser: {Url}", url);
+                }
+                else
+                {
+                    // Fallback: open in external browser
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+                    App.Logger?.Information("Speech bubble link opened externally: {Url}", url);
+                }
+
+                e.Handled = true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open speech bubble link");
+            }
         }
 
         /// <summary>
@@ -2500,9 +2585,9 @@ namespace ConditioningControlPanel
                 _speechDelayTimer?.Stop();
 
                 _isGiggling = true;
-                var formattedText = FormatTextForBubble(text);
-                TxtSpeech.Text = formattedText;
-                AdjustBubbleSize(formattedText);
+                PopulateSpeechBubble(text);
+                var plainText = MarkdownLinkRegex.Replace(text ?? "", "$1");
+                AdjustBubbleSize(plainText);
 
                 SpeechBubble.UpdateLayout();
                 SpeechBubble.Visibility = Visibility.Visible;
@@ -2648,9 +2733,9 @@ namespace ConditioningControlPanel
             App.Subliminal?.PlayTriggerAudio(trigger);
 
             _isGiggling = true;
-            var formattedText = FormatTextForBubble(trigger);
-            TxtSpeech.Text = formattedText;
-            AdjustBubbleSize(formattedText);
+            PopulateSpeechBubble(trigger);
+            var plainText = MarkdownLinkRegex.Replace(trigger ?? "", "$1");
+            AdjustBubbleSize(plainText);
 
             // Force layout update before showing to prevent flickering
             SpeechBubble.UpdateLayout();
