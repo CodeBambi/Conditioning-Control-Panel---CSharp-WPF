@@ -457,13 +457,12 @@ namespace ConditioningControlPanel
                 // Reset interaction queue to clear any pending queued items
                 App.InteractionQueue?.ForceReset();
 
-                // Restore window
-                if (!IsVisible)
-                {
-                    _trayIcon?.ShowWindow();
-                }
+                // Restore window - always show and bring to front
+                Show();
                 WindowState = WindowState.Normal;
                 Activate();
+                Topmost = true;  // Temporarily topmost to ensure it's visible
+                Topmost = false; // Then disable topmost
                 ShowAvatarTube();
                 
                 _trayIcon?.ShowNotification("Stopped", "Press panic key again within 2 seconds to exit completely.", System.Windows.Forms.ToolTipIcon.Info);
