@@ -7,6 +7,7 @@ namespace ConditioningControlPanel.Services;
 
 /// <summary>
 /// Global keyboard hook to capture key presses system-wide (even when minimized)
+/// Supports lockdown mode to block escape keys (Alt+Tab, Alt+F4, Win keys, etc.)
 /// </summary>
 public class GlobalKeyboardHook : IDisposable
 {
@@ -14,15 +15,46 @@ public class GlobalKeyboardHook : IDisposable
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
 
+    // Virtual key codes for modifier detection
+    private const int VK_MENU = 0x12;      // Alt
+    private const int VK_CONTROL = 0x11;   // Ctrl
+    private const int VK_SHIFT = 0x10;     // Shift
+    private const int VK_LWIN = 0x5B;      // Left Windows
+    private const int VK_RWIN = 0x5C;      // Right Windows
+
     private IntPtr _hookId = IntPtr.Zero;
     private readonly LowLevelKeyboardProc _proc;
     private bool _isDisposed;
+    private bool _lockdownMode = false;
 
     public event Action<Key>? KeyPressed;
+
+    /// <summary>
+    /// Whether lockdown mode is currently active (blocking escape keys)
+    /// </summary>
+    public bool IsLockdownActive => _lockdownMode;
 
     public GlobalKeyboardHook()
     {
         _proc = HookCallback;
+    }
+
+    /// <summary>
+    /// Enable lockdown mode - blocks Alt+Tab, Alt+F4, Win keys, Escape, etc.
+    /// </summary>
+    public void EnableLockdown()
+    {
+        _lockdownMode = true;
+        App.Logger?.Warning("LOCKDOWN MODE ENABLED - Escape keys are now blocked");
+    }
+
+    /// <summary>
+    /// Disable lockdown mode - allows all keys through
+    /// </summary>
+    public void DisableLockdown()
+    {
+        _lockdownMode = false;
+        App.Logger?.Information("Lockdown mode disabled");
     }
 
     public void Start()
@@ -54,7 +86,14 @@ public class GlobalKeyboardHook : IDisposable
         {
             int vkCode = Marshal.ReadInt32(lParam);
             var key = KeyInterop.KeyFromVirtualKey(vkCode);
-            
+
+            // In lockdown mode, block escape keys
+            if (_lockdownMode && ShouldBlockKey(key, vkCode))
+            {
+                App.Logger?.Debug("LOCKDOWN: Blocked key {Key}", key);
+                return (IntPtr)1; // Block the key - don't pass to system
+            }
+
             try
             {
                 KeyPressed?.Invoke(key);
@@ -65,6 +104,48 @@ public class GlobalKeyboardHook : IDisposable
             }
         }
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
+    }
+
+    /// <summary>
+    /// Determines if a key should be blocked in lockdown mode
+    /// </summary>
+    private bool ShouldBlockKey(Key key, int vkCode)
+    {
+        // Check modifier states
+        bool altHeld = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+        bool ctrlHeld = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+        bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        bool winHeld = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 ||
+                       (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
+
+        // Block Alt+Tab (window switching)
+        if (altHeld && key == Key.Tab) return true;
+
+        // Block Alt+F4 (close window)
+        if (altHeld && key == Key.F4) return true;
+
+        // Block Alt+Escape (switch window)
+        if (altHeld && key == Key.Escape) return true;
+
+        // Block Windows key combinations
+        if (winHeld) return true;
+
+        // Block Windows key itself
+        if (key == Key.LWin || key == Key.RWin) return true;
+
+        // Block Ctrl+Shift+Escape (Task Manager shortcut)
+        if (ctrlHeld && shiftHeld && key == Key.Escape) return true;
+
+        // Block Escape key entirely
+        if (key == Key.Escape) return true;
+
+        // Block Ctrl+Alt+Delete cannot be intercepted (Windows kernel protection)
+        // But we can try to block other common escapes
+
+        // Block Alt+Space (system menu)
+        if (altHeld && key == Key.Space) return true;
+
+        return false;
     }
 
     public void Dispose()
@@ -79,7 +160,7 @@ public class GlobalKeyboardHook : IDisposable
     private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, 
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn,
         IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
@@ -91,6 +172,9 @@ public class GlobalKeyboardHook : IDisposable
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
 
     #endregion
 }

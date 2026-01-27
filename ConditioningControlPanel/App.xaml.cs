@@ -548,6 +548,18 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.95, "Opening main window...");
 
+            // LOCKDOWN: Show warning dialog - user must consent to lockdown mode
+            var warningDialog = new LockdownWarningDialog();
+            splash.Hide(); // Hide splash while dialog is shown
+            if (warningDialog.ShowDialog() != true)
+            {
+                Logger.Warning("LOCKDOWN: User declined lockdown warning - exiting");
+                Shutdown();
+                return;
+            }
+            Logger.Warning("LOCKDOWN: User accepted lockdown warning - enabling lockdown mode");
+            splash.Show();
+
             // Show main window
             var mainWindow = new MainWindow();
             mainWindow.Show();

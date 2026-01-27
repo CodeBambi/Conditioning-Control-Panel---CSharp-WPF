@@ -42,7 +42,6 @@ namespace ConditioningControlPanel
         private bool _isDualMonitorPlaybackActive = false;
         private TrayIconService? _trayIcon;
         private GlobalKeyboardHook? _keyboardHook;
-        private bool _isCapturingPanicKey = false;
         private bool _exitRequested = false;
         private int _panicPressCount = 0;
 
@@ -148,13 +147,12 @@ namespace ConditioningControlPanel
                 WakeBambiUp();
             };
 
-            // Initialize global keyboard hook (only if panic key is enabled)
+            // LOCKDOWN: Initialize global keyboard hook and enable lockdown mode
             _keyboardHook = new GlobalKeyboardHook();
             _keyboardHook.KeyPressed += OnGlobalKeyPressed;
-            if (App.Settings.Current.PanicKeyEnabled)
-            {
-                _keyboardHook.Start();
-            }
+            _keyboardHook.Start(); // LOCKDOWN: Always start hook for key blocking
+            _keyboardHook.EnableLockdown(); // LOCKDOWN: Enable key blocking mode
+            App.Logger?.Warning("LOCKDOWN VERSION: Keyboard lockdown mode enabled");
             
             // Subscribe to progression events for real-time XP updates
             App.Progression.XPChanged += OnXPChanged;
@@ -393,18 +391,6 @@ namespace ConditioningControlPanel
                 }
             }
             
-            // Handle panic key capture mode
-            if (_isCapturingPanicKey)
-            {
-                Dispatcher.Invoke(() =>
-                {
-                    App.Settings.Current.PanicKey = key.ToString();
-                    _isCapturingPanicKey = false;
-                    UpdatePanicKeyButton();
-                    App.Logger?.Information("Panic key changed to: {Key}", key);
-                });
-                return;
-            }
             
             // Check if panic key is enabled and pressed
             var settings = App.Settings.Current;
@@ -485,14 +471,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void UpdatePanicKeyButton()
-        {
-            if (BtnPanicKey != null)
-            {
-                var currentKey = App.Settings.Current.PanicKey;
-                BtnPanicKey.Content = _isCapturingPanicKey ? "Press any key..." : $"🔑 {currentKey}";
-            }
-        }
 
         private void LoadLogo()
         {
@@ -615,8 +593,6 @@ namespace ConditioningControlPanel
             // Re-center after load in case DPI wasn't available in constructor
             CenterOnPrimaryScreen();
 
-            // Update panic key button
-            UpdatePanicKeyButton();
 
             // Handle start minimized (to tray) - delay briefly to let window render properly first
             if (App.Settings.Current.StartMinimized)
@@ -6923,7 +6899,7 @@ namespace ConditioningControlPanel
             // Video settings
             s.MandatoryVideosEnabled = ChkVideoEnabled.IsChecked ?? false;
             s.VideosPerHour = (int)SliderPerHour.Value;
-            s.StrictLockEnabled = ChkStrictLock.IsChecked ?? false;
+            // LOCKDOWN: StrictLockEnabled is hardcoded to true
             s.AttentionChecksEnabled = ChkMiniGameEnabled.IsChecked ?? false;
             s.AttentionDensity = (int)SliderTargets.Value;
             s.RandomizeAttentionTargets = ChkRandomizeTargets.IsChecked ?? false;
@@ -7061,7 +7037,7 @@ namespace ConditioningControlPanel
             // Video
             ChkVideoEnabled.IsChecked = s.MandatoryVideosEnabled;
             SliderPerHour.Value = s.VideosPerHour;
-            ChkStrictLock.IsChecked = s.StrictLockEnabled;
+            // LOCKDOWN: StrictLock checkbox removed - always strict
             ChkMiniGameEnabled.IsChecked = s.AttentionChecksEnabled;
             SliderTargets.Value = s.AttentionDensity;
             ChkRandomizeTargets.IsChecked = s.RandomizeAttentionTargets;
@@ -7082,7 +7058,7 @@ namespace ConditioningControlPanel
             ChkVidLaunch.IsChecked = s.ForceVideoOnLaunch;
             ChkAutoRun.IsChecked = s.AutoStartEngine;
             ChkStartHidden.IsChecked = s.StartMinimized;
-            ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
+            // LOCKDOWN: NoPanic checkbox removed - panic key always disabled
             ChkOfflineMode.IsChecked = s.OfflineMode;
 
             // Startup video display
@@ -7338,7 +7314,7 @@ namespace ConditioningControlPanel
             // Video
             s.MandatoryVideosEnabled = ChkVideoEnabled.IsChecked ?? false;
             s.VideosPerHour = (int)SliderPerHour.Value;
-            s.StrictLockEnabled = ChkStrictLock.IsChecked ?? false;
+            // LOCKDOWN: StrictLockEnabled is hardcoded to true
             s.AttentionChecksEnabled = ChkMiniGameEnabled.IsChecked ?? false;
             s.AttentionDensity = (int)SliderTargets.Value;
             s.RandomizeAttentionTargets = ChkRandomizeTargets.IsChecked ?? false;
@@ -7359,7 +7335,7 @@ namespace ConditioningControlPanel
             s.ForceVideoOnLaunch = ChkVidLaunch.IsChecked ?? false;
             s.AutoStartEngine = ChkAutoRun.IsChecked ?? false;
             s.StartMinimized = ChkStartHidden.IsChecked ?? false;
-            s.PanicKeyEnabled = !(ChkNoPanic.IsChecked ?? false);
+            // LOCKDOWN: PanicKeyEnabled is hardcoded to false
             s.OfflineMode = ChkOfflineMode.IsChecked ?? false;
 
             // Audio
@@ -8208,34 +8184,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void ChkBubbleCountStrict_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = ChkBubbleCountStrict.IsChecked ?? false;
-
-            // Show warning when enabling strict mode
-            if (isEnabled)
-            {
-                var confirmed = WarningDialog.ShowDoubleWarning(this,
-                    "Strict Bubble Count",
-                    "• You will NOT be able to skip the bubble count challenge\n" +
-                    "• You MUST answer correctly to dismiss\n" +
-                    "• After 3 wrong attempts, a mercy lock card appears\n" +
-                    "• This can be very restrictive!");
-
-                if (!confirmed)
-                {
-                    _isLoading = true;
-                    ChkBubbleCountStrict.IsChecked = false;
-                    _isLoading = false;
-                    return;
-                }
-            }
-
-            App.Settings.Current.BubbleCountStrictLock = isEnabled;
-            App.Settings.Save();
-        }
 
         private void BtnTestBubbleCount_Click(object sender, RoutedEventArgs e)
         {
@@ -10841,7 +10789,14 @@ namespace ConditioningControlPanel
                     catch (Exception ex)
                     {
                         App.Logger?.Error(ex, "Failed to install pack: {Name}", pack.Name);
-                        MessageBox.Show($"Installation failed: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        // Extract the innermost exception for a clearer error message
+                        var innermost = ex;
+                        while (innermost.InnerException != null)
+                            innermost = innermost.InnerException;
+                        var errorMsg = innermost.Message != ex.Message
+                            ? $"{ex.Message}\n\nDetails: {innermost.Message}"
+                            : ex.Message;
+                        MessageBox.Show($"Installation failed: {errorMsg}\n\nIf this persists, try:\n- Temporarily disable antivirus\n- Try a different network (mobile hotspot)\n- Check logs/crash.log for details", "Download Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                     finally
                     {
@@ -10937,64 +10892,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void BtnPanicKey_Click(object sender, RoutedEventArgs e)
-        {
-            _isCapturingPanicKey = true;
-            UpdatePanicKeyButton();
-            MessageBox.Show("Press any key to set as the new panic key...", "Change Panic Key", 
-                MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        private void ChkStrictLock_Checked(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            // Show double warning
-            var confirmed = WarningDialog.ShowDoubleWarning(this,
-                "Strict Lock",
-                "• You will NOT be able to skip or close videos\n" +
-                "• Videos MUST be watched to completion\n" +
-                "• The only way out is the panic key (if enabled)\n" +
-                "• This can be very intense and restrictive");
-
-            if (!confirmed)
-            {
-                ChkStrictLock.IsChecked = false;
-            }
-        }
-
-        private void ChkNoPanic_Checked(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            // Show double warning
-            var confirmed = WarningDialog.ShowDoubleWarning(this,
-                "Disable Panic Key",
-                "• You will have NO emergency escape option\n" +
-                "• The ONLY way to exit will be the Exit button\n" +
-                "• Combined with Strict Lock, this is VERY restrictive\n" +
-                "• Make sure you know what you're doing!");
-
-            if (!confirmed)
-            {
-                ChkNoPanic.IsChecked = false;
-            }
-            else
-            {
-                // Stop keyboard hook when panic key is disabled (privacy improvement)
-                _keyboardHook?.Stop();
-                App.Logger?.Information("Keyboard hook stopped - panic key disabled");
-            }
-        }
-
-        private void ChkNoPanic_Unchecked(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            // Start keyboard hook when panic key is re-enabled
-            _keyboardHook?.Start();
-            App.Logger?.Information("Keyboard hook started - panic key enabled");
-        }
 
         private void ChkOfflineMode_Changed(object sender, RoutedEventArgs e)
         {

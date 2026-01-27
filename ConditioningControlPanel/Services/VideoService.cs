@@ -33,6 +33,7 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _attentionTimer;
         private DispatcherTimer? _safetyTimer;
         private DispatcherTimer? _fallbackSafetyTimer;
+        private DispatcherTimer? _topmostTimer; // LOCKDOWN: Aggressive topmost timer
 
         private bool _isRunning;
         private bool _videoPlaying;
@@ -57,6 +58,25 @@ namespace ConditioningControlPanel.Services
         private static bool _libVLCInitialized;
         private static bool _libVLCInitializing;
         private readonly List<LibVLCSharp.Shared.MediaPlayer> _mediaPlayers = new();
+
+        #region LOCKDOWN: Win32 API for aggressive topmost
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+        private const int WS_EX_APPWINDOW = 0x00040000;
+        #endregion
 
         public event EventHandler? VideoAboutToStart; // Fires 1.3s before video
         public event EventHandler? VideoStarted;
@@ -485,6 +505,7 @@ namespace ConditioningControlPanel.Services
             {
                 _videoPlaying = true;
                 _strictActive = false;
+                StartAggressiveTopmost(); // LOCKDOWN: Force windows to stay on top
 
                 var allScreens = App.GetAllScreensCached().ToList();
                 if (allScreens.Count == 0) return;
@@ -657,11 +678,12 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Information("VideoService: PlayVideo called for {File}", Path.GetFileName(path));
 
             _videoPlaying = true;
-            _strictActive = strict;
+            _strictActive = true; // LOCKDOWN: Always strict, ignore parameter
             _retryPath = path;
             _startTime = DateTime.Now;
             _hits = _total = 0;
             _spawnTimes.Clear();
+            StartAggressiveTopmost(); // LOCKDOWN: Force windows to stay on top
 
             // Update Discord presence
             App.DiscordRpc?.SetVideoActivity();
@@ -1213,43 +1235,98 @@ namespace ConditioningControlPanel.Services
 
         private void SetupStrictHandlers(Window win, bool strict)
         {
-            if (strict)
+            // LOCKDOWN: Always strict - ignore parameter, force strict mode
+            win.Closing += (s, e) => { if (_videoPlaying) e.Cancel = true; };
+            win.PreviewKeyDown += (s, e) =>
             {
-                win.Closing += (s, e) => { if (_videoPlaying) e.Cancel = true; };
-                win.PreviewKeyDown += (s, e) =>
-                {
-                    // In strict mode, block panic key, Alt+F4, and system keys
-                    if (e.Key.ToString() == App.Settings.Current.PanicKey || e.Key == Key.System ||
-                        (e.Key == Key.F4 && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)))
-                        e.Handled = true;
-                };
-                // Don't reactivate if attention targets are active - they need focus for clicks
-                win.Deactivated += (s, e) =>
-                {
-                    if (_videoPlaying && _strictActive && !App.Settings.Current.AttentionChecksEnabled)
-                    {
-                        win.Activate();
-                        win.Focus();
-                    }
-                };
-            }
-            else
+                // LOCKDOWN: Block all escape attempts
+                if (e.Key == Key.System || e.Key == Key.Escape ||
+                    (e.Key == Key.F4 && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)))
+                    e.Handled = true;
+            };
+
+            // Don't reactivate if attention targets are active - they need focus for clicks
+            win.Deactivated += (s, e) =>
             {
-                win.KeyDown += (s, e) =>
+                if (_videoPlaying && _strictActive && !App.Settings.Current.AttentionChecksEnabled)
                 {
-                    if (App.Settings.Current.PanicKeyEnabled && e.Key.ToString() == App.Settings.Current.PanicKey)
+                    win.Activate();
+                    win.Focus();
+                }
+            };
+
+            // LOCKDOWN: Prevent minimize - force back to maximized
+            win.StateChanged += (s, e) =>
+            {
+                if (_videoPlaying && win.WindowState == WindowState.Minimized)
+                {
+                    App.Logger?.Debug("LOCKDOWN: Prevented minimize, forcing maximized");
+                    win.WindowState = WindowState.Maximized;
+                }
+            };
+
+            // LOCKDOWN: Apply WS_EX_TOOLWINDOW to hide from Alt+Tab
+            win.Loaded += (s, e) =>
+            {
+                try
+                {
+                    var hwnd = new WindowInteropHelper(win).Handle;
+                    if (hwnd != IntPtr.Zero)
                     {
-                        try
+                        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                        exStyle |= WS_EX_TOOLWINDOW;
+                        exStyle &= ~WS_EX_APPWINDOW;
+                        SetWindowLong(hwnd, GWL_EXSTYLE, exStyle);
+                        App.Logger?.Debug("LOCKDOWN: Applied WS_EX_TOOLWINDOW to video window");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "LOCKDOWN: Failed to apply tool window style");
+                }
+            };
+        }
+
+        /// <summary>
+        /// LOCKDOWN: Start aggressive topmost timer that forces video windows to stay on top
+        /// </summary>
+        private void StartAggressiveTopmost()
+        {
+            _topmostTimer?.Stop();
+            _topmostTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+            _topmostTimer.Tick += (s, e) =>
+            {
+                if (!_videoPlaying)
+                {
+                    _topmostTimer?.Stop();
+                    return;
+                }
+
+                foreach (var win in _windows.ToList())
+                {
+                    try
+                    {
+                        var hwnd = new WindowInteropHelper(win).Handle;
+                        if (hwnd != IntPtr.Zero)
                         {
-                            Cleanup();
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Error(ex, "Error during video cleanup on escape");
+                            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                         }
                     }
-                };
-            }
+                    catch { /* Ignore - window may have closed */ }
+                }
+            };
+            _topmostTimer.Start();
+            App.Logger?.Information("LOCKDOWN: Aggressive topmost timer started");
+        }
+
+        /// <summary>
+        /// LOCKDOWN: Stop aggressive topmost timer
+        /// </summary>
+        private void StopAggressiveTopmost()
+        {
+            _topmostTimer?.Stop();
+            _topmostTimer = null;
         }
 
         #region Attention Checks
@@ -1802,6 +1879,7 @@ namespace ConditioningControlPanel.Services
             _safetyTimer?.Stop();
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
+            StopAggressiveTopmost(); // LOCKDOWN: Stop topmost timer
             _videoPlaying = false;
             CloseAll();
 

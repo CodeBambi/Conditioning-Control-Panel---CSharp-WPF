@@ -12,8 +12,8 @@
 ; - Register uninstaller
 ; - Store install path in registry for Velopack updates
 
-#define MyAppName "Conditioning Control Panel"
-#define MyAppVersion "5.4.2"
+#define MyAppName "Conditioning Control Panel - Lockdown"
+#define MyAppVersion "5.4.2-Lockdown"
 #define MyAppPublisher "CodeBambi"
 #define MyAppURL "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF"
 #define MyAppExeName "ConditioningControlPanel.exe"

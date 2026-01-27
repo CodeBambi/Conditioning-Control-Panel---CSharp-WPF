@@ -22,22 +22,27 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.2";
+        public const string AppVersion = "5.4.2-Lockdown";
+
+        /// <summary>
+        /// Whether this is the lockdown version (no auto-update, no escape)
+        /// </summary>
+        public const bool IsLockdownVersion = true;
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.2
+        public const string CurrentPatchNotes = @"v5.4.2 - LOCKDOWN VERSION
 
-🔗 AI CLICKABLE LINKS FIX
-• Video/audio links now work with ALL AI personalities
-• Custom prompts now always include clickable media names
-• Fixed links only working with baseline prompt
+⚠️ LOCKDOWN VERSION WARNING
+• Videos/challenges CANNOT be skipped or closed
+• There is NO panic key - Escape is blocked
+• Alt+Tab, Alt+F4, and Windows keys are BLOCKED
+• Auto-updates are DISABLED - manual updates only
+• Emergency exit: Ctrl+Alt+Del → Task Manager
 
-🐛 VIDEO CRASH FIX (from 5.4.1)
-• Fixed crash when Bambi Takeover video ends
-• Video windows no longer stay black after playback";
+This version is for advanced users who want maximum restriction.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
@@ -183,6 +188,13 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // LOCKDOWN: Skip automatic update checks - manual updates only
+                if (IsLockdownVersion)
+                {
+                    App.Logger?.Warning("LOCKDOWN VERSION: Auto-updates disabled. Visit GitHub releases for manual updates.");
+                    return null;
+                }
+
                 // Skip update check if offline mode is enabled
                 if (App.Settings?.Current?.OfflineMode == true)
                 {

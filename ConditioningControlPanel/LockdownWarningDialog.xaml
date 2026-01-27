@@ -1,0 +1,146 @@
+<Window x:Class="ConditioningControlPanel.LockdownWarningDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LOCKDOWN VERSION WARNING"
+        Width="550" Height="480"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Border Background="#1A0A0A" CornerRadius="12" BorderBrush="#FF4444" BorderThickness="2">
+        <Grid Margin="30">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,20">
+                <TextBlock Text="WARNING" FontSize="32" FontWeight="Bold"
+                           Foreground="#FF4444" HorizontalAlignment="Center"/>
+                <TextBlock Text="LOCKDOWN VERSION" FontSize="18" FontWeight="SemiBold"
+                           Foreground="#FF6666" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+            </StackPanel>
+
+            <!-- Warning Content -->
+            <Border Grid.Row="1" Background="#200A0A" CornerRadius="8" Padding="20">
+                <StackPanel>
+                    <TextBlock Text="This is the LOCKDOWN version of Conditioning Control Panel."
+                               Foreground="White" FontSize="13" TextWrapping="Wrap" Margin="0,0,0,15"/>
+
+                    <TextBlock Text="By proceeding, you acknowledge:" Foreground="#FF8888"
+                               FontWeight="SemiBold" Margin="0,0,0,10"/>
+
+                    <StackPanel Margin="10,0,0,0">
+                        <TextBlock Foreground="#FFCCCC" FontSize="12" TextWrapping="Wrap" Margin="0,5">
+                            <Run Text="1." Foreground="#FF6666" FontWeight="Bold"/>
+                            <Run Text=" Videos and challenges CANNOT be closed or skipped"/>
+                        </TextBlock>
+                        <TextBlock Foreground="#FFCCCC" FontSize="12" TextWrapping="Wrap" Margin="0,5">
+                            <Run Text="2." Foreground="#FF6666" FontWeight="Bold"/>
+                            <Run Text=" There is NO panic key or emergency escape"/>
+                        </TextBlock>
+                        <TextBlock Foreground="#FFCCCC" FontSize="12" TextWrapping="Wrap" Margin="0,5">
+                            <Run Text="3." Foreground="#FF6666" FontWeight="Bold"/>
+                            <Run Text=" Alt+Tab, Alt+F4, and Windows keys are BLOCKED"/>
+                        </TextBlock>
+                        <TextBlock Foreground="#FFCCCC" FontSize="12" TextWrapping="Wrap" Margin="0,5">
+                            <Run Text="4." Foreground="#FF6666" FontWeight="Bold"/>
+                            <Run Text=" The ONLY way to exit is completing the content"/>
+                        </TextBlock>
+                        <TextBlock Foreground="#FFCCCC" FontSize="12" TextWrapping="Wrap" Margin="0,5">
+                            <Run Text="5." Foreground="#FF6666" FontWeight="Bold"/>
+                            <Run Text=" This version requires MANUAL updates"/>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <Border Background="#300A0A" CornerRadius="4" Padding="10" Margin="0,15,0,0">
+                        <TextBlock Foreground="#FF8888" FontSize="11" TextWrapping="Wrap" FontStyle="Italic">
+                            Emergency exit: Ctrl+Alt+Del → Task Manager → End Task
+                            (This is the ONLY escape method available)
+                        </TextBlock>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- Checkbox -->
+            <CheckBox x:Name="ChkAccept" Grid.Row="2" Margin="0,20,0,15"
+                      Foreground="White" FontSize="13"
+                      Checked="ChkAccept_Changed" Unchecked="ChkAccept_Changed">
+                <TextBlock Text="I understand and accept these risks" TextWrapping="Wrap"/>
+            </CheckBox>
+
+            <!-- Buttons -->
+            <Grid Grid.Row="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button x:Name="BtnExit" Grid.Column="0" Content="Exit"
+                        Margin="0,0,10,0" Padding="20,12"
+                        Background="#333333" Foreground="White"
+                        BorderThickness="0" FontSize="14"
+                        Click="BtnExit_Click" Cursor="Hand">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="border" Property="Background" Value="#444444"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <Button x:Name="BtnEnter" Grid.Column="1" Content="Enter Lockdown Mode"
+                        Margin="10,0,0,0" Padding="20,12"
+                        Background="#661111" Foreground="White"
+                        BorderThickness="0" FontSize="14" FontWeight="SemiBold"
+                        IsEnabled="False" Click="BtnEnter_Click" Cursor="Hand">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter TargetName="border" Property="Background" Value="#331111"/>
+                                                <Setter Property="Foreground" Value="#666666"/>
+                                            </Trigger>
+                                            <MultiTrigger>
+                                                <MultiTrigger.Conditions>
+                                                    <Condition Property="IsEnabled" Value="True"/>
+                                                    <Condition Property="IsMouseOver" Value="True"/>
+                                                </MultiTrigger.Conditions>
+                                                <Setter TargetName="border" Property="Background" Value="#882222"/>
+                                            </MultiTrigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

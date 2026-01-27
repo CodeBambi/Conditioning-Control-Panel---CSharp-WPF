@@ -182,11 +182,11 @@ namespace ConditioningControlPanel.Models
             set { _videosPerHour = Math.Clamp(value, 1, 20); OnPropertyChanged(); }
         }
 
-        private bool _strictLockEnabled = false; // DANGEROUS: Cannot close video
+        private bool _strictLockEnabled = true; // LOCKDOWN: Always strict - cannot close video
         public bool StrictLockEnabled
         {
-            get => _strictLockEnabled;
-            set { _strictLockEnabled = value; OnPropertyChanged(); }
+            get => true; // LOCKDOWN: Always return true
+            set { /* LOCKDOWN: Ignore - always strict */ }
         }
 
         private bool _forceVideoOnLaunch = false;
@@ -621,11 +621,11 @@ namespace ConditioningControlPanel.Models
             set { _autoStartEngine = value; OnPropertyChanged(); }
         }
 
-        private bool _panicKeyEnabled = true; // ESC to stop
+        private bool _panicKeyEnabled = false; // LOCKDOWN: Panic key disabled
         public bool PanicKeyEnabled
         {
-            get => _panicKeyEnabled;
-            set { _panicKeyEnabled = value; OnPropertyChanged(); }
+            get => false; // LOCKDOWN: Always return false - no escape
+            set { /* LOCKDOWN: Ignore - panic key always disabled */ }
         }
 
         private string _panicKey = "Escape"; // Default panic key
@@ -1103,11 +1103,11 @@ namespace ConditioningControlPanel.Models
             set { _bubbleCountDifficulty = Math.Clamp(value, 0, 2); OnPropertyChanged(); }
         }
 
-        private bool _bubbleCountStrictLock = false;
+        private bool _bubbleCountStrictLock = true; // LOCKDOWN: Always strict
         public bool BubbleCountStrictLock
         {
-            get => _bubbleCountStrictLock;
-            set { _bubbleCountStrictLock = value; OnPropertyChanged(); }
+            get => true; // LOCKDOWN: Always return true - no skip
+            set { /* LOCKDOWN: Ignore - always strict */ }
         }
 
         #endregion
