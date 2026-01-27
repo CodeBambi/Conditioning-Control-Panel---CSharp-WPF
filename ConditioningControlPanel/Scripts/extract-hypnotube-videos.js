@@ -13,8 +13,8 @@
 (function() {
     const videos = [];
 
-    // Find all video links - they have href starting with /video/
-    const videoLinks = document.querySelectorAll('a[href^="/video/"]');
+    // Find all video links - full URL pattern
+    const videoLinks = document.querySelectorAll('a[href*="hypnotube.com/video/"]');
 
     // Track seen URLs to avoid duplicates (thumbnails and titles link to same video)
     const seenUrls = new Set();

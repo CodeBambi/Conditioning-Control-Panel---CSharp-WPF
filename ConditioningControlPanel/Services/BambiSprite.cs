@@ -66,34 +66,51 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Clickable content the AI can suggest with markdown links.
         /// These appear as clickable links in speech bubbles.
-        /// TODO: Replace placeholder URLs with actual content URLs.
         /// </summary>
         private readonly List<ContentSuggestion> _clickableContent = new()
         {
             // === BAMBICLOUD PLAYLISTS ===
-            // Format: new("Display Name", "AI context description", "full URL")
+            // TODO: Add BambiCloud playlists when available
             new("20 Days Challenge", "Complete 20-day transformation journey playlist",
                 "https://bambicloud.com/playlist/PLACEHOLDER_UUID_1"),
-            new("Rapid Inductions", "Quick conditioning sessions for busy schedules",
-                "https://bambicloud.com/playlist/PLACEHOLDER_UUID_2"),
-            new("Deep Sleep Sessions", "Extended relaxation and deep conditioning",
-                "https://bambicloud.com/playlist/PLACEHOLDER_UUID_3"),
-            new("Bambi Basics", "Essential files for beginners",
-                "https://bambicloud.com/playlist/PLACEHOLDER_UUID_4"),
-            // TODO: Add more playlists with real URLs
 
-            // === HYPNOTUBE VIDEOS ===
-            new("Bambi TikTok #1", "The viral classic that started it all",
-                "https://hypnotube.com/video/bambi-tiktok-1-PLACEHOLDER.html"),
-            new("Bambi TikTok #8", "The most intense in the series",
-                "https://hypnotube.com/video/bambi-tiktok-8-PLACEHOLDER.html"),
-            new("Tom's Dangerous TikTok", "Classic deep conditioning video",
-                "https://hypnotube.com/video/toms-dangerous-tiktok-PLACEHOLDER.html"),
-            new("Bambi Makeover", "Visual transformation journey",
-                "https://hypnotube.com/video/bambi-makeover-PLACEHOLDER.html"),
-            new("Bambi Slay", "Confidence and attitude training",
-                "https://hypnotube.com/video/bambi-slay-PLACEHOLDER.html"),
-            // TODO: Add more videos with real URLs
+            // === HYPNOTUBE VIDEOS (extracted 2025-01-27) ===
+            new("Naughty Bambi", "Popular Bambi video",
+                "https://hypnotube.com/video/naughty-bambi-109749.html"),
+            new("Bambi Bae", "Popular Bambi video",
+                "https://hypnotube.com/video/bambi-bae-113979.html"),
+            new("Bambi's Naughty TikTok Collection", "Viral TikTok-style video",
+                "https://hypnotube.com/video/bambis-naughty-tiktok-collection-117314.html"),
+            new("TikTok Loop", "Viral TikTok-style video",
+                "https://hypnotube.com/video/tiktok-loop-39245.html"),
+            new("Overload", "Intense conditioning",
+                "https://hypnotube.com/video/overload-46422.html"),
+            new("Bambi TikTok - In Beat", "Viral TikTok-style video",
+                "https://hypnotube.com/video/bambi-tiktok-in-beat-52730.html"),
+            new("Bambi TikTok - In Beat - Longer Version", "Viral TikTok-style video",
+                "https://hypnotube.com/video/bambi-tiktok-in-beat-longer-version-56194.html"),
+            new("Bambi TikTok - Good Girls Dont Cum", "Viral TikTok-style video",
+                "https://hypnotube.com/video/bambi-tiktok-good-girls-dont-cum-68081.html"),
+            new("Bambi Chastity Overload", "Chastity training",
+                "https://hypnotube.com/video/bambi-chastity-overload-75092.html"),
+            new("Mommy's In Control Full", "Popular Bambi video",
+                "https://hypnotube.com/video/mommys-in-control-full-76043.html"),
+            new("Bambi Loves Hentai - OneeKitsune", "Popular Bambi video",
+                "https://hypnotube.com/video/bambi-loves-hentai-oneekitsune-78373.html"),
+            new("Bubblehead Forever - Iplaywithdolls", "Popular Bambi video",
+                "https://hypnotube.com/video/bubblehead-forever-iplaywithdolls-79880.html"),
+            new("Dumb Bimbo Brainwash", "Intense conditioning",
+                "https://hypnotube.com/video/dumb-bimbo-brainwash-80780.html"),
+            new("Bambi TikTok Eager Slut", "Viral TikTok-style video",
+                "https://hypnotube.com/video/bambi-tiktok-eager-slut-80971.html"),
+            new("Mindlocked Cock Zombie", "Intense conditioning",
+                "https://hypnotube.com/video/mindlocked-cock-zombie-87742.html"),
+            new("Bambi TikTok Good Girl Academy", "Viral TikTok-style video",
+                "https://hypnotube.com/video/bambi-tiktok-good-girl-academy-92527.html"),
+            new("Bambi TikTok Chastity Trainer", "Chastity training",
+                "https://hypnotube.com/video/bambi-tiktok-chastity-trainer-96290.html"),
+            new("Bambi Slay", "Popular Bambi video",
+                "https://hypnotube.com/video/bambi-slay-99609.html"),
         };
 
         // The Top Domains/Apps to recognize
