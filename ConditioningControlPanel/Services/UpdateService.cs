@@ -22,22 +22,30 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.3";
+        public const string AppVersion = "5.4.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.3
+        public const string CurrentPatchNotes = @"v5.4.4
 
-🐛 VIDEO STABILITY FIX
-• Fixed intermittent crash when stopping videos with panic key
-• Added cleanup synchronization to prevent race conditions
-• Increased LibVLC dispose delay for safer cleanup
+📦 CONTENT PACKS
+• Split Install/Uninstall and Activate/Deactivate buttons for packs
+• Resumable downloads - resumes from where it left off instead of restarting
+• Increased retries from 3 to 10 (progress preserved between retries)
+• Fixed parent Content Packs checkbox not reflecting children's state
+• Fixed disabled pack assets still being used despite being unchecked
 
-⚡ FASTER FIRST VIDEO
-• LibVLC now pre-loads in background during app startup
-• First video no longer has a long delay to load";
+🤖 AI COMPANION
+• Slut mode now suggests video links more reliably
+• Slut mode visually disabled when custom prompts are active
+• Enabling custom prompts auto-disables slut mode to prevent conflicts
+
+🐛 BUG FIXES
+• Fixed main window not reappearing after panic key press
+• Fixed browser navigating to homepage when clicking speech bubble links
+• Removed unused preset dropdown clipping behind UI";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
