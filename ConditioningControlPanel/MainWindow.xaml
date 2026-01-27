@@ -1,4 +1,4 @@
-<Window x:Class="ConditioningControlPanel.MainWindow"
+﻿<Window x:Class="ConditioningControlPanel.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
@@ -4609,19 +4609,20 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
                                         <!-- Avatar with online indicator -->
-                                        <Grid Width="70" Height="70">
-                                            <Border CornerRadius="35" BorderBrush="#5865F2" BorderThickness="2">
+                                        <Grid Width="100" Height="100">
+                                            <Border CornerRadius="50" BorderBrush="#5865F2" BorderThickness="3">
                                                 <Border.Background>
                                                     <ImageBrush x:Name="ProfileViewerAvatar" Stretch="UniformToFill"/>
                                                 </Border.Background>
                                             </Border>
                                             <!-- Online status dot -->
-                                            <Ellipse x:Name="ProfileOnlineIndicator" Width="16" Height="16"
+                                            <Ellipse x:Name="ProfileOnlineIndicator" Width="20" Height="20"
                                                      HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                                     Stroke="#1E1E3F" StrokeThickness="2" Fill="#43B581"/>
+                                                     Margin="0,0,5,5" Stroke="#1E1E3F" StrokeThickness="3" Fill="#43B581"/>
                                         </Grid>
 
                                         <!-- Name and handle -->
@@ -4632,34 +4633,53 @@
                                                 <TextBlock x:Name="TxtProfileViewerOnline" Text="Online"
                                                            Foreground="#43B581" FontSize="11"/>
                                             </StackPanel>
-                                            <!-- Discord handle (only if DM allowed) -->
-                                            <Border x:Name="ProfileDiscordHandle" Visibility="Collapsed"
-                                                    Background="#40000000" CornerRadius="4" Padding="6,3" Margin="0,6,0,0"
-                                                    HorizontalAlignment="Left" Cursor="Hand" MouseLeftButtonDown="ProfileDiscordHandle_Click"
-                                                    ToolTip="Click to copy Discord ID">
+                                            <!-- Discord button (only if DM allowed) -->
+                                            <Button x:Name="BtnProfileDiscord" Visibility="Collapsed"
+                                                    Background="#5865F2" Foreground="White" BorderThickness="0"
+                                                    Padding="10,5" Margin="0,8,0,0" Cursor="Hand"
+                                                    HorizontalAlignment="Left" Click="BtnProfileDiscord_Click"
+                                                    ToolTip="Open Discord Profile">
+                                                <Button.Template>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Button.Template>
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="💬" FontSize="10" Margin="0,0,4,0"/>
-                                                    <TextBlock x:Name="TxtProfileDiscordId" Text="@user" Foreground="#5865F2" FontSize="11"/>
-                                                    <TextBlock Text=" 📋" FontSize="9" Foreground="#808080"/>
+                                                    <TextBlock Text="💬" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                    <TextBlock x:Name="TxtProfileDiscordId" Text="Message on Discord" Foreground="White" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                                 </StackPanel>
-                                            </Border>
+                                            </Button>
                                         </StackPanel>
+
+                                        <!-- Patreon tier banner (Pink filter / Prime subject) -->
+                                        <Border x:Name="ProfilePatreonTierBanner" Grid.Column="2" Visibility="Collapsed"
+                                                Width="140" Height="100" CornerRadius="8" Margin="10,0,0,0"
+                                                VerticalAlignment="Center">
+                                            <Image x:Name="ImgPatreonTierBanner" Stretch="Uniform"/>
+                                        </Border>
                                     </Grid>
                                 </Border>
 
-                                <!-- Level & Patreon Badge -->
+                                <!-- Level, Rank & Patreon Badge -->
                                 <Border Background="#1A1A32" CornerRadius="10" Padding="12" Margin="0,0,0,10">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel>
+                                        <StackPanel Grid.Column="0">
                                             <TextBlock Text="LEVEL" Foreground="#808080" FontSize="10" FontWeight="Bold"/>
-                                            <TextBlock x:Name="TxtProfileViewerLevel" Text="1" Foreground="#5865F2" FontSize="32" FontWeight="ExtraBold" Margin="0,-5,0,0"/>
+                                            <TextBlock x:Name="TxtProfileViewerLevel" Text="1" Foreground="#FFD700" FontSize="32" FontWeight="ExtraBold" Margin="0,-5,0,0"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="RANK" Foreground="#808080" FontSize="10" FontWeight="Bold"/>
+                                            <TextBlock x:Name="TxtProfileViewerRank" Text="#-" Foreground="#FFD700" FontSize="32" FontWeight="ExtraBold" Margin="0,-5,0,0"/>
                                         </StackPanel>
                                         <!-- Patreon Badge -->
-                                        <Image x:Name="ProfilePatreonBadge" Grid.Column="1" Height="40" VerticalAlignment="Center"
+                                        <Image x:Name="ProfilePatreonBadge" Grid.Column="2" Height="40" VerticalAlignment="Center"
                                                Visibility="Collapsed"/>
                                     </Grid>
                                 </Border>
@@ -4677,40 +4697,70 @@
                                             <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
 
-                                        <!-- XP -->
-                                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,10">
-                                            <TextBlock Text="XP" Foreground="#808080" FontSize="9"/>
-                                            <TextBlock x:Name="TxtProfileViewerXp" Text="0" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                                        <!-- XP with image -->
+                                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,12" Orientation="Horizontal">
+                                            <Border Width="64" Height="64" CornerRadius="8" Background="#252545" Margin="0,0,12,0">
+                                                <Image x:Name="ImgStatXp" Source="pack://application:,,,/Resources/achievements/lv_10.png" Stretch="Uniform" Margin="3"/>
+                                            </Border>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="XP" Foreground="#FF69B4" FontSize="12" FontWeight="Bold"/>
+                                                <TextBlock x:Name="TxtProfileViewerXp" Text="0" Foreground="White" FontSize="18" FontWeight="Bold"/>
+                                            </StackPanel>
                                         </StackPanel>
 
-                                        <!-- Bubbles -->
-                                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,10">
-                                            <TextBlock Text="🫧 BUBBLES" Foreground="#808080" FontSize="9"/>
-                                            <TextBlock x:Name="TxtProfileViewerBubbles" Text="0" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                                        <!-- Bubbles with image -->
+                                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,12" Orientation="Horizontal">
+                                            <Border Width="64" Height="64" CornerRadius="8" Background="#252545" Margin="0,0,12,0">
+                                                <Image x:Name="ImgStatBubbles" Source="pack://application:,,,/Resources/achievements/pop_the_Thought.png" Stretch="Uniform" Margin="3"/>
+                                            </Border>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="BUBBLES" Foreground="#FF69B4" FontSize="12" FontWeight="Bold"/>
+                                                <TextBlock x:Name="TxtProfileViewerBubbles" Text="0" Foreground="White" FontSize="18" FontWeight="Bold"/>
+                                            </StackPanel>
                                         </StackPanel>
 
-                                        <!-- Video Time -->
-                                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,10">
-                                            <TextBlock Text="🎬 VIDEOS" Foreground="#808080" FontSize="9"/>
-                                            <TextBlock x:Name="TxtProfileViewerVideos" Text="0h" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                                        <!-- Video Time with image -->
+                                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,12" Orientation="Horizontal">
+                                            <Border Width="64" Height="64" CornerRadius="8" Background="#252545" Margin="0,0,12,0">
+                                                <Image x:Name="ImgStatVideos" Source="pack://application:,,,/Resources/achievements/10_hours_pink.png" Stretch="Uniform" Margin="3"/>
+                                            </Border>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="VIDEOS" Foreground="#FF69B4" FontSize="12" FontWeight="Bold"/>
+                                                <TextBlock x:Name="TxtProfileViewerVideos" Text="0h" Foreground="White" FontSize="18" FontWeight="Bold"/>
+                                            </StackPanel>
                                         </StackPanel>
 
-                                        <!-- GIFs -->
-                                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,10">
-                                            <TextBlock Text="✨ GIFS" Foreground="#808080" FontSize="9"/>
-                                            <TextBlock x:Name="TxtProfileViewerGifs" Text="0" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                                        <!-- GIFs with image -->
+                                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,12" Orientation="Horizontal">
+                                            <Border Width="64" Height="64" CornerRadius="8" Background="#252545" Margin="0,0,12,0">
+                                                <Image x:Name="ImgStatGifs" Source="pack://application:,,,/Resources/achievements/retinal_burn.png" Stretch="Uniform" Margin="3"/>
+                                            </Border>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="FLASHES" Foreground="#FF69B4" FontSize="12" FontWeight="Bold"/>
+                                                <TextBlock x:Name="TxtProfileViewerGifs" Text="0" Foreground="White" FontSize="18" FontWeight="Bold"/>
+                                            </StackPanel>
                                         </StackPanel>
 
-                                        <!-- Lock Cards -->
-                                        <StackPanel Grid.Row="2" Grid.Column="0">
-                                            <TextBlock Text="🔒 LOCK CARDS" Foreground="#808080" FontSize="9"/>
-                                            <TextBlock x:Name="TxtProfileViewerLockCards" Text="0" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                                        <!-- Lock Cards with image -->
+                                        <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal">
+                                            <Border Width="64" Height="64" CornerRadius="8" Background="#252545" Margin="0,0,12,0">
+                                                <Image x:Name="ImgStatLockCards" Source="pack://application:,,,/Resources/achievements/total_lockdown.png" Stretch="Uniform" Margin="3"/>
+                                            </Border>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="LOCK CARDS" Foreground="#FF69B4" FontSize="12" FontWeight="Bold"/>
+                                                <TextBlock x:Name="TxtProfileViewerLockCards" Text="0" Foreground="White" FontSize="18" FontWeight="Bold"/>
+                                            </StackPanel>
                                         </StackPanel>
 
-                                        <!-- Achievements -->
-                                        <StackPanel Grid.Row="2" Grid.Column="1">
-                                            <TextBlock Text="🏆 ACHIEVEMENTS" Foreground="#808080" FontSize="9"/>
-                                            <TextBlock x:Name="TxtProfileViewerAchievements" Text="0" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                                        <!-- Achievements with image -->
+                                        <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
+                                            <Border Width="64" Height="64" CornerRadius="8" Background="#252545" Margin="0,0,12,0">
+                                                <Image x:Name="ImgStatAchievements" Source="pack://application:,,,/Resources/achievements/spiral_eyes.png" Stretch="Uniform" Margin="3"/>
+                                            </Border>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="ACHIEVEMENTS" Foreground="#FF69B4" FontSize="12" FontWeight="Bold"/>
+                                                <TextBlock x:Name="TxtProfileViewerAchievements" Text="0" Foreground="White" FontSize="18" FontWeight="Bold"/>
+                                            </StackPanel>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -4727,9 +4777,9 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Width="36" Height="36" Margin="2" CornerRadius="4"
+                                                    <Border Width="80" Height="80" Margin="4" CornerRadius="8"
                                                             Background="#252545" ToolTip="{Binding Name}">
-                                                        <Image Source="{Binding Image}" Stretch="Uniform" Margin="2"/>
+                                                        <Image Source="{Binding Image}" Stretch="Uniform" Margin="4"/>
                                                     </Border>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>

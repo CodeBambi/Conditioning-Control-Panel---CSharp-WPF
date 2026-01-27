@@ -96,6 +96,7 @@ namespace ConditioningControlPanel.Services
         private bool _bubblesPulseActive = false;
         private bool _bouncingTextPulseActive = false;
         private bool _webVideoActive = false; // Blocks all actions while web video plays fullscreen
+        private HashSet<string> _shownWebVideos = new(); // Track shown videos to avoid repeats
         // Separate generation counters for each pulse type to avoid cross-invalidation
         private int _spiralPulseGeneration = 0;
         private int _pinkFilterPulseGeneration = 0;
@@ -1135,11 +1136,25 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            // Pick a random video
+            // Pick a random video that hasn't been shown yet
             var videoList = videoLinks.ToList();
-            var randomVideo = videoList[_random.Next(videoList.Count)];
+            var availableVideos = videoList.Where(v => !_shownWebVideos.Contains(v.Key)).ToList();
+            
+            // If all videos have been shown, reset the list
+            if (availableVideos.Count == 0)
+            {
+                App.Logger?.Information("AutonomyService: All {Count} web videos have been shown, resetting list", videoList.Count);
+                _shownWebVideos.Clear();
+                availableVideos = videoList;
+            }
+            
+            var randomVideo = availableVideos[_random.Next(availableVideos.Count)];
             var videoName = randomVideo.Key;
             var videoUrl = randomVideo.Value;
+            
+            // Mark this video as shown
+            _shownWebVideos.Add(videoName);
+            App.Logger?.Debug("AutonomyService: Shown {Shown}/{Total} web videos", _shownWebVideos.Count, videoList.Count);
 
             App.Logger?.Information("AutonomyService: Playing web video '{Name}' at {Url}", videoName, videoUrl);
 

@@ -636,6 +636,7 @@ namespace ConditioningControlPanel
                 var companionProgress = App.Companion.GetProgress(companionId.Value);
 
                 TxtAvatarTitle.Text = companionDef.Name.ToUpperInvariant();
+                TxtAvatarLevel.Visibility = Visibility.Visible;
                 TxtAvatarLevel.Text = companionProgress.IsMaxLevel
                     ? "MAX!"
                     : $"Lv. {companionProgress.Level}";
@@ -645,7 +646,17 @@ namespace ConditioningControlPanel
                 // For sets 1-3 (pre-level 50), use legacy avatar titles
                 int titleIndex = Math.Clamp(_currentAvatarSet - 1, 0, AvatarTitles.Length - 1);
                 TxtAvatarTitle.Text = AvatarTitles[titleIndex];
-                TxtAvatarLevel.Text = $"Lv. {level}";
+
+                // Hide level for the first 2 generic sprites (sets 1-2) to avoid confusion with persona levels
+                if (_currentAvatarSet <= 2)
+                {
+                    TxtAvatarLevel.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    TxtAvatarLevel.Visibility = Visibility.Visible;
+                    TxtAvatarLevel.Text = $"Lv. {level}";
+                }
             }
         }
 

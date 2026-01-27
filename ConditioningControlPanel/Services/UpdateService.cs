@@ -22,23 +22,38 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.3.3";
+        public const string AppVersion = "5.4.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.3.3
+        public const string CurrentPatchNotes = @"v5.4.0
+
+🎮 DISCORD TAB & PROFILE VIEWER
+• New dedicated Discord tab in main navigation
+• Full profile viewer with bigger 100px avatar
+• Discord button - click to open user's profile in browser
+• Level AND Rank display with gold styling
+• Stats grid with achievement image thumbnails
+• Achievement showcase with 80x80 thumbnails
+• Patreon tier banners (Pink Filter / Prime Subject)
+• Search bar pre-fills with your display name
+• Auto-displays your profile when opening tab
+
+🔗 CLICKABLE AVATAR LINKS
+• Avatar companion can now open links in your browser
+• Links mentioned by AI are now interactive
+
+🎬 HYPNOTUBE TAKEOVER
+• Takeover mode can play curated HypnoTube videos
+• Curated selection for immersive sessions
 
 🐛 BUG FIXES
-• Fixed app freeze/hang when videos end (LibVLC deadlock)
-• Fixed ESC key not closing videos in strict mode
-• Fixed account conflict when logging in with different providers
-
-🔐 UNIFIED LOGIN
-• Added unified account system - one display name across Patreon & Discord
-• Prevents accidentally logging into two different accounts
-• Auto-links second provider to existing account";
+• Fixed crash when searching leaderboard profiles
+• Fixed scheduler not showing tray icon
+• Fixed Discord settings not syncing between tabs
+• Fixed DM toggle not updating profile viewer";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

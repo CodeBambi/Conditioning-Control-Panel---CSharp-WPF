@@ -1247,7 +1247,7 @@ namespace ConditioningControlPanel
             BtnAchievements.Style = inactiveStyle;
             BtnCompanion.Style = inactiveStyle;
             BtnLeaderboard.Style = inactiveStyle;
-            BtnOpenAssets.Style = inactiveStyle;
+            BtnOpenAssetsTop.Style = inactiveStyle;
             // BtnPatreonExclusives keeps its inline Patreon red style defined in XAML
 
             switch (tab)
@@ -1304,7 +1304,7 @@ namespace ConditioningControlPanel
 
                 case "assets":
                     AssetsTab.Visibility = Visibility.Visible;
-                    BtnOpenAssets.Style = activeStyle;
+                    BtnOpenAssetsTop.Style = activeStyle;
                     RefreshAssetTree();
                     InitializeAssetPresets();
                     _ = RefreshPacksAsync();
@@ -2269,13 +2269,38 @@ namespace ConditioningControlPanel
 
         private async void ChkAllowDiscordDm_Changed(object sender, RoutedEventArgs e)
         {
-            if (App.Settings?.Current != null)
+            if (App.Settings?.Current != null && sender is CheckBox chk)
             {
-                App.Settings.Current.AllowDiscordDm = ChkAllowDiscordDm.IsChecked == true;
+                var isChecked = chk.IsChecked == true;
+                App.Settings.Current.AllowDiscordDm = isChecked;
+
+                // Sync both checkboxes
+                if (ChkAllowDiscordDm != null && ChkAllowDiscordDm != chk)
+                    ChkAllowDiscordDm.IsChecked = isChecked;
+                if (ChkDiscordTabAllowDm != null && ChkDiscordTabAllowDm != chk)
+                    ChkDiscordTabAllowDm.IsChecked = isChecked;
+
                 // Sync immediately so the setting takes effect on the leaderboard
                 if (App.ProfileSync != null)
                 {
                     await App.ProfileSync.SyncProfileAsync();
+                }
+
+                // Refresh profile viewer to show/hide DM button
+                if (ProfileCardContainer?.Visibility == Visibility.Visible)
+                {
+                    // Update the Discord button visibility based on new setting
+                    if (BtnProfileDiscord != null)
+                    {
+                        if (isChecked && !string.IsNullOrEmpty(App.Discord?.UserId))
+                        {
+                            BtnProfileDiscord.Visibility = Visibility.Visible;
+                        }
+                        else
+                        {
+                            BtnProfileDiscord.Visibility = Visibility.Collapsed;
+                        }
+                    }
                 }
             }
         }
@@ -5621,6 +5646,16 @@ namespace ConditioningControlPanel
                 if (ChkDiscordTabAnonymous != null) ChkDiscordTabAnonymous.IsChecked = s.DiscordUseAnonymousName;
                 if (ChkDiscordTabAllowDm != null) ChkDiscordTabAllowDm.IsChecked = s.AllowDiscordDm;
             }
+
+            // Pre-fill search bar with user's display name and auto-display own profile
+            var displayName = App.Discord?.CustomDisplayName ?? App.Discord?.DisplayName ?? App.Patreon?.DisplayName;
+            if (TxtProfileSearch != null && !string.IsNullOrEmpty(displayName))
+            {
+                TxtProfileSearch.Text = displayName;
+            }
+
+            // Auto-display own profile when Discord tab is opened
+            DisplayOwnProfile();
         }
 
         #region Profile Viewer
@@ -5687,6 +5722,58 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnProfileDiscord_Click(object sender, RoutedEventArgs e)
+        {
+            // Get Discord ID from button's Tag
+            var button = sender as Button;
+            var discordId = button?.Tag as string;
+
+            if (string.IsNullOrEmpty(discordId))
+            {
+                discordId = TxtProfileDiscordId?.Text;
+            }
+
+            if (!string.IsNullOrEmpty(discordId))
+            {
+                try
+                {
+                    // Open Discord profile in browser using rundll32 to force browser
+                    var profileUrl = $"https://discord.com/users/{discordId}";
+                    var startInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "rundll32.exe",
+                        Arguments = $"url.dll,FileProtocolHandler {profileUrl}",
+                        UseShellExecute = false
+                    };
+                    System.Diagnostics.Process.Start(startInfo);
+                    App.Logger?.Information("Opened Discord profile for user: {DiscordId}", discordId);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to open Discord profile");
+                    // Fallback: copy to clipboard
+                    try
+                    {
+                        System.Windows.Clipboard.SetText(discordId);
+                        if (TxtProfileDiscordId != null)
+                        {
+                            var originalText = TxtProfileDiscordId.Text;
+                            TxtProfileDiscordId.Text = "ID Copied!";
+                            Task.Delay(1500).ContinueWith(_ =>
+                            {
+                                Dispatcher.Invoke(() =>
+                                {
+                                    if (TxtProfileDiscordId != null)
+                                        TxtProfileDiscordId.Text = originalText;
+                                });
+                            });
+                        }
+                    }
+                    catch { }
+                }
+            }
+        }
+
         private void SearchAndDisplayProfile(string? searchName)
         {
             if (string.IsNullOrWhiteSpace(searchName))
@@ -5741,7 +5828,36 @@ namespace ConditioningControlPanel
             if (App.Leaderboard != null)
             {
                 await App.Leaderboard.RefreshAsync();
-                SearchAndDisplayProfile(searchName);
+
+                // After refresh, try to find the profile but don't recurse if still empty
+                var entries = App.Leaderboard?.Entries;
+                if (entries != null && entries.Count > 0)
+                {
+                    var entry = entries.FirstOrDefault(e =>
+                        e.DisplayName?.Equals(searchName, StringComparison.OrdinalIgnoreCase) == true);
+
+                    if (entry == null)
+                    {
+                        entry = entries.FirstOrDefault(e =>
+                            e.DisplayName?.Contains(searchName, StringComparison.OrdinalIgnoreCase) == true);
+                    }
+
+                    if (entry != null)
+                    {
+                        DisplayProfileEntry(entry);
+                        return;
+                    }
+                }
+
+                // Show not found message
+                if (NoProfileSelected != null)
+                {
+                    NoProfileSelected.Visibility = Visibility.Visible;
+                }
+                if (ProfileCardContainer != null)
+                {
+                    ProfileCardContainer.Visibility = Visibility.Collapsed;
+                }
             }
         }
 
@@ -5798,17 +5914,18 @@ namespace ConditioningControlPanel
                 ProfileOnlineIndicator.Fill = new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#43B581"));
 
-            // Discord handle
-            if (ProfileDiscordHandle != null && TxtProfileDiscordId != null)
+            // Discord button
+            if (BtnProfileDiscord != null && TxtProfileDiscordId != null)
             {
                 if (App.Settings?.Current?.AllowDiscordDm == true && !string.IsNullOrEmpty(App.Discord?.UserId))
                 {
-                    ProfileDiscordHandle.Visibility = Visibility.Visible;
-                    TxtProfileDiscordId.Text = App.Discord.UserId;
+                    BtnProfileDiscord.Visibility = Visibility.Visible;
+                    TxtProfileDiscordId.Text = App.Discord.DisplayName ?? App.Discord.UserId;
+                    BtnProfileDiscord.Tag = App.Discord.UserId; // Store ID for click handler
                 }
                 else
                 {
-                    ProfileDiscordHandle.Visibility = Visibility.Collapsed;
+                    BtnProfileDiscord.Visibility = Visibility.Collapsed;
                 }
             }
 
@@ -5818,6 +5935,12 @@ namespace ConditioningControlPanel
             var progress = App.Achievements?.Progress;
 
             if (TxtProfileViewerLevel != null) TxtProfileViewerLevel.Text = level.ToString();
+
+            // Rank (own rank from leaderboard, if available)
+            if (TxtProfileViewerRank != null)
+            {
+                TxtProfileViewerRank.Text = "#-"; // Will be set when leaderboard loads
+            }
             if (TxtProfileViewerXp != null) TxtProfileViewerXp.Text = FormatNumber(xp);
             if (TxtProfileViewerBubbles != null) TxtProfileViewerBubbles.Text = FormatNumber(progress?.TotalBubblesPopped ?? 0);
             if (TxtProfileViewerVideos != null)
@@ -5845,6 +5968,34 @@ namespace ConditioningControlPanel
                 else
                 {
                     ProfilePatreonBadge.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            // Patreon tier banner (Pink filter / Prime subject images)
+            // Shows for tier 1+, tier 2+, tier 3, OR whitelisted users
+            if (ProfilePatreonTierBanner != null && ImgPatreonTierBanner != null)
+            {
+                var tier = (int)(App.Patreon?.CurrentTier ?? 0);
+                var isWhitelisted = App.Patreon?.IsWhitelisted == true;
+                if (App.Patreon?.HasPremiumAccess == true || isWhitelisted)
+                {
+                    ProfilePatreonTierBanner.Visibility = Visibility.Visible;
+                    try
+                    {
+                        // Tier 3 = Prime subject, everyone else = Pink filter
+                        var bannerImage = tier >= 3 ? "prime subject.webp" : "Pink filter.webp";
+                        ImgPatreonTierBanner.Source = new System.Windows.Media.Imaging.BitmapImage(
+                            new Uri($"pack://application:,,,/Resources/{bannerImage}", UriKind.Absolute));
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to load Patreon tier banner image");
+                        ProfilePatreonTierBanner.Visibility = Visibility.Collapsed;
+                    }
+                }
+                else
+                {
+                    ProfilePatreonTierBanner.Visibility = Visibility.Collapsed;
                 }
             }
 
@@ -5892,22 +6043,29 @@ namespace ConditioningControlPanel
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(
                         entry.IsOnline ? "#43B581" : "#747F8D"));
 
-            // Discord handle (only if they have it and allow DMs)
-            if (ProfileDiscordHandle != null && TxtProfileDiscordId != null)
+            // Discord button (only if they have it and allow DMs)
+            if (BtnProfileDiscord != null && TxtProfileDiscordId != null)
             {
                 if (entry.HasDiscord && !string.IsNullOrEmpty(entry.DiscordId))
                 {
-                    ProfileDiscordHandle.Visibility = Visibility.Visible;
-                    TxtProfileDiscordId.Text = entry.DiscordId;
+                    BtnProfileDiscord.Visibility = Visibility.Visible;
+                    TxtProfileDiscordId.Text = entry.DisplayName ?? "Message on Discord";
+                    BtnProfileDiscord.Tag = entry.DiscordId; // Store ID for click handler
                 }
                 else
                 {
-                    ProfileDiscordHandle.Visibility = Visibility.Collapsed;
+                    BtnProfileDiscord.Visibility = Visibility.Collapsed;
                 }
             }
 
             // Stats
             if (TxtProfileViewerLevel != null) TxtProfileViewerLevel.Text = entry.Level.ToString();
+
+            // Rank
+            if (TxtProfileViewerRank != null)
+            {
+                TxtProfileViewerRank.Text = entry.Rank > 0 ? $"#{entry.Rank}" : "#-";
+            }
             if (TxtProfileViewerXp != null) TxtProfileViewerXp.Text = entry.XpDisplay;
             if (TxtProfileViewerBubbles != null) TxtProfileViewerBubbles.Text = entry.BubblesPoppedDisplay;
             if (TxtProfileViewerVideos != null)
@@ -5930,6 +6088,31 @@ namespace ConditioningControlPanel
                 else
                 {
                     ProfilePatreonBadge.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            // Patreon tier banner (Pink filter / Prime subject images)
+            // Shows for any Patreon supporter (tier 1+)
+            if (ProfilePatreonTierBanner != null && ImgPatreonTierBanner != null)
+            {
+                if (entry.IsPatreon && entry.PatreonTier >= 1)
+                {
+                    ProfilePatreonTierBanner.Visibility = Visibility.Visible;
+                    try
+                    {
+                        // Tier 3 = Prime subject, everyone else = Pink filter
+                        var bannerImage = entry.PatreonTier >= 3 ? "prime subject.webp" : "Pink filter.webp";
+                        ImgPatreonTierBanner.Source = new System.Windows.Media.Imaging.BitmapImage(
+                            new Uri($"pack://application:,,,/Resources/{bannerImage}", UriKind.Absolute));
+                    }
+                    catch
+                    {
+                        ProfilePatreonTierBanner.Visibility = Visibility.Collapsed;
+                    }
+                }
+                else
+                {
+                    ProfilePatreonTierBanner.Visibility = Visibility.Collapsed;
                 }
             }
 
@@ -6585,8 +6768,7 @@ namespace ConditioningControlPanel
                 App.Logger?.Information("Scheduler: App started within scheduled time window - auto-starting");
 
                 // Minimize to tray and start engine
-                WindowState = WindowState.Minimized;
-                Hide();
+                _trayIcon?.MinimizeToTray();
                 _trayIcon?.ShowNotification("Scheduler Active", "Session auto-started based on schedule.", System.Windows.Forms.ToolTipIcon.Info);
 
                 StartEngine();
@@ -6626,10 +6808,9 @@ namespace ConditioningControlPanel
                 
                 Dispatcher.Invoke(() =>
                 {
-                    WindowState = WindowState.Minimized;
-                    Hide();
+                    _trayIcon?.MinimizeToTray();
                     _trayIcon?.ShowNotification("Scheduler Active", "Session auto-started based on schedule.", System.Windows.Forms.ToolTipIcon.Info);
-                    
+
                     StartEngine();
                     _schedulerAutoStarted = true;
                 });
