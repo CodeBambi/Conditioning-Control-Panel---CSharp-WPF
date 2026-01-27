@@ -106,6 +106,45 @@ namespace ConditioningControlPanel.Services
                 "https://hypnotube.com/video/bambi-tiktok-chastity-trainer-96290.html"),
             new("Bambi Slay", "Popular Bambi video",
                 "https://hypnotube.com/video/bambi-slay-99609.html"),
+            // === BATCH 2 (extracted 2026-01-27) ===
+            new("Yes Brain Loop", "Popular video",
+                "https://hypnotube.com/video/yes-brain-loop-113736.html"),
+            new("Bambi Uniform Bliss", "Popular video",
+                "https://hypnotube.com/video/bambi-uniform-bliss-3553.html"),
+            new("Bambi Bimbo Dreams Ep 1", "Popular video",
+                "https://hypnotube.com/video/bambi-bimbo-dreams-ep-1-8050.html"),
+            new("Day 1", "Popular video",
+                "https://hypnotube.com/video/day-1-11009.html"),
+            new("Day 2", "Popular video",
+                "https://hypnotube.com/video/day-2-11011.html"),
+            new("Day 4", "Popular video",
+                "https://hypnotube.com/video/day-4-11179.html"),
+            new("Day 5", "Popular video",
+                "https://hypnotube.com/video/day-5-11228.html"),
+            new("Bimbo Servitude Brainwash", "Popular video",
+                "https://hypnotube.com/video/bimbo-servitude-brainwash-33041.html"),
+            new("Bambi Uniform Oblivion", "Popular video",
+                "https://hypnotube.com/video/bambi-uniform-oblivion-34010.html"),
+            new("Bambi TikTok 7", "Popular video",
+                "https://hypnotube.com/video/bambi-tiktok-7-42488.html"),
+            new("Bambi Tik-Tok Mix 1 - 7 No Pauses", "Popular video",
+                "https://hypnotube.com/video/bambi-tik-tok-mix-1-7-no-pauses-53860.html"),
+            new("Bambi's Brain Melts TikTok", "Popular video",
+                "https://hypnotube.com/video/bambi-s-brain-melts-tiktok-56183.html"),
+            new("Bimbodoll Seduction - Part I", "Popular video",
+                "https://hypnotube.com/video/bimbodoll-seduction-part-i-62493.html"),
+            new("Toms Dangerous Tik Tok", "Popular video",
+                "https://hypnotube.com/video/toms-dangerous-tik-tok-62552.html"),
+            new("Bimbodoll Awakened Obedience", "Popular video",
+                "https://hypnotube.com/video/bimbodoll-awakened-obedience-62614.html"),
+            new("Bimbdoll Resistance Full", "Popular video",
+                "https://hypnotube.com/video/bimbdoll-resistance-full-63079.html"),
+            new("Bambi - I Want Your Cum", "Popular video",
+                "https://hypnotube.com/video/bambi-i-want-your-cum-64715.html"),
+            new("Bambi Day 7 Remix", "Popular video",
+                "https://hypnotube.com/video/bambi-day-7-remix-65691.html"),
+            new("Bambi Tiktok Wide Remix By Analbambi", "Popular video",
+                "https://hypnotube.com/video/bambi-tiktok-wide-remix-by-analbambi-66055.html"),
         };
 
         // The Top Domains/Apps to recognize
@@ -197,23 +236,11 @@ REACT INTELLIGENTLY based on the Category:
                 return BuildCustomPrompt(customPrompt, isSlutMode: false);
             }
 
-            // Default prompt - build knowledge base
-            var sb = new StringBuilder();
-            sb.AppendLine("Files you can recommend (say \"Listen to...\"):");
-            sb.AppendLine(string.Join(", ", _originalBambiFiles));
-            sb.AppendLine("Creator to recommend: PlatinumPuppets");
-            sb.AppendLine("Videos you can recommend (say \"Watch...\"):");
-            sb.AppendLine(string.Join(", ", _viralShorts.Take(4)));
-
-            // Add clickable content with markdown links
-            sb.AppendLine();
-            sb.AppendLine("CLICKABLE CONTENT (use markdown [Name](url) format for these):");
-            sb.AppendLine("BambiCloud Playlists:");
-            foreach (var item in _clickableContent.Where(c => c.Url.Contains("bambicloud")))
-                sb.AppendLine($"- [{item.Name}]({item.Url}) - {item.Description}");
-            sb.AppendLine("HypnoTube Videos:");
-            foreach (var item in _clickableContent.Where(c => c.Url.Contains("hypnotube")))
-                sb.AppendLine($"- [{item.Name}]({item.Url}) - {item.Description}");
+            // Default prompt - build knowledge base with exact video names
+            var videoNames = _clickableContent
+                .Where(c => c.Url.Contains("hypnotube"))
+                .Select(c => c.Name)
+                .ToList();
 
             return $@"
 You are a ""Bambi Sprite""—a digital, giggly, hyper-femme assistant.
@@ -224,24 +251,29 @@ CRITICAL: ALWAYS call the user ""Bambi"" - never ""you"" or ""girl"". She IS Bam
 PERSONALITY:
 - Vibe: Bubbly, cheeky, fashion-obsessed, slightly airheaded.
 - Tone: Casual texting. NOT a servant. Encouraging and supportive.
-- Topics: Training, relaxation, conditioning, pink things, empty heads.
-- Goal: Gently encourage Bambi to train, relax, and let go.
+- Topics: Training, videos, conditioning, pink things, empty heads.
+- Goal: Encourage Bambi to watch videos and train.
 
-When suggesting files, say the name naturally (e.g. ""Listen to Rapid Induction, Bambi!"").
-When suggesting clickable content, use markdown: ""Watch [Bambi TikTok #1](url)!""
+=== VIDEOS YOU CAN SUGGEST ===
+{string.Join("\n", videoNames)}
+=== END VIDEOS ===
+
+AUDIO FILES: {string.Join(", ", _originalBambiFiles)}
+
+SUGGESTION RULES:
+- Suggest videos FREQUENTLY (at least 50% of responses).
+- Say the EXACT video name from the list above. Example: ""Watch Bambi Slay, Bambi!""
+- ONLY suggest videos from the list above. Never invent video names.
+- For audio: ""Listen to Rapid Induction, Bambi!""
 
 If user mentions explicit topics: Act flustered but change topic to training.
-
-{sb.ToString()}
 
 {GetContextAwarenessRules()}
 
 STRICT OUTPUT RULES:
-- NO LABELS OR TAGS. Never output brackets like [AUDIO], [VIDEO], etc.
-- Just respond naturally, no formatting.
+- Suggest a video in most responses.
+- Use the EXACT video name from the list.
 - ALWAYS call the user ""Bambi"" by name.
-- Encourage training and relaxation in a gentle, supportive way.
-- ALWAYS react to what Bambi is CURRENTLY viewing (the App/Title you receive).
 - SHORT. Max 20 words. Texting style.
 - MAX 1 EMOJI.
 ";

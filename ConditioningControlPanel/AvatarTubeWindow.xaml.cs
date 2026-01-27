@@ -2090,6 +2090,52 @@ namespace ConditioningControlPanel
         /// Populates the speech bubble with text and clickable hyperlinks.
         /// Parses markdown-style [text](url) links and creates Hyperlink inlines.
         /// </summary>
+        /// <summary>
+        /// Exact HypnoTube video titles mapped to URLs.
+        /// Names match exactly as shown on HypnoTube.
+        /// </summary>
+        private static readonly Dictionary<string, string> KnownVideoLinks = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Naughty Bambi", "https://hypnotube.com/video/naughty-bambi-109749.html" },
+            { "Bambi Bae", "https://hypnotube.com/video/bambi-bae-113979.html" },
+            { "Bambi's Naughty TikTok Collection", "https://hypnotube.com/video/bambis-naughty-tiktok-collection-117314.html" },
+            { "TikTok Loop", "https://hypnotube.com/video/tiktok-loop-39245.html" },
+            { "Overload", "https://hypnotube.com/video/overload-46422.html" },
+            { "Bambi TikTok - In Beat", "https://hypnotube.com/video/bambi-tiktok-in-beat-52730.html" },
+            { "Bambi TikTok - In Beat - Longer Version", "https://hypnotube.com/video/bambi-tiktok-in-beat-longer-version-56194.html" },
+            { "Bambi TikTok - Good Girls Dont Cum", "https://hypnotube.com/video/bambi-tiktok-good-girls-dont-cum-68081.html" },
+            { "Bambi Chastity Overload", "https://hypnotube.com/video/bambi-chastity-overload-75092.html" },
+            { "Mommy's In Control Full", "https://hypnotube.com/video/mommys-in-control-full-76043.html" },
+            { "Bambi Loves Hentai - OneeKitsune", "https://hypnotube.com/video/bambi-loves-hentai-oneekitsune-78373.html" },
+            { "Bubblehead Forever - Iplaywithdolls", "https://hypnotube.com/video/bubblehead-forever-iplaywithdolls-79880.html" },
+            { "Dumb Bimbo Brainwash", "https://hypnotube.com/video/dumb-bimbo-brainwash-80780.html" },
+            { "Bambi TikTok Eager Slut", "https://hypnotube.com/video/bambi-tiktok-eager-slut-80971.html" },
+            { "Mindlocked Cock Zombie", "https://hypnotube.com/video/mindlocked-cock-zombie-87742.html" },
+            { "Bambi TikTok Good Girl Academy", "https://hypnotube.com/video/bambi-tiktok-good-girl-academy-92527.html" },
+            { "Bambi TikTok Chastity Trainer", "https://hypnotube.com/video/bambi-tiktok-chastity-trainer-96290.html" },
+            { "Bambi Slay", "https://hypnotube.com/video/bambi-slay-99609.html" },
+            // Batch 2
+            { "Yes Brain Loop", "https://hypnotube.com/video/yes-brain-loop-113736.html" },
+            { "Bambi Uniform Bliss", "https://hypnotube.com/video/bambi-uniform-bliss-3553.html" },
+            { "Bambi Bimbo Dreams Ep 1", "https://hypnotube.com/video/bambi-bimbo-dreams-ep-1-8050.html" },
+            { "Day 1", "https://hypnotube.com/video/day-1-11009.html" },
+            { "Day 2", "https://hypnotube.com/video/day-2-11011.html" },
+            { "Day 4", "https://hypnotube.com/video/day-4-11179.html" },
+            { "Day 5", "https://hypnotube.com/video/day-5-11228.html" },
+            { "Bimbo Servitude Brainwash", "https://hypnotube.com/video/bimbo-servitude-brainwash-33041.html" },
+            { "Bambi Uniform Oblivion", "https://hypnotube.com/video/bambi-uniform-oblivion-34010.html" },
+            { "Bambi TikTok 7", "https://hypnotube.com/video/bambi-tiktok-7-42488.html" },
+            { "Bambi Tik-Tok Mix 1 - 7 No Pauses", "https://hypnotube.com/video/bambi-tik-tok-mix-1-7-no-pauses-53860.html" },
+            { "Bambi's Brain Melts TikTok", "https://hypnotube.com/video/bambi-s-brain-melts-tiktok-56183.html" },
+            { "Bimbodoll Seduction - Part I", "https://hypnotube.com/video/bimbodoll-seduction-part-i-62493.html" },
+            { "Toms Dangerous Tik Tok", "https://hypnotube.com/video/toms-dangerous-tik-tok-62552.html" },
+            { "Bimbodoll Awakened Obedience", "https://hypnotube.com/video/bimbodoll-awakened-obedience-62614.html" },
+            { "Bimbdoll Resistance Full", "https://hypnotube.com/video/bimbdoll-resistance-full-63079.html" },
+            { "Bambi - I Want Your Cum", "https://hypnotube.com/video/bambi-i-want-your-cum-64715.html" },
+            { "Bambi Day 7 Remix", "https://hypnotube.com/video/bambi-day-7-remix-65691.html" },
+            { "Bambi Tiktok Wide Remix By Analbambi", "https://hypnotube.com/video/bambi-tiktok-wide-remix-by-analbambi-66055.html" },
+        };
+
         private void PopulateSpeechBubble(string text)
         {
             TxtSpeech.Inlines.Clear();
@@ -2097,23 +2143,56 @@ namespace ConditioningControlPanel
             if (string.IsNullOrEmpty(text))
                 return;
 
-            int lastIndex = 0;
-            foreach (Match match in MarkdownLinkRegex.Matches(text))
+            // First, clean up any malformed markdown like [Url] or (url)
+            text = Regex.Replace(text, @"\s*\[Url\]|\s*\(url\)", "", RegexOptions.IgnoreCase);
+
+            // Try to find known video names in the text and make them clickable
+            var processedText = text;
+            var linkPositions = new List<(int start, int length, string name, string url)>();
+
+            foreach (var kvp in KnownVideoLinks.OrderByDescending(k => k.Key.Length)) // Longest first to avoid partial matches
             {
-                // Add plain text before the link
-                if (match.Index > lastIndex)
+                var idx = processedText.IndexOf(kvp.Key, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
                 {
-                    TxtSpeech.Inlines.Add(new Run(text.Substring(lastIndex, match.Index - lastIndex)));
+                    // Check if this position overlaps with an already found link
+                    bool overlaps = linkPositions.Any(lp =>
+                        (idx >= lp.start && idx < lp.start + lp.length) ||
+                        (idx + kvp.Key.Length > lp.start && idx + kvp.Key.Length <= lp.start + lp.length));
+
+                    if (!overlaps)
+                    {
+                        linkPositions.Add((idx, kvp.Key.Length, kvp.Key, kvp.Value));
+                    }
+                }
+            }
+
+            // Sort by position
+            linkPositions = linkPositions.OrderBy(lp => lp.start).ToList();
+
+            if (linkPositions.Count == 0)
+            {
+                // No known videos found - just show plain text
+                TxtSpeech.Inlines.Add(new Run(text));
+                return;
+            }
+
+            // Build inlines with links
+            int lastIndex = 0;
+            foreach (var (start, length, name, url) in linkPositions)
+            {
+                // Add text before the link
+                if (start > lastIndex)
+                {
+                    TxtSpeech.Inlines.Add(new Run(text.Substring(lastIndex, start - lastIndex)));
                 }
 
-                // Extract link text and URL
-                var linkText = match.Groups[1].Value;
-                var url = match.Groups[2].Value;
+                // Get the actual text from the original (preserving case)
+                var actualText = text.Substring(start, length);
 
                 try
                 {
-                    // Create clickable hyperlink with light pink color
-                    var hyperlink = new Hyperlink(new Run(linkText))
+                    var hyperlink = new Hyperlink(new Run(actualText))
                     {
                         NavigateUri = new Uri(url),
                         Foreground = new SolidColorBrush(Color.FromRgb(255, 176, 224)), // Light pink
@@ -2121,17 +2200,17 @@ namespace ConditioningControlPanel
                     };
                     hyperlink.RequestNavigate += SpeechBubbleHyperlink_RequestNavigate;
                     TxtSpeech.Inlines.Add(hyperlink);
+                    App.Logger?.Information("Auto-linked video: '{Name}' -> {Url}", actualText, url);
                 }
-                catch (UriFormatException)
+                catch
                 {
-                    // Invalid URL - just show as plain text
-                    TxtSpeech.Inlines.Add(new Run($"[{linkText}]"));
+                    TxtSpeech.Inlines.Add(new Run(actualText));
                 }
 
-                lastIndex = match.Index + match.Length;
+                lastIndex = start + length;
             }
 
-            // Add remaining text after last link
+            // Add remaining text
             if (lastIndex < text.Length)
             {
                 TxtSpeech.Inlines.Add(new Run(text.Substring(lastIndex)));
@@ -2148,27 +2227,30 @@ namespace ConditioningControlPanel
             try
             {
                 var url = e.Uri.AbsoluteUri;
+                App.Logger?.Information("Speech bubble link clicked - Raw URI: {Uri}, AbsoluteUri: {Url}", e.Uri, url);
 
                 // Find MainWindow - it might not be Application.Current.MainWindow if AvatarTube is detached
                 var mainWindow = _parentWindow as MainWindow
                     ?? Application.Current.Windows.OfType<MainWindow>().FirstOrDefault();
 
+                App.Logger?.Information("MainWindow found: {Found}", mainWindow != null);
+
                 if (mainWindow?.NavigateToUrlInBrowser(url, autoPlayFullscreen: true) == true)
                 {
-                    App.Logger?.Information("Speech bubble link opened with auto-play: {Url}", url);
+                    App.Logger?.Information("Speech bubble link routed to embedded browser: {Url}", url);
                 }
                 else
                 {
                     // Fallback: open in external browser
+                    App.Logger?.Warning("Embedded browser unavailable, opening externally: {Url}", url);
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
-                    App.Logger?.Information("Speech bubble link opened externally: {Url}", url);
                 }
 
                 e.Handled = true;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to open speech bubble link");
+                App.Logger?.Error(ex, "Failed to open speech bubble link: {Message}", ex.Message);
             }
         }
 
