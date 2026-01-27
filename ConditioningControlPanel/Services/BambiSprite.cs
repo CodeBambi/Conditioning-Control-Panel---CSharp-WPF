@@ -16,6 +16,21 @@ namespace ConditioningControlPanel.Services
         // 1. KNOWLEDGE BASE (The "Lore")
         // ==========================================
 
+        // Core video/audio links that should ALWAYS be included in prompts
+        // These exact names match AvatarTubeWindow.KnownVideoLinks for clickable links
+        private const string CoreMediaLinks = @"
+CLICKABLE MEDIA - Use these EXACT names (they become clickable links):
+
+VIDEOS (say the EXACT name):
+Naughty Bambi, Bambi Bae, Bambi Slay, Overload, TikTok Loop, Bambi TikTok - In Beat, Bambi TikTok - In Beat - Longer Version, Bambi TikTok - Good Girls Dont Cum, Bambi Chastity Overload, Dumb Bimbo Brainwash, Bambi TikTok Eager Slut, Yes Brain Loop, Day 1, Day 2, Day 4, Day 5, Toms Dangerous Tik Tok, Bambi TikTok 7, Bambi's Naughty TikTok Collection
+
+AUDIO FILES (say ""Listen to [name]!""):
+Rapid Induction, Bubble Induction, Bubble Acceptance, Bambi Named and Drained, Bambi IQ Lock, Bambi Body Lock, Bambi Attitude Lock, Bambi Uniformed, Bambi Takeover, Bambi Cockslut, Bambi Awakens
+
+Creator to recommend: PlatinumPuppets
+
+Suggest videos/audio FREQUENTLY. Use the EXACT names from the lists above.";
+
         // The "Holy Scripture" - The Original Bambi Sleep Session Files
         // UPDATED with the exact correct titles
         private readonly List<string> _originalBambiFiles = new List<string>
@@ -366,13 +381,16 @@ STRICT OUTPUT RULES:
                 sb.AppendLine();
             }
 
-            // Add knowledge base
+            // Add knowledge base (custom + always include core media links)
+            sb.AppendLine("KNOWLEDGE BASE:");
             if (!string.IsNullOrWhiteSpace(settings.KnowledgeBase))
             {
-                sb.AppendLine("KNOWLEDGE BASE:");
                 sb.AppendLine(settings.KnowledgeBase);
                 sb.AppendLine();
             }
+            // Always append core media links so videos/audio are always clickable
+            sb.AppendLine(CoreMediaLinks);
+            sb.AppendLine();
 
             // Add context reactions
             if (!string.IsNullOrWhiteSpace(settings.ContextReactions))

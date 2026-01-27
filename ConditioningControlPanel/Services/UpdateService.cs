@@ -22,20 +22,22 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.1";
+        public const string AppVersion = "5.4.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.1
+        public const string CurrentPatchNotes = @"v5.4.2
 
-🐛 HOTFIX: VIDEO CRASH FIX
+🔗 AI CLICKABLE LINKS FIX
+• Video/audio links now work with ALL AI personalities
+• Custom prompts now always include clickable media names
+• Fixed links only working with baseline prompt
+
+🐛 VIDEO CRASH FIX (from 5.4.1)
 • Fixed crash when Bambi Takeover video ends
-• Video windows no longer stay black after playback
-• Added error handling for LibVLC event dispatching
-• Improved cleanup reliability for video playback
-• Better logging to diagnose video issues";
+• Video windows no longer stay black after playback";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
