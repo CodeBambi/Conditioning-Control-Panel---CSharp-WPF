@@ -1385,12 +1385,12 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Use explorer.exe to force opening in default browser, bypassing Discord's URL handler
+                    // Use rundll32 to force opening in default browser - this bypasses app URL handlers
                     var url = $"https://discord.com/users/{discordId}";
                     Process.Start(new ProcessStartInfo
                     {
-                        FileName = "explorer.exe",
-                        Arguments = $"\"{url}\"",
+                        FileName = "rundll32",
+                        Arguments = $"url.dll,FileProtocolHandler {url}",
                         UseShellExecute = false
                     });
                 }
