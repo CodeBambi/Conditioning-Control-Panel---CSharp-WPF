@@ -33,27 +33,27 @@ namespace ConditioningControlPanel.Services
 🎮 DISCORD TAB & PROFILE VIEWER
 • New dedicated Discord tab in main navigation
 • Full profile viewer with bigger 100px avatar
-• Discord button - click to open user's profile in browser
+• Discord button opens user's profile in browser
 • Level AND Rank display with gold styling
 • Stats grid with achievement image thumbnails
 • Achievement showcase with 80x80 thumbnails
 • Patreon tier banners (Pink Filter / Prime Subject)
 • Search bar pre-fills with your display name
 • Auto-displays your profile when opening tab
+• DM toggle immediately updates profile viewer
 
 🔗 CLICKABLE AVATAR LINKS
-• Avatar companion can now open links in your browser
-• Links mentioned by AI are now interactive
+• Avatar companion can now open links in browser
+• Links mentioned by AI are now clickable
 
 🎬 HYPNOTUBE TAKEOVER
-• Takeover mode can play curated HypnoTube videos
+• Takeover mode plays curated HypnoTube videos
 • Curated selection for immersive sessions
 
 🐛 BUG FIXES
 • Fixed crash when searching leaderboard profiles
 • Fixed scheduler not showing tray icon
-• Fixed Discord settings not syncing between tabs
-• Fixed DM toggle not updating profile viewer";
+• Fixed Discord settings not syncing between tabs";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
