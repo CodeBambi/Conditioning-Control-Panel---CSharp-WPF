@@ -1400,13 +1400,28 @@ namespace ConditioningControlPanel.Services
                         .Replace("\\r\\n", "\n")
                         .Replace("\\n", "\n")
                         .Replace("\\\"", "\"");
+
+                    // Clean up markdown headers for plain text display
+                    releaseNotes = System.Text.RegularExpressions.Regex.Replace(releaseNotes, @"^###\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+                    releaseNotes = System.Text.RegularExpressions.Regex.Replace(releaseNotes, @"^##\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+                    releaseNotes = releaseNotes.Replace("\\", ""); // Remove escape backslashes
+                }
+
+                // Parse file size from assets array (look for .exe installer)
+                long fileSizeBytes = 0;
+                var sizeMatch = System.Text.RegularExpressions.Regex.Match(response,
+                    @"""name""\s*:\s*""[^""]*Setup\.exe""[^}]*""size""\s*:\s*(\d+)");
+                if (sizeMatch.Success && long.TryParse(sizeMatch.Groups[1].Value, out var size))
+                {
+                    fileSizeBytes = size;
+                    App.Logger?.Debug("Parsed installer size from GitHub: {Size} bytes", fileSizeBytes);
                 }
 
                 return new AppUpdateInfo
                 {
                     Version = latestVersionString,
                     ReleaseNotes = releaseNotes,
-                    FileSizeBytes = 0, // Unknown from API
+                    FileSizeBytes = fileSizeBytes,
                     ReleaseDate = DateTime.Now,
                     IsNewer = true,
                     IsGitHubFallback = true // Flag to indicate this came from GitHub API
