@@ -5370,9 +5370,9 @@ namespace ConditioningControlPanel
         /// Called by speech bubble links in AvatarTubeWindow.
         /// </summary>
         /// <param name="url">The URL to navigate to</param>
-        /// <param name="fullscreen">If true, opens the browser in fullscreen mode</param>
+        /// <param name="autoPlayFullscreen">If true, auto-plays video and requests fullscreen on the video element</param>
         /// <returns>True if navigation was initiated, false if browser unavailable</returns>
-        public bool NavigateToUrlInBrowser(string url, bool fullscreen = false)
+        public bool NavigateToUrlInBrowser(string url, bool autoPlayFullscreen = false)
         {
             if (_browser == null || !_browserInitialized)
             {
@@ -5394,25 +5394,30 @@ namespace ConditioningControlPanel
                     RbHypnoTube.IsChecked = true;
                 }
 
-                // Navigate first
+                _browser.ZoomFactor = 0.5;
+
+                // If auto-play fullscreen requested, set up handler for when navigation completes
+                if (autoPlayFullscreen && _browser.WebView?.CoreWebView2 != null)
+                {
+                    void OnNavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+                    {
+                        _browser.WebView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+
+                        if (e.IsSuccess)
+                        {
+                            // Inject script to auto-play and fullscreen the video after a short delay
+                            _ = AutoPlayAndFullscreenVideoAsync();
+                        }
+                    }
+
+                    _browser.WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+                }
+
+                // Navigate
                 _browser.Navigate(url);
 
-                // Then go fullscreen if requested
-                if (fullscreen)
-                {
-                    // Small delay to let navigation start before fullscreen
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        EnterBrowserFullscreen();
-                    }), System.Windows.Threading.DispatcherPriority.Background);
-                }
-                else
-                {
-                    _browser.ZoomFactor = 0.5;
-                }
-
-                App.Logger?.Information("Speech link navigated to: {Url} (Site: {Site}, Fullscreen: {Fullscreen})",
-                    url, lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube", fullscreen);
+                App.Logger?.Information("Speech link navigated to: {Url} (Site: {Site}, AutoPlay: {AutoPlay})",
+                    url, lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube", autoPlayFullscreen);
 
                 return true;
             }
@@ -5420,6 +5425,47 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Error(ex, "Browser navigation failed for URL: {Url}", url);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Injects JavaScript to find the video element, play it, and request fullscreen.
+        /// </summary>
+        private async Task AutoPlayAndFullscreenVideoAsync()
+        {
+            if (_browser?.WebView?.CoreWebView2 == null) return;
+
+            try
+            {
+                // Wait a moment for the page to fully render
+                await Task.Delay(1500);
+
+                // JavaScript to find video, play it, and request fullscreen
+                var script = @"
+                    (function() {
+                        const video = document.querySelector('video');
+                        if (video) {
+                            video.muted = false;
+                            video.play().then(() => {
+                                // Request fullscreen on the video element
+                                if (video.requestFullscreen) {
+                                    video.requestFullscreen();
+                                } else if (video.webkitRequestFullscreen) {
+                                    video.webkitRequestFullscreen();
+                                } else if (video.msRequestFullscreen) {
+                                    video.msRequestFullscreen();
+                                }
+                            }).catch(e => console.log('Autoplay blocked:', e));
+                        }
+                    })();
+                ";
+
+                await _browser.WebView.CoreWebView2.ExecuteScriptAsync(script);
+                App.Logger?.Debug("Auto-play and fullscreen script injected");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to auto-play/fullscreen video");
             }
         }
 

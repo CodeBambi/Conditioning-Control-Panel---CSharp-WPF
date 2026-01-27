@@ -2153,9 +2153,9 @@ namespace ConditioningControlPanel
                 var mainWindow = _parentWindow as MainWindow
                     ?? Application.Current.Windows.OfType<MainWindow>().FirstOrDefault();
 
-                if (mainWindow?.NavigateToUrlInBrowser(url, fullscreen: true) == true)
+                if (mainWindow?.NavigateToUrlInBrowser(url, autoPlayFullscreen: true) == true)
                 {
-                    App.Logger?.Information("Speech bubble link opened in fullscreen browser: {Url}", url);
+                    App.Logger?.Information("Speech bubble link opened with auto-play: {Url}", url);
                 }
                 else
                 {

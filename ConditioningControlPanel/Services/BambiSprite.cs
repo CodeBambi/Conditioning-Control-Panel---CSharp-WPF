@@ -69,11 +69,6 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private readonly List<ContentSuggestion> _clickableContent = new()
         {
-            // === BAMBICLOUD PLAYLISTS ===
-            // TODO: Add BambiCloud playlists when available
-            new("20 Days Challenge", "Complete 20-day transformation journey playlist",
-                "https://bambicloud.com/playlist/PLACEHOLDER_UUID_1"),
-
             // === HYPNOTUBE VIDEOS (extracted 2025-01-27) ===
             new("Naughty Bambi", "Popular Bambi video",
                 "https://hypnotube.com/video/naughty-bambi-109749.html"),
