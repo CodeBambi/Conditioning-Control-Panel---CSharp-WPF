@@ -5279,10 +5279,17 @@ namespace ConditioningControlPanel
                 
                 _browser.BrowserReady += (s, e) =>
                 {
-                    Dispatcher.Invoke(() => 
+                    Dispatcher.Invoke(() =>
                     {
                         TxtBrowserStatus.Text = "● Connected";
                         TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(0, 230, 118)); // Green
+
+                        // Now that CoreWebView2 is ready, attach message handler for video end notifications
+                        if (_browser?.WebView?.CoreWebView2 != null)
+                        {
+                            _browser.WebView.CoreWebView2.WebMessageReceived += OnBrowserWebMessageReceived;
+                            App.Logger?.Information("Browser WebMessageReceived handler attached");
+                        }
                     });
                 };
                 
@@ -5311,11 +5318,8 @@ namespace ConditioningControlPanel
                     BrowserContainer.Children.Add(webView);
                     _browserInitialized = true;
 
-                    // Listen for messages from JavaScript (video ended, fullscreen exit, etc.)
-                    if (webView.CoreWebView2 != null)
-                    {
-                        webView.CoreWebView2.WebMessageReceived += OnBrowserWebMessageReceived;
-                    }
+                    // Note: WebMessageReceived handler is attached in BrowserReady event
+                    // because CoreWebView2 isn't ready until then
 
                     App.Logger?.Information("Browser initialized - Bambi Cloud loaded");
                 }
@@ -5607,67 +5611,6 @@ namespace ConditioningControlPanel
                 }
             }
 
-            // Update Player Profile panel visibility
-            if (DiscordProfileNotLoggedIn != null && DiscordProfileLoggedIn != null)
-            {
-                DiscordProfileNotLoggedIn.Visibility = isLoggedIn ? Visibility.Collapsed : Visibility.Visible;
-                DiscordProfileLoggedIn.Visibility = isLoggedIn ? Visibility.Visible : Visibility.Collapsed;
-
-                if (isLoggedIn)
-                {
-                    // Load avatar
-                    var avatarUrl = App.Discord.GetAvatarUrl(256);
-                    if (!string.IsNullOrEmpty(avatarUrl) && DiscordAvatarBrush != null)
-                    {
-                        try
-                        {
-                            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-                            bitmap.BeginInit();
-                            bitmap.UriSource = new Uri(avatarUrl);
-                            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                            bitmap.EndInit();
-                            DiscordAvatarBrush.ImageSource = bitmap;
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Warning(ex, "Failed to load Discord avatar");
-                        }
-                    }
-
-                    // Set name and handle
-                    if (TxtDiscordProfileName != null)
-                        TxtDiscordProfileName.Text = App.Discord.DisplayName ?? App.Discord.Username ?? "User";
-                    if (TxtDiscordProfileHandle != null)
-                        TxtDiscordProfileHandle.Text = $"@{App.Discord.Username}";
-
-                    // Set level and XP from progression
-                    var level = App.Settings?.Current?.PlayerLevel ?? 1;
-                    var xp = App.Settings?.Current?.PlayerXP ?? 0;
-                    var xpForNext = App.Progression?.GetXPForLevel(level) ?? 100;
-                    var xpProgress = Math.Min(1.0, xp / xpForNext);
-
-                    if (TxtDiscordProfileLevel != null)
-                        TxtDiscordProfileLevel.Text = level.ToString();
-                    if (TxtDiscordProfileXp != null)
-                        TxtDiscordProfileXp.Text = $"{xp:N0} / {xpForNext:N0} XP";
-                    if (DiscordProfileXpBar != null)
-                    {
-                        // Set width as percentage of parent (parent width ~200)
-                        DiscordProfileXpBar.Width = xpProgress * 200;
-                    }
-
-                    // Set stats
-                    var achievementCount = App.Achievements?.GetUnlockedCount() ?? 0;
-                    var totalMinutes = App.Achievements?.Progress?.TotalVideoMinutes ?? 0;
-                    var totalHours = totalMinutes / 60.0;
-
-                    if (TxtDiscordProfileAchievements != null)
-                        TxtDiscordProfileAchievements.Text = achievementCount.ToString();
-                    if (TxtDiscordProfileTime != null)
-                        TxtDiscordProfileTime.Text = totalHours >= 1 ? $"{totalHours:F1}h" : $"{totalMinutes}m";
-                }
-            }
-
             // Sync checkbox states
             if (s != null)
             {
@@ -5679,6 +5622,388 @@ namespace ConditioningControlPanel
                 if (ChkDiscordTabAllowDm != null) ChkDiscordTabAllowDm.IsChecked = s.AllowDiscordDm;
             }
         }
+
+        #region Profile Viewer
+
+        private void TxtProfileSearch_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                SearchAndDisplayProfile(TxtProfileSearch?.Text);
+            }
+        }
+
+        private void BtnProfileSearch_Click(object sender, RoutedEventArgs e)
+        {
+            SearchAndDisplayProfile(TxtProfileSearch?.Text);
+        }
+
+        private void BtnViewMyProfile_Click(object sender, RoutedEventArgs e)
+        {
+            // Find current user in leaderboard by their display name
+            var displayName = App.Discord?.CustomDisplayName ?? App.Discord?.DisplayName ?? App.Patreon?.DisplayName;
+            if (string.IsNullOrEmpty(displayName))
+            {
+                // Not logged in - show own local stats
+                DisplayOwnProfile();
+                return;
+            }
+
+            SearchAndDisplayProfile(displayName);
+        }
+
+        private void BtnClearProfile_Click(object sender, RoutedEventArgs e)
+        {
+            if (TxtProfileSearch != null) TxtProfileSearch.Text = "";
+            if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Collapsed;
+            if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Visible;
+            if (ProfileAchievementGrid != null) ProfileAchievementGrid.ItemsSource = null;
+        }
+
+        private void ProfileDiscordHandle_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var discordId = TxtProfileDiscordId?.Text;
+            if (!string.IsNullOrEmpty(discordId))
+            {
+                try
+                {
+                    System.Windows.Clipboard.SetText(discordId);
+                    // Show brief feedback
+                    var originalText = TxtProfileDiscordId.Text;
+                    TxtProfileDiscordId.Text = "Copied!";
+                    Task.Delay(1000).ContinueWith(_ =>
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            if (TxtProfileDiscordId != null)
+                                TxtProfileDiscordId.Text = originalText;
+                        });
+                    });
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to copy Discord ID to clipboard");
+                }
+            }
+        }
+
+        private void SearchAndDisplayProfile(string? searchName)
+        {
+            if (string.IsNullOrWhiteSpace(searchName))
+            {
+                return;
+            }
+
+            // Search in leaderboard entries
+            var entries = App.Leaderboard?.Entries;
+            if (entries == null || entries.Count == 0)
+            {
+                // Try to refresh leaderboard first
+                _ = RefreshAndSearchAsync(searchName);
+                return;
+            }
+
+            // Find matching entry (case-insensitive)
+            var entry = entries.FirstOrDefault(e =>
+                e.DisplayName?.Equals(searchName, StringComparison.OrdinalIgnoreCase) == true);
+
+            if (entry != null)
+            {
+                DisplayProfileEntry(entry);
+            }
+            else
+            {
+                // No exact match - try partial match
+                entry = entries.FirstOrDefault(e =>
+                    e.DisplayName?.Contains(searchName, StringComparison.OrdinalIgnoreCase) == true);
+
+                if (entry != null)
+                {
+                    DisplayProfileEntry(entry);
+                }
+                else
+                {
+                    // Show not found message
+                    if (NoProfileSelected != null)
+                    {
+                        NoProfileSelected.Visibility = Visibility.Visible;
+                    }
+                    if (ProfileCardContainer != null)
+                    {
+                        ProfileCardContainer.Visibility = Visibility.Collapsed;
+                    }
+                }
+            }
+        }
+
+        private async Task RefreshAndSearchAsync(string searchName)
+        {
+            if (App.Leaderboard != null)
+            {
+                await App.Leaderboard.RefreshAsync();
+                SearchAndDisplayProfile(searchName);
+            }
+        }
+
+        private void DisplayOwnProfile()
+        {
+            // Display local profile when not on leaderboard
+            if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Visible;
+            if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Collapsed;
+
+            // Avatar - load from Discord
+            if (ProfileViewerAvatar != null)
+            {
+                string? avatarUrl = null;
+                if (App.Discord?.IsAuthenticated == true)
+                {
+                    avatarUrl = App.Discord.GetAvatarUrl(256);
+                }
+
+                if (!string.IsNullOrEmpty(avatarUrl))
+                {
+                    try
+                    {
+                        var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                        bitmap.BeginInit();
+                        bitmap.UriSource = new Uri(avatarUrl);
+                        bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                        bitmap.EndInit();
+                        ProfileViewerAvatar.ImageSource = bitmap;
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to load profile avatar");
+                        ProfileViewerAvatar.ImageSource = null;
+                    }
+                }
+                else
+                {
+                    ProfileViewerAvatar.ImageSource = null;
+                }
+            }
+
+            // Name
+            if (TxtProfileViewerName != null)
+                TxtProfileViewerName.Text = App.Discord?.CustomDisplayName ?? App.Discord?.DisplayName ?? App.Patreon?.DisplayName ?? "You";
+
+            // Online status
+            if (TxtProfileViewerOnline != null)
+            {
+                TxtProfileViewerOnline.Text = "Online";
+                TxtProfileViewerOnline.Foreground = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#43B581"));
+            }
+            if (ProfileOnlineIndicator != null)
+                ProfileOnlineIndicator.Fill = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#43B581"));
+
+            // Discord handle
+            if (ProfileDiscordHandle != null && TxtProfileDiscordId != null)
+            {
+                if (App.Settings?.Current?.AllowDiscordDm == true && !string.IsNullOrEmpty(App.Discord?.UserId))
+                {
+                    ProfileDiscordHandle.Visibility = Visibility.Visible;
+                    TxtProfileDiscordId.Text = App.Discord.UserId;
+                }
+                else
+                {
+                    ProfileDiscordHandle.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            // Stats from local data
+            var level = App.Settings?.Current?.PlayerLevel ?? 1;
+            var xp = App.Settings?.Current?.PlayerXP ?? 0;
+            var progress = App.Achievements?.Progress;
+
+            if (TxtProfileViewerLevel != null) TxtProfileViewerLevel.Text = level.ToString();
+            if (TxtProfileViewerXp != null) TxtProfileViewerXp.Text = FormatNumber(xp);
+            if (TxtProfileViewerBubbles != null) TxtProfileViewerBubbles.Text = FormatNumber(progress?.TotalBubblesPopped ?? 0);
+            if (TxtProfileViewerVideos != null)
+            {
+                var minutes = progress?.TotalVideoMinutes ?? 0;
+                TxtProfileViewerVideos.Text = minutes >= 60 ? $"{minutes / 60:F1}h" : $"{minutes:F0}m";
+            }
+            if (TxtProfileViewerGifs != null) TxtProfileViewerGifs.Text = FormatNumber(progress?.TotalFlashImages ?? 0);
+            if (TxtProfileViewerLockCards != null) TxtProfileViewerLockCards.Text = FormatNumber(progress?.TotalLockCardsCompleted ?? 0);
+            if (TxtProfileViewerAchievements != null)
+            {
+                var unlocked = App.Achievements?.GetUnlockedCount() ?? 0;
+                var total = Models.Achievement.All.Values.Count;
+                TxtProfileViewerAchievements.Text = $"{unlocked}/{total}";
+            }
+
+            // Patreon badge
+            if (ProfilePatreonBadge != null)
+            {
+                if (App.Patreon?.IsAuthenticated == true && (int)(App.Patreon?.CurrentTier ?? 0) > 0)
+                {
+                    ProfilePatreonBadge.Visibility = Visibility.Visible;
+                    ProfilePatreonBadge.Source = LoadPatreonBadgeImage((int)(App.Patreon.CurrentTier));
+                }
+                else
+                {
+                    ProfilePatreonBadge.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            // Load achievement images for own profile
+            if (progress?.UnlockedAchievements != null && progress.UnlockedAchievements.Count > 0)
+            {
+                LoadProfileAchievementImages(progress.UnlockedAchievements);
+            }
+            else
+            {
+                if (ProfileAchievementGrid != null) ProfileAchievementGrid.ItemsSource = null;
+                if (TxtNoAchievements != null)
+                {
+                    TxtNoAchievements.Text = "No achievements yet";
+                    TxtNoAchievements.Visibility = Visibility.Visible;
+                }
+            }
+        }
+
+        private void DisplayProfileEntry(Services.LeaderboardEntry entry)
+        {
+            if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Visible;
+            if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Collapsed;
+
+            // Avatar - we don't have avatar URLs from leaderboard, use placeholder
+            if (ProfileViewerAvatar != null)
+            {
+                ProfileViewerAvatar.ImageSource = null; // Clear previous
+            }
+
+            // Name
+            if (TxtProfileViewerName != null)
+                TxtProfileViewerName.Text = entry.DisplayName ?? "Unknown";
+
+            // Online status
+            if (TxtProfileViewerOnline != null)
+            {
+                TxtProfileViewerOnline.Text = entry.IsOnline ? "Online" : "Offline";
+                TxtProfileViewerOnline.Foreground = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(
+                        entry.IsOnline ? "#43B581" : "#747F8D"));
+            }
+            if (ProfileOnlineIndicator != null)
+                ProfileOnlineIndicator.Fill = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(
+                        entry.IsOnline ? "#43B581" : "#747F8D"));
+
+            // Discord handle (only if they have it and allow DMs)
+            if (ProfileDiscordHandle != null && TxtProfileDiscordId != null)
+            {
+                if (entry.HasDiscord && !string.IsNullOrEmpty(entry.DiscordId))
+                {
+                    ProfileDiscordHandle.Visibility = Visibility.Visible;
+                    TxtProfileDiscordId.Text = entry.DiscordId;
+                }
+                else
+                {
+                    ProfileDiscordHandle.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            // Stats
+            if (TxtProfileViewerLevel != null) TxtProfileViewerLevel.Text = entry.Level.ToString();
+            if (TxtProfileViewerXp != null) TxtProfileViewerXp.Text = entry.XpDisplay;
+            if (TxtProfileViewerBubbles != null) TxtProfileViewerBubbles.Text = entry.BubblesPoppedDisplay;
+            if (TxtProfileViewerVideos != null)
+            {
+                var hours = entry.VideoMinutes / 60.0;
+                TxtProfileViewerVideos.Text = hours >= 1 ? $"{hours:F1}h" : $"{entry.VideoMinutes:F0}m";
+            }
+            if (TxtProfileViewerGifs != null) TxtProfileViewerGifs.Text = entry.GifsSpawnedDisplay;
+            if (TxtProfileViewerLockCards != null) TxtProfileViewerLockCards.Text = entry.LockCardsCompleted.ToString();
+            if (TxtProfileViewerAchievements != null) TxtProfileViewerAchievements.Text = entry.AchievementsDisplay;
+
+            // Patreon badge
+            if (ProfilePatreonBadge != null)
+            {
+                if (entry.IsPatreon && entry.PatreonTier > 0)
+                {
+                    ProfilePatreonBadge.Visibility = Visibility.Visible;
+                    ProfilePatreonBadge.Source = LoadPatreonBadgeImage(entry.PatreonTier);
+                }
+                else
+                {
+                    ProfilePatreonBadge.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            // We don't have detailed achievement list from leaderboard, just the count
+            // So hide the achievement grid for other users or show placeholder
+            if (ProfileAchievementGrid != null)
+            {
+                ProfileAchievementGrid.ItemsSource = null;
+            }
+            if (TxtNoAchievements != null)
+            {
+                TxtNoAchievements.Text = $"{entry.AchievementsCount} achievements unlocked";
+                TxtNoAchievements.Visibility = Visibility.Visible;
+            }
+        }
+
+        private System.Windows.Media.Imaging.BitmapImage? LoadPatreonBadgeImage(int tier)
+        {
+            try
+            {
+                var imageName = tier switch
+                {
+                    1 => "Patreon tier1.png",
+                    2 => "Patreon tier2.png",
+                    3 => "Patreon tier3.png",
+                    _ => "Patreon tier1.png"
+                };
+                return new System.Windows.Media.Imaging.BitmapImage(
+                    new Uri($"pack://application:,,,/Resources/{imageName}", UriKind.Absolute));
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void LoadProfileAchievementImages(HashSet<string>? unlockedAchievements)
+        {
+            if (ProfileAchievementGrid == null) return;
+
+            if (unlockedAchievements == null || unlockedAchievements.Count == 0)
+            {
+                ProfileAchievementGrid.ItemsSource = null;
+                if (TxtNoAchievements != null) TxtNoAchievements.Visibility = Visibility.Visible;
+                return;
+            }
+
+            if (TxtNoAchievements != null) TxtNoAchievements.Visibility = Visibility.Collapsed;
+
+            var achievementItems = new List<object>();
+            foreach (var achievementId in unlockedAchievements)
+            {
+                var achievement = Models.Achievement.All.Values.FirstOrDefault(a => a.Id == achievementId);
+                if (achievement != null)
+                {
+                    var image = LoadAchievementImage(achievement.ImageName);
+                    if (image != null)
+                    {
+                        achievementItems.Add(new { Name = achievement.Name, Image = image });
+                    }
+                }
+            }
+
+            ProfileAchievementGrid.ItemsSource = achievementItems;
+        }
+
+        private string FormatNumber(double number)
+        {
+            if (number >= 1_000_000) return $"{number / 1_000_000:F1}M";
+            if (number >= 1_000) return $"{number / 1_000:F1}k";
+            return number.ToString("N0");
+        }
+
+        #endregion
 
         private void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
         {

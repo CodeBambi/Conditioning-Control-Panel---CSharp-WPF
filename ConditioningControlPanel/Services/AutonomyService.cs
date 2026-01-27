@@ -1141,23 +1141,31 @@ namespace ConditioningControlPanel.Services
             var videoName = randomVideo.Key;
             var videoUrl = randomVideo.Value;
 
-            App.Logger?.Information("AutonomyService: Playing web video '{Name}' fullscreen", videoName);
+            App.Logger?.Information("AutonomyService: Playing web video '{Name}' at {Url}", videoName, videoUrl);
+
+            // Find MainWindow - try multiple approaches
+            var mainWindow = Application.Current?.MainWindow as MainWindow
+                ?? Application.Current?.Windows.OfType<MainWindow>().FirstOrDefault();
+
+            if (mainWindow == null)
+            {
+                App.Logger?.Warning("AutonomyService: MainWindow not found, cannot play web video");
+                return;
+            }
 
             // Mark video as active - blocks other autonomy actions
             _webVideoActive = true;
 
             // Navigate to video with fullscreen autoplay
-            var mainWindow = Application.Current?.MainWindow as MainWindow;
-            if (mainWindow?.NavigateToUrlInBrowser(videoUrl, autoPlayFullscreen: true) == true)
+            if (mainWindow.NavigateToUrlInBrowser(videoUrl, autoPlayFullscreen: true))
             {
-                // Announce what we're playing via avatar
-                App.AvatarWindow?.GigglePriority($"Watch {videoName}~", false);
+                App.Logger?.Information("AutonomyService: Web video navigation initiated for '{Name}'", videoName);
             }
             else
             {
                 // Navigation failed - reset state
                 _webVideoActive = false;
-                App.Logger?.Warning("AutonomyService: Failed to navigate to web video");
+                App.Logger?.Warning("AutonomyService: Failed to navigate to web video - browser not available");
             }
         }
 
