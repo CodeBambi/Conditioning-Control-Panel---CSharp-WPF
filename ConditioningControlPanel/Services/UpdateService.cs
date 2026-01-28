@@ -1472,22 +1472,13 @@ namespace ConditioningControlPanel.Services
                         var response = await client.GetStringAsync(url);
 
                         // Parse JSON to get body field (release notes)
-                        // Simple parsing without full JSON library
-                        var bodyStart = response.IndexOf("\"body\":");
-                        if (bodyStart > 0)
+                        var json = Newtonsoft.Json.Linq.JObject.Parse(response);
+                        var body = json["body"]?.ToString();
+
+                        if (!string.IsNullOrWhiteSpace(body) && body != "null")
                         {
-                            bodyStart = response.IndexOf("\"", bodyStart + 7) + 1;
-                            var bodyEnd = response.IndexOf("\"", bodyStart);
-
-                            // Handle escaped quotes and newlines
-                            var body = response.Substring(bodyStart, bodyEnd - bodyStart);
-                            body = body.Replace("\\r\\n", "\n").Replace("\\n", "\n").Replace("\\\"", "\"");
-
-                            if (!string.IsNullOrWhiteSpace(body) && body != "null")
-                            {
-                                App.Logger?.Debug("Fetched release notes from GitHub for {Tag}", tag);
-                                return body;
-                            }
+                            App.Logger?.Debug("Fetched release notes from GitHub for {Tag}", tag);
+                            return body;
                         }
                     }
                     catch
