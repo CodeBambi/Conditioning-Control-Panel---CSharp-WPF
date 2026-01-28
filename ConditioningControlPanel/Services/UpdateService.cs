@@ -22,30 +22,23 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.4";
+        public const string AppVersion = "5.4.5";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.4
+        public const string CurrentPatchNotes = @"v5.4.5
 
-📦 CONTENT PACKS
-• Split Install/Uninstall and Activate/Deactivate buttons for packs
-• Resumable downloads - resumes from where it left off instead of restarting
-• Increased retries from 3 to 10 (progress preserved between retries)
-• Fixed parent Content Packs checkbox not reflecting children's state
-• Fixed disabled pack assets still being used despite being unchecked
+🔧 CRITICAL BUG FIXES
+• Fixed XP/level reset on startup - progress no longer lost when cloud data is stale
+• Fixed mandatory video freezing/crashing on multi-monitor setups
+• Added protection against cloud profile corruption - local progress preserved
 
-🤖 AI COMPANION
-• Slut mode now suggests video links more reliably
-• Slut mode visually disabled when custom prompts are active
-• Enabling custom prompts auto-disables slut mode to prevent conflicts
-
-🐛 BUG FIXES
-• Fixed main window not reappearing after panic key press
-• Fixed browser navigating to homepage when clicking speech bubble links
-• Removed unused preset dropdown clipping behind UI";
+☁️ CLOUD SYNC IMPROVEMENTS
+• Sync now takes HIGHER of local vs cloud values (prevents data loss)
+• Auto-recreates cloud profile if missing but local has progress
+• 80 user profiles restored from backup after data loss incident";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
