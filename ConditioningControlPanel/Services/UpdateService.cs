@@ -22,17 +22,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.5";
+        public const string AppVersion = "5.4.6";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.5
+        public const string CurrentPatchNotes = @"v5.4.6
 
 🔧 CRITICAL BUG FIXES
 • Fixed XP/level reset on startup - progress no longer lost when cloud data is stale
 • Fixed mandatory video freezing/crashing on multi-monitor setups
+• Fixed leaderboard crash when viewing restored profiles
 • Added protection against cloud profile corruption - local progress preserved
 
 ☁️ CLOUD SYNC IMPROVEMENTS
