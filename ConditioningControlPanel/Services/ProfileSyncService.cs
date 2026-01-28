@@ -188,7 +188,30 @@ namespace ConditioningControlPanel.Services
 
                 if (!result.Exists || result.Profile == null)
                 {
-                    App.Logger?.Information("No cloud profile found for user {UserId}", result.UserId);
+                    // Cloud profile doesn't exist - check if we have local progress to sync UP
+                    var settings = App.Settings?.Current;
+                    var localLevel = settings?.PlayerLevel ?? 1;
+                    var localXp = settings?.PlayerXP ?? 0;
+
+                    if (localLevel > 1 || localXp > 100)
+                    {
+                        // We have local progress but no cloud profile - sync UP immediately
+                        // This handles cases where cloud profile was deleted/corrupted
+                        App.Logger?.Warning("No cloud profile found but local has progress (Level {Level}, {XP} XP) - syncing UP to create cloud profile",
+                            localLevel, (int)localXp);
+
+                        // Trigger sync UP to create the cloud profile with local data
+                        _ = Task.Run(async () =>
+                        {
+                            await Task.Delay(500); // Small delay
+                            await SyncProfileAsync();
+                        });
+                    }
+                    else
+                    {
+                        App.Logger?.Information("No cloud profile found for user {UserId} (new user)", result.UserId);
+                    }
+
                     return true; // Not an error, just no profile yet
                 }
 
