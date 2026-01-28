@@ -401,22 +401,26 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void OnCompositionTargetRendering(object? sender, EventArgs e)
         {
-            if (!_frameReady || _sharedFrame == null || _frameBuffer == IntPtr.Zero)
+            // Capture references locally to avoid race conditions with Stop()
+            var frame = _sharedFrame;
+            var buffer = _frameBuffer;
+
+            if (!_frameReady || frame == null || buffer == IntPtr.Zero)
                 return;
 
             _frameReady = false;
 
             try
             {
-                _sharedFrame.Lock();
+                frame.Lock();
 
                 // Copy frame data from LibVLC buffer to WriteableBitmap
                 var bufferSize = _videoWidth * _videoHeight * 4;
-                CopyMemory(_sharedFrame.BackBuffer, _frameBuffer, bufferSize);
+                CopyMemory(frame.BackBuffer, buffer, bufferSize);
 
                 // Mark entire bitmap as dirty so WPF redraws it
-                _sharedFrame.AddDirtyRect(new Int32Rect(0, 0, (int)_videoWidth, (int)_videoHeight));
-                _sharedFrame.Unlock();
+                frame.AddDirtyRect(new Int32Rect(0, 0, (int)_videoWidth, (int)_videoHeight));
+                frame.Unlock();
 
                 // Both windows automatically update because they reference the same bitmap!
             }

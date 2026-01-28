@@ -6374,8 +6374,8 @@ namespace ConditioningControlPanel
                 // Save avatar attached state before entering fullscreen
                 _avatarWasAttachedBeforeBrowserFullscreen = _avatarTubeWindow != null && !_avatarTubeWindow.IsDetached;
 
-                var allScreens = System.Windows.Forms.Screen.AllScreens.ToList();
-                if (allScreens.Count == 0)
+                var allScreens = App.GetAllScreensCached();
+                if (allScreens.Length == 0)
                 {
                     App.Logger?.Warning("No screens available for browser fullscreen");
                     return;

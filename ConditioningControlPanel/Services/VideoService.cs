@@ -1783,26 +1783,8 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("CloseAll: Closing {Count} video windows, {MsgCount} message windows",
                     _windows.Count, _messageWindows.Count);
 
-                // First, detach MediaPlayers from VideoViews to prevent crashes
-                var windowsCopy = _windows.ToList();
-                foreach (var w in windowsCopy)
-                {
-                    try
-                    {
-                        if (w.Content is Grid g && g.Children.Count > 0 && g.Children[0] is VideoView vv)
-                        {
-                            var mp = vv.MediaPlayer;
-                            vv.MediaPlayer = null; // Detach before dispose
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Debug("CloseAll: Error detaching VideoView - {Error}", ex.Message);
-                    }
-                }
-
-                // Stop all LibVLC media players BEFORE closing windows (synchronously)
-                // This prevents race conditions where LibVLC accesses window handles after they're destroyed
+                // CRITICAL: Stop all LibVLC media players FIRST before detaching from VideoViews
+                // If we detach while player is still rendering, it can crash (especially multi-monitor)
                 var playersCopy = _mediaPlayers.ToList();
                 _mediaPlayers.Clear();
 
@@ -1815,6 +1797,23 @@ namespace ConditioningControlPanel.Services
                     catch (Exception ex)
                     {
                         App.Logger?.Debug("CloseAll: Failed to stop LibVLC player - {Error}", ex.Message);
+                    }
+                }
+
+                // Now detach MediaPlayers from VideoViews (safe since players are stopped)
+                var windowsCopy = _windows.ToList();
+                foreach (var w in windowsCopy)
+                {
+                    try
+                    {
+                        if (w.Content is Grid g && g.Children.Count > 0 && g.Children[0] is VideoView vv)
+                        {
+                            vv.MediaPlayer = null; // Detach after stopping
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("CloseAll: Error detaching VideoView - {Error}", ex.Message);
                     }
                 }
 
