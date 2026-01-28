@@ -22,24 +22,46 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.6";
+        public const string AppVersion = "5.4.7";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.6
+        public const string CurrentPatchNotes = @"v5.4.7
 
-🔧 CRITICAL BUG FIXES
-• Fixed XP/level reset on startup - progress no longer lost when cloud data is stale
-• Fixed mandatory video freezing/crashing on multi-monitor setups
-• Fixed leaderboard crash when viewing restored profiles
-• Added protection against cloud profile corruption - local progress preserved
+🔒 PRIVACY
+• App never exposes real Discord or Patreon names - only your chosen display name is shown
+• Removed 'Use Anonymous Name' option (privacy is now always on)
+• Level milestone webhooks use your display name, not Discord username
 
-☁️ CLOUD SYNC IMPROVEMENTS
-• Sync now takes HIGHER of local vs cloud values (prevents data loss)
-• Auto-recreates cloud profile if missing but local has progress
-• 80 user profiles restored from backup after data loss incident";
+👤 PROFILE VIEWER
+• Profile pictures! Opt-in 'Share Profile Picture' setting in Discord tab
+• Profiles now show live online status when viewed
+• Double-click any leaderboard entry to jump to their profile
+• Own profile always shows your avatar (local fallback)
+
+🔧 ACCOUNT FIXES
+• Users with missing display names are now auto-detected and prompted on startup
+• Cancelling registration now properly logs out (prevents orphan profiles with no name)
+• Server correctly reads settings from all profile sources (unified, Patreon, Discord)
+
+🎮 VIDEO & STABILITY
+• Bubble Count Challenge rewritten with LibVLC (no more MediaElement crashes)
+• Fixed video windows becoming orphaned on app exit
+• Fixed LibVLC crash-on-cleanup race conditions with proper shutdown ordering
+• Dual monitor video: fixed frame buffer race conditions during stop
+• LibVLC discovery improved - checks multiple paths for libvlc.dll
+• Ordered shutdown: bubbles stop before video to avoid UI thread contention
+
+🫧 BUBBLES
+• Bubble pop animation now plays fully before removal
+• Fixed race condition when cleaning up bubbles during video playback
+
+☁️ SERVER
+• New profile lookup endpoint for fresh online status and avatars
+• Discord heartbeat now keeps unified accounts marked as online
+• Leaderboard correctly merges online status across linked accounts";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

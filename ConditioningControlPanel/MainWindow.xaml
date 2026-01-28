@@ -769,8 +769,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.4.6 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.4.6 - XP reset fix, multi-monitor video fix, leaderboard fix"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.4.7 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.4.7 - Profile pictures, privacy fixes, LibVLC stability"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -4402,26 +4402,12 @@
                                 </Grid>
 
                                 <!-- Privacy Options -->
-                                <Grid Margin="0,0,0,8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,10,0">
-                                        <CheckBox x:Name="ChkUseAnonymousName" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                  Checked="ChkUseAnonymousName_Changed" Unchecked="ChkUseAnonymousName_Changed"/>
-                                        <TextBlock Text="Use Display Name" Foreground="White" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
-                                                   ToolTip="Use your display name instead of Discord username for privacy"/>
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                        <CheckBox x:Name="ChkShowLevelInPresence" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                  Checked="ChkShowLevelInPresence_Changed" Unchecked="ChkShowLevelInPresence_Changed"/>
-                                        <TextBlock Text="Show Level in Status" Foreground="White" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
-                                                   ToolTip="Show your level in Discord Rich Presence status"/>
-                                    </StackPanel>
-                                </Grid>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <CheckBox x:Name="ChkShowLevelInPresence" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                              Checked="ChkShowLevelInPresence_Changed" Unchecked="ChkShowLevelInPresence_Changed"/>
+                                    <TextBlock Text="Show Level in Status" Foreground="White" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
+                                               ToolTip="Show your level in Discord Rich Presence status"/>
+                                </StackPanel>
 
                                 <!-- Allow Discord DM from Leaderboard -->
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
@@ -4429,6 +4415,14 @@
                                               Checked="ChkAllowDiscordDm_Changed" Unchecked="ChkAllowDiscordDm_Changed"/>
                                     <TextBlock Text="Allow Discord DMs from Leaderboard" Foreground="White" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
                                                ToolTip="Show your Discord icon on the leaderboard so others can send you DMs"/>
+                                </StackPanel>
+
+                                <!-- Share Profile Picture -->
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <CheckBox x:Name="ChkShareProfilePicture" Style="{StaticResource ToggleStyle}"
+                                              Checked="ChkShareProfilePicture_Changed" Unchecked="ChkShareProfilePicture_Changed"/>
+                                    <TextBlock Text="Share Profile Picture" Foreground="White" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"
+                                               ToolTip="Show your Discord avatar on your profile when others view it"/>
                                 </StackPanel>
 
                                 <TextBlock Text="All sharing is opt-in. Nothing is shared without your consent."
@@ -4703,7 +4697,7 @@
                         </Border>
                     </StackPanel>
                 </ScrollViewer>
-            </Border>            <Border Grid.Column="2" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="10"><TextBlock Text="Community Settings" Foreground="#5865F2" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/><Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,12" BorderBrush="#5865F2" BorderThickness="1"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock x:Name="TxtDiscordTabStatus" Text="Not Connected" Foreground="White" FontSize="14" FontWeight="Bold"/><TextBlock x:Name="TxtDiscordTabInfo" Text="Link Discord for community features" Foreground="#808080" FontSize="11" Margin="0,2,0,0"/></StackPanel><Button x:Name="BtnDiscordTabLogin" Grid.Column="1" Content="Login with Discord" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,8" FontWeight="Bold" FontSize="11" Cursor="Hand" Click="BtnDiscordTabLogin_Click"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Discord Rich Presence" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Show your activity status" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabRichPresence" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Show Level in Status" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Display your level" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShowLevel" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkShowLevelInPresence_Changed" Unchecked="ChkShowLevelInPresence_Changed"/></Grid></Border><TextBlock Text="Community Sharing" Foreground="#5865F2" FontSize="13" FontWeight="Bold" Margin="0,12,0,10"/><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Achievements" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post achievements to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareAchievements" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareAchievements_Changed" Unchecked="ChkShareAchievements_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Level Milestones" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post level ups to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareLevelUps" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareLevelUps_Changed" Unchecked="ChkShareLevelUps_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Use Display Name" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Privacy option" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabAnonymous" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkUseAnonymousName_Changed" Unchecked="ChkUseAnonymousName_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Allow DMs from Leaderboard" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Let others message you" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabAllowDm" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkAllowDiscordDm_Changed" Unchecked="ChkAllowDiscordDm_Changed"/></Grid></Border><TextBlock Text="All sharing is opt-in." Foreground="#5865F2" FontSize="10" FontStyle="Italic" Margin="0,10,0,0"/><Button Content="Join Discord Server" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,12" Margin="0,15,0,0" FontWeight="Bold" FontSize="12" Cursor="Hand" Click="BtnDiscord_Click"/></StackPanel></ScrollViewer></Border>        </Grid>
+            </Border>            <Border Grid.Column="2" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="10"><TextBlock Text="Community Settings" Foreground="#5865F2" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/><Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,12" BorderBrush="#5865F2" BorderThickness="1"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock x:Name="TxtDiscordTabStatus" Text="Not Connected" Foreground="White" FontSize="14" FontWeight="Bold"/><TextBlock x:Name="TxtDiscordTabInfo" Text="Link Discord for community features" Foreground="#808080" FontSize="11" Margin="0,2,0,0"/></StackPanel><Button x:Name="BtnDiscordTabLogin" Grid.Column="1" Content="Login with Discord" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,8" FontWeight="Bold" FontSize="11" Cursor="Hand" Click="BtnDiscordTabLogin_Click"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Discord Rich Presence" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Show your activity status" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabRichPresence" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Show Level in Status" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Display your level" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShowLevel" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkShowLevelInPresence_Changed" Unchecked="ChkShowLevelInPresence_Changed"/></Grid></Border><TextBlock Text="Community Sharing" Foreground="#5865F2" FontSize="13" FontWeight="Bold" Margin="0,12,0,10"/><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Achievements" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post achievements to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareAchievements" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareAchievements_Changed" Unchecked="ChkShareAchievements_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Level Milestones" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post level ups to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareLevelUps" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareLevelUps_Changed" Unchecked="ChkShareLevelUps_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Allow DMs from Leaderboard" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Let others message you" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabAllowDm" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkAllowDiscordDm_Changed" Unchecked="ChkAllowDiscordDm_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Profile Picture" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Show your avatar to others" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabSharePfp" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareProfilePicture_Changed" Unchecked="ChkShareProfilePicture_Changed"/></Grid></Border><TextBlock Text="All sharing is opt-in." Foreground="#5865F2" FontSize="10" FontStyle="Italic" Margin="0,10,0,0"/><Button Content="Join Discord Server" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,12" Margin="0,15,0,0" FontWeight="Bold" FontSize="12" Cursor="Hand" Click="BtnDiscord_Click"/></StackPanel></ScrollViewer></Border>        </Grid>
         <!-- Leaderboard Tab -->
         <Grid x:Name="LeaderboardTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
             <Border CornerRadius="12">
@@ -4762,12 +4756,13 @@
                         </Grid>
                     </Border>
 
-                    <!-- Leaderboard list -->
+                    <!-- Leaderboard list - double-click to view profile -->
                     <ListView x:Name="LstLeaderboard" Grid.Row="1" Background="Transparent"
                               BorderThickness="0" Margin="10,5,10,10" Foreground="#FF69B4"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               FontSize="21" FontFamily="Segoe Print" FontWeight="ExtraBold"
-                              GridViewColumnHeader.Click="LeaderboardColumnHeader_Click">
+                              GridViewColumnHeader.Click="LeaderboardColumnHeader_Click"
+                              MouseDoubleClick="LstLeaderboard_MouseDoubleClick">
                         <ListView.Resources>
                             <!-- Header style for dark theme - clickable for sorting -->
                             <Style TargetType="GridViewColumnHeader">

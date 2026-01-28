@@ -88,6 +88,12 @@ namespace ConditioningControlPanel.Services
         public bool NeedsDisplayNameMigration { get; private set; }
 
         /// <summary>
+        /// True if user needs to complete registration (choose display name).
+        /// Set by the server when display_name is null/empty.
+        /// </summary>
+        public bool NeedsRegistration { get; private set; }
+
+        /// <summary>
         /// Whether this is the user's first login (no display name set yet on ANY provider).
         /// If Discord already has a display name, this returns false to avoid re-prompting.
         /// </summary>
@@ -471,8 +477,11 @@ namespace ConditioningControlPanel.Services
                 var userIsWhitelisted = subscription.IsWhitelisted;
                 _isWhitelisted = userIsWhitelisted;
 
-                App.Logger?.Debug("Server whitelist check: Email={Email}, Name={Name}, Whitelisted={Whitelisted}",
-                    subscription.PatronEmail, subscription.PatronName, userIsWhitelisted);
+                // Check if user needs to complete registration (choose display name)
+                NeedsRegistration = subscription.NeedsRegistration;
+
+                App.Logger?.Debug("Server whitelist check: Email={Email}, Name={Name}, Whitelisted={Whitelisted}, NeedsRegistration={NeedsReg}",
+                    subscription.PatronEmail, subscription.PatronName, userIsWhitelisted, subscription.NeedsRegistration);
 
                 // Set unified user ID for cross-provider account linking
                 // Only set App.UnifiedUserId if not already set by another provider (to allow conflict detection)

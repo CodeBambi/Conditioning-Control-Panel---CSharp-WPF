@@ -2003,22 +2003,6 @@ namespace ConditioningControlPanel
             SpeechBubble.UpdateLayout();
             SpeechBubble.Visibility = Visibility.Visible;
 
-            // Bring tube to front when attached so bubble is visible above main window
-            // Use Background priority to ensure it happens after all window activations complete
-            if (_isAttached)
-            {
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    if (_isAttached && _tubeHandle != IntPtr.Zero)
-                    {
-                        BringToFrontTemporarily();
-                    }
-                }), System.Windows.Threading.DispatcherPriority.Background);
-
-                // Start z-order refresh timer to keep bubble on top while visible
-                StartZOrderRefreshTimer();
-            }
-
             // Calculate display duration based on text length
             // Base: 5 seconds, plus ~0.05s per character, min 5s, max 14s
             // AI responses get slightly longer display time
@@ -2716,18 +2700,6 @@ namespace ConditioningControlPanel
                 SpeechBubble.UpdateLayout();
                 SpeechBubble.Visibility = Visibility.Visible;
 
-                if (_isAttached)
-                {
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        if (_isAttached && _tubeHandle != IntPtr.Zero)
-                        {
-                            BringToFrontTemporarily();
-                        }
-                    }), System.Windows.Threading.DispatcherPriority.Background);
-                    StartZOrderRefreshTimer();
-                }
-
                 // Play the voice line audio in sync with the bubble
                 PlayVoiceLineAudio(filePath);
 
@@ -2864,21 +2836,6 @@ namespace ConditioningControlPanel
             // Force layout update before showing to prevent flickering
             SpeechBubble.UpdateLayout();
             SpeechBubble.Visibility = Visibility.Visible;
-
-            // Bring tube to front when attached so bubble is visible above main window
-            if (_isAttached)
-            {
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    if (_isAttached && _tubeHandle != IntPtr.Zero)
-                    {
-                        BringToFrontTemporarily();
-                    }
-                }), System.Windows.Threading.DispatcherPriority.Background);
-
-                // Start z-order refresh timer to keep bubble on top while visible
-                StartZOrderRefreshTimer();
-            }
 
             App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
 

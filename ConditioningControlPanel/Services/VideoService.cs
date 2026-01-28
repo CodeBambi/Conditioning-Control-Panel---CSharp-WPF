@@ -71,6 +71,32 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool IsPlaying => _videoPlaying;
 
+        /// <summary>
+        /// Get the shared LibVLC instance (used by BubbleCountWindow).
+        /// Returns null if not yet initialized - caller should handle this.
+        /// LibVLC is initialized via PreloadLibVLC() during app startup.
+        /// </summary>
+        public static LibVLC? SharedLibVLC => _libVLC;
+
+        /// <summary>
+        /// Wait for LibVLC initialization to complete (with timeout).
+        /// Returns true if LibVLC is available, false if timeout or init failed.
+        /// </summary>
+        public static bool WaitForLibVLC(int timeoutMs = 5000)
+        {
+            var start = DateTime.UtcNow;
+            while ((DateTime.UtcNow - start).TotalMilliseconds < timeoutMs)
+            {
+                if (_libVLCInitialized)
+                {
+                    return _libVLC != null;
+                }
+                Thread.Sleep(50);
+            }
+            App.Logger?.Warning("VideoService: Timed out waiting for LibVLC initialization");
+            return _libVLC != null;
+        }
+
         public VideoService()
         {
             RefreshVideosPath();
@@ -120,20 +146,31 @@ namespace ConditioningControlPanel.Services
 
                 try
                 {
-                    // Find the libvlc folder - it's in a subdirectory of the app
+                    // Find the libvlc folder - check for libvlc.dll existence, not just folder
                     var appDir = AppDomain.CurrentDomain.BaseDirectory;
-                    var libvlcPath = Path.Combine(appDir, "libvlc");
+                    string? libvlcPath = null;
 
-                    App.Logger?.Information("Looking for LibVLC in: {Path}", libvlcPath);
-
-                    if (!Directory.Exists(libvlcPath))
+                    // Try paths in order of preference
+                    var pathsToTry = new[]
                     {
-                        // Try alternate location (development)
-                        libvlcPath = Path.Combine(appDir, "libvlc", "win-x64");
-                        App.Logger?.Information("Trying alternate LibVLC path: {Path}", libvlcPath);
+                        Path.Combine(appDir, "libvlc", "win-x64"),  // NuGet package structure
+                        Path.Combine(appDir, "libvlc"),             // Direct folder
+                        appDir                                       // Same folder as exe
+                    };
+
+                    foreach (var path in pathsToTry)
+                    {
+                        var dllPath = Path.Combine(path, "libvlc.dll");
+                        App.Logger?.Information("Checking for LibVLC at: {Path}", dllPath);
+                        if (File.Exists(dllPath))
+                        {
+                            libvlcPath = path;
+                            App.Logger?.Information("Found libvlc.dll at: {Path}", path);
+                            break;
+                        }
                     }
 
-                    if (Directory.Exists(libvlcPath))
+                    if (libvlcPath != null)
                     {
                         // Initialize LibVLCSharp core with explicit path
                         Core.Initialize(libvlcPath);
@@ -141,7 +178,8 @@ namespace ConditioningControlPanel.Services
                     }
                     else
                     {
-                        // Try default initialization
+                        // Try default initialization (may find system-installed VLC)
+                        App.Logger?.Information("libvlc.dll not found in expected locations, trying default initialization");
                         Core.Initialize();
                         App.Logger?.Information("LibVLC core initialized from default location");
                     }
@@ -283,10 +321,11 @@ namespace ConditioningControlPanel.Services
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
 
-            // Force cleanup of any playing video
+            // Force cleanup of any playing video - use synchronous disposal during stop
+            // because Stop is typically called during app shutdown
             _videoPlaying = false;
             _strictActive = false;
-            Cleanup();
+            CloseAll(synchronous: true);
 
             App.Logger?.Information("VideoService stopped");
         }
@@ -485,17 +524,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Force cleanup without scheduling next - used for panic key and preventing stacking
         /// </summary>
-        public void ForceCleanup()
+        /// <param name="synchronous">If true, disposes LibVLC players synchronously (use during app exit)</param>
+        public void ForceCleanup(bool synchronous = false)
         {
             _safetyTimer?.Stop();
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
             _videoPlaying = false;
             _strictActive = false;
-            CloseAll();
+            CloseAll(synchronous);
             App.Audio?.Unduck();
             _penalties = 0;
-            App.Logger?.Information("VideoService: Force cleanup completed");
+            App.Logger?.Information("VideoService: Force cleanup completed (synchronous={Sync})", synchronous);
         }
 
         /// <summary>
@@ -1755,7 +1795,7 @@ namespace ConditioningControlPanel.Services
 
         #region Cleanup
 
-        private void CloseAll()
+        private void CloseAll(bool synchronous = false)
         {
             // Use lock to prevent race conditions between multiple cleanup triggers
             // (panic key, EndReached, safety timer, etc.)
@@ -1800,15 +1840,30 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
-                // Now detach MediaPlayers from VideoViews (safe since players are stopped)
+                // CRITICAL: Wait a bit after stopping players to let LibVLC finish any pending operations
+                // This prevents crashes when detaching VideoView while LibVLC is still processing
+                if (playersCopy.Count > 0)
+                {
+                    Thread.Sleep(100); // Give LibVLC time to fully stop rendering
+                }
+
+                // Now detach MediaPlayers from VideoViews (safe since players are stopped and we waited)
                 var windowsCopy = _windows.ToList();
                 foreach (var w in windowsCopy)
                 {
                     try
                     {
-                        if (w.Content is Grid g && g.Children.Count > 0 && g.Children[0] is VideoView vv)
+                        if (w.Content is Grid g)
                         {
-                            vv.MediaPlayer = null; // Detach after stopping
+                            // Find VideoView in the grid (might not be at index 0 due to overlays)
+                            foreach (var child in g.Children)
+                            {
+                                if (child is VideoView vv)
+                                {
+                                    vv.MediaPlayer = null; // Detach after stopping
+                                    break;
+                                }
+                            }
                         }
                     }
                     catch (Exception ex)
@@ -1817,16 +1872,29 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
-                // Close video windows AFTER media players are stopped
+                // Another small delay after detaching before closing windows
+                if (windowsCopy.Count > 0)
+                {
+                    Thread.Sleep(50);
+                }
+
+                // Close video windows AFTER media players are stopped and detached
                 foreach (var w in _windows.ToList())
                 {
                     try
                     {
                         // Stop any MediaElement
-                        if (w.Content is Grid g && g.Children.Count > 0 && g.Children[0] is MediaElement me)
+                        if (w.Content is Grid g)
                         {
-                            me.Stop();
-                            me.Source = null; // Release media resources
+                            foreach (var child in g.Children)
+                            {
+                                if (child is MediaElement me)
+                                {
+                                    me.Stop();
+                                    me.Source = null; // Release media resources
+                                    break;
+                                }
+                            }
                         }
                         w.Close();
                     }
@@ -1837,16 +1905,13 @@ namespace ConditioningControlPanel.Services
                 }
                 _windows.Clear();
 
-                // Dispose media players asynchronously AFTER windows are closed
-                // Increased delay to 500ms to ensure LibVLC event handlers have fully completed
-                // This prevents crashes when Dispose() is called while events are still processing
+                // Dispose media players - synchronously during app exit, async during normal operation
                 if (playersCopy.Count > 0)
                 {
-                    Task.Run(async () =>
+                    if (synchronous)
                     {
-                        // Wait for any pending EndReached events to complete their Task.Run dispatch
-                        await Task.Delay(500);
-
+                        // Synchronous disposal - used during app exit to prevent orphaned windows
+                        App.Logger?.Debug("CloseAll: Synchronous disposal of {Count} LibVLC players", playersCopy.Count);
                         foreach (var player in playersCopy)
                         {
                             try
@@ -1858,7 +1923,28 @@ namespace ConditioningControlPanel.Services
                                 App.Logger?.Debug("CloseAll: Failed to dispose LibVLC player - {Error}", ex.Message);
                             }
                         }
-                    });
+                    }
+                    else
+                    {
+                        // Async disposal - normal operation to prevent blocking UI
+                        Task.Run(async () =>
+                        {
+                            // Wait for any pending EndReached events to complete their Task.Run dispatch
+                            await Task.Delay(750);
+
+                            foreach (var player in playersCopy)
+                            {
+                                try
+                                {
+                                    player.Dispose();
+                                }
+                                catch (Exception ex)
+                                {
+                                    App.Logger?.Debug("CloseAll: Failed to dispose LibVLC player - {Error}", ex.Message);
+                                }
+                            }
+                        });
+                    }
                 }
 
                 // Also close any lingering message windows

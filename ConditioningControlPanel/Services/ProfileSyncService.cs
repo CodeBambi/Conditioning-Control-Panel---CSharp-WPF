@@ -297,6 +297,7 @@ namespace ConditioningControlPanel.Services
                     },
                     LastSession = DateTime.Now.ToString("o"),
                     AllowDiscordDm = settings.AllowDiscordDm,
+                    ShareProfilePicture = settings.ShareProfilePicture,
                     DiscordId = App.Discord?.UserId  // Include Discord ID even when syncing via Patreon
                 };
 
@@ -548,6 +549,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("allow_discord_dm")]
             public bool AllowDiscordDm { get; set; }
+
+            [JsonProperty("share_profile_picture")]
+            public bool ShareProfilePicture { get; set; }
 
             [JsonProperty("discord_id")]
             public string? DiscordId { get; set; }

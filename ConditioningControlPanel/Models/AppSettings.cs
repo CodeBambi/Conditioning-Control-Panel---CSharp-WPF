@@ -720,6 +720,17 @@ namespace ConditioningControlPanel.Models
             set { _allowDiscordDm = value; OnPropertyChanged(); }
         }
 
+        private bool _shareProfilePicture = false;
+        /// <summary>
+        /// Share your Discord profile picture on the leaderboard and profile viewer.
+        /// When enabled, other users can see your avatar when viewing your profile.
+        /// </summary>
+        public bool ShareProfilePicture
+        {
+            get => _shareProfilePicture;
+            set { _shareProfilePicture = value; OnPropertyChanged(); }
+        }
+
         private bool _offlineMode = false;
         /// <summary>
         /// Offline mode - disables all network features (updates, AI chat, leaderboard, Patreon verification).

@@ -494,8 +494,16 @@ public static class AccountService
             }
             else
             {
-                // User cancelled
-                App.Logger?.Information("AccountService: User cancelled registration");
+                // User cancelled - MUST logout to prevent orphan profiles with null display_name
+                // If we don't logout, the cached tokens will cause auto-sync on next startup,
+                // which creates a profile without display_name (the user never picked one)
+                App.Logger?.Information("AccountService: User cancelled registration, logging out {Provider}", provider);
+
+                if (provider == "patreon")
+                    App.Patreon?.Logout();
+                else
+                    App.Discord?.Logout();
+
                 return false;
             }
         }
