@@ -224,10 +224,10 @@ public class LeaderboardEntry
     [JsonProperty("achievements_count")]
     public int AchievementsCount { get; set; }
 
-    [JsonProperty("is_online")]
+    [JsonProperty("is_online", NullValueHandling = NullValueHandling.Ignore)]
     public bool IsOnline { get; set; }
 
-    [JsonProperty("is_patreon")]
+    [JsonProperty("is_patreon", NullValueHandling = NullValueHandling.Ignore)]
     public bool IsPatreon { get; set; }
 
     [JsonProperty("patreon_tier")]
