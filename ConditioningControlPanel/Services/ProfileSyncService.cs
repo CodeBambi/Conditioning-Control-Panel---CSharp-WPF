@@ -323,8 +323,8 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Load cloud profile data as source of truth (prevents JSON cheating).
-        /// Server values always override local values.
+        /// Merge cloud profile with local data, taking the HIGHER values to prevent progress loss.
+        /// This protects against cloud data corruption, sync issues, or stale cloud profiles.
         /// </summary>
         private void MergeCloudProfile(CloudProfile cloudProfile)
         {
@@ -335,55 +335,45 @@ namespace ConditioningControlPanel.Services
 
             bool needsSave = false;
 
-            // SERVER IS SOURCE OF TRUTH - always use cloud values to prevent cheating
-            // Cloud stores TOTAL XP, but PlayerXP is progress within current level
-            // Convert total XP back to current level progress
-            var currentLevelXp = App.Progression?.GetCurrentLevelXP(cloudProfile.Level, cloudProfile.Xp) ?? 0;
+            // Calculate total XP for both local and cloud to compare properly
+            // Cloud stores TOTAL XP, local stores current-level XP
+            var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+            var cloudTotalXp = (double)cloudProfile.Xp;
 
-            if (settings.PlayerLevel != cloudProfile.Level || Math.Abs(settings.PlayerXP - currentLevelXp) > 0.01)
+            // TAKE HIGHER VALUES - prevents progress loss from cloud corruption/sync issues
+            // This is safer than "cloud is truth" which can wipe legitimate progress
+            if (cloudTotalXp > localTotalXp)
             {
-                // SAFEGUARD: If cloud level is significantly lower than local, log a warning
-                // This could indicate a cloud profile corruption or migration issue
-                var levelDifference = settings.PlayerLevel - cloudProfile.Level;
-                if (levelDifference >= 10)
-                {
-                    App.Logger?.Warning("POTENTIAL DATA LOSS: Local level ({Local}) is {Diff} levels higher than cloud ({Cloud}). " +
-                        "This could indicate cloud profile corruption. Cloud data will be used as source of truth for anti-cheat.",
-                        settings.PlayerLevel, levelDifference, cloudProfile.Level);
+                // Cloud has more progress - use cloud values
+                var cloudLevelXp = App.Progression?.GetCurrentLevelXP(cloudProfile.Level, cloudProfile.Xp) ?? 0;
 
-                    // Store a backup of local progress in case user needs to recover
-                    try
-                    {
-                        var backupPath = System.IO.Path.Combine(App.UserDataPath, $"progress_backup_{DateTime.Now:yyyyMMdd_HHmmss}.json");
-                        var backup = new
-                        {
-                            LocalLevel = settings.PlayerLevel,
-                            LocalXP = settings.PlayerXP,
-                            CloudLevel = cloudProfile.Level,
-                            CloudXP = cloudProfile.Xp,
-                            Timestamp = DateTime.Now
-                        };
-                        System.IO.File.WriteAllText(backupPath, Newtonsoft.Json.JsonConvert.SerializeObject(backup, Newtonsoft.Json.Formatting.Indented));
-                        App.Logger?.Information("Backed up local progress to {Path}", backupPath);
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning("Failed to backup local progress: {Error}", ex.Message);
-                    }
-                }
-                else if (settings.PlayerLevel > cloudProfile.Level)
-                {
-                    App.Logger?.Warning("Local level ({Local}) higher than cloud ({Cloud}) - resetting to cloud (anti-cheat)",
-                        settings.PlayerLevel, cloudProfile.Level);
-                }
-                App.Logger?.Information("Setting level from cloud: Level {Level}, CurrentXP {CurrentXP} (from total {TotalXP})",
-                    cloudProfile.Level, currentLevelXp, cloudProfile.Xp);
+                App.Logger?.Information("Cloud has higher progress - syncing DOWN: Cloud Level {CloudLevel} ({CloudXP} total XP) > Local Level {LocalLevel} ({LocalXP} total XP)",
+                    cloudProfile.Level, (int)cloudTotalXp, settings.PlayerLevel, (int)localTotalXp);
+
                 settings.PlayerLevel = cloudProfile.Level;
-                settings.PlayerXP = currentLevelXp;
+                settings.PlayerXP = cloudLevelXp;
                 needsSave = true;
 
-                // Check for level-based achievements
+                // Check for level-based achievements with the new level
                 App.Achievements?.CheckLevelAchievements(cloudProfile.Level);
+            }
+            else if (localTotalXp > cloudTotalXp)
+            {
+                // Local has more progress - keep local, will sync UP on next SyncProfileAsync
+                App.Logger?.Information("Local has higher progress - keeping local: Local Level {LocalLevel} ({LocalXP} total XP) > Cloud Level {CloudLevel} ({CloudXP} total XP)",
+                    settings.PlayerLevel, (int)localTotalXp, cloudProfile.Level, (int)cloudTotalXp);
+
+                // Trigger an immediate sync UP so cloud gets the correct data
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(1000); // Small delay to let startup complete
+                    await SyncProfileAsync();
+                });
+            }
+            else
+            {
+                App.Logger?.Debug("Local and cloud progress are equal: Level {Level}, Total XP {XP}",
+                    settings.PlayerLevel, (int)localTotalXp);
             }
 
             // Merge achievements
@@ -400,7 +390,7 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Load stats from cloud (SERVER IS SOURCE OF TRUTH - prevents JSON cheating)
+            // Merge stats - take HIGHER values to prevent progress loss
             if (cloudProfile.Stats != null && achievements?.Progress != null)
             {
                 var progress = achievements.Progress;
@@ -408,8 +398,9 @@ namespace ConditioningControlPanel.Services
                 if (cloudProfile.Stats.TryGetValue("longest_session_minutes", out var minutes))
                 {
                     var m = Convert.ToDouble(minutes);
-                    if (progress.LongestSessionMinutes != m)
+                    if (m > progress.LongestSessionMinutes)
                     {
+                        App.Logger?.Debug("Stats sync: LongestSessionMinutes cloud ({Cloud}) > local ({Local})", m, progress.LongestSessionMinutes);
                         progress.LongestSessionMinutes = m;
                         needsSave = true;
                     }
@@ -417,8 +408,9 @@ namespace ConditioningControlPanel.Services
                 if (cloudProfile.Stats.TryGetValue("total_flashes", out var flashes))
                 {
                     var f = Convert.ToInt32(flashes);
-                    if (progress.TotalFlashImages != f)
+                    if (f > progress.TotalFlashImages)
                     {
+                        App.Logger?.Debug("Stats sync: TotalFlashImages cloud ({Cloud}) > local ({Local})", f, progress.TotalFlashImages);
                         progress.TotalFlashImages = f;
                         needsSave = true;
                     }
@@ -426,8 +418,9 @@ namespace ConditioningControlPanel.Services
                 if (cloudProfile.Stats.TryGetValue("consecutive_days", out var streak))
                 {
                     var st = Convert.ToInt32(streak);
-                    if (progress.ConsecutiveDays != st)
+                    if (st > progress.ConsecutiveDays)
                     {
+                        App.Logger?.Debug("Stats sync: ConsecutiveDays cloud ({Cloud}) > local ({Local})", st, progress.ConsecutiveDays);
                         progress.ConsecutiveDays = st;
                         needsSave = true;
                     }
@@ -435,8 +428,9 @@ namespace ConditioningControlPanel.Services
                 if (cloudProfile.Stats.TryGetValue("total_bubbles_popped", out var bubbles))
                 {
                     var b = Convert.ToInt32(bubbles);
-                    if (progress.TotalBubblesPopped != b)
+                    if (b > progress.TotalBubblesPopped)
                     {
+                        App.Logger?.Debug("Stats sync: TotalBubblesPopped cloud ({Cloud}) > local ({Local})", b, progress.TotalBubblesPopped);
                         progress.TotalBubblesPopped = b;
                         needsSave = true;
                     }
