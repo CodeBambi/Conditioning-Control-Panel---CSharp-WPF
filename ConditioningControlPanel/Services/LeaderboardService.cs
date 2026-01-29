@@ -76,7 +76,7 @@ public class LeaderboardService : IDisposable
         {
             App.Logger?.Debug("Fetching leaderboard with sort_by={SortBy}", sortBy);
 
-            var response = await _httpClient.GetAsync($"{ProxyBaseUrl}/leaderboard?sort_by={sortBy}&limit=500");
+            var response = await _httpClient.GetAsync($"{ProxyBaseUrl}/leaderboard?sort_by={sortBy}&limit=1000");
 
             if (!response.IsSuccessStatusCode)
             {
@@ -123,6 +123,38 @@ public class LeaderboardService : IDisposable
         finally
         {
             IsRefreshing = false;
+        }
+    }
+
+    /// <summary>
+    /// Look up a specific user's fresh profile data by display name.
+    /// Returns fresh online status and avatar URL.
+    /// </summary>
+    public async Task<UserLookupResult?> LookupUserAsync(string displayName)
+    {
+        try
+        {
+            var url = $"{ProxyBaseUrl}/user/lookup?display_name={Uri.EscapeDataString(displayName)}";
+            var response = await _httpClient.GetAsync(url);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                App.Logger?.Warning("User lookup failed: {Status} for {Name}", response.StatusCode, displayName);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var result = JsonConvert.DeserializeObject<UserLookupResult>(json);
+
+            App.Logger?.Debug("User lookup successful: {Name}, Online={Online}, Avatar={HasAvatar}",
+                displayName, result?.IsOnline, !string.IsNullOrEmpty(result?.AvatarUrl));
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning(ex, "User lookup failed for {Name}", displayName);
+            return null;
         }
     }
 
@@ -224,10 +256,10 @@ public class LeaderboardEntry
     [JsonProperty("achievements_count")]
     public int AchievementsCount { get; set; }
 
-    [JsonProperty("is_online")]
+    [JsonProperty("is_online", NullValueHandling = NullValueHandling.Ignore)]
     public bool IsOnline { get; set; }
 
-    [JsonProperty("is_patreon")]
+    [JsonProperty("is_patreon", NullValueHandling = NullValueHandling.Ignore)]
     public bool IsPatreon { get; set; }
 
     [JsonProperty("patreon_tier")]
@@ -246,4 +278,52 @@ public class LeaderboardEntry
     /// Uses the total achievement count from the Achievement model
     /// </summary>
     public string AchievementsDisplay => $"{AchievementsCount} / {Models.Achievement.All.Count}";
+}
+
+/// <summary>
+/// Result of looking up a specific user's profile
+/// </summary>
+public class UserLookupResult
+{
+    [JsonProperty("display_name")]
+    public string? DisplayName { get; set; }
+
+    [JsonProperty("level")]
+    public int Level { get; set; }
+
+    [JsonProperty("xp")]
+    public int Xp { get; set; }
+
+    [JsonProperty("total_bubbles_popped")]
+    public int BubblesPopped { get; set; }
+
+    [JsonProperty("total_flashes")]
+    public int GifsSpawned { get; set; }
+
+    [JsonProperty("total_video_minutes")]
+    public double VideoMinutes { get; set; }
+
+    [JsonProperty("total_lock_cards_completed")]
+    public int LockCardsCompleted { get; set; }
+
+    [JsonProperty("achievements_count")]
+    public int AchievementsCount { get; set; }
+
+    [JsonProperty("is_online")]
+    public bool IsOnline { get; set; }
+
+    [JsonProperty("is_patreon")]
+    public bool IsPatreon { get; set; }
+
+    [JsonProperty("patreon_tier")]
+    public int PatreonTier { get; set; }
+
+    [JsonProperty("discord_id")]
+    public string? DiscordId { get; set; }
+
+    [JsonProperty("avatar_url")]
+    public string? AvatarUrl { get; set; }
+
+    [JsonProperty("last_seen")]
+    public string? LastSeen { get; set; }
 }

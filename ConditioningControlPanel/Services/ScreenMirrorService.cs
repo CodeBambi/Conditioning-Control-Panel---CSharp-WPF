@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace ConditioningControlPanel.Services
@@ -30,6 +31,8 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Switch to Clone/Duplicate display mode.
         /// All monitors will show the same content as the primary monitor.
+        /// Note: This may fail on 3+ monitor setups, mixed GPU configurations,
+        /// or monitors with incompatible resolutions.
         /// </summary>
         public bool EnableMirror()
         {
@@ -37,6 +40,12 @@ namespace ConditioningControlPanel.Services
 
             try
             {
+                // Log screen configuration for debugging
+                var screens = App.GetAllScreensCached();
+                App.Logger?.Debug("ScreenMirror: Attempting clone on {Count} screens: {Screens}",
+                    screens.Length,
+                    string.Join(", ", screens.Select(s => $"{s.DeviceName} ({s.Bounds.Width}x{s.Bounds.Height})")));
+
                 var result = SetDisplayConfig(0, IntPtr.Zero, 0, IntPtr.Zero, SDC_TOPOLOGY_CLONE | SDC_APPLY);
 
                 if (result == 0) // ERROR_SUCCESS
@@ -47,7 +56,16 @@ namespace ConditioningControlPanel.Services
                 }
                 else
                 {
-                    App.Logger?.Warning("ScreenMirror: Failed to enable clone mode, error code: {Code}", result);
+                    // Provide helpful error descriptions
+                    var errorDesc = result switch
+                    {
+                        50 => "NOT_SUPPORTED - Clone mode not available (3+ monitors or mixed GPUs?)",
+                        5 => "ACCESS_DENIED - Insufficient permissions",
+                        31 => "GEN_FAILURE - Display configuration incompatible",
+                        87 => "INVALID_PARAMETER - Invalid display topology",
+                        _ => $"Unknown error"
+                    };
+                    App.Logger?.Warning("ScreenMirror: Failed to enable clone mode - {Error} (code: {Code})", errorDesc, result);
                     return false;
                 }
             }

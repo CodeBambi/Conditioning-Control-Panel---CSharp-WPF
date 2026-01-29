@@ -471,6 +471,7 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.5, "Initializing video service...");
             Video = new VideoService();
+            Video.PreloadLibVLC(); // Pre-load LibVLC in background for faster first video
 
             splash.SetProgress(0.6, "Initializing effects...");
             Progression = new ProgressionService();
@@ -589,11 +590,10 @@ namespace ConditioningControlPanel
             PlayAchievementSound();
 
             // Send Discord webhook if enabled (fire and forget)
+            // Always use CustomDisplayName for privacy - never expose real Discord/Patreon names
             if (Settings?.Current?.DiscordShareAchievements == true)
             {
-                var displayName = Settings.Current.DiscordUseAnonymousName
-                    ? (Patreon?.DisplayName ?? Discord?.DisplayName ?? "Someone")
-                    : (Discord?.Username ?? Patreon?.DisplayName ?? "Someone");
+                var displayName = Discord?.CustomDisplayName ?? Patreon?.DisplayName ?? "Someone";
                 _ = Discord?.SendAchievementWebhookAsync(achievement, displayName);
             }
         }

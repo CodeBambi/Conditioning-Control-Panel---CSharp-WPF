@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Bubble Count Challenge"
         WindowStyle="None"
-        AllowsTransparency="True"
+        AllowsTransparency="False"
         Background="Black"
         Topmost="True"
         ShowInTaskbar="False"
@@ -12,19 +12,9 @@
         FontFamily="Comic Sans MS, Segoe UI">
 
     <Grid x:Name="MainGrid">
-        <!-- Video Player Background -->
-        <MediaElement x:Name="VideoPlayer"
-                      LoadedBehavior="Manual"
-                      UnloadedBehavior="Manual"
-                      Stretch="Uniform"
-                      MediaEnded="VideoPlayer_MediaEnded"
-                      MediaOpened="VideoPlayer_MediaOpened"
-                      MediaFailed="VideoPlayer_MediaFailed"/>
-
-        <!-- Bubble Overlay Canvas -->
-        <Canvas x:Name="BubbleCanvas"
-                Background="Transparent"
-                IsHitTestVisible="False"/>
+        <!-- Video Player Container - VideoView added programmatically -->
+        <!-- Bubbles are now separate windows to avoid blocking LibVLC rendering -->
+        <Grid x:Name="VideoContainer" Background="Black"/>
 
         <!-- Top Info Bar -->
         <Border Background="#80000000"

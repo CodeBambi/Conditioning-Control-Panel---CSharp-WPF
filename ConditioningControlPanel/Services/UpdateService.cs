@@ -22,7 +22,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.2-Lockdown";
+        public const string AppVersion = "5.4.7-Lockdown";
 
         /// <summary>
         /// Whether this is the lockdown version (no auto-update, no escape)
@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.2 - LOCKDOWN VERSION
+        public const string CurrentPatchNotes = @"v5.4.7 - LOCKDOWN VERSION
 
 ⚠️ LOCKDOWN VERSION WARNING
 • Videos/challenges CANNOT be skipped or closed
@@ -42,7 +42,42 @@ namespace ConditioningControlPanel.Services
 • Auto-updates are DISABLED - manual updates only
 • Emergency exit: Ctrl+Alt+Del → Task Manager
 
-This version is for advanced users who want maximum restriction.";
+This version is for advanced users who want maximum restriction.
+
+---
+
+🔒 PRIVACY
+• App never exposes real Discord or Patreon names - only your chosen display name is shown
+• Removed 'Use Anonymous Name' option (privacy is now always on)
+• Level milestone webhooks use your display name, not Discord username
+
+👤 PROFILE VIEWER
+• Profile pictures! Opt-in 'Share Profile Picture' setting in Discord tab
+• Profiles now show live online status when viewed
+• Double-click any leaderboard entry to jump to their profile
+• Own profile always shows your avatar (local fallback)
+
+🔧 ACCOUNT FIXES
+• Users with missing display names are now auto-detected and prompted on startup
+• Cancelling registration now properly logs out (prevents orphan profiles with no name)
+• Server correctly reads settings from all profile sources (unified, Patreon, Discord)
+
+🎮 VIDEO & STABILITY
+• Bubble Count Challenge rewritten with LibVLC (no more MediaElement crashes)
+• Fixed video windows becoming orphaned on app exit
+• Fixed LibVLC crash-on-cleanup race conditions with proper shutdown ordering
+• Dual monitor video: fixed frame buffer race conditions during stop
+• LibVLC discovery improved - checks multiple paths for libvlc.dll
+• Ordered shutdown: bubbles stop before video to avoid UI thread contention
+
+🫧 BUBBLES
+• Bubble pop animation now plays fully before removal
+• Fixed race condition when cleaning up bubbles during video playback
+
+☁️ SERVER
+• New profile lookup endpoint for fresh online status and avatars
+• Discord heartbeat now keeps unified accounts marked as online
+• Leaderboard correctly merges online status across linked accounts";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
@@ -1404,13 +1439,28 @@ This version is for advanced users who want maximum restriction.";
                         .Replace("\\r\\n", "\n")
                         .Replace("\\n", "\n")
                         .Replace("\\\"", "\"");
+
+                    // Clean up markdown headers for plain text display
+                    releaseNotes = System.Text.RegularExpressions.Regex.Replace(releaseNotes, @"^###\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+                    releaseNotes = System.Text.RegularExpressions.Regex.Replace(releaseNotes, @"^##\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+                    releaseNotes = releaseNotes.Replace("\\", ""); // Remove escape backslashes
+                }
+
+                // Parse file size from assets array (look for .exe installer)
+                long fileSizeBytes = 0;
+                var sizeMatch = System.Text.RegularExpressions.Regex.Match(response,
+                    @"""name""\s*:\s*""[^""]*Setup\.exe""[^}]*""size""\s*:\s*(\d+)");
+                if (sizeMatch.Success && long.TryParse(sizeMatch.Groups[1].Value, out var size))
+                {
+                    fileSizeBytes = size;
+                    App.Logger?.Debug("Parsed installer size from GitHub: {Size} bytes", fileSizeBytes);
                 }
 
                 return new AppUpdateInfo
                 {
                     Version = latestVersionString,
                     ReleaseNotes = releaseNotes,
-                    FileSizeBytes = 0, // Unknown from API
+                    FileSizeBytes = fileSizeBytes,
                     ReleaseDate = DateTime.Now,
                     IsNewer = true,
                     IsGitHubFallback = true // Flag to indicate this came from GitHub API
@@ -1445,22 +1495,13 @@ This version is for advanced users who want maximum restriction.";
                         var response = await client.GetStringAsync(url);
 
                         // Parse JSON to get body field (release notes)
-                        // Simple parsing without full JSON library
-                        var bodyStart = response.IndexOf("\"body\":");
-                        if (bodyStart > 0)
+                        var json = Newtonsoft.Json.Linq.JObject.Parse(response);
+                        var body = json["body"]?.ToString();
+
+                        if (!string.IsNullOrWhiteSpace(body) && body != "null")
                         {
-                            bodyStart = response.IndexOf("\"", bodyStart + 7) + 1;
-                            var bodyEnd = response.IndexOf("\"", bodyStart);
-
-                            // Handle escaped quotes and newlines
-                            var body = response.Substring(bodyStart, bodyEnd - bodyStart);
-                            body = body.Replace("\\r\\n", "\n").Replace("\\n", "\n").Replace("\\\"", "\"");
-
-                            if (!string.IsNullOrWhiteSpace(body) && body != "null")
-                            {
-                                App.Logger?.Debug("Fetched release notes from GitHub for {Tag}", tag);
-                                return body;
-                            }
+                            App.Logger?.Debug("Fetched release notes from GitHub for {Tag}", tag);
+                            return body;
                         }
                     }
                     catch

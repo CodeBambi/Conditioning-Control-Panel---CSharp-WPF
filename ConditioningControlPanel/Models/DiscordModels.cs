@@ -93,6 +93,13 @@ namespace ConditioningControlPanel.Models
         [JsonPropertyName("verified")]
         public bool Verified { get; set; }
 
+        /// <summary>
+        /// Whether this user needs to register (choose display name)
+        /// </summary>
+        [JsonProperty("needs_registration")]
+        [JsonPropertyName("needs_registration")]
+        public bool NeedsRegistration { get; set; }
+
         [JsonProperty("error")]
         [JsonPropertyName("error")]
         public string? Error { get; set; }

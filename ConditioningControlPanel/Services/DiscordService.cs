@@ -85,6 +85,12 @@ namespace ConditioningControlPanel.Services
         public string? UnifiedUserId { get; set; }
 
         /// <summary>
+        /// True if user needs to complete registration (choose display name).
+        /// Set by the server when display_name is null/empty.
+        /// </summary>
+        public bool NeedsRegistration { get; private set; }
+
+        /// <summary>
         /// Whether this is the user's first login (no display name set yet on ANY provider).
         /// If Patreon already has a display name, this returns false to avoid re-prompting.
         /// </summary>
@@ -446,6 +452,7 @@ namespace ConditioningControlPanel.Services
                 DisplayName = user.DisplayName;
                 Avatar = user.Avatar;
                 Email = user.Email;
+                NeedsRegistration = user.NeedsRegistration;
 
                 // Cache result for 24 hours
                 _tokenStorage.StoreCachedState(new DiscordCachedState
@@ -459,7 +466,7 @@ namespace ConditioningControlPanel.Services
                     CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours)
                 });
 
-                App.Logger?.Information("Discord user validated: {Username} ({Id})", Username, UserId);
+                App.Logger?.Information("Discord user validated: {Username} ({Id}), NeedsRegistration={NeedsReg}", Username, UserId, user.NeedsRegistration);
             }
             catch (Exception ex)
             {

@@ -159,14 +159,14 @@ namespace ConditioningControlPanel.Models
         public bool IsDownloaded
         {
             get => _isDownloaded;
-            set { _isDownloaded = value; OnPropertyChanged(); OnPropertyChanged(nameof(DownloadButtonText)); }
+            set { _isDownloaded = value; OnPropertyChanged(); OnPropertyChanged(nameof(DownloadButtonText)); OnPropertyChanged(nameof(ActivateButtonText)); }
         }
 
         private bool _isActive;
         public bool IsActive
         {
             get => _isActive;
-            set { _isActive = value; OnPropertyChanged(); OnPropertyChanged(nameof(DownloadButtonText)); }
+            set { _isActive = value; OnPropertyChanged(); OnPropertyChanged(nameof(DownloadButtonText)); OnPropertyChanged(nameof(ActivateButtonText)); }
         }
 
         private bool _isDownloading;
@@ -206,9 +206,11 @@ namespace ConditioningControlPanel.Models
                     return $"Downloading... {DownloadProgress:F0}%";
                 }
                 if (IsDownloaded) return "Uninstall";
-                return "Download";
+                return "Install";
             }
         }
+
+        public string ActivateButtonText => IsActive ? "Deactivate" : "Activate";
 
         public string SizeDisplay
         {

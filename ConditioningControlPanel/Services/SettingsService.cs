@@ -145,10 +145,13 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                App.Logger?.Information("Settings.Save: ActivePackIds BEFORE serialize: [{Ids}]",
+                    string.Join(", ", Current.ActivePackIds ?? new List<string>()));
+
                 var json = JsonConvert.SerializeObject(Current, Formatting.Indented);
                 File.WriteAllText(_settingsPath, json);
-                App.Logger?.Information("Settings saved to {Path} (Triggers: {TriggerCount})",
-                    _settingsPath, Current.CustomTriggers?.Count ?? 0);
+                App.Logger?.Information("Settings saved to {Path} (Triggers: {TriggerCount}, ActivePacks: {PackCount})",
+                    _settingsPath, Current.CustomTriggers?.Count ?? 0, Current.ActivePackIds?.Count ?? 0);
             }
             catch (Exception ex)
             {

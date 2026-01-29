@@ -54,11 +54,10 @@ namespace ConditioningControlPanel.Services
                 App.DiscordRpc?.UpdateLevel(settings.PlayerLevel);
 
                 // Send Discord webhook for level milestones (10, 25, 50, 100, etc.)
+                // Always use CustomDisplayName for privacy - never expose real Discord/Patreon names
                 if (settings.DiscordShareLevelUps && IsLevelMilestone(settings.PlayerLevel))
                 {
-                    var displayName = settings.DiscordUseAnonymousName
-                        ? (App.Patreon?.DisplayName ?? App.Discord?.DisplayName ?? "Someone")
-                        : (App.Discord?.Username ?? App.Patreon?.DisplayName ?? "Someone");
+                    var displayName = App.Discord?.CustomDisplayName ?? App.Patreon?.DisplayName ?? "Someone";
                     _ = App.Discord?.SendLevelUpWebhookAsync(settings.PlayerLevel, displayName);
                 }
 

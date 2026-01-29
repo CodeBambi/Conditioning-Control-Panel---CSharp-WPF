@@ -42,6 +42,10 @@ namespace ConditioningControlPanel.Services
         private DateTime _startTime;
         private double _duration;
 
+        // Cleanup synchronization to prevent race conditions
+        private readonly object _cleanupLock = new();
+        private volatile bool _isCleaningUp;
+
         // Maximum video duration fallback (10 minutes) - if LengthChanged never fires
         private const int MaxVideoFallbackSeconds = 600;
         
@@ -87,10 +91,50 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool IsPlaying => _videoPlaying;
 
+        /// <summary>
+        /// Get the shared LibVLC instance (used by BubbleCountWindow).
+        /// Returns null if not yet initialized - caller should handle this.
+        /// LibVLC is initialized via PreloadLibVLC() during app startup.
+        /// </summary>
+        public static LibVLC? SharedLibVLC => _libVLC;
+
+        /// <summary>
+        /// Wait for LibVLC initialization to complete (with timeout).
+        /// Returns true if LibVLC is available, false if timeout or init failed.
+        /// </summary>
+        public static bool WaitForLibVLC(int timeoutMs = 5000)
+        {
+            var start = DateTime.UtcNow;
+            while ((DateTime.UtcNow - start).TotalMilliseconds < timeoutMs)
+            {
+                if (_libVLCInitialized)
+                {
+                    return _libVLC != null;
+                }
+                Thread.Sleep(50);
+            }
+            App.Logger?.Warning("VideoService: Timed out waiting for LibVLC initialization");
+            return _libVLC != null;
+        }
+
         public VideoService()
         {
             RefreshVideosPath();
             // LibVLC initialization is deferred to first video playback for faster startup
+        }
+
+        /// <summary>
+        /// Pre-initialize LibVLC during app startup to avoid slow first video.
+        /// Call this from App.OnStartup() in a background task.
+        /// </summary>
+        public void PreloadLibVLC()
+        {
+            Task.Run(() =>
+            {
+                App.Logger?.Information("VideoService: Pre-loading LibVLC in background...");
+                EnsureLibVLCInitialized();
+                App.Logger?.Information("VideoService: LibVLC pre-load complete, initialized={Initialized}", _libVLCInitialized);
+            });
         }
 
         /// <summary>
@@ -122,20 +166,31 @@ namespace ConditioningControlPanel.Services
 
                 try
                 {
-                    // Find the libvlc folder - it's in a subdirectory of the app
+                    // Find the libvlc folder - check for libvlc.dll existence, not just folder
                     var appDir = AppDomain.CurrentDomain.BaseDirectory;
-                    var libvlcPath = Path.Combine(appDir, "libvlc");
+                    string? libvlcPath = null;
 
-                    App.Logger?.Information("Looking for LibVLC in: {Path}", libvlcPath);
-
-                    if (!Directory.Exists(libvlcPath))
+                    // Try paths in order of preference
+                    var pathsToTry = new[]
                     {
-                        // Try alternate location (development)
-                        libvlcPath = Path.Combine(appDir, "libvlc", "win-x64");
-                        App.Logger?.Information("Trying alternate LibVLC path: {Path}", libvlcPath);
+                        Path.Combine(appDir, "libvlc", "win-x64"),  // NuGet package structure
+                        Path.Combine(appDir, "libvlc"),             // Direct folder
+                        appDir                                       // Same folder as exe
+                    };
+
+                    foreach (var path in pathsToTry)
+                    {
+                        var dllPath = Path.Combine(path, "libvlc.dll");
+                        App.Logger?.Information("Checking for LibVLC at: {Path}", dllPath);
+                        if (File.Exists(dllPath))
+                        {
+                            libvlcPath = path;
+                            App.Logger?.Information("Found libvlc.dll at: {Path}", path);
+                            break;
+                        }
                     }
 
-                    if (Directory.Exists(libvlcPath))
+                    if (libvlcPath != null)
                     {
                         // Initialize LibVLCSharp core with explicit path
                         Core.Initialize(libvlcPath);
@@ -143,7 +198,8 @@ namespace ConditioningControlPanel.Services
                     }
                     else
                     {
-                        // Try default initialization
+                        // Try default initialization (may find system-installed VLC)
+                        App.Logger?.Information("libvlc.dll not found in expected locations, trying default initialization");
                         Core.Initialize();
                         App.Logger?.Information("LibVLC core initialized from default location");
                     }
@@ -183,7 +239,23 @@ namespace ConditioningControlPanel.Services
             _videosPath = Path.Combine(App.EffectiveAssetsPath, "videos");
             Directory.CreateDirectory(_videosPath);
             _videoQueue.Clear();
+            _packVideoQueue.Clear();
             App.Logger?.Information("VideoService: Videos path refreshed to {Path}", _videosPath);
+        }
+
+        /// <summary>
+        /// Reloads all video assets (regular and pack videos).
+        /// Call this when pack activation state changes.
+        /// </summary>
+        public void ReloadAssets()
+        {
+            var beforeRegular = _videoQueue.Count;
+            var beforePack = _packVideoQueue.Count;
+            _videoQueue.Clear();
+            _packVideoQueue.Clear();
+            CleanupTempPackFiles();
+            App.Logger?.Information("VideoService: Assets reloaded - cleared queues (was {RegularCount} regular, {PackCount} pack)",
+                beforeRegular, beforePack);
         }
 
         /// <summary>
@@ -269,10 +341,11 @@ namespace ConditioningControlPanel.Services
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
 
-            // Force cleanup of any playing video
+            // Force cleanup of any playing video - use synchronous disposal during stop
+            // because Stop is typically called during app shutdown
             _videoPlaying = false;
             _strictActive = false;
-            Cleanup();
+            CloseAll(synchronous: true);
 
             App.Logger?.Information("VideoService stopped");
         }
@@ -471,17 +544,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Force cleanup without scheduling next - used for panic key and preventing stacking
         /// </summary>
-        public void ForceCleanup()
+        /// <param name="synchronous">If true, disposes LibVLC players synchronously (use during app exit)</param>
+        public void ForceCleanup(bool synchronous = false)
         {
             _safetyTimer?.Stop();
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
             _videoPlaying = false;
             _strictActive = false;
-            CloseAll();
+            CloseAll(synchronous);
             App.Audio?.Unduck();
             _penalties = 0;
-            App.Logger?.Information("VideoService: Force cleanup completed");
+            App.Logger?.Information("VideoService: Force cleanup completed (synchronous={Sync})", synchronous);
         }
 
         /// <summary>
@@ -563,11 +637,18 @@ namespace ConditioningControlPanel.Services
                 mediaPlayer.EndReached += (s, e) =>
                 {
                     // CRITICAL: Detach from LibVLC thread immediately to prevent deadlocks
-                    App.Logger?.Information("VideoService: LibVLC URL EndReached fired");
+                    App.Logger?.Information("VideoService: LibVLC URL EndReached fired, _isCleaningUp={Cleaning}", _isCleaningUp);
                     Task.Run(() =>
                     {
                         try
                         {
+                            // Skip if cleanup already in progress (e.g., from panic key)
+                            if (_isCleaningUp)
+                            {
+                                App.Logger?.Debug("VideoService: URL EndReached skipped - cleanup already in progress");
+                                return;
+                            }
+
                             var dispatcher = Application.Current?.Dispatcher;
                             if (dispatcher == null || dispatcher.HasShutdownStarted)
                             {
@@ -576,6 +657,7 @@ namespace ConditioningControlPanel.Services
                             }
                             dispatcher.BeginInvoke(() =>
                             {
+                                if (_isCleaningUp) return; // Double-check on UI thread
                                 _videoPlaying = false;
                                 CloseAll();
                             });
@@ -585,7 +667,8 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Error(ex, "VideoService: Failed to dispatch CloseAll from URL EndReached");
                             try
                             {
-                                Application.Current?.Dispatcher?.Invoke(() => ForceCleanup());
+                                if (!_isCleaningUp)
+                                    Application.Current?.Dispatcher?.Invoke(() => ForceCleanup());
                             }
                             catch { /* Last resort failed */ }
                         }
@@ -884,11 +967,18 @@ namespace ConditioningControlPanel.Services
                     // LibVLC waits for event handlers to complete before returning, and if we
                     // try to Stop/Dispose the player while waiting, it deadlocks.
                     // Using Task.Run ensures we return from the event handler immediately.
-                    App.Logger?.Information("VideoService: LibVLC EndReached fired");
+                    App.Logger?.Information("VideoService: LibVLC EndReached fired, _isCleaningUp={Cleaning}", _isCleaningUp);
                     Task.Run(() =>
                     {
                         try
                         {
+                            // Skip if cleanup already in progress (e.g., from panic key)
+                            if (_isCleaningUp)
+                            {
+                                App.Logger?.Debug("VideoService: EndReached skipped - cleanup already in progress");
+                                return;
+                            }
+
                             var dispatcher = Application.Current?.Dispatcher;
                             if (dispatcher == null)
                             {
@@ -908,7 +998,8 @@ namespace ConditioningControlPanel.Services
                             // Try direct cleanup as last resort - windows may stay open otherwise
                             try
                             {
-                                Application.Current?.Dispatcher?.Invoke(() => ForceCleanup());
+                                if (!_isCleaningUp)
+                                    Application.Current?.Dispatcher?.Invoke(() => ForceCleanup());
                             }
                             catch (Exception ex2)
                             {
@@ -1568,8 +1659,15 @@ namespace ConditioningControlPanel.Services
 
         private void OnEnded()
         {
-            App.Logger?.Information("VideoService: OnEnded() called, _videoPlaying={Playing}, _windows={WinCount}",
-                _videoPlaying, _windows.Count);
+            App.Logger?.Information("VideoService: OnEnded() called, _videoPlaying={Playing}, _windows={WinCount}, _isCleaningUp={Cleaning}",
+                _videoPlaying, _windows.Count, _isCleaningUp);
+
+            // Skip if cleanup is already in progress (e.g., from panic key)
+            if (_isCleaningUp)
+            {
+                App.Logger?.Information("VideoService: OnEnded() early return - cleanup already in progress");
+                return;
+            }
 
             if (!_videoPlaying)
             {
@@ -1774,101 +1872,168 @@ namespace ConditioningControlPanel.Services
 
         #region Cleanup
 
-        private void CloseAll()
+        private void CloseAll(bool synchronous = false)
         {
-            _attentionTimer?.Stop();
-
-            lock (_targets)
+            // Use lock to prevent race conditions between multiple cleanup triggers
+            // (panic key, EndReached, safety timer, etc.)
+            lock (_cleanupLock)
             {
-                App.Logger?.Information("ATTENTION: CloseAll() called - destroying {Count} targets", _targets.Count);
-                foreach (var t in _targets.ToList()) t.Destroy();
-                _targets.Clear();
+                if (_isCleaningUp)
+                {
+                    App.Logger?.Debug("CloseAll: Already cleaning up, skipping duplicate call");
+                    return;
+                }
+                _isCleaningUp = true;
             }
 
-            App.Logger?.Debug("CloseAll: Closing {Count} video windows, {MsgCount} message windows",
-                _windows.Count, _messageWindows.Count);
-
-            // First, detach MediaPlayers from VideoViews to prevent crashes
-            var windowsCopy = _windows.ToList();
-            foreach (var w in windowsCopy)
+            try
             {
-                try
+                _attentionTimer?.Stop();
+
+                lock (_targets)
                 {
-                    if (w.Content is Grid g && g.Children.Count > 0 && g.Children[0] is VideoView vv)
+                    App.Logger?.Information("ATTENTION: CloseAll() called - destroying {Count} targets", _targets.Count);
+                    foreach (var t in _targets.ToList()) t.Destroy();
+                    _targets.Clear();
+                }
+
+                App.Logger?.Debug("CloseAll: Closing {Count} video windows, {MsgCount} message windows",
+                    _windows.Count, _messageWindows.Count);
+
+                // CRITICAL: Stop all LibVLC media players FIRST before detaching from VideoViews
+                // If we detach while player is still rendering, it can crash (especially multi-monitor)
+                var playersCopy = _mediaPlayers.ToList();
+                _mediaPlayers.Clear();
+
+                foreach (var player in playersCopy)
+                {
+                    try
                     {
-                        var mp = vv.MediaPlayer;
-                        vv.MediaPlayer = null; // Detach before dispose
+                        player.Stop();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("CloseAll: Failed to stop LibVLC player - {Error}", ex.Message);
                     }
                 }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("CloseAll: Error detaching VideoView - {Error}", ex.Message);
-                }
-            }
 
-            // Stop all LibVLC media players BEFORE closing windows (synchronously)
-            // This prevents race conditions where LibVLC accesses window handles after they're destroyed
-            var playersCopy = _mediaPlayers.ToList();
-            _mediaPlayers.Clear();
-
-            foreach (var player in playersCopy)
-            {
-                try
+                // CRITICAL: Wait a bit after stopping players to let LibVLC finish any pending operations
+                // This prevents crashes when detaching VideoView while LibVLC is still processing
+                if (playersCopy.Count > 0)
                 {
-                    player.Stop();
+                    Thread.Sleep(100); // Give LibVLC time to fully stop rendering
                 }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("CloseAll: Failed to stop LibVLC player - {Error}", ex.Message);
-                }
-            }
 
-            // Close video windows AFTER media players are stopped
-            foreach (var w in _windows.ToList())
-            {
-                try
+                // Now detach MediaPlayers from VideoViews (safe since players are stopped and we waited)
+                var windowsCopy = _windows.ToList();
+                foreach (var w in windowsCopy)
                 {
-                    // Stop any MediaElement
-                    if (w.Content is Grid g && g.Children.Count > 0 && g.Children[0] is MediaElement me)
+                    try
                     {
-                        me.Stop();
-                        me.Source = null; // Release media resources
-                    }
-                    w.Close();
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning("CloseAll: Failed to close video window - {Error}", ex.Message);
-                }
-            }
-            _windows.Clear();
-
-            // Dispose media players asynchronously AFTER windows are closed
-            // Add a small delay to ensure LibVLC event handlers have fully detached
-            // This prevents deadlocks when Dispose() waits for event completion
-            if (playersCopy.Count > 0)
-            {
-                Task.Run(async () =>
-                {
-                    // Wait for any pending EndReached events to complete their Task.Run dispatch
-                    await Task.Delay(100);
-
-                    foreach (var player in playersCopy)
-                    {
-                        try
+                        if (w.Content is Grid g)
                         {
-                            player.Dispose();
-                        }
-                        catch (Exception ex)
-                        {
-                            App.Logger?.Debug("CloseAll: Failed to dispose LibVLC player - {Error}", ex.Message);
+                            // Find VideoView in the grid (might not be at index 0 due to overlays)
+                            foreach (var child in g.Children)
+                            {
+                                if (child is VideoView vv)
+                                {
+                                    vv.MediaPlayer = null; // Detach after stopping
+                                    break;
+                                }
+                            }
                         }
                     }
-                });
-            }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("CloseAll: Error detaching VideoView - {Error}", ex.Message);
+                    }
+                }
 
-            // Also close any lingering message windows
-            CloseMessageWindows();
+                // Another small delay after detaching before closing windows
+                if (windowsCopy.Count > 0)
+                {
+                    Thread.Sleep(50);
+                }
+
+                // Close video windows AFTER media players are stopped and detached
+                foreach (var w in _windows.ToList())
+                {
+                    try
+                    {
+                        // Stop any MediaElement
+                        if (w.Content is Grid g)
+                        {
+                            foreach (var child in g.Children)
+                            {
+                                if (child is MediaElement me)
+                                {
+                                    me.Stop();
+                                    me.Source = null; // Release media resources
+                                    break;
+                                }
+                            }
+                        }
+                        w.Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("CloseAll: Failed to close video window - {Error}", ex.Message);
+                    }
+                }
+                _windows.Clear();
+
+                // Dispose media players - synchronously during app exit, async during normal operation
+                if (playersCopy.Count > 0)
+                {
+                    if (synchronous)
+                    {
+                        // Synchronous disposal - used during app exit to prevent orphaned windows
+                        App.Logger?.Debug("CloseAll: Synchronous disposal of {Count} LibVLC players", playersCopy.Count);
+                        foreach (var player in playersCopy)
+                        {
+                            try
+                            {
+                                player.Dispose();
+                            }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Debug("CloseAll: Failed to dispose LibVLC player - {Error}", ex.Message);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Async disposal - normal operation to prevent blocking UI
+                        Task.Run(async () =>
+                        {
+                            // Wait for any pending EndReached events to complete their Task.Run dispatch
+                            await Task.Delay(750);
+
+                            foreach (var player in playersCopy)
+                            {
+                                try
+                                {
+                                    player.Dispose();
+                                }
+                                catch (Exception ex)
+                                {
+                                    App.Logger?.Debug("CloseAll: Failed to dispose LibVLC player - {Error}", ex.Message);
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Also close any lingering message windows
+                CloseMessageWindows();
+            }
+            finally
+            {
+                lock (_cleanupLock)
+                {
+                    _isCleaningUp = false;
+                }
+            }
         }
 
         private void Cleanup()
@@ -2042,6 +2207,14 @@ namespace ConditioningControlPanel.Services
 
             // Load pack videos from active packs
             var packVideos = App.ContentPacks?.GetAllActivePackVideos() ?? new List<(string, PackFileEntry)>();
+
+            // Log which packs the videos are coming from
+            var packVideosByPack = packVideos.GroupBy(v => v.PackId).ToList();
+            foreach (var group in packVideosByPack)
+            {
+                App.Logger?.Information("VideoService: Pack '{PackId}' contributing {Count} videos", group.Key, group.Count());
+            }
+
             _packVideoQueue = new Queue<(string, PackFileEntry)>(packVideos.OrderBy(_ => _random.Next()));
 
             App.Logger?.Information("VideoService: Queues refilled - {RegularCount} regular videos, {PackCount} pack videos (path: {Path})",

@@ -106,6 +106,10 @@ public class BubbleService : IDisposable
         _animationTimer?.Stop();
         _animationTimer = null;
 
+        // Small delay to allow any pending animation ticks to complete
+        // This prevents race conditions when cleaning up during video playback
+        Thread.Sleep(50);
+
         // Pop all remaining bubbles
         PopAllBubbles();
 
@@ -194,7 +198,7 @@ public class BubbleService : IDisposable
                 
                 var screen = screens[_random.Next(screens.Length)];
                 var isClickable = settings.BubblesClickable;
-                var bubble = new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, isClickable);
+                var bubble = new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable);
                 _bubbles.Add(bubble);
                 
                 App.Logger?.Debug("Spawned bubble, total: {Count}", _bubbles.Count);
@@ -209,10 +213,10 @@ public class BubbleService : IDisposable
     private void OnPop(Bubble bubble)
     {
         PlayPopSound();
-        _bubbles.Remove(bubble);
+        // Don't remove here - let the pop animation play, removal happens in OnDestroy
         OnBubblePopped?.Invoke();
         App.Progression?.AddXP(2, XPSource.Bubble);
-        
+
         // Track for achievement
         App.Achievements?.TrackBubblePopped();
 
@@ -222,8 +226,15 @@ public class BubbleService : IDisposable
 
     private void OnMiss(Bubble bubble)
     {
+        // Bubble floated off screen - remove immediately (no animation needed)
         _bubbles.Remove(bubble);
         OnBubbleMissed?.Invoke();
+    }
+
+    private void OnDestroy(Bubble bubble)
+    {
+        // Called when bubble is fully destroyed (after pop animation completes)
+        _bubbles.Remove(bubble);
     }
 
     private void PlayPopSound()
@@ -348,29 +359,44 @@ public class BubbleService : IDisposable
         try
         {
             // Safety check for shutdown scenarios
-            if (Application.Current?.Dispatcher == null)
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted)
             {
-                // Direct cleanup without dispatcher
+                // Direct cleanup without dispatcher - force destroy
                 foreach (var bubble in _bubbles.ToArray())
                 {
-                    bubble.Pop();
+                    try { bubble.ForceDestroy(); } catch { }
                 }
                 _bubbles.Clear();
                 return;
             }
 
-            Application.Current.Dispatcher.Invoke(() =>
+            // Take a copy of bubbles to close
+            var bubblesToClose = _bubbles.ToArray();
+            _bubbles.Clear();
+
+            // Close on UI thread - use Invoke for synchronous cleanup during stop
+            // Since animation timer is stopped, we need to force destroy (no animation)
+            dispatcher.Invoke(() =>
             {
-                foreach (var bubble in _bubbles.ToArray())
+                foreach (var bubble in bubblesToClose)
                 {
-                    bubble.Pop();
+                    try
+                    {
+                        bubble.ForceDestroy();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Error destroying bubble: {Error}", ex.Message);
+                    }
                 }
-                _bubbles.Clear();
-            });
+            }, System.Windows.Threading.DispatcherPriority.Send); // High priority to complete quickly
         }
         catch (Exception ex)
         {
             App.Logger?.Debug("PopAllBubbles error during shutdown: {Error}", ex.Message);
+            // Force clear the list even if popup failed
+            _bubbles.Clear();
         }
     }
 
@@ -387,8 +413,9 @@ internal class Bubble
 {
     private readonly Window _window;
     private readonly Random _random;
-    private readonly Action<Bubble> _onPop;
-    private readonly Action<Bubble> _onMiss;
+    private readonly Action<Bubble>? _onPop;
+    private readonly Action<Bubble>? _onMiss;
+    private readonly Action<Bubble>? _onDestroy;
     private readonly bool _isClickable;
 
     private double _posX, _posY;
@@ -411,11 +438,12 @@ internal class Bubble
     public bool IsAlive => _isAlive && !_isDestroyed;
 
     public Bubble(System.Windows.Forms.Screen screen, BitmapImage? image, Random random,
-                  Action<Bubble> onPop, Action<Bubble> onMiss, bool isClickable = true)
+                  Action<Bubble>? onPop, Action<Bubble>? onMiss, Action<Bubble>? onDestroy, bool isClickable = true)
     {
         _random = random;
         _onPop = onPop;
         _onMiss = onMiss;
+        _onDestroy = onDestroy;
         _isClickable = isClickable;
         
         // Random properties
@@ -561,6 +589,7 @@ internal class Bubble
     /// </summary>
     public void AnimateFrame()
     {
+        // Early exit checks - must be first to avoid any work on destroyed bubbles
         if (!_isAlive || _isDestroyed) return;
 
         if (_isPopping)
@@ -614,9 +643,12 @@ internal class Bubble
             }
         }
 
-        // Update visuals
+        // Update visuals - wrapped in try-catch to handle disposed windows gracefully
         try
         {
+            // Double-check we're still alive after calculations
+            if (_isDestroyed || !_isAlive) return;
+
             // Update scale wobble (scaled for 30fps)
             var wobble = 0.06 * Math.Sin(_timeAlive * 7.5 + _wobbleOffset);
             var currentScale = _scale + wobble;
@@ -650,7 +682,17 @@ internal class Bubble
         if (!_isAlive || _isPopping) return;
         _isPopping = true;
         _onPop?.Invoke(this);
-        Destroy(); // Close the window
+        // Don't call Destroy() here - let AnimateFrame() handle the burst animation
+        // The animation will expand and fade the bubble, then call Destroy() when done
+    }
+
+    /// <summary>
+    /// Force destroy the bubble immediately without animation.
+    /// Used during cleanup when animation timer is stopped.
+    /// </summary>
+    public void ForceDestroy()
+    {
+        Destroy();
     }
 
     private void Destroy()
@@ -660,6 +702,9 @@ internal class Bubble
         _isAlive = false;
 
         try { _window.Close(); } catch { }
+
+        // Notify service to remove from list (after animation completed)
+        try { _onDestroy?.Invoke(this); } catch { }
     }
 
     #region Win32

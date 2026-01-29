@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -153,12 +155,15 @@ namespace ConditioningControlPanel.Services
         public void Stop()
         {
             _isPlaying = false;
+            _frameReady = false; // Prevent render loop from processing any more frames
 
+            // Unsubscribe from rendering event first to stop frame updates
             Application.Current?.Dispatcher?.Invoke(() =>
             {
                 CompositionTarget.Rendering -= OnCompositionTargetRendering;
             });
 
+            // Stop the media player
             try
             {
                 _mediaPlayer?.Stop();
@@ -167,6 +172,9 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("DualMonitorVideo: Error stopping media player: {Error}", ex.Message);
             }
+
+            // Wait a bit for LibVLC to fully stop rendering
+            Thread.Sleep(100);
 
             // Close all windows
             Application.Current?.Dispatcher?.Invoke(() =>
@@ -185,33 +193,53 @@ namespace ConditioningControlPanel.Services
                 _windows.Clear();
             });
 
-            // Clean up media player
-            if (_mediaPlayer != null)
-            {
-                _mediaPlayer.Playing -= OnPlaying;
-                _mediaPlayer.EndReached -= OnEndReached;
-                _mediaPlayer.EncounteredError -= OnError;
-
-                try
-                {
-                    _mediaPlayer.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("DualMonitorVideo: Error disposing media player: {Error}", ex.Message);
-                }
-                _mediaPlayer = null;
-            }
-
-            // Free frame buffer
-            if (_frameBuffer != IntPtr.Zero)
-            {
-                Marshal.FreeHGlobal(_frameBuffer);
-                _frameBuffer = IntPtr.Zero;
-            }
-
+            // Clear shared frame reference
             _sharedFrame = null;
-            _frameReady = false;
+
+            // Clean up media player with delay to let any pending events complete
+            var playerToDispose = _mediaPlayer;
+            _mediaPlayer = null;
+
+            if (playerToDispose != null)
+            {
+                playerToDispose.Playing -= OnPlaying;
+                playerToDispose.EndReached -= OnEndReached;
+                playerToDispose.EncounteredError -= OnError;
+
+                // Dispose asynchronously after delay to avoid crashes from pending events
+                Task.Run(async () =>
+                {
+                    await Task.Delay(500);
+                    try
+                    {
+                        playerToDispose.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("DualMonitorVideo: Error disposing media player: {Error}", ex.Message);
+                    }
+                });
+            }
+
+            // Free frame buffer after a small delay to ensure no one is reading it
+            var bufferToFree = _frameBuffer;
+            _frameBuffer = IntPtr.Zero;
+
+            if (bufferToFree != IntPtr.Zero)
+            {
+                Task.Run(async () =>
+                {
+                    await Task.Delay(200);
+                    try
+                    {
+                        Marshal.FreeHGlobal(bufferToFree);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("DualMonitorVideo: Error freeing frame buffer: {Error}", ex.Message);
+                    }
+                });
+            }
 
             App.Logger?.Information("DualMonitorVideo: Playback stopped");
         }
@@ -401,22 +429,26 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void OnCompositionTargetRendering(object? sender, EventArgs e)
         {
-            if (!_frameReady || _sharedFrame == null || _frameBuffer == IntPtr.Zero)
+            // Capture references locally to avoid race conditions with Stop()
+            var frame = _sharedFrame;
+            var buffer = _frameBuffer;
+
+            if (!_frameReady || frame == null || buffer == IntPtr.Zero)
                 return;
 
             _frameReady = false;
 
             try
             {
-                _sharedFrame.Lock();
+                frame.Lock();
 
                 // Copy frame data from LibVLC buffer to WriteableBitmap
                 var bufferSize = _videoWidth * _videoHeight * 4;
-                CopyMemory(_sharedFrame.BackBuffer, _frameBuffer, bufferSize);
+                CopyMemory(frame.BackBuffer, buffer, bufferSize);
 
                 // Mark entire bitmap as dirty so WPF redraws it
-                _sharedFrame.AddDirtyRect(new Int32Rect(0, 0, (int)_videoWidth, (int)_videoHeight));
-                _sharedFrame.Unlock();
+                frame.AddDirtyRect(new Int32Rect(0, 0, (int)_videoWidth, (int)_videoHeight));
+                frame.Unlock();
 
                 // Both windows automatically update because they reference the same bitmap!
             }

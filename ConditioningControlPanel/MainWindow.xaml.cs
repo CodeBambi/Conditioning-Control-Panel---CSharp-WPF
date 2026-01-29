@@ -33,10 +33,24 @@ namespace ConditioningControlPanel
         private const int DWMWCP_ROUND = 2;
         private const int DWMWCP_ROUNDSMALL = 3;
 
+        // Win32 API for forcing window to foreground
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        private static extern bool BringWindowToTop(IntPtr hWnd);
+
+        private const int SW_RESTORE = 9;
+        private const int SW_SHOW = 5;
+
         private bool _isRunning = false;
         private bool _isLoading = true;
         private BrowserService? _browser;
         private bool _browserInitialized = false;
+        private bool _skipSiteToggleNavigation = false;
         private List<Window> _browserFullscreenWindows = new();
         private Window? _browserPopoutWindow = null;
         private bool _isDualMonitorPlaybackActive = false;
@@ -62,6 +76,7 @@ namespace ConditioningControlPanel
         // Avatar Tube Window
         private AvatarTubeWindow? _avatarTubeWindow;
         private bool _avatarWasAttachedBeforeMaximize = false;
+        private bool _avatarWasAttachedBeforeBrowserFullscreen = false;
 
         // Auto-pause state when minimized with attached avatar
         private bool _autonomyWasPausedOnMinimize = false;
@@ -443,13 +458,12 @@ namespace ConditioningControlPanel
                 // Reset interaction queue to clear any pending queued items
                 App.InteractionQueue?.ForceReset();
 
-                // Restore window
-                if (!IsVisible)
-                {
-                    _trayIcon?.ShowWindow();
-                }
+                // Restore window - always show and bring to front
+                Show();
                 WindowState = WindowState.Normal;
                 Activate();
+                Topmost = true;  // Temporarily topmost to ensure it's visible
+                Topmost = false; // Then disable topmost
                 ShowAvatarTube();
                 
                 _trayIcon?.ShowNotification("Stopped", "Press panic key again within 2 seconds to exit completely.", System.Windows.Forms.ToolTipIcon.Info);
@@ -461,6 +475,14 @@ namespace ConditioningControlPanel
 
                 // IMMEDIATELY kill ALL audio before anything else
                 App.KillAllAudio();
+
+                // CRITICAL: Force close all video windows SYNCHRONOUSLY before exit
+                // LibVLC windows become orphaned if we exit without proper cleanup
+                App.Video?.ForceCleanup(synchronous: true);
+                BubbleCountWindow.ForceCloseAll();
+
+                // Give LibVLC a moment to release native resources
+                Thread.Sleep(100);
 
                 _exitRequested = true;
                 SaveSettings();
@@ -634,6 +656,59 @@ namespace ConditioningControlPanel
 
             // Initialize scrolling marquee banner
             InitializeMarqueeBanner();
+
+            // Check if any authenticated user needs to complete registration (choose display name)
+            // This handles users who had cached tokens but cancelled the registration dialog previously
+            _ = CheckPendingRegistrationAsync();
+        }
+
+        /// <summary>
+        /// Check if any authenticated user needs to complete registration (choose display name).
+        /// This catches users who have profiles with null display_name from before the fix.
+        /// </summary>
+        private async Task CheckPendingRegistrationAsync()
+        {
+            try
+            {
+                // Wait a bit for background authentication to complete
+                await Task.Delay(2000);
+
+                // Check if user is authenticated but needs registration
+                bool patreonNeedsReg = App.Patreon?.IsAuthenticated == true && App.Patreon.NeedsRegistration;
+                bool discordNeedsReg = App.Discord?.IsAuthenticated == true && App.Discord.NeedsRegistration;
+
+                if (!patreonNeedsReg && !discordNeedsReg)
+                    return;
+
+                App.Logger?.Information("User needs to complete registration: Patreon={Patreon}, Discord={Discord}",
+                    patreonNeedsReg, discordNeedsReg);
+
+                // Determine which provider to use for registration (prefer Patreon)
+                string provider = patreonNeedsReg ? "patreon" : "discord";
+
+                // Show the display name dialog (HandlePostAuthAsync gets the token internally)
+                await Dispatcher.InvokeAsync(async () =>
+                {
+                    var success = await Services.AccountService.HandlePostAuthAsync(this, provider);
+                    if (success)
+                    {
+                        App.Logger?.Information("Pending registration completed successfully");
+                        // Refresh the profile to get updated data
+                        if (App.ProfileSync != null)
+                            await App.ProfileSync.LoadProfileAsync();
+                        UpdateQuickPatreonUI();
+                        UpdateQuickDiscordUI();
+                    }
+                    else
+                    {
+                        App.Logger?.Warning("Pending registration failed or was cancelled");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Error checking pending registration");
+            }
         }
 
         /// <summary>
@@ -1384,6 +1459,25 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void LstLeaderboard_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Get the double-clicked item
+            if (LstLeaderboard?.SelectedItem is Services.LeaderboardEntry entry && !string.IsNullOrEmpty(entry.DisplayName))
+            {
+                App.Logger?.Information("Leaderboard double-click: Opening profile for {DisplayName}", entry.DisplayName);
+
+                // Switch to Discord tab (which contains the Profile Viewer)
+                ShowTab("discord");
+
+                // Set the search text and display the profile
+                if (TxtProfileSearch != null)
+                {
+                    TxtProfileSearch.Text = entry.DisplayName;
+                }
+                SearchAndDisplayProfile(entry.DisplayName);
+            }
+        }
+
         private async Task RefreshLeaderboardAsync(string? sortBy = null)
         {
             if (App.Leaderboard == null || TxtLeaderboardStatus == null || BtnRefreshLeaderboard == null) return;
@@ -2035,9 +2129,13 @@ namespace ConditioningControlPanel
             AwarenessLocked.Visibility = level2Unlocked ? Visibility.Collapsed : Visibility.Visible;
             AwarenessUnlocked.Visibility = level2Unlocked ? Visibility.Visible : Visibility.Collapsed;
 
-            // Slut Mode lock overlay
+            // Slut Mode lock overlay (disabled when custom prompts are active)
+            var customPromptsActive = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
             SlutModeLocked.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
-            ChkSlutMode.IsEnabled = hasPremiumAccess;
+            ChkSlutMode.IsEnabled = hasPremiumAccess && !customPromptsActive;
+            ChkSlutMode.ToolTip = customPromptsActive
+                ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
+                : "Enable explicit AI responses (Patreon only)";
 
             // Haptics - unlock for all Patreon supporters
             var hasHapticsAccess = hasPremiumAccess;
@@ -2225,14 +2323,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void ChkUseAnonymousName_Changed(object sender, RoutedEventArgs e)
-        {
-            if (App.Settings?.Current != null)
-            {
-                App.Settings.Current.DiscordUseAnonymousName = ChkUseAnonymousName.IsChecked == true;
-            }
-        }
-
         private void ChkShowLevelInPresence_Changed(object sender, RoutedEventArgs e)
         {
             if (App.Settings?.Current != null)
@@ -2277,6 +2367,27 @@ namespace ConditioningControlPanel
                             BtnProfileDiscord.Visibility = Visibility.Collapsed;
                         }
                     }
+                }
+            }
+        }
+
+        private async void ChkShareProfilePicture_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current != null && sender is CheckBox chk)
+            {
+                var isChecked = chk.IsChecked == true;
+                App.Settings.Current.ShareProfilePicture = isChecked;
+
+                // Sync both checkboxes (Patreon tab and Discord tab)
+                if (ChkShareProfilePicture != null && ChkShareProfilePicture != chk)
+                    ChkShareProfilePicture.IsChecked = isChecked;
+                if (ChkDiscordTabSharePfp != null && ChkDiscordTabSharePfp != chk)
+                    ChkDiscordTabSharePfp.IsChecked = isChecked;
+
+                // Sync immediately so the setting takes effect
+                if (App.ProfileSync != null)
+                {
+                    await App.ProfileSync.SyncProfileAsync();
                 }
             }
         }
@@ -2337,9 +2448,14 @@ namespace ConditioningControlPanel
             TxtTriggerIntervalCompanion.Text = $"{settings.TriggerIntervalSeconds}s";
             TriggerSettingsPanelCompanion.Visibility = settings.TriggerModeEnabled ? Visibility.Visible : Visibility.Collapsed;
 
-            // Slut Mode settings (Patreon only)
+            // Slut Mode settings (Patreon only, disabled when custom prompts active)
             var slutModeAvailable = App.Patreon?.HasPremiumAccess == true;
-            ChkSlutMode.IsChecked = slutModeAvailable && settings.SlutModeEnabled;
+            var customPromptsActiveForSlut = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
+            ChkSlutMode.IsChecked = slutModeAvailable && settings.SlutModeEnabled && !customPromptsActiveForSlut;
+            ChkSlutMode.IsEnabled = slutModeAvailable && !customPromptsActiveForSlut;
+            ChkSlutMode.ToolTip = customPromptsActiveForSlut
+                ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
+                : null;
             SlutModeLocked.Visibility = slutModeAvailable ? Visibility.Collapsed : Visibility.Visible;
 
             // Hide avatar if disabled
@@ -2400,6 +2516,22 @@ namespace ConditioningControlPanel
 
             // Refresh UI to reflect any prompt changes
             UpdateCommunityPromptsUI();
+
+            // Sync slut mode checkbox (custom prompts may have auto-disabled it)
+            _isLoading = true;
+            try
+            {
+                var customActive = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
+                ChkSlutMode.IsChecked = App.Settings?.Current?.SlutModeEnabled == true && !customActive;
+                ChkSlutMode.IsEnabled = (App.Patreon?.HasPremiumAccess == true) && !customActive;
+                ChkSlutMode.ToolTip = customActive
+                    ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
+                    : null;
+            }
+            finally
+            {
+                _isLoading = false;
+            }
         }
 
         private void ChkAiChat_Changed(object sender, RoutedEventArgs e)
@@ -2523,6 +2655,13 @@ namespace ConditioningControlPanel
                     "Patreon Only",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
+                return;
+            }
+
+            // Block when custom prompts are active
+            if (isEnabled && App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
+            {
+                ChkSlutMode.IsChecked = false;
                 return;
             }
 
@@ -5370,6 +5509,13 @@ namespace ConditioningControlPanel
         {
             if (_browser == null || !_browserInitialized) return;
 
+            // Skip navigation if we're already navigating to a specific URL (from speech bubble link)
+            if (_skipSiteToggleNavigation)
+            {
+                _skipSiteToggleNavigation = false;
+                return;
+            }
+
             var isBambiCloud = RbBambiCloud.IsChecked == true;
             var url = isBambiCloud
                 ? "https://bambicloud.com/"
@@ -5408,12 +5554,15 @@ namespace ConditioningControlPanel
                 var lowerUrl = url.ToLowerInvariant();
 
                 // Switch to correct site tab based on URL
+                // Set flag to skip the homepage navigation in the toggle handler
                 if (lowerUrl.Contains("bambicloud.com") && RbBambiCloud.IsChecked != true)
                 {
+                    _skipSiteToggleNavigation = true;
                     RbBambiCloud.IsChecked = true;
                 }
                 else if (lowerUrl.Contains("hypnotube.com") && RbHypnoTube.IsChecked != true)
                 {
+                    _skipSiteToggleNavigation = true;
                     RbHypnoTube.IsChecked = true;
                 }
 
@@ -5555,8 +5704,9 @@ namespace ConditioningControlPanel
                 if (message.Contains("\"type\":\"videoEnded\""))
                 {
                     // Video ended or fullscreen exited - notify AutonomyService
-                    App.Logger?.Information("Web video playback ended, notifying AutonomyService");
+                    App.Logger?.Information("Web video playback ended");
                     App.Autonomy?.OnWebVideoEnded();
+                    ExitBrowserFullscreen();
                 }
             }
             catch (Exception ex)
@@ -5619,8 +5769,8 @@ namespace ConditioningControlPanel
                 if (ChkDiscordTabShowLevel != null) ChkDiscordTabShowLevel.IsChecked = s.DiscordShowLevelInPresence;
                 if (ChkDiscordTabShareAchievements != null) ChkDiscordTabShareAchievements.IsChecked = s.DiscordShareAchievements;
                 if (ChkDiscordTabShareLevelUps != null) ChkDiscordTabShareLevelUps.IsChecked = s.DiscordShareLevelUps;
-                if (ChkDiscordTabAnonymous != null) ChkDiscordTabAnonymous.IsChecked = s.DiscordUseAnonymousName;
                 if (ChkDiscordTabAllowDm != null) ChkDiscordTabAllowDm.IsChecked = s.AllowDiscordDm;
+                if (ChkDiscordTabSharePfp != null) ChkDiscordTabSharePfp.IsChecked = s.ShareProfilePicture;
             }
 
             // Pre-fill search bar with user's display name and auto-display own profile
@@ -5875,9 +6025,9 @@ namespace ConditioningControlPanel
                 }
             }
 
-            // Name
+            // Name - only show user-chosen display name, never real Discord/Patreon names
             if (TxtProfileViewerName != null)
-                TxtProfileViewerName.Text = App.Discord?.CustomDisplayName ?? App.Discord?.DisplayName ?? App.Patreon?.DisplayName ?? "You";
+                TxtProfileViewerName.Text = App.Discord?.CustomDisplayName ?? App.Patreon?.DisplayName ?? "You";
 
             // Online status
             if (TxtProfileViewerOnline != null)
@@ -5896,7 +6046,8 @@ namespace ConditioningControlPanel
                 if (App.Settings?.Current?.AllowDiscordDm == true && !string.IsNullOrEmpty(App.Discord?.UserId))
                 {
                     BtnProfileDiscord.Visibility = Visibility.Visible;
-                    TxtProfileDiscordId.Text = App.Discord.DisplayName ?? App.Discord.UserId;
+                    // Use CustomDisplayName (user-chosen) for privacy, not Discord global_name
+                    TxtProfileDiscordId.Text = App.Discord.CustomDisplayName ?? App.Patreon?.DisplayName ?? App.Discord.UserId;
                     BtnProfileDiscord.Tag = App.Discord.UserId; // Store ID for click handler
                 }
                 else
@@ -5996,17 +6147,17 @@ namespace ConditioningControlPanel
             if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Visible;
             if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Collapsed;
 
-            // Avatar - we don't have avatar URLs from leaderboard, use placeholder
+            // Avatar - clear previous, will be loaded async
             if (ProfileViewerAvatar != null)
             {
-                ProfileViewerAvatar.ImageSource = null; // Clear previous
+                ProfileViewerAvatar.ImageSource = null;
             }
 
             // Name
             if (TxtProfileViewerName != null)
                 TxtProfileViewerName.Text = entry.DisplayName ?? "Unknown";
 
-            // Online status
+            // Online status (from cached data initially)
             if (TxtProfileViewerOnline != null)
             {
                 TxtProfileViewerOnline.Text = entry.IsOnline ? "Online" : "Offline";
@@ -6018,6 +6169,12 @@ namespace ConditioningControlPanel
                 ProfileOnlineIndicator.Fill = new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(
                         entry.IsOnline ? "#43B581" : "#747F8D"));
+
+            // Trigger async lookup to get fresh online status and avatar
+            if (!string.IsNullOrEmpty(entry.DisplayName))
+            {
+                _ = RefreshProfileViewerAsync(entry.DisplayName);
+            }
 
             // Discord button (only if they have it and allow DMs)
             if (BtnProfileDiscord != null && TxtProfileDiscordId != null)
@@ -6102,6 +6259,77 @@ namespace ConditioningControlPanel
             {
                 TxtNoAchievements.Text = $"{entry.AchievementsCount} achievements unlocked";
                 TxtNoAchievements.Visibility = Visibility.Visible;
+            }
+        }
+
+        /// <summary>
+        /// Refresh profile viewer with fresh data from server (online status, avatar)
+        /// </summary>
+        private async Task RefreshProfileViewerAsync(string displayName)
+        {
+            try
+            {
+                var lookup = await App.Leaderboard?.LookupUserAsync(displayName);
+                if (lookup == null) return;
+
+                // Update on UI thread
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    // Verify we're still showing this user (user may have clicked away)
+                    if (TxtProfileViewerName?.Text != displayName) return;
+
+                    // Update online status
+                    if (TxtProfileViewerOnline != null)
+                    {
+                        TxtProfileViewerOnline.Text = lookup.IsOnline ? "Online" : "Offline";
+                        TxtProfileViewerOnline.Foreground = new System.Windows.Media.SolidColorBrush(
+                            (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(
+                                lookup.IsOnline ? "#43B581" : "#747F8D"));
+                    }
+                    if (ProfileOnlineIndicator != null)
+                    {
+                        ProfileOnlineIndicator.Fill = new System.Windows.Media.SolidColorBrush(
+                            (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(
+                                lookup.IsOnline ? "#43B581" : "#747F8D"));
+                    }
+
+                    // Load avatar if available
+                    if (ProfileViewerAvatar != null)
+                    {
+                        string? avatarUrl = lookup.AvatarUrl;
+
+                        // Fallback: if viewing own profile and server didn't return avatar, use local Discord avatar
+                        if (string.IsNullOrEmpty(avatarUrl))
+                        {
+                            var ownDisplayName = App.Discord?.CustomDisplayName ?? App.Discord?.DisplayName ?? App.Patreon?.DisplayName;
+                            if (displayName.Equals(ownDisplayName, StringComparison.OrdinalIgnoreCase) && App.Discord?.IsAuthenticated == true)
+                            {
+                                avatarUrl = App.Discord.GetAvatarUrl(256);
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(avatarUrl))
+                        {
+                            try
+                            {
+                                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                                bitmap.BeginInit();
+                                bitmap.UriSource = new Uri(avatarUrl);
+                                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                                bitmap.EndInit();
+                                ProfileViewerAvatar.ImageSource = bitmap;
+                            }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Warning(ex, "Failed to load profile avatar from {Url}", avatarUrl);
+                            }
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to refresh profile viewer for {Name}", displayName);
             }
         }
 
@@ -6290,8 +6518,11 @@ namespace ConditioningControlPanel
 
             try
             {
-                var allScreens = System.Windows.Forms.Screen.AllScreens.ToList();
-                if (allScreens.Count == 0)
+                // Save avatar attached state before entering fullscreen
+                _avatarWasAttachedBeforeBrowserFullscreen = _avatarTubeWindow != null && !_avatarTubeWindow.IsDetached;
+
+                var allScreens = App.GetAllScreensCached();
+                if (allScreens.Length == 0)
                 {
                     App.Logger?.Warning("No screens available for browser fullscreen");
                     return;
@@ -6390,6 +6621,8 @@ namespace ConditioningControlPanel
                         _browser.ZoomFactor = 0.5;
                     }
                 }
+
+                _avatarWasAttachedBeforeBrowserFullscreen = false;
 
                 App.Logger?.Information("Browser exited fullscreen");
             }
@@ -6554,14 +6787,22 @@ namespace ConditioningControlPanel
 
         public void StopEngine()
         {
+            // Stop flash first (safe, no complex cleanup)
             App.Flash.Stop();
+
+            // Stop bubbles BEFORE video to avoid UI thread contention
+            // Bubbles use high-priority animation timers that can interfere with video cleanup
+            App.Bubbles.Stop();
+            App.BouncingText.Stop();
+
+            // Now stop video (complex LibVLC cleanup)
             App.Video.Stop();
+
+            // Stop other services
             App.Subliminal.Stop();
             App.Overlay.Stop();
-            App.Bubbles.Stop();
             App.LockCard.Stop();
             App.BubbleCount.Stop();
-            App.BouncingText.Stop();
             App.MindWipe.Stop();
             App.BrainDrain.Stop();
             App.Autonomy?.Stop();
@@ -7214,9 +7455,9 @@ namespace ConditioningControlPanel
             // Discord Sharing Settings
             ChkShareAchievements.IsChecked = s.DiscordShareAchievements;
             ChkShareLevelUps.IsChecked = s.DiscordShareLevelUps;
-            ChkUseAnonymousName.IsChecked = s.DiscordUseAnonymousName;
             ChkShowLevelInPresence.IsChecked = s.DiscordShowLevelInPresence;
             ChkAllowDiscordDm.IsChecked = s.AllowDiscordDm;
+            ChkShareProfilePicture.IsChecked = s.ShareProfilePicture;
 
             // Update Discord UI (both main tab and Patreon tab)
             UpdateQuickDiscordUI();
@@ -9647,6 +9888,8 @@ namespace ConditioningControlPanel
                 if (packsNode.Children.Count > 0)
                 {
                     packsNode.FileCount = packsNode.Children.Sum(c => c.FileCount);
+                    packsNode.CheckedFileCount = packsNode.Children.Sum(c => c.GetTotalCheckedFileCount());
+                    packsNode.IsChecked = packsNode.CheckedFileCount > 0;
                     _assetTree.Add(packsNode);
                 }
             }
@@ -9680,6 +9923,10 @@ namespace ConditioningControlPanel
             var imageFiles = packFiles.Where(f => f.FileType == "image").ToList();
             if (imageFiles.Count > 0)
             {
+                // Count active images (not in DisabledAssetPaths)
+                var activeImageCount = imageFiles.Count(f =>
+                    !App.Settings.Current.DisabledAssetPaths.Contains($"pack:{packId}/{f.OriginalName}"));
+
                 var imagesNode = new AssetTreeItem
                 {
                     Name = "images",
@@ -9687,9 +9934,9 @@ namespace ConditioningControlPanel
                     IsPackFolder = true,
                     PackId = packId,
                     PackFileType = "image",
-                    IsChecked = true,
+                    IsChecked = activeImageCount > 0,
                     FileCount = imageFiles.Count,
-                    CheckedFileCount = imageFiles.Count,
+                    CheckedFileCount = activeImageCount,
                     Parent = packNode
                 };
                 packNode.Children.Add(imagesNode);
@@ -9699,6 +9946,10 @@ namespace ConditioningControlPanel
             var videoFiles = packFiles.Where(f => f.FileType == "video").ToList();
             if (videoFiles.Count > 0)
             {
+                // Count active videos (not in DisabledAssetPaths)
+                var activeVideoCount = videoFiles.Count(f =>
+                    !App.Settings.Current.DisabledAssetPaths.Contains($"pack:{packId}/{f.OriginalName}"));
+
                 var videosNode = new AssetTreeItem
                 {
                     Name = "videos",
@@ -9706,15 +9957,16 @@ namespace ConditioningControlPanel
                     IsPackFolder = true,
                     PackId = packId,
                     PackFileType = "video",
-                    IsChecked = true,
+                    IsChecked = activeVideoCount > 0,
                     FileCount = videoFiles.Count,
-                    CheckedFileCount = videoFiles.Count,
+                    CheckedFileCount = activeVideoCount,
                     Parent = packNode
                 };
                 packNode.Children.Add(videosNode);
             }
 
             packNode.FileCount = packFiles.Count;
+            packNode.IsChecked = packNode.Children.Any(c => c.IsChecked);
             return packNode;
         }
 
@@ -10179,19 +10431,7 @@ namespace ConditioningControlPanel
         {
             if (sender is CheckBox cb && cb.DataContext is AssetFileItem file)
             {
-                // Use DisabledAssetPaths (blacklist): unchecked items are in the set
-                if (file.IsChecked)
-                {
-                    App.Settings.Current.DisabledAssetPaths.Remove(file.RelativePath);
-                }
-                else
-                {
-                    App.Settings.Current.DisabledAssetPaths.Add(file.RelativePath);
-                }
-
-                // Update parent folder state
-                UpdateParentFolderCheckState();
-                UpdateAssetCounts();
+                UpdateFileCheckState(file);
             }
         }
 
@@ -10201,7 +10441,36 @@ namespace ConditioningControlPanel
             if (sender is Border border && border.DataContext is AssetFileItem file)
             {
                 file.IsChecked = !file.IsChecked;
-                ThumbnailCheckBox_Changed(sender, e);
+                UpdateFileCheckState(file);
+            }
+        }
+
+        /// <summary>
+        /// Update DisabledAssetPaths and folder state when a single file's check state changes.
+        /// </summary>
+        private void UpdateFileCheckState(AssetFileItem file)
+        {
+            // Use DisabledAssetPaths (blacklist): unchecked items are in the set
+            if (file.IsChecked)
+            {
+                App.Settings.Current.DisabledAssetPaths.Remove(file.RelativePath);
+            }
+            else
+            {
+                App.Settings.Current.DisabledAssetPaths.Add(file.RelativePath);
+            }
+
+            // Update parent folder state - set flag to prevent FolderCheckBox_Changed from
+            // propagating changes to all children when the folder's IsChecked changes
+            _isUpdatingFolderCheckState = true;
+            try
+            {
+                UpdateParentFolderCheckState();
+                UpdateAssetCounts();
+            }
+            finally
+            {
+                _isUpdatingFolderCheckState = false;
             }
         }
 
@@ -10217,43 +10486,63 @@ namespace ConditioningControlPanel
 
         private void BtnSelectAllAssets_Click(object sender, RoutedEventArgs e)
         {
-            // Update DisabledAssetPaths (clear all = everything enabled)
-            foreach (var folder in _assetTree)
+            if (_selectedFolder == null) return;
+
+            _isUpdatingFolderCheckState = true;
+            try
             {
-                UpdateFolderFilesCheckState(folder, true);
+                // Update DisabledAssetPaths only for selected folder and subfolders
+                UpdateFolderFilesCheckState(_selectedFolder, true);
+
+                // Update visual state for selected folder and children
+                SetFolderAndChildrenChecked(_selectedFolder, true);
+
+                // Propagate changes up to parent folders
+                _selectedFolder.Parent?.UpdateCheckStateFromChildren();
+
+                // Sync thumbnail checkboxes
+                RefreshThumbnailCheckboxes();
+                UpdateAssetCounts();
             }
-
-            // Recalculate all folder check states from DisabledAssetPaths
-            RecalculateAllFolderCheckStates();
-
-            // Sync thumbnail checkboxes
-            RefreshThumbnailCheckboxes();
-            UpdateAssetCounts();
+            finally
+            {
+                _isUpdatingFolderCheckState = false;
+            }
         }
 
         private void BtnDeselectAllAssets_Click(object sender, RoutedEventArgs e)
         {
-            // Update DisabledAssetPaths (add all = everything disabled)
-            foreach (var folder in _assetTree)
+            if (_selectedFolder == null) return;
+
+            _isUpdatingFolderCheckState = true;
+            try
             {
-                UpdateFolderFilesCheckState(folder, false);
+                // Update DisabledAssetPaths only for selected folder and subfolders
+                UpdateFolderFilesCheckState(_selectedFolder, false);
+
+                // Update visual state for selected folder and children
+                SetFolderAndChildrenChecked(_selectedFolder, false);
+
+                // Propagate changes up to parent folders
+                _selectedFolder.Parent?.UpdateCheckStateFromChildren();
+
+                // Sync thumbnail checkboxes
+                RefreshThumbnailCheckboxes();
+                UpdateAssetCounts();
             }
-
-            // Recalculate all folder check states from DisabledAssetPaths
-            RecalculateAllFolderCheckStates();
-
-            // Sync thumbnail checkboxes
-            RefreshThumbnailCheckboxes();
-            UpdateAssetCounts();
+            finally
+            {
+                _isUpdatingFolderCheckState = false;
+            }
         }
 
         private void BtnSaveAssetSelection_Click(object sender, RoutedEventArgs e)
         {
             App.Settings.Save();
 
-            // Clear caches so services pick up new selection
-            App.Flash?.ClearFileCache();
-            App.Video?.RefreshVideosPath();
+            // Fully reload asset pools so services pick up new selection
+            App.Flash?.LoadAssets();
+            App.Video?.ReloadAssets();
 
             var disabledCount = App.Settings.Current.DisabledAssetPaths.Count;
             var message = disabledCount > 0
@@ -10737,8 +11026,9 @@ namespace ConditioningControlPanel
                         pack.PreviewImages.Clear(); // Clear preview images
 
                         // UI updates automatically via data binding
-
                         RefreshAssetTree();
+                        App.Flash?.LoadAssets();
+                        App.Video?.ReloadAssets();
                         MessageBox.Show($"'{pack.Name}' has been uninstalled.", "Uninstalled", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (Exception ex)
@@ -10772,8 +11062,9 @@ namespace ConditioningControlPanel
 
                         // UI updates automatically via data binding
                         // Preview images are loaded by OnPackDownloadCompleted event handler
-
                         RefreshAssetTree();
+                        App.Flash?.LoadAssets();
+                        App.Video?.ReloadAssets();
                         MessageBox.Show($"'{pack.Name}' installed successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (UnauthorizedAccessException)
@@ -10804,6 +11095,38 @@ namespace ConditioningControlPanel
                         pack.IsDownloading = false;
                         pack.DownloadProgress = 0;
                     }
+                }
+            }
+        }
+
+        private void BtnPackActivate_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is ContentPack pack && pack.IsDownloaded)
+            {
+                try
+                {
+                    if (pack.IsActive)
+                    {
+                        // Deactivate pack (hide but keep downloaded)
+                        App.ContentPacks?.DeactivatePack(pack.Id);
+                        pack.IsActive = false;
+                    }
+                    else
+                    {
+                        // Activate pack (show in assets)
+                        App.ContentPacks?.ActivatePack(pack.Id);
+                        pack.IsActive = true;
+                    }
+
+                    // Refresh asset tree UI and reload asset pools
+                    RefreshAssetTree();
+                    App.Flash?.LoadAssets();
+                    App.Video?.ReloadAssets();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Failed to toggle pack activation: {Name}", pack.Name);
+                    MessageBox.Show($"Failed to update pack: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }

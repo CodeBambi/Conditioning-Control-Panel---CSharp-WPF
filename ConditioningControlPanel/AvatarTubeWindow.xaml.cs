@@ -1155,7 +1155,7 @@ namespace ConditioningControlPanel
             ImgAvatar.BeginAnimation(OpacityProperty, fadeOut);
         }
 
-        private void UpdatePosition()
+        public void UpdatePosition()
         {
             if (!_isAttached || _parentWindow == null) return;
 
@@ -1271,6 +1271,12 @@ namespace ConditioningControlPanel
             if (_parentWindow == null) return;
             try
             {
+                // Only show tube if parent window is actually the foreground window
+                var parentHandle = new System.Windows.Interop.WindowInteropHelper(_parentWindow).Handle;
+                var foreground = GetForegroundWindow();
+                if (parentHandle == IntPtr.Zero || foreground != parentHandle)
+                    return;
+
                 if (_parentWindow.WindowState != WindowState.Minimized && _parentWindow.IsVisible)
                 {
                     Show();
@@ -1343,6 +1349,15 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // When attached, only show if parent window is the foreground window
+                if (_isAttached && _parentWindow != null)
+                {
+                    var parentHandle = new System.Windows.Interop.WindowInteropHelper(_parentWindow).Handle;
+                    var foreground = GetForegroundWindow();
+                    if (parentHandle == IntPtr.Zero || foreground != parentHandle)
+                        return; // Don't show tube if main window isn't in front
+                }
+
                 Show();
 
                 // Only update position if parent is visible
@@ -1988,22 +2003,6 @@ namespace ConditioningControlPanel
             SpeechBubble.UpdateLayout();
             SpeechBubble.Visibility = Visibility.Visible;
 
-            // Bring tube to front when attached so bubble is visible above main window
-            // Use Background priority to ensure it happens after all window activations complete
-            if (_isAttached)
-            {
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    if (_isAttached && _tubeHandle != IntPtr.Zero)
-                    {
-                        BringToFrontTemporarily();
-                    }
-                }), System.Windows.Threading.DispatcherPriority.Background);
-
-                // Start z-order refresh timer to keep bubble on top while visible
-                StartZOrderRefreshTimer();
-            }
-
             // Calculate display duration based on text length
             // Base: 5 seconds, plus ~0.05s per character, min 5s, max 14s
             // AI responses get slightly longer display time
@@ -2298,10 +2297,18 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Temporarily brings the tube window to front (above main window)
+        /// Only works if attached and parent window is visible and not minimized
         /// </summary>
         private void BringToFrontTemporarily()
         {
             if (_tubeHandle == IntPtr.Zero) return;
+
+            // Don't bring to front if detached (topmost handles that)
+            if (!_isAttached) return;
+
+            // Don't bring to front if parent window is not visible or minimized
+            if (_parentWindow == null || !_parentWindow.IsVisible || _parentWindow.WindowState == WindowState.Minimized)
+                return;
 
             // Bring window to top of z-order (above main window)
             // Use only SWP_NOACTIVATE - do NOT use SWP_SHOWWINDOW as it can interfere with keyboard focus
@@ -2693,18 +2700,6 @@ namespace ConditioningControlPanel
                 SpeechBubble.UpdateLayout();
                 SpeechBubble.Visibility = Visibility.Visible;
 
-                if (_isAttached)
-                {
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        if (_isAttached && _tubeHandle != IntPtr.Zero)
-                        {
-                            BringToFrontTemporarily();
-                        }
-                    }), System.Windows.Threading.DispatcherPriority.Background);
-                    StartZOrderRefreshTimer();
-                }
-
                 // Play the voice line audio in sync with the bubble
                 PlayVoiceLineAudio(filePath);
 
@@ -2841,21 +2836,6 @@ namespace ConditioningControlPanel
             // Force layout update before showing to prevent flickering
             SpeechBubble.UpdateLayout();
             SpeechBubble.Visibility = Visibility.Visible;
-
-            // Bring tube to front when attached so bubble is visible above main window
-            if (_isAttached)
-            {
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    if (_isAttached && _tubeHandle != IntPtr.Zero)
-                    {
-                        BringToFrontTemporarily();
-                    }
-                }), System.Windows.Threading.DispatcherPriority.Background);
-
-                // Start z-order refresh timer to keep bubble on top while visible
-                StartZOrderRefreshTimer();
-            }
 
             App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
 
@@ -4579,6 +4559,13 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // Block when custom prompts override slut mode
+            if (App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
+            {
+                Giggle("Custom prompt is active~ Disable it first!");
+                return;
+            }
+
             var current = App.Settings?.Current?.SlutModeEnabled ?? false;
             if (App.Settings?.Current != null)
             {
@@ -4717,16 +4704,22 @@ namespace ConditioningControlPanel
                 MenuItemBambiTakeover.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
             }
 
-            // Slut mode (Patreon only)
+            // Slut mode (Patreon only, disabled when custom prompts are active)
             var slutOn = App.Settings?.Current?.SlutModeEnabled == true;
             var slutAvailable = App.Patreon?.HasPremiumAccess == true;
+            var customPromptsActive = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
             MenuItemSlutMode.Header = slutOn ? "☑ Slut Mode" : "☐ Slut Mode";
             MenuItemSlutMode.Foreground = slutOn ? new SolidColorBrush(Color.FromRgb(255, 105, 180)) : new SolidColorBrush(Colors.White);
-            MenuItemSlutMode.IsEnabled = slutAvailable;
+            MenuItemSlutMode.IsEnabled = slutAvailable && !customPromptsActive;
             if (!slutAvailable)
             {
                 MenuItemSlutMode.Header = "🔒 Slut Mode";
                 MenuItemSlutMode.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
+            }
+            else if (customPromptsActive)
+            {
+                MenuItemSlutMode.Header = "☐ Slut Mode (Custom Prompt)";
+                MenuItemSlutMode.Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 144)); // Grey
             }
 
             // Mute avatar
