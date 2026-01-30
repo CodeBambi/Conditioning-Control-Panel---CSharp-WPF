@@ -11408,61 +11408,81 @@ namespace ConditioningControlPanel
             if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
                 var selectedPath = dialog.SelectedPath;
-
-                // Check if we have downloaded packs in the old location that should be moved
-                var oldPacksFolder = Path.Combine(oldEffectivePath, ".packs");
                 var newPacksFolder = Path.Combine(selectedPath, ".packs");
                 var shouldMovePacks = false;
+                var packFoldersToMove = new List<(string SourceFolder, string PackName)>();
+                long totalBytes = 0;
 
-                App.Logger?.Information("Asset folder change: old={OldPath}, new={NewPath}, oldPacks={OldPacks}, newPacks={NewPacks}",
-                    oldEffectivePath, selectedPath, oldPacksFolder, newPacksFolder);
-
-                var oldPacksFolderExists = Directory.Exists(oldPacksFolder);
-                var pathsAreDifferent = !string.Equals(oldPacksFolder, newPacksFolder, StringComparison.OrdinalIgnoreCase);
-
-                App.Logger?.Information("Pack folder check: exists={Exists}, different={Different}", oldPacksFolderExists, pathsAreDifferent);
-
-                if (oldPacksFolderExists && pathsAreDifferent)
+                // Check multiple locations for existing packs (retrocompatibility)
+                // 1. Current effective path (where user currently has assets)
+                // 2. Default path (in case packs were stranded there from before)
+                var locationsToCheck = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
                 {
-                    // Check if old folder has actual pack folders (each pack has a GUID folder with .manifest.enc inside)
-                    var packFolders = new List<string>();
-                    long totalBytes = 0;
+                    Path.Combine(oldEffectivePath, ".packs"),
+                    Path.Combine(App.UserAssetsPath, ".packs")
+                };
 
-                    foreach (var dir in Directory.GetDirectories(oldPacksFolder))
+                // Don't check the new location (we're moving TO there)
+                locationsToCheck.Remove(newPacksFolder);
+
+                App.Logger?.Information("Asset folder change: checking {Count} locations for packs: {Locations}",
+                    locationsToCheck.Count, string.Join(", ", locationsToCheck));
+
+                foreach (var packsFolder in locationsToCheck)
+                {
+                    if (!Directory.Exists(packsFolder)) continue;
+
+                    foreach (var dir in Directory.GetDirectories(packsFolder))
                     {
                         var manifestPath = Path.Combine(dir, ".manifest.enc");
-                        if (File.Exists(manifestPath))
+                        if (!File.Exists(manifestPath)) continue;
+
+                        // Try to read pack name from manifest
+                        string packName = Path.GetFileName(dir); // Default to GUID if we can't read name
+                        try
                         {
-                            packFolders.Add(dir);
-                            // Calculate folder size
-                            try
+                            var json = Services.PackEncryptionService.LoadEncryptedManifest(manifestPath);
+                            var manifest = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(json);
+                            if (manifest?.PackName != null)
                             {
-                                foreach (var file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
-                                {
-                                    totalBytes += new FileInfo(file).Length;
-                                }
+                                packName = (string)manifest.PackName;
                             }
-                            catch { }
                         }
+                        catch { }
+
+                        packFoldersToMove.Add((dir, packName));
+
+                        // Calculate folder size
+                        try
+                        {
+                            foreach (var file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+                            {
+                                totalBytes += new FileInfo(file).Length;
+                            }
+                        }
+                        catch { }
                     }
+                }
 
-                    App.Logger?.Information("Found {Count} pack folders in old location, total size: {Size} bytes", packFolders.Count, totalBytes);
+                App.Logger?.Information("Found {Count} packs to potentially move, total size: {Size} bytes",
+                    packFoldersToMove.Count, totalBytes);
 
-                    if (packFolders.Count > 0)
-                    {
-                        var sizeText = FormatFileSize(totalBytes);
+                if (packFoldersToMove.Count > 0)
+                {
+                    var sizeText = FormatFileSize(totalBytes);
+                    var packNames = string.Join("\n• ", packFoldersToMove.Select(p => p.PackName));
 
-                        var moveResult = MessageBox.Show(
-                            $"You have {packFolders.Count} downloaded content pack(s) ({sizeText}) in the old location.\n\n" +
-                            "Do you want to move them to the new folder?\n\n" +
-                            "• Yes - Move packs to new location (recommended)\n" +
-                            "• No - Leave packs in old location (you may need to re-download)\n\n" +
-                            (totalBytes > 500_000_000 ? "⚠️ This may take a moment due to the file size." : ""),
-                            "Move Downloaded Packs?",
-                            MessageBoxButton.YesNo,
-                            MessageBoxImage.Question);
-                        shouldMovePacks = moveResult == MessageBoxResult.Yes;
-                    }
+                    var moveResult = MessageBox.Show(
+                        $"Found {packFoldersToMove.Count} downloaded content pack(s) ({sizeText}):\n\n" +
+                        $"• {packNames}\n\n" +
+                        "Do you want to move them to the new folder?\n\n" +
+                        "• Yes - Move packs to new location (recommended)\n" +
+                        "• No - Leave packs where they are (you may need to re-download)\n\n" +
+                        (totalBytes > 500_000_000 ? "⚠️ This may take a moment due to the file size." : ""),
+                        "Move Downloaded Packs?",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+                    shouldMovePacks = moveResult == MessageBoxResult.Yes;
                 }
 
                 // Create subfolders
@@ -11470,7 +11490,7 @@ namespace ConditioningControlPanel
                 Directory.CreateDirectory(Path.Combine(selectedPath, "videos"));
 
                 // Move packs if requested
-                if (shouldMovePacks)
+                if (shouldMovePacks && packFoldersToMove.Count > 0)
                 {
                     try
                     {
@@ -11481,27 +11501,23 @@ namespace ConditioningControlPanel
                             di.Attributes |= FileAttributes.Hidden;
                         }
 
-                        // Move all pack folders from old location to new
-                        foreach (var packDir in Directory.GetDirectories(oldPacksFolder))
+                        var movedCount = 0;
+                        foreach (var (sourceFolder, packName) in packFoldersToMove)
                         {
-                            var destDir = Path.Combine(newPacksFolder, Path.GetFileName(packDir));
+                            var destDir = Path.Combine(newPacksFolder, Path.GetFileName(sourceFolder));
                             if (!Directory.Exists(destDir))
                             {
-                                Directory.Move(packDir, destDir);
+                                Directory.Move(sourceFolder, destDir);
+                                movedCount++;
+                                App.Logger?.Information("Moved pack '{PackName}' from {Source} to {Dest}", packName, sourceFolder, destDir);
                             }
-                        }
-
-                        // Also move any cache files
-                        foreach (var file in Directory.GetFiles(oldPacksFolder))
-                        {
-                            var destFile = Path.Combine(newPacksFolder, Path.GetFileName(file));
-                            if (!File.Exists(destFile))
+                            else
                             {
-                                File.Move(file, destFile);
+                                App.Logger?.Warning("Pack folder already exists at destination, skipping: {Dest}", destDir);
                             }
                         }
 
-                        App.Logger?.Information("Moved packs from {OldPath} to {NewPath}", oldPacksFolder, newPacksFolder);
+                        App.Logger?.Information("Moved {Count}/{Total} packs to {NewPath}", movedCount, packFoldersToMove.Count, newPacksFolder);
                     }
                     catch (Exception ex)
                     {
