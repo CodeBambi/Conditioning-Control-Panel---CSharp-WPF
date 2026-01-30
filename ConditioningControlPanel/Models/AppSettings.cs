@@ -731,6 +731,17 @@ namespace ConditioningControlPanel.Models
             set { _shareProfilePicture = value; OnPropertyChanged(); }
         }
 
+        private bool _showOnlineStatus = true;
+        /// <summary>
+        /// Show your online status on the leaderboard and profile viewer.
+        /// When disabled, you appear offline to other users (invisible mode).
+        /// </summary>
+        public bool ShowOnlineStatus
+        {
+            get => _showOnlineStatus;
+            set { _showOnlineStatus = value; OnPropertyChanged(); }
+        }
+
         private bool _offlineMode = false;
         /// <summary>
         /// Offline mode - disables all network features (updates, AI chat, leaderboard, Patreon verification).

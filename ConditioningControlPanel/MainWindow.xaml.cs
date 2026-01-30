@@ -2416,6 +2416,29 @@ namespace ConditioningControlPanel
             }
         }
 
+        private async void ChkShowOnlineStatus_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current != null && sender is CheckBox chk)
+            {
+                var isChecked = chk.IsChecked == true;
+                App.Settings.Current.ShowOnlineStatus = isChecked;
+
+                // Sync both checkboxes (Patreon tab and Discord tab)
+                if (ChkShowOnlineStatus != null && ChkShowOnlineStatus != chk)
+                    ChkShowOnlineStatus.IsChecked = isChecked;
+                if (ChkDiscordTabShowOnline != null && ChkDiscordTabShowOnline != chk)
+                    ChkDiscordTabShowOnline.IsChecked = isChecked;
+
+                App.Logger?.Information("Online status visibility changed: {Visible}", isChecked);
+
+                // Sync immediately so the setting takes effect
+                if (App.ProfileSync != null)
+                {
+                    await App.ProfileSync.SyncProfileAsync();
+                }
+            }
+        }
+
         private void BtnVisitPatreon_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -5795,6 +5818,7 @@ namespace ConditioningControlPanel
                 if (ChkDiscordTabShareLevelUps != null) ChkDiscordTabShareLevelUps.IsChecked = s.DiscordShareLevelUps;
                 if (ChkDiscordTabAllowDm != null) ChkDiscordTabAllowDm.IsChecked = s.AllowDiscordDm;
                 if (ChkDiscordTabSharePfp != null) ChkDiscordTabSharePfp.IsChecked = s.ShareProfilePicture;
+                if (ChkDiscordTabShowOnline != null) ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
             }
 
             // Pre-fill search bar with user's display name and auto-display own profile
@@ -7514,6 +7538,8 @@ namespace ConditioningControlPanel
             ChkShowLevelInPresence.IsChecked = s.DiscordShowLevelInPresence;
             ChkAllowDiscordDm.IsChecked = s.AllowDiscordDm;
             ChkShareProfilePicture.IsChecked = s.ShareProfilePicture;
+            if (ChkShowOnlineStatus != null) ChkShowOnlineStatus.IsChecked = s.ShowOnlineStatus;
+            if (ChkDiscordTabShowOnline != null) ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
 
             // Update Discord UI (both main tab and Patreon tab)
             UpdateQuickDiscordUI();
