@@ -856,19 +856,42 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Checks if a pack is installed.
+        /// Checks if a pack is installed (both in settings AND manifest exists on disk).
         /// </summary>
         public bool IsPackInstalled(string packId)
         {
-            return App.Settings?.Current?.InstalledPackIds?.Contains(packId) ?? false;
+            // Must be in settings
+            var inSettings = App.Settings?.Current?.InstalledPackIds?.Contains(packId) ?? false;
+            if (!inSettings) return false;
+
+            // Get GUID from settings map
+            var guidMap = App.Settings?.Current?.PackGuidMap;
+            if (guidMap == null || !guidMap.TryGetValue(packId, out var guid))
+            {
+                App.Logger?.Debug("Pack {PackId} is in settings but has no GUID mapping", packId);
+                return false;
+            }
+
+            // Verify the manifest file actually exists in the current packs folder
+            var manifestPath = Path.Combine(_packsFolder, guid, ".manifest.enc");
+            var manifestExists = File.Exists(manifestPath);
+
+            if (!manifestExists)
+            {
+                App.Logger?.Debug("Pack {PackId} (GUID {Guid}) is in settings but manifest not found at {Path}", packId, guid, manifestPath);
+            }
+
+            return manifestExists;
         }
 
         /// <summary>
-        /// Checks if a pack is active.
+        /// Checks if a pack is active (must also be installed with file present).
         /// </summary>
         public bool IsPackActive(string packId)
         {
-            return App.Settings?.Current?.ActivePackIds?.Contains(packId) ?? false;
+            // Must be active in settings AND actually installed (file exists)
+            var isActive = App.Settings?.Current?.ActivePackIds?.Contains(packId) ?? false;
+            return isActive && IsPackInstalled(packId);
         }
 
         /// <summary>
