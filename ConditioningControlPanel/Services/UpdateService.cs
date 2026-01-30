@@ -28,32 +28,58 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.8
+        public const string CurrentPatchNotes = @"v5.4.8 - Personality System & Major Overhaul
 
-🔒 PRIVACY
-• New 'Show Online Status' toggle - appear offline/invisible to others
-• Setting syncs immediately and applies to leaderboard and profile viewer
+🎭 NEW PERSONALITY SYSTEM
+• 6 Built-in Personality Presets:
+  - BambiSprite (default) - Bubbly, cheeky bad influence bestie
+  - Slut Mode (Patreon) - Explicit, horny, cock-obsessed
+  - Gentle Trainer - Soft, encouraging, nurturing guide
+  - Strict Domme - Commanding, disciplined, authoritative
+  - Bimbo Coach - Transformation-focused, aesthetic obsessed
+  - Hypno Guide - Trance-focused, soothing suggestions
+• Quick switch personalities from avatar right-click menu
+• Shows 'Personality: [name]' with easy dropdown selector
+• Custom prompt indicator when using your own prompts
+• Global Knowledge Base Links - add URLs that apply to ALL personalities
+• Automatic migration from old Slut Mode toggle
 
-👤 PROFILE VIEWER
-• View other users' achievement badges on their profile page
-• Server now returns full achievement list for profile lookups
+🎬 SESSION EDITOR IMPROVEMENTS
+• Completely redesigned layout - 30% more compact
+• All content now fits cleanly in the window
+• Scrollbar added for when content overflows
+• Smaller, cleaner feature icons (68x68 from 98x98)
+• Reduced timeline row height for more visible segments
+• Better visual hierarchy and spacing
+
+📺 VIDEO STABILITY FIXES
+• Fixed dual-monitor video freeze - one window freezing no longer affects the other
+• Per-window bitmap isolation prevents cross-contamination
+• Parallel player.Stop() with timeout prevents hanging on cleanup
+• Panic key now reliably closes ALL video windows
+
+🔒 PRIVACY & PROFILES
+• New 'Show Online Status' toggle - appear offline/invisible
+• View other users' achievement badges on profile pages
+• Setting syncs immediately to leaderboard
 
 🖼️ FLASH IMAGES
 • True random selection - no more predictable sequences
-• Added support for more image formats: .jpe, .jfif, .tif, .tiff, .heic, .avif
-• Diagnostic logging to help troubleshoot missing images
+• Support for more formats: .jpe, .jfif, .tif, .tiff, .heic, .avif
 
 📁 ASSET FOLDER
-• Changing asset folder now detects and offers to move downloaded content packs
-• Shows pack names and total size before moving
-• Retrocompatible: finds stranded packs in both current and default locations
-• Packs correctly show as 'not installed' when files are missing
+• Detects and offers to move downloaded content packs when changing folders
+• Retrocompatible pack detection in both current and default locations
 
-🔧 FIXES
-• Settings now save immediately when changed mid-session
-• Fixed LibVLC threading crashes in multi-monitor mode
-• Fixed frame buffer race conditions during video stop
-• Fixed 'X active packs' error showing phantom packs after folder change";
+🎨 UI IMPROVEMENTS
+• Removed Slut Mode checkbox from Patreon tab (now in personality menu)
+• Dark themed personality submenu in avatar context menu
+• Cleaner prompt editor with Global KB Links section
+
+🔧 ADDITIONAL FIXES
+• Settings save immediately when changed mid-session
+• Fixed LibVLC threading crashes and frame buffer race conditions
+• Fixed 'X active packs' showing phantom packs after folder change";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
