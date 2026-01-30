@@ -11,6 +11,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using LibVLCSharp.Shared;
 using Application = System.Windows.Application;
 using Screen = System.Windows.Forms.Screen;
@@ -32,8 +33,9 @@ namespace ConditioningControlPanel.Services
         private uint _videoWidth;
         private uint _videoHeight;
         private readonly List<Window> _windows = new();
-        private readonly object _frameLock = new();
+        private readonly object _bufferLock = new();
         private volatile bool _frameReady;
+        private volatile bool _bufferValid;  // Guards buffer access across threads
         private bool _isPlaying;
         private bool _disposed;
 
@@ -87,7 +89,11 @@ namespace ConditioningControlPanel.Services
 
                 // Allocate frame buffer for LibVLC to write to
                 var bufferSize = _videoWidth * _videoHeight * 4; // BGRA = 4 bytes per pixel
-                _frameBuffer = Marshal.AllocHGlobal((int)bufferSize);
+                lock (_bufferLock)
+                {
+                    _frameBuffer = Marshal.AllocHGlobal((int)bufferSize);
+                    _bufferValid = true;
+                }
 
                 // Create shared bitmap on UI thread
                 Application.Current.Dispatcher.Invoke(() =>
@@ -154,8 +160,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void Stop()
         {
+            // CRITICAL: Invalidate buffer FIRST to stop render loop from using it
+            _bufferValid = false;
             _isPlaying = false;
-            _frameReady = false; // Prevent render loop from processing any more frames
+            _frameReady = false;
 
             // Unsubscribe from rendering event first to stop frame updates
             Application.Current?.Dispatcher?.Invoke(() =>
@@ -174,7 +182,8 @@ namespace ConditioningControlPanel.Services
             }
 
             // Wait a bit for LibVLC to fully stop rendering
-            Thread.Sleep(100);
+            // Use message-pump-aware wait to prevent deadlock when called from UI thread
+            WaitWithMessagePump(150);
 
             // Close all windows
             Application.Current?.Dispatcher?.Invoke(() =>
@@ -221,15 +230,21 @@ namespace ConditioningControlPanel.Services
                 });
             }
 
-            // Free frame buffer after a small delay to ensure no one is reading it
-            var bufferToFree = _frameBuffer;
-            _frameBuffer = IntPtr.Zero;
+            // Free frame buffer with lock to prevent race with render callback
+            // Use longer delay to ensure all pending render frames have completed
+            IntPtr bufferToFree;
+            lock (_bufferLock)
+            {
+                bufferToFree = _frameBuffer;
+                _frameBuffer = IntPtr.Zero;
+            }
 
             if (bufferToFree != IntPtr.Zero)
             {
                 Task.Run(async () =>
                 {
-                    await Task.Delay(200);
+                    // Wait longer than render loop interval (16ms) plus safety margin
+                    await Task.Delay(500);
                     try
                     {
                         Marshal.FreeHGlobal(bufferToFree);
@@ -242,6 +257,29 @@ namespace ConditioningControlPanel.Services
             }
 
             App.Logger?.Information("DualMonitorVideo: Playback stopped");
+        }
+
+        /// <summary>
+        /// Waits for a specified number of milliseconds while continuing to pump WPF messages.
+        /// This prevents deadlocks when LibVLC threads need to dispatch to the UI thread during cleanup.
+        /// </summary>
+        private static void WaitWithMessagePump(int milliseconds)
+        {
+            var endTime = DateTime.UtcNow.AddMilliseconds(milliseconds);
+            while (DateTime.UtcNow < endTime)
+            {
+                try
+                {
+                    Application.Current?.Dispatcher?.Invoke(
+                        DispatcherPriority.Background,
+                        new Action(() => { }));
+                }
+                catch
+                {
+                    return;
+                }
+                Thread.Sleep(10);
+            }
         }
 
         /// <summary>
@@ -429,26 +467,36 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void OnCompositionTargetRendering(object? sender, EventArgs e)
         {
-            // Capture references locally to avoid race conditions with Stop()
-            var frame = _sharedFrame;
-            var buffer = _frameBuffer;
+            // Quick check without lock - if buffer is invalid, skip immediately
+            if (!_bufferValid || !_frameReady)
+                return;
 
-            if (!_frameReady || frame == null || buffer == IntPtr.Zero)
+            // Capture shared frame reference (immutable once set, cleared to null on stop)
+            var frame = _sharedFrame;
+            if (frame == null)
                 return;
 
             _frameReady = false;
 
             try
             {
-                frame.Lock();
+                // Lock to safely access buffer pointer
+                lock (_bufferLock)
+                {
+                    // Double-check validity inside lock
+                    if (!_bufferValid || _frameBuffer == IntPtr.Zero)
+                        return;
 
-                // Copy frame data from LibVLC buffer to WriteableBitmap
-                var bufferSize = _videoWidth * _videoHeight * 4;
-                CopyMemory(frame.BackBuffer, buffer, bufferSize);
+                    frame.Lock();
 
-                // Mark entire bitmap as dirty so WPF redraws it
-                frame.AddDirtyRect(new Int32Rect(0, 0, (int)_videoWidth, (int)_videoHeight));
-                frame.Unlock();
+                    // Copy frame data from LibVLC buffer to WriteableBitmap
+                    var bufferSize = _videoWidth * _videoHeight * 4;
+                    CopyMemory(frame.BackBuffer, _frameBuffer, bufferSize);
+
+                    // Mark entire bitmap as dirty so WPF redraws it
+                    frame.AddDirtyRect(new Int32Rect(0, 0, (int)_videoWidth, (int)_videoHeight));
+                    frame.Unlock();
+                }
 
                 // Both windows automatically update because they reference the same bitmap!
             }
@@ -496,6 +544,10 @@ namespace ConditioningControlPanel.Services
             _disposed = true;
 
             Stop();
+
+            // CRITICAL: Wait for async player disposal (500ms in Stop) to complete
+            // before disposing LibVLC, as the player needs LibVLC to be alive during disposal
+            Thread.Sleep(600);
 
             try
             {

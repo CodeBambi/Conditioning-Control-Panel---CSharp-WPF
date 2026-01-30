@@ -61,6 +61,7 @@ namespace ConditioningControlPanel.Services
         private static bool _libVLCInitialized;
         private static bool _libVLCInitializing;
         private readonly List<LibVLCSharp.Shared.MediaPlayer> _mediaPlayers = new();
+        private readonly object _mediaPlayersLock = new();  // Thread-safe access to _mediaPlayers
 
         public event EventHandler? VideoAboutToStart; // Fires 1.3s before video
         public event EventHandler? VideoStarted;
@@ -271,8 +272,14 @@ namespace ConditioningControlPanel.Services
         {
             var effectiveVolume = GetEffectiveVolume();
 
-            // Update LibVLC media players
-            foreach (var player in _mediaPlayers.ToList())
+            // Update LibVLC media players (thread-safe snapshot)
+            List<LibVLCSharp.Shared.MediaPlayer> playersCopy;
+            lock (_mediaPlayersLock)
+            {
+                playersCopy = _mediaPlayers.ToList();
+            }
+
+            foreach (var player in playersCopy)
             {
                 try
                 {
@@ -609,7 +616,10 @@ namespace ConditioningControlPanel.Services
             };
 
             var mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC!);
-            _mediaPlayers.Add(mediaPlayer);
+            lock (_mediaPlayersLock)
+            {
+                _mediaPlayers.Add(mediaPlayer);
+            }
 
             if (withAudio)
             {
@@ -912,7 +922,10 @@ namespace ConditioningControlPanel.Services
 
                 // Create media player for this video
                 mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC!);
-                _mediaPlayers.Add(mediaPlayer);
+                lock (_mediaPlayersLock)
+                {
+                    _mediaPlayers.Add(mediaPlayer);
+                }
 
             // Only the primary player handles events (to avoid duplicate triggers)
             if (withAudio)
@@ -1090,7 +1103,10 @@ namespace ConditioningControlPanel.Services
                 {
                     if (mediaPlayer != null)
                     {
-                        _mediaPlayers.Remove(mediaPlayer);
+                        lock (_mediaPlayersLock)
+                        {
+                            _mediaPlayers.Remove(mediaPlayer);
+                        }
                         mediaPlayer.Dispose();
                     }
                     win?.Close();
@@ -1825,8 +1841,12 @@ namespace ConditioningControlPanel.Services
 
                 // CRITICAL: Stop all LibVLC media players FIRST before detaching from VideoViews
                 // If we detach while player is still rendering, it can crash (especially multi-monitor)
-                var playersCopy = _mediaPlayers.ToList();
-                _mediaPlayers.Clear();
+                List<LibVLCSharp.Shared.MediaPlayer> playersCopy;
+                lock (_mediaPlayersLock)
+                {
+                    playersCopy = _mediaPlayers.ToList();
+                    _mediaPlayers.Clear();
+                }
 
                 foreach (var player in playersCopy)
                 {
@@ -1842,9 +1862,10 @@ namespace ConditioningControlPanel.Services
 
                 // CRITICAL: Wait a bit after stopping players to let LibVLC finish any pending operations
                 // This prevents crashes when detaching VideoView while LibVLC is still processing
+                // Use message-pump-aware wait to prevent deadlock (LibVLC threads may need UI thread)
                 if (playersCopy.Count > 0)
                 {
-                    Thread.Sleep(100); // Give LibVLC time to fully stop rendering
+                    WaitWithMessagePump(100);
                 }
 
                 // Now detach MediaPlayers from VideoViews (safe since players are stopped and we waited)
@@ -1873,9 +1894,10 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Another small delay after detaching before closing windows
+                // Use message-pump-aware wait to prevent deadlock with LibVLC
                 if (windowsCopy.Count > 0)
                 {
-                    Thread.Sleep(50);
+                    WaitWithMessagePump(50);
                 }
 
                 // Close video windows AFTER media players are stopped and detached
@@ -1956,6 +1978,33 @@ namespace ConditioningControlPanel.Services
                 {
                     _isCleaningUp = false;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Waits for a specified number of milliseconds while continuing to pump WPF messages.
+        /// This prevents deadlocks when LibVLC threads need to dispatch to the UI thread during cleanup.
+        /// MUST be called from UI thread.
+        /// </summary>
+        private static void WaitWithMessagePump(int milliseconds)
+        {
+            var endTime = DateTime.UtcNow.AddMilliseconds(milliseconds);
+            while (DateTime.UtcNow < endTime)
+            {
+                try
+                {
+                    // Process pending WPF messages at Background priority
+                    // This allows LibVLC callbacks to complete without deadlock
+                    Application.Current?.Dispatcher?.Invoke(
+                        DispatcherPriority.Background,
+                        new Action(() => { }));
+                }
+                catch
+                {
+                    // Dispatcher may be gone during shutdown
+                    return;
+                }
+                Thread.Sleep(10); // Small sleep between message pumps to avoid busy-wait
             }
         }
 

@@ -1033,17 +1033,20 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,10,0"
                                             ToolTip="Turn flash images on or off">
-                                    <CheckBox x:Name="ChkFlashEnabled" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
+                                    <CheckBox x:Name="ChkFlashEnabled" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                              Checked="ChkFlashEnabled_Changed" Unchecked="ChkFlashEnabled_Changed"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable" Margin="5,0,0,0" FontSize="11"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,10,0"
                                             ToolTip="When enabled, clicking an image dismisses it.&#x0a;When disabled, images are click-through.">
-                                    <CheckBox x:Name="ChkClickable" Style="{StaticResource ToggleStyle}" IsChecked="True"/>
+                                    <CheckBox x:Name="ChkClickable" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                              Checked="ChkClickable_Changed" Unchecked="ChkClickable_Changed"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Click" Margin="5,0,0,0" FontSize="11"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal"
                                             ToolTip="Hydra Mode: Clicking an image spawns&#x0a;two more images instead of dismissing it.&#x0a;Creates an escalating challenge!">
-                                    <CheckBox x:Name="ChkCorruption" Style="{StaticResource ToggleStyle}"/>
+                                    <CheckBox x:Name="ChkCorruption" Style="{StaticResource ToggleStyle}"
+                                              Checked="ChkCorruption_Changed" Unchecked="ChkCorruption_Changed"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="🐙Hydra" Margin="5,0,0,0" FontSize="11"/>
                                 </StackPanel>
                             </Grid>
@@ -1170,7 +1173,8 @@
                                     <ColumnDefinition Width="30"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" ToolTip="Turn mandatory videos on or off">
-                                    <CheckBox x:Name="ChkVideoEnabled" Style="{StaticResource ToggleStyle}"/>
+                                    <CheckBox x:Name="ChkVideoEnabled" Style="{StaticResource ToggleStyle}"
+                                              Checked="ChkVideoEnabled_Changed" Unchecked="ChkVideoEnabled_Changed"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable" Margin="6,0,15,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" ToolTip="Strict mode: videos cannot be skipped, must watch entirely">
@@ -1189,6 +1193,7 @@
                                     <Grid>
                                         <TextBlock Text="🎯 Mini-Game" Foreground="{StaticResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
                                         <CheckBox x:Name="ChkMiniGameEnabled" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right"
+                                                  Checked="ChkMiniGameEnabled_Changed" Unchecked="ChkMiniGameEnabled_Changed"
                                                   ToolTip="Enable attention check targets"/>
                                     </Grid>
 
@@ -1246,6 +1251,7 @@
                                     <Button Content="⚙" Style="{StaticResource OutlineButton}" Padding="6,3" Click="BtnSubliminalSettings_Click" Margin="0,0,8,0"
                                             ToolTip="Advanced subliminal visual settings"/>
                                     <CheckBox x:Name="ChkSubliminalEnabled" Style="{StaticResource ToggleStyle}"
+                                              Checked="ChkSubliminalEnabled_Changed" Unchecked="ChkSubliminalEnabled_Changed"
                                               ToolTip="Enable/disable subliminal messages"/>
                                 </StackPanel>
                             </Grid>
@@ -1274,7 +1280,8 @@
                             <!-- Audio Whispers -->
                             <Grid Margin="0,10,0,0" ToolTip="Play whispered audio when subliminal messages appear.">
                                 <StackPanel Orientation="Horizontal">
-                                    <CheckBox x:Name="ChkAudioWhispers" Style="{StaticResource ToggleStyle}"/>
+                                    <CheckBox x:Name="ChkAudioWhispers" Style="{StaticResource ToggleStyle}"
+                                              Checked="ChkAudioWhispers_Changed" Unchecked="ChkAudioWhispers_Changed"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="📊 Audio Whispers" Margin="6,0,0,0"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

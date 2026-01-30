@@ -476,22 +476,28 @@ namespace ConditioningControlPanel
             _totalErrors = 0;
             _totalCharsTyped = 0;
             
-            var screens = System.Windows.Forms.Screen.AllScreens;
+            var screens = App.GetAllScreensCached();
+            if (screens.Length == 0)
+            {
+                App.Logger?.Warning("LockCardWindow: No screens available");
+                return;
+            }
+
             LockCardWindow? primaryWindow = null;
-            
+
             foreach (var screen in screens)
             {
                 var isPrimary = screen.Primary;
                 var window = new LockCardWindow(phrase, repeats, strictMode, screen, isPrimary);
-                
+
                 if (isPrimary)
                 {
                     primaryWindow = window;
                 }
-                
+
                 window.Show();
             }
-            
+
             // Focus primary window
             primaryWindow?.Activate();
             primaryWindow?.TxtInput.Focus();

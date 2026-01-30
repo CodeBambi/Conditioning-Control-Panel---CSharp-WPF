@@ -101,10 +101,18 @@ namespace ConditioningControlPanel
             _sharedInput = "";
             
             var settings = App.Settings.Current;
-            var screens = settings.DualMonitorEnabled 
-                ? System.Windows.Forms.Screen.AllScreens 
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
-            
+            var allScreens = App.GetAllScreensCached();
+            var screens = settings.DualMonitorEnabled
+                ? allScreens
+                : new[] { allScreens.FirstOrDefault(s => s.Primary) ?? allScreens.FirstOrDefault() ?? System.Windows.Forms.Screen.PrimaryScreen! };
+
+            if (screens.Length == 0)
+            {
+                App.Logger?.Warning("BubbleCountResultWindow: No screens available");
+                onComplete?.Invoke(false);
+                return;
+            }
+
             var primary = screens.FirstOrDefault(s => s.Primary) ?? screens[0];
             
             // Create secondary windows first

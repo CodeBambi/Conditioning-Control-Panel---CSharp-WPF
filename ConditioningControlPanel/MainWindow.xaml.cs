@@ -7144,12 +7144,15 @@ namespace ConditioningControlPanel
         private void ApplySettingsLive()
         {
             if (_isLoading) return;
-            
+
             var s = App.Settings.Current;
-            
-            // Track if flash frequency changed
+
+            // Track previous values to detect changes
             var oldFlashFreq = s.FlashFrequency;
-            
+            var wasFlashEnabled = s.FlashEnabled;
+            var wasVideoEnabled = s.MandatoryVideosEnabled;
+            var wasSubliminalEnabled = s.SubliminalEnabled;
+
             // Flash settings
             s.FlashEnabled = ChkFlashEnabled.IsChecked ?? true;
             s.FlashClickable = ChkClickable.IsChecked ?? true;
@@ -7160,7 +7163,7 @@ namespace ConditioningControlPanel
             s.ImageScale = (int)SliderSize.Value;
             s.FlashOpacity = (int)SliderOpacity.Value;
             s.FadeDuration = (int)SliderFade.Value;
-            
+
             // Video settings
             s.MandatoryVideosEnabled = ChkVideoEnabled.IsChecked ?? false;
             s.VideosPerHour = (int)SliderPerHour.Value;
@@ -7178,8 +7181,8 @@ namespace ConditioningControlPanel
             s.SubliminalOpacity = (int)SliderSubOpacity.Value;
             s.SubAudioEnabled = ChkAudioWhispers.IsChecked ?? false;
             s.SubAudioVolume = (int)SliderWhisperVol.Value;
-            
-            // Audio settings  
+
+            // Audio settings
             s.MasterVolume = (int)SliderMaster.Value;
             s.AudioDuckingEnabled = ChkAudioDuck.IsChecked ?? true;
             s.DuckingLevel = (int)SliderDuck.Value;
@@ -7188,20 +7191,49 @@ namespace ConditioningControlPanel
             // Overlay settings
             s.SpiralOpacity = (int)SliderSpiralOpacity.Value;
             s.PinkFilterOpacity = (int)SliderPinkOpacity.Value;
-            
+
             // Refresh services if running
             if (_isRunning)
             {
+                // Handle Flash service toggle
+                if (s.FlashEnabled != wasFlashEnabled)
+                {
+                    if (s.FlashEnabled)
+                        App.Flash.Start();
+                    else
+                        App.Flash.Stop();
+                    App.Logger?.Information("Flash images toggled via ApplySettingsLive: {Enabled}", s.FlashEnabled);
+                }
                 // Reschedule flash timer if frequency changed
-                if (s.FlashFrequency != oldFlashFreq)
+                else if (s.FlashFrequency != oldFlashFreq)
                 {
                     App.Flash.RefreshSchedule();
                 }
-                
+
+                // Handle Video service toggle
+                if (s.MandatoryVideosEnabled != wasVideoEnabled)
+                {
+                    if (s.MandatoryVideosEnabled)
+                        App.Video.Start();
+                    else
+                        App.Video.Stop();
+                    App.Logger?.Information("Mandatory videos toggled via ApplySettingsLive: {Enabled}", s.MandatoryVideosEnabled);
+                }
+
+                // Handle Subliminal service toggle
+                if (s.SubliminalEnabled != wasSubliminalEnabled)
+                {
+                    if (s.SubliminalEnabled)
+                        App.Subliminal.Start();
+                    else
+                        App.Subliminal.Stop();
+                    App.Logger?.Information("Subliminals toggled via ApplySettingsLive: {Enabled}", s.SubliminalEnabled);
+                }
+
                 // Refresh overlays (spiral, pink filter)
                 App.Overlay.RefreshOverlays();
             }
-            
+
             // Save settings to disk
             App.Settings.Save();
         }
@@ -8378,6 +8410,118 @@ namespace ConditioningControlPanel
                 App.Logger?.Information("Lock Card toggled: {Enabled}", isEnabled);
             }
             
+            App.Settings.Save();
+        }
+
+        private void ChkFlashEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkFlashEnabled.IsChecked ?? true;
+            App.Settings.Current.FlashEnabled = isEnabled;
+
+            // Immediately start/stop flash service if engine is running
+            if (_isRunning)
+            {
+                if (isEnabled)
+                {
+                    App.Flash.Start();
+                }
+                else
+                {
+                    App.Flash.Stop();
+                }
+                App.Logger?.Information("Flash images toggled: {Enabled}", isEnabled);
+            }
+
+            App.Settings.Save();
+        }
+
+        private void ChkClickable_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isClickable = ChkClickable.IsChecked ?? true;
+            App.Settings.Current.FlashClickable = isClickable;
+            App.Logger?.Information("Flash clickable toggled: {Enabled}", isClickable);
+            App.Settings.Save();
+        }
+
+        private void ChkCorruption_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkCorruption.IsChecked ?? false;
+            App.Settings.Current.CorruptionMode = isEnabled;
+            App.Logger?.Information("Hydra mode toggled: {Enabled}", isEnabled);
+            App.Settings.Save();
+        }
+
+        private void ChkVideoEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkVideoEnabled.IsChecked ?? false;
+            App.Settings.Current.MandatoryVideosEnabled = isEnabled;
+
+            // Immediately start/stop video service if engine is running
+            if (_isRunning)
+            {
+                if (isEnabled)
+                {
+                    App.Video.Start();
+                }
+                else
+                {
+                    App.Video.Stop();
+                }
+                App.Logger?.Information("Mandatory videos toggled: {Enabled}", isEnabled);
+            }
+
+            App.Settings.Save();
+        }
+
+        private void ChkSubliminalEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkSubliminalEnabled.IsChecked ?? false;
+            App.Settings.Current.SubliminalEnabled = isEnabled;
+
+            // Immediately start/stop subliminal service if engine is running
+            if (_isRunning)
+            {
+                if (isEnabled)
+                {
+                    App.Subliminal.Start();
+                }
+                else
+                {
+                    App.Subliminal.Stop();
+                }
+                App.Logger?.Information("Subliminals toggled: {Enabled}", isEnabled);
+            }
+
+            App.Settings.Save();
+        }
+
+        private void ChkAudioWhispers_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkAudioWhispers.IsChecked ?? false;
+            App.Settings.Current.SubAudioEnabled = isEnabled;
+            App.Logger?.Information("Audio whispers toggled: {Enabled}", isEnabled);
+            App.Settings.Save();
+        }
+
+        private void ChkMiniGameEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkMiniGameEnabled.IsChecked ?? false;
+            App.Settings.Current.AttentionChecksEnabled = isEnabled;
+            App.Logger?.Information("Attention checks toggled: {Enabled}", isEnabled);
             App.Settings.Save();
         }
 
