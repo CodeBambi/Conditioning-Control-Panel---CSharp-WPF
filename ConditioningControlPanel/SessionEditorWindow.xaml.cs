@@ -172,10 +172,10 @@ namespace ConditioningControlPanel
             var border = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(37, 37, 66)), // #252542
-                CornerRadius = new CornerRadius(10),
-                Width = 98,
-                Height = 98,
-                Margin = new Thickness(6),
+                CornerRadius = new CornerRadius(7),
+                Width = 68,
+                Height = 68,
+                Margin = new Thickness(4),
                 Cursor = Cursors.Hand,
                 Tag = feature.Id,
                 ToolTip = $"{feature.Name}\n{GetFeatureDescription(feature)}\n\nDrag to timeline to add a segment"
@@ -184,7 +184,7 @@ namespace ConditioningControlPanel
             var grid = new Grid();
 
             // Try to load PNG image, fallback to emoji
-            var content = CreateFeatureIconContent(feature, 89);
+            var content = CreateFeatureIconContent(feature, 60);
             grid.Children.Add(content);
 
             border.Child = grid;
@@ -415,7 +415,7 @@ namespace ConditioningControlPanel
             }
         }
 
-        private const int TimelineRowHeight = 64;
+        private const int TimelineRowHeight = 45;
 
         private void RenderEvents()
         {
@@ -438,7 +438,7 @@ namespace ConditioningControlPanel
             }
 
             // Update canvas height to fit all rows
-            var requiredHeight = Math.Max(50, featureIds.Count * TimelineRowHeight + 20);
+            var requiredHeight = Math.Max(35, featureIds.Count * TimelineRowHeight + 15);
             CanvasTimeline.Height = requiredHeight;
 
             // Render each start event with its paired stop
@@ -450,7 +450,7 @@ namespace ConditioningControlPanel
                 if (!featureRows.TryGetValue(evt.FeatureId, out var row))
                     continue;
 
-                var rowY = 5 + row * TimelineRowHeight;
+                var rowY = 4 + row * TimelineRowHeight;
 
                 var startX = MinuteToPosition(evt.Minute, width);
                 var stopEvt = _session.GetPairedStopEvent(evt);
@@ -462,10 +462,10 @@ namespace ConditioningControlPanel
                 var bar = new Rectangle
                 {
                     Width = Math.Max(endX - startX, 10),
-                    Height = 16,
+                    Height = 11,
                     Fill = new SolidColorBrush(Color.FromArgb(100, 255, 105, 180)),
-                    RadiusX = 4,
-                    RadiusY = 4,
+                    RadiusX = 3,
+                    RadiusY = 3,
                     Cursor = Cursors.Hand,
                     Tag = evt.Id, // Store start event ID
                     ToolTip = $"{feature.Name}\n{evt.Minute} - {stopEvt?.Minute ?? _session.DurationMinutes} min\n\nDrag to move • Right-click to edit"
@@ -478,18 +478,18 @@ namespace ConditioningControlPanel
                 Canvas.SetTop(bar, rowY + 2);
                 CanvasTimeline.Children.Add(bar);
 
-                // Start icon (green)
+                // Start icon
                 var startIcon = CreateTimelineIcon(evt, feature, true);
-                Canvas.SetLeft(startIcon, startX - 27);
-                Canvas.SetTop(startIcon, rowY - 22);
+                Canvas.SetLeft(startIcon, startX - 19);
+                Canvas.SetTop(startIcon, rowY - 15);
                 CanvasTimeline.Children.Add(startIcon);
 
-                // Stop icon (red) if exists
+                // Stop icon if exists
                 if (stopEvt != null)
                 {
                     var stopIcon = CreateTimelineIcon(stopEvt, feature, false);
-                    Canvas.SetLeft(stopIcon, endX - 27);
-                    Canvas.SetTop(stopIcon, rowY - 22);
+                    Canvas.SetLeft(stopIcon, endX - 19);
+                    Canvas.SetTop(stopIcon, rowY - 15);
                     CanvasTimeline.Children.Add(stopIcon);
                 }
             }
@@ -499,19 +499,19 @@ namespace ConditioningControlPanel
         {
             var border = new Border
             {
-                Width = 54,
-                Height = 54,
-                CornerRadius = new CornerRadius(15),
+                Width = 38,
+                Height = 38,
+                CornerRadius = new CornerRadius(10),
                 Background = Brushes.Transparent, // Removed green/red color
                 Cursor = Cursors.SizeWE, // Horizontal resize cursor to indicate draggable
                 Tag = evt.Id,
                 ToolTip = $"{feature.Name} - {(isStart ? "Start" : "Stop")} at {evt.Minute} min\nDrag to move • Right-click to edit",
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 5, 0, 5)
+                Margin = new Thickness(0, 3, 0, 3)
             };
 
             // Try to load PNG image, fallback to emoji
-            var content = CreateFeatureIconContent(feature, 44);
+            var content = CreateFeatureIconContent(feature, 32);
             border.Child = content;
 
             // Drag handlers for repositioning (left button)

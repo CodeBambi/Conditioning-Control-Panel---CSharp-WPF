@@ -2153,14 +2153,6 @@ namespace ConditioningControlPanel
             AwarenessLocked.Visibility = level2Unlocked ? Visibility.Collapsed : Visibility.Visible;
             AwarenessUnlocked.Visibility = level2Unlocked ? Visibility.Visible : Visibility.Collapsed;
 
-            // Slut Mode lock overlay (disabled when custom prompts are active)
-            var customPromptsActive = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
-            SlutModeLocked.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
-            ChkSlutMode.IsEnabled = hasPremiumAccess && !customPromptsActive;
-            ChkSlutMode.ToolTip = customPromptsActive
-                ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
-                : "Enable explicit AI responses (Patreon only)";
-
             // Haptics - unlock for all Patreon supporters
             var hasHapticsAccess = hasPremiumAccess;
             HapticsContentGrid.Opacity = hasHapticsAccess ? 1.0 : 0.3;
@@ -2495,16 +2487,6 @@ namespace ConditioningControlPanel
             TxtTriggerIntervalCompanion.Text = $"{settings.TriggerIntervalSeconds}s";
             TriggerSettingsPanelCompanion.Visibility = settings.TriggerModeEnabled ? Visibility.Visible : Visibility.Collapsed;
 
-            // Slut Mode settings (Patreon only, disabled when custom prompts active)
-            var slutModeAvailable = App.Patreon?.HasPremiumAccess == true;
-            var customPromptsActiveForSlut = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
-            ChkSlutMode.IsChecked = slutModeAvailable && settings.SlutModeEnabled && !customPromptsActiveForSlut;
-            ChkSlutMode.IsEnabled = slutModeAvailable && !customPromptsActiveForSlut;
-            ChkSlutMode.ToolTip = customPromptsActiveForSlut
-                ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
-                : null;
-            SlutModeLocked.Visibility = slutModeAvailable ? Visibility.Collapsed : Visibility.Visible;
-
             // Hide avatar if disabled
             if (!settings.AvatarEnabled)
             {
@@ -2563,22 +2545,6 @@ namespace ConditioningControlPanel
 
             // Refresh UI to reflect any prompt changes
             UpdateCommunityPromptsUI();
-
-            // Sync slut mode checkbox (custom prompts may have auto-disabled it)
-            _isLoading = true;
-            try
-            {
-                var customActive = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
-                ChkSlutMode.IsChecked = App.Settings?.Current?.SlutModeEnabled == true && !customActive;
-                ChkSlutMode.IsEnabled = (App.Patreon?.HasPremiumAccess == true) && !customActive;
-                ChkSlutMode.ToolTip = customActive
-                    ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
-                    : null;
-            }
-            finally
-            {
-                _isLoading = false;
-            }
         }
 
         private void ChkAiChat_Changed(object sender, RoutedEventArgs e)
@@ -2681,41 +2647,6 @@ namespace ConditioningControlPanel
                 MessageBox.Show($"Error opening trigger editor: {ex.Message}", "Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        // ============================================================
-        // SLUT MODE (Patreon only)
-        // ============================================================
-
-        private void ChkSlutMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = ChkSlutMode.IsChecked == true;
-
-            // Check Patreon access
-            if (isEnabled && App.Patreon?.HasPremiumAccess != true)
-            {
-                ChkSlutMode.IsChecked = false;
-                MessageBox.Show(
-                    "Slut Mode requires Patreon subscription.",
-                    "Patreon Only",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-                return;
-            }
-
-            // Block when custom prompts are active
-            if (isEnabled && App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
-            {
-                ChkSlutMode.IsChecked = false;
-                return;
-            }
-
-            App.Settings.Current.SlutModeEnabled = isEnabled;
-            App.Settings.Save();
-
-            App.Logger?.Information("Slut Mode {State}", isEnabled ? "enabled" : "disabled");
         }
 
         private void ChkAwarenessMode_Changed(object sender, RoutedEventArgs e)
@@ -3229,22 +3160,6 @@ namespace ConditioningControlPanel
 
                 // Companion tab - ChkMuteWhispersCompanion represents "whispers muted" (inverted)
                 ChkMuteWhispersCompanion.IsChecked = !enabled;
-            }
-            finally
-            {
-                _isLoading = false;
-            }
-        }
-
-        /// <summary>
-        /// Sync slut mode state across all UI controls
-        /// </summary>
-        public void SyncSlutModeUI(bool enabled)
-        {
-            _isLoading = true;
-            try
-            {
-                ChkSlutMode.IsChecked = enabled;
             }
             finally
             {
@@ -10785,6 +10700,7 @@ namespace ConditioningControlPanel
             // Fully reload asset pools so services pick up new selection
             App.Flash?.LoadAssets();
             App.Video?.ReloadAssets();
+            App.BubbleCount?.ReloadAssets();
 
             var disabledCount = App.Settings.Current.DisabledAssetPaths.Count;
             var message = disabledCount > 0
@@ -11271,6 +11187,7 @@ namespace ConditioningControlPanel
                         RefreshAssetTree();
                         App.Flash?.LoadAssets();
                         App.Video?.ReloadAssets();
+                        App.BubbleCount?.ReloadAssets();
                         MessageBox.Show($"'{pack.Name}' has been uninstalled.", "Uninstalled", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (Exception ex)
@@ -11307,6 +11224,7 @@ namespace ConditioningControlPanel
                         RefreshAssetTree();
                         App.Flash?.LoadAssets();
                         App.Video?.ReloadAssets();
+                        App.BubbleCount?.ReloadAssets();
                         MessageBox.Show($"'{pack.Name}' installed successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (UnauthorizedAccessException)
@@ -11357,6 +11275,7 @@ namespace ConditioningControlPanel
                     RefreshAssetTree();
                     App.Flash?.LoadAssets();
                     App.Video?.ReloadAssets();
+                    App.BubbleCount?.ReloadAssets();
                 }
                 catch (Exception ex)
                 {

@@ -3756,26 +3756,6 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Slut Mode (Patreon Only) -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0">
-                            <Grid>
-                                <StackPanel>
-                                    <TextBlock Text="Slut Mode" Foreground="#FF6B6B" FontSize="13" FontWeight="Bold"/>
-                                    <TextBlock Text="Explicit AI responses (Patreon only)" Foreground="#808080" FontSize="11"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ChkSlutMode" Style="{StaticResource ToggleStyle}"
-                                          HorizontalAlignment="Right" VerticalAlignment="Center"
-                                          Checked="ChkSlutMode_Changed" Unchecked="ChkSlutMode_Changed"/>
-                                <!-- Lock overlay for non-patrons - covers the toggle -->
-                                <Border x:Name="SlutModeLocked" Background="#F01A1A2E" CornerRadius="10"
-                                        HorizontalAlignment="Right" VerticalAlignment="Center"
-                                        Visibility="Collapsed" IsHitTestVisible="True"
-                                        BorderBrush="#9B59B6" BorderThickness="1" Padding="8,3">
-                                    <TextBlock Text="🔒 Patreon" Foreground="#9B59B6" FontSize="10"/>
-                                </Border>
-                            </Grid>
-                        </Border>
-
                         <!-- Haptics Control - Two Side-by-Side Boxes -->
                         <Grid Margin="0,10,0,0">
                             <!-- Haptics Content (enabled for whitelisted testers) -->

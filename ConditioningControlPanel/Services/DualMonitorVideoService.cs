@@ -28,11 +28,10 @@ namespace ConditioningControlPanel.Services
     {
         private LibVLC? _libVLC;
         private VlcMediaPlayer? _mediaPlayer;
-        private WriteableBitmap? _sharedFrame;
         private IntPtr _frameBuffer = IntPtr.Zero;
         private uint _videoWidth;
         private uint _videoHeight;
-        private readonly List<Window> _windows = new();
+        private readonly List<(Window Window, WriteableBitmap Bitmap, Image ImageControl)> _windowData = new();
         private readonly object _bufferLock = new();
         private volatile bool _frameReady;
         private volatile bool _bufferValid;  // Guards buffer access across threads
@@ -95,17 +94,6 @@ namespace ConditioningControlPanel.Services
                     _bufferValid = true;
                 }
 
-                // Create shared bitmap on UI thread
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    _sharedFrame = new WriteableBitmap(
-                        (int)_videoWidth,
-                        (int)_videoHeight,
-                        96, 96,
-                        PixelFormats.Bgr32,
-                        null);
-                });
-
                 // Create media player with memory rendering
                 _mediaPlayer = new VlcMediaPlayer(_libVLC);
                 _mediaPlayer.SetVideoCallbacks(LockCallback, null, DisplayCallback);
@@ -131,7 +119,7 @@ namespace ConditioningControlPanel.Services
                 _isPlaying = true;
 
                 App.Logger?.Information("DualMonitorVideo: Started playback of {Url} on {Count} monitors",
-                    videoUrl, _windows.Count);
+                    videoUrl, _windowData.Count);
             }
             catch (Exception ex)
             {
@@ -188,7 +176,7 @@ namespace ConditioningControlPanel.Services
             // Close all windows
             Application.Current?.Dispatcher?.Invoke(() =>
             {
-                foreach (var window in _windows.ToArray())
+                foreach (var (window, _, _) in _windowData.ToArray())
                 {
                     try
                     {
@@ -199,11 +187,8 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Debug("DualMonitorVideo: Error closing window: {Error}", ex.Message);
                     }
                 }
-                _windows.Clear();
+                _windowData.Clear();
             });
-
-            // Clear shared frame reference
-            _sharedFrame = null;
 
             // Clean up media player with delay to let any pending events complete
             var playerToDispose = _mediaPlayer;
@@ -362,9 +347,17 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    var window = CreateFullscreenWindow(screen);
+                    // Each window gets its own WriteableBitmap for isolation
+                    var bitmap = new WriteableBitmap(
+                        (int)_videoWidth,
+                        (int)_videoHeight,
+                        96, 96,
+                        PixelFormats.Bgr32,
+                        null);
+
+                    var (window, imageControl) = CreateFullscreenWindow(screen, bitmap);
                     window.Show();
-                    _windows.Add(window);
+                    _windowData.Add((window, bitmap, imageControl));
 
                     App.Logger?.Debug("DualMonitorVideo: Created window on {Screen} at {Bounds}",
                         screen.DeviceName, screen.Bounds);
@@ -375,15 +368,15 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            App.Logger?.Information("DualMonitorVideo: Successfully created {Count} windows", _windows.Count);
+            App.Logger?.Information("DualMonitorVideo: Successfully created {Count} windows", _windowData.Count);
         }
 
-        private Window CreateFullscreenWindow(Screen screen)
+        private (Window Window, Image ImageControl) CreateFullscreenWindow(Screen screen, WriteableBitmap bitmap)
         {
-            // Image control that displays the shared bitmap
+            // Image control that displays this window's bitmap
             var image = new Image
             {
-                Source = _sharedFrame,  // All windows share the SAME bitmap!
+                Source = bitmap,  // Each window has its own bitmap for isolation
                 Stretch = Stretch.Uniform,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
@@ -431,7 +424,7 @@ namespace ConditioningControlPanel.Services
                     SWP_NOACTIVATE);
             };
 
-            return window;
+            return (window, image);
         }
 
         #region LibVLC Callbacks
@@ -442,9 +435,20 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private IntPtr LockCallback(IntPtr opaque, IntPtr planes)
         {
-            // Tell LibVLC where to write the frame data
-            Marshal.WriteIntPtr(planes, _frameBuffer);
-            return IntPtr.Zero;
+            // Check if buffer is still valid before giving LibVLC access
+            lock (_bufferLock)
+            {
+                if (!_bufferValid || _frameBuffer == IntPtr.Zero)
+                {
+                    // Return null plane to indicate no valid buffer
+                    Marshal.WriteIntPtr(planes, IntPtr.Zero);
+                    return IntPtr.Zero;
+                }
+
+                // Tell LibVLC where to write the frame data
+                Marshal.WriteIntPtr(planes, _frameBuffer);
+                return IntPtr.Zero;
+            }
         }
 
         /// <summary>
@@ -462,8 +466,8 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// WPF composition target rendering callback.
-        /// Copies the frame from LibVLC buffer to the shared WriteableBitmap.
-        /// Both windows automatically update since they share the same bitmap source.
+        /// Copies the frame from LibVLC buffer to each window's WriteableBitmap.
+        /// Each window has its own bitmap for isolation - if one fails, others continue.
         /// </summary>
         private void OnCompositionTargetRendering(object? sender, EventArgs e)
         {
@@ -471,38 +475,65 @@ namespace ConditioningControlPanel.Services
             if (!_bufferValid || !_frameReady)
                 return;
 
-            // Capture shared frame reference (immutable once set, cleared to null on stop)
-            var frame = _sharedFrame;
-            if (frame == null)
+            // Capture window data (list reference is stable, contents may change)
+            var windows = _windowData.ToArray();
+            if (windows.Length == 0)
                 return;
 
             _frameReady = false;
 
+            bool lockAcquired = false;
             try
             {
-                // Lock to safely access buffer pointer
-                lock (_bufferLock)
+                // Use TryEnter with timeout to prevent deadlocks
+                lockAcquired = Monitor.TryEnter(_bufferLock, 16); // ~1 frame at 60fps
+                if (!lockAcquired)
                 {
-                    // Double-check validity inside lock
-                    if (!_bufferValid || _frameBuffer == IntPtr.Zero)
-                        return;
-
-                    frame.Lock();
-
-                    // Copy frame data from LibVLC buffer to WriteableBitmap
-                    var bufferSize = _videoWidth * _videoHeight * 4;
-                    CopyMemory(frame.BackBuffer, _frameBuffer, bufferSize);
-
-                    // Mark entire bitmap as dirty so WPF redraws it
-                    frame.AddDirtyRect(new Int32Rect(0, 0, (int)_videoWidth, (int)_videoHeight));
-                    frame.Unlock();
+                    // Skip this frame rather than block
+                    return;
                 }
 
-                // Both windows automatically update because they reference the same bitmap!
+                // Double-check validity inside lock
+                if (!_bufferValid || _frameBuffer == IntPtr.Zero)
+                    return;
+
+                var bufferSize = _videoWidth * _videoHeight * 4;
+                var dirtyRect = new Int32Rect(0, 0, (int)_videoWidth, (int)_videoHeight);
+
+                // Copy to each window's bitmap independently
+                // If one fails, others still update
+                foreach (var (_, bitmap, _) in windows)
+                {
+                    try
+                    {
+                        bitmap.Lock();
+                        try
+                        {
+                            CopyMemory(bitmap.BackBuffer, _frameBuffer, bufferSize);
+                            bitmap.AddDirtyRect(dirtyRect);
+                        }
+                        finally
+                        {
+                            bitmap.Unlock();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("DualMonitorVideo: Frame copy error for one window: {Error}", ex.Message);
+                        // Continue to other windows
+                    }
+                }
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("DualMonitorVideo: Frame copy error: {Error}", ex.Message);
+            }
+            finally
+            {
+                if (lockAcquired)
+                {
+                    Monitor.Exit(_bufferLock);
+                }
             }
         }
 

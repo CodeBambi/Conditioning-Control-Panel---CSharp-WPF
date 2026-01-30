@@ -1,8 +1,28 @@
+using System;
+using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows;
+using System.Windows.Data;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel
 {
+    /// <summary>
+    /// Converts null or empty strings to Collapsed visibility.
+    /// </summary>
+    public class NullOrEmptyToCollapsedConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return string.IsNullOrWhiteSpace(value as string) ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
     /// <summary>
     /// Dialog for editing AI companion prompt settings.
     /// Allows users to customize personality, reactions, knowledge base, and output rules.
@@ -11,6 +31,7 @@ namespace ConditioningControlPanel
     {
         private readonly CompanionPromptSettings _defaults;
         private bool _hasUnsavedChanges;
+        private readonly ObservableCollection<KnowledgeBaseLink> _knowledgeLinks = new();
 
         public CompanionPromptEditorDialog()
         {
@@ -18,7 +39,39 @@ namespace ConditioningControlPanel
 
             _defaults = CompanionPromptSettings.GetDefaults();
             LoadCurrentSettings();
+            LoadKnowledgeLinks();
             UpdateActivePromptDisplay();
+        }
+
+        /// <summary>
+        /// Loads global knowledge base links into the list.
+        /// </summary>
+        private void LoadKnowledgeLinks()
+        {
+            _knowledgeLinks.Clear();
+            var links = App.Settings?.Current?.GlobalKnowledgeBaseLinks;
+            if (links != null)
+            {
+                foreach (var link in links)
+                {
+                    _knowledgeLinks.Add(link);
+                }
+            }
+            LstKnowledgeLinks.ItemsSource = _knowledgeLinks;
+        }
+
+        /// <summary>
+        /// Saves global knowledge base links from the list.
+        /// </summary>
+        private void SaveKnowledgeLinks()
+        {
+            if (App.Settings?.Current == null) return;
+
+            App.Settings.Current.GlobalKnowledgeBaseLinks.Clear();
+            foreach (var link in _knowledgeLinks)
+            {
+                App.Settings.Current.GlobalKnowledgeBaseLinks.Add(link);
+            }
         }
 
         /// <summary>
@@ -98,18 +151,14 @@ namespace ConditioningControlPanel
             settings.ContextReactions = TxtContextReactions.Text;
             settings.OutputRules = TxtOutputRules.Text;
 
-            // Auto-disable slut mode when custom prompts are enabled (they override it)
-            if (settings.UseCustomPrompt && App.Settings.Current.SlutModeEnabled)
-            {
-                App.Settings.Current.SlutModeEnabled = false;
-                App.Logger?.Information("Auto-disabled Slut Mode because custom prompts were enabled");
-            }
+            // Save global knowledge base links
+            SaveKnowledgeLinks();
 
             App.Settings.Save();
             _hasUnsavedChanges = false;
 
-            App.Logger?.Information("Companion prompt settings saved. UseCustomPrompt={UseCustom}",
-                settings.UseCustomPrompt);
+            App.Logger?.Information("Companion prompt settings saved. UseCustomPrompt={UseCustom}, GlobalLinks={LinkCount}",
+                settings.UseCustomPrompt, _knowledgeLinks.Count);
         }
 
         private void UpdateEnabledState()
@@ -158,6 +207,30 @@ namespace ConditioningControlPanel
         private void ResetOutputRules_Click(object sender, RoutedEventArgs e)
         {
             TxtOutputRules.Text = _defaults.OutputRules;
+        }
+
+        private void AddKnowledgeLink_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new KnowledgeLinkEditorDialog { Owner = this };
+            if (dialog.ShowDialog() == true && dialog.Result != null)
+            {
+                _knowledgeLinks.Add(dialog.Result);
+                _hasUnsavedChanges = true;
+            }
+        }
+
+        private void RemoveKnowledgeLink_Click(object sender, RoutedEventArgs e)
+        {
+            if (LstKnowledgeLinks.SelectedItem is KnowledgeBaseLink link)
+            {
+                _knowledgeLinks.Remove(link);
+                _hasUnsavedChanges = true;
+            }
+            else
+            {
+                MessageBox.Show("Please select a link to remove.", "No Selection",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
         }
 
         private void ResetAll_Click(object sender, RoutedEventArgs e)

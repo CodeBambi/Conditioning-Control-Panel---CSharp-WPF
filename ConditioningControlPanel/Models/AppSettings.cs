@@ -1510,6 +1510,39 @@ namespace ConditioningControlPanel.Models
             set { _companionPrompt = value ?? new(); OnPropertyChanged(); }
         }
 
+        private string _activePersonalityPresetId = PersonalityPresets.BambiSpriteId;
+        /// <summary>
+        /// ID of the currently active personality preset.
+        /// </summary>
+        public string ActivePersonalityPresetId
+        {
+            get => _activePersonalityPresetId;
+            set { _activePersonalityPresetId = value ?? PersonalityPresets.BambiSpriteId; OnPropertyChanged(); }
+        }
+
+        private List<PersonalityPreset> _userPersonalityPresets = new();
+        /// <summary>
+        /// User-created personality presets (customizations or copies of built-ins).
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<PersonalityPreset> UserPersonalityPresets
+        {
+            get => _userPersonalityPresets;
+            set { _userPersonalityPresets = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private List<KnowledgeBaseLink> _globalKnowledgeBaseLinks = new();
+        /// <summary>
+        /// Global knowledge base links shared across ALL personality presets.
+        /// These are appended to every AI prompt regardless of which personality is active.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<KnowledgeBaseLink> GlobalKnowledgeBaseLinks
+        {
+            get => _globalKnowledgeBaseLinks;
+            set { _globalKnowledgeBaseLinks = value ?? new(); OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Trigger Mode (Free)

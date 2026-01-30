@@ -1848,15 +1848,26 @@ namespace ConditioningControlPanel.Services
                     _mediaPlayers.Clear();
                 }
 
-                foreach (var player in playersCopy)
+                // Stop all players in parallel with timeout to prevent one hanging player from blocking others
+                if (playersCopy.Count > 0)
                 {
-                    try
+                    var stopTasks = playersCopy.Select(player => Task.Run(() =>
                     {
-                        player.Stop();
-                    }
-                    catch (Exception ex)
+                        try
+                        {
+                            player.Stop();
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("CloseAll: Failed to stop LibVLC player - {Error}", ex.Message);
+                        }
+                    })).ToArray();
+
+                    // Wait for all players to stop with timeout (500ms should be plenty)
+                    var allStopped = Task.WaitAll(stopTasks, TimeSpan.FromMilliseconds(500));
+                    if (!allStopped)
                     {
-                        App.Logger?.Debug("CloseAll: Failed to stop LibVLC player - {Error}", ex.Message);
+                        App.Logger?.Warning("CloseAll: Some LibVLC players did not stop within timeout");
                     }
                 }
 

@@ -63,9 +63,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task<string> GetBambiReplyAsync(string userInput)
         {
-            // Use slut mode prompt if enabled (Patreon only)
-            var isSlutMode = App.Settings?.Current?.SlutModeEnabled == true && App.Patreon?.HasPremiumAccess == true;
-            var prompt = isSlutMode ? _bambiSprite.GetSlutModePersonality() : _bambiSprite.GetSystemPrompt();
+            // Get prompt from active personality preset (handles all personalities including slut mode)
+            var prompt = _bambiSprite.GetSystemPrompt();
 
             var result = await GetAiResponseAsync(userInput, prompt);
             return result ?? FallbackResponse;
@@ -78,9 +77,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "")
         {
-            // Use slut mode prompt if enabled (Patreon only)
-            var isSlutMode = App.Settings?.Current?.SlutModeEnabled == true && App.Patreon?.HasPremiumAccess == true;
-            var prompt = isSlutMode ? _bambiSprite.GetSlutModePersonality() : _bambiSprite.GetSystemPrompt();
+            // Get prompt from active personality preset
+            var prompt = _bambiSprite.GetSystemPrompt();
 
             // Get website/service name and tab title
             var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
@@ -99,9 +97,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration)
         {
-            // Use slut mode prompt if enabled (Patreon only)
-            var isSlutMode = App.Settings?.Current?.SlutModeEnabled == true && App.Patreon?.HasPremiumAccess == true;
-            var prompt = isSlutMode ? _bambiSprite.GetSlutModePersonality() : _bambiSprite.GetSystemPrompt();
+            // Get prompt from active personality preset
+            var prompt = _bambiSprite.GetSystemPrompt();
 
             // Format duration nicely
             string durationText;
