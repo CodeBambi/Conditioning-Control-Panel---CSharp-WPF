@@ -6373,6 +6373,26 @@ namespace ConditioningControlPanel
                             }
                         }
                     }
+
+                    // Load achievements from lookup result (for other users)
+                    if (lookup.Achievements != null && lookup.Achievements.Count > 0)
+                    {
+                        var achievementSet = new HashSet<string>(lookup.Achievements);
+                        LoadProfileAchievementImages(achievementSet);
+                    }
+                    else if (lookup.AchievementsCount > 0)
+                    {
+                        // Fallback: server returned count but no list (shouldn't happen with updated server)
+                        if (TxtNoAchievements != null)
+                        {
+                            TxtNoAchievements.Text = $"{lookup.AchievementsCount} achievements unlocked";
+                            TxtNoAchievements.Visibility = Visibility.Visible;
+                        }
+                        if (ProfileAchievementGrid != null)
+                        {
+                            ProfileAchievementGrid.ItemsSource = null;
+                        }
+                    }
                 });
             }
             catch (Exception ex)
@@ -10202,7 +10222,7 @@ namespace ConditioningControlPanel
             };
 
             // Count files in this folder
-            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
             var files = Directory.GetFiles(path)
                 .Where(f => validExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
                 .ToList();
@@ -10264,7 +10284,7 @@ namespace ConditioningControlPanel
         private void RecalculateFolderCheckState(AssetTreeItem folder)
         {
             var basePath = App.EffectiveAssetsPath;
-            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
 
             // Handle pack virtual folders
             if (folder.IsPackFolder && !string.IsNullOrEmpty(folder.PackId) && !string.IsNullOrEmpty(folder.PackFileType))
@@ -10444,7 +10464,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
             var files = Directory.GetFiles(folderPath)
                 .Where(f => validExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
                 .OrderBy(f => Path.GetFileName(f))
@@ -10596,7 +10616,7 @@ namespace ConditioningControlPanel
         private void UpdateFolderFilesCheckState(AssetTreeItem folder, bool isChecked)
         {
             var basePath = App.EffectiveAssetsPath;
-            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
 
             // Handle pack virtual folders
             if (folder.IsPackFolder && !string.IsNullOrEmpty(folder.PackId) && !string.IsNullOrEmpty(folder.PackFileType))
@@ -11375,6 +11395,7 @@ namespace ConditioningControlPanel
 
             // Start from current custom path if set, otherwise default
             var currentPath = App.Settings?.Current?.CustomAssetsPath;
+            var oldEffectivePath = App.EffectiveAssetsPath;
             if (!string.IsNullOrWhiteSpace(currentPath) && Directory.Exists(currentPath))
             {
                 dialog.SelectedPath = currentPath;
@@ -11388,27 +11409,110 @@ namespace ConditioningControlPanel
             {
                 var selectedPath = dialog.SelectedPath;
 
+                // Check if we have downloaded packs in the old location that should be moved
+                var oldPacksFolder = Path.Combine(oldEffectivePath, ".packs");
+                var newPacksFolder = Path.Combine(selectedPath, ".packs");
+                var shouldMovePacks = false;
+
+                if (Directory.Exists(oldPacksFolder) && !string.Equals(oldPacksFolder, newPacksFolder, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Check if old folder has actual pack files
+                    var oldPackFiles = Directory.GetFiles(oldPacksFolder, "*.pack", SearchOption.TopDirectoryOnly);
+                    if (oldPackFiles.Length > 0)
+                    {
+                        // Calculate total size of packs
+                        long totalBytes = 0;
+                        foreach (var packFile in oldPackFiles)
+                        {
+                            try { totalBytes += new FileInfo(packFile).Length; } catch { }
+                        }
+                        var sizeText = FormatFileSize(totalBytes);
+
+                        var moveResult = MessageBox.Show(
+                            $"You have {oldPackFiles.Length} downloaded content pack(s) ({sizeText}) in the old location.\n\n" +
+                            "Do you want to move them to the new folder?\n\n" +
+                            "• Yes - Move packs to new location (recommended)\n" +
+                            "• No - Leave packs in old location (you may need to re-download)\n\n" +
+                            (totalBytes > 500_000_000 ? "⚠️ This may take a moment due to the file size." : ""),
+                            "Move Downloaded Packs?",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question);
+                        shouldMovePacks = moveResult == MessageBoxResult.Yes;
+                    }
+                }
+
                 // Create subfolders
                 Directory.CreateDirectory(Path.Combine(selectedPath, "images"));
                 Directory.CreateDirectory(Path.Combine(selectedPath, "videos"));
+
+                // Move packs if requested
+                if (shouldMovePacks)
+                {
+                    try
+                    {
+                        // Create new packs folder if needed
+                        if (!Directory.Exists(newPacksFolder))
+                        {
+                            var di = Directory.CreateDirectory(newPacksFolder);
+                            di.Attributes |= FileAttributes.Hidden;
+                        }
+
+                        // Move all files from old packs folder to new
+                        foreach (var file in Directory.GetFiles(oldPacksFolder))
+                        {
+                            var destFile = Path.Combine(newPacksFolder, Path.GetFileName(file));
+                            if (!File.Exists(destFile))
+                            {
+                                File.Move(file, destFile);
+                            }
+                        }
+
+                        App.Logger?.Information("Moved packs from {OldPath} to {NewPath}", oldPacksFolder, newPacksFolder);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Error(ex, "Failed to move packs to new location");
+                        MessageBox.Show(
+                            $"Could not move packs to new location: {ex.Message}\n\nYou may need to re-download them.",
+                            "Warning",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
+                }
 
                 // Save to settings
                 App.Settings.Current.CustomAssetsPath = selectedPath;
                 App.Settings.Save();
 
-                // Refresh services to use new path
+                // Refresh all services to use new path
                 App.Flash?.RefreshImagesPath();
                 App.Video?.RefreshVideosPath();
                 App.BubbleCount?.RefreshVideosPath();
+                App.ContentPacks?.RefreshPacksPath();
+
+                // Refresh the asset tree to show new location
+                RefreshAssetTree();
 
                 MessageBox.Show(
-                    $"Custom assets folder set to:\n{selectedPath}\n\nSubfolders 'images' and 'videos' have been created.",
+                    $"Custom assets folder set to:\n{selectedPath}\n\nSubfolders 'images' and 'videos' have been created." +
+                    (shouldMovePacks ? "\n\nYour downloaded packs have been moved." : ""),
                     "Assets Folder Set",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
 
                 App.Logger?.Information("Custom assets path set to: {Path}", selectedPath);
             }
+        }
+
+        private static string FormatFileSize(long bytes)
+        {
+            if (bytes >= 1024L * 1024 * 1024)
+                return $"{bytes / (1024.0 * 1024.0 * 1024.0):F1} GB";
+            if (bytes >= 1024 * 1024)
+                return $"{bytes / (1024.0 * 1024.0):F1} MB";
+            if (bytes >= 1024)
+                return $"{bytes / 1024.0:F1} KB";
+            return $"{bytes} bytes";
         }
 
         private void BtnRefreshAssets_Click(object sender, RoutedEventArgs e)

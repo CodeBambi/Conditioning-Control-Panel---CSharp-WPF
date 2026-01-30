@@ -29,8 +29,8 @@ namespace ConditioningControlPanel.Services
 
         private readonly Random _random = new();
         private readonly List<FlashWindow> _activeWindows = new();
-        private Queue<string> _imageQueue = new();  // Performance: Changed to Queue for O(1) dequeue
-        private Queue<(string PackId, PackFileEntry File)> _packImageQueue = new();  // Queue for pack images
+        private List<string> _imageList = new();  // Cached image list for random selection
+        private List<(string PackId, PackFileEntry File)> _packImageList = new();  // Cached pack images for random selection
         private Queue<string> _soundQueue = new();  // Performance: Changed to Queue for O(1) dequeue
         private readonly List<string> _tempPackFiles = new();  // Track temp files for cleanup
         private readonly object _lockObj = new();
@@ -111,8 +111,8 @@ namespace ConditioningControlPanel.Services
 
             lock (_lockObj)
             {
-                _imageQueue.Clear();
-                _packImageQueue.Clear();
+                _imageList.Clear();
+                _packImageList.Clear();
                 CleanupTempPackFiles();
             }
 
@@ -194,8 +194,8 @@ namespace ConditioningControlPanel.Services
         {
             lock (_lockObj)
             {
-                _imageQueue = new Queue<string>();  // Performance: Reset queues
-                _packImageQueue = new Queue<(string, PackFileEntry)>();  // Reset pack queue
+                _imageList.Clear();  // Clear cached image list
+                _packImageList.Clear();  // Clear cached pack image list
                 _soundQueue = new Queue<string>();
                 CleanupTempPackFiles();
             }
@@ -1018,14 +1018,14 @@ namespace ConditioningControlPanel.Services
         {
             lock (_lockObj)
             {
-                // Refill queues if both are empty
-                if (_imageQueue.Count == 0 && _packImageQueue.Count == 0)
+                // Refresh image lists if empty (first call or after cache clear)
+                if (_imageList.Count == 0 && _packImageList.Count == 0)
                 {
-                    RefillImageQueues();
+                    RefreshImageLists();
                 }
 
-                // If both queues are empty after refill, no images available
-                if (_imageQueue.Count == 0 && _packImageQueue.Count == 0)
+                // If both lists are empty after refresh, no images available
+                if (_imageList.Count == 0 && _packImageList.Count == 0)
                 {
                     return new List<string>();
                 }
@@ -1033,30 +1033,24 @@ namespace ConditioningControlPanel.Services
                 var result = new List<string>(count);
                 for (int i = 0; i < count; i++)
                 {
-                    // Refill queues if we run out
-                    if (_imageQueue.Count == 0 && _packImageQueue.Count == 0)
-                    {
-                        RefillImageQueues();
-                        if (_imageQueue.Count == 0 && _packImageQueue.Count == 0)
-                            break;
-                    }
-
                     // Randomly choose between regular and pack images based on what's available
                     bool usePackImage = false;
-                    if (_imageQueue.Count > 0 && _packImageQueue.Count > 0)
+                    if (_imageList.Count > 0 && _packImageList.Count > 0)
                     {
                         // Both available - pick randomly weighted by count
-                        var totalCount = _imageQueue.Count + _packImageQueue.Count;
-                        usePackImage = _random.Next(totalCount) >= _imageQueue.Count;
+                        var totalCount = _imageList.Count + _packImageList.Count;
+                        usePackImage = _random.Next(totalCount) >= _imageList.Count;
                     }
-                    else if (_packImageQueue.Count > 0)
+                    else if (_packImageList.Count > 0)
                     {
                         usePackImage = true;
                     }
 
-                    if (usePackImage && _packImageQueue.Count > 0)
+                    if (usePackImage && _packImageList.Count > 0)
                     {
-                        var packImage = _packImageQueue.Dequeue();
+                        // Randomly select a pack image (true random, not sequential)
+                        var index = _random.Next(_packImageList.Count);
+                        var packImage = _packImageList[index];
                         // Decrypt pack image to temp file
                         var tempPath = App.ContentPacks?.GetPackFileTempPath(packImage.PackId, packImage.File);
                         if (!string.IsNullOrEmpty(tempPath))
@@ -1066,12 +1060,14 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Debug("Using pack image: {Name} from pack {PackId}", packImage.File.OriginalName, packImage.PackId);
                             continue;
                         }
-                        // If decryption failed, try regular queue
+                        // If decryption failed, try regular list
                     }
 
-                    if (_imageQueue.Count > 0)
+                    if (_imageList.Count > 0)
                     {
-                        result.Add(_imageQueue.Dequeue());
+                        // Randomly select an image (true random, not sequential)
+                        var index = _random.Next(_imageList.Count);
+                        result.Add(_imageList[index]);
                     }
                 }
                 return result;
@@ -1079,23 +1075,23 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Refills both image queues (regular and pack images).
+        /// Refreshes both image lists (regular and pack images) from disk cache.
+        /// Called when lists are empty or cache has expired.
         /// </summary>
-        private void RefillImageQueues()
+        private void RefreshImageLists()
         {
             // Clean up old temp pack files
             CleanupTempPackFiles();
 
-            // Load regular images
-            var files = GetMediaFiles(_imagesPath, new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" });
-            _imageQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
+            // Load regular images (include common extensions and variants)
+            // GetMediaFiles has its own 60-second cache, so this is efficient
+            _imageList = GetMediaFiles(_imagesPath, new[] { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif" });
 
             // Load pack images from active packs
-            var packImages = App.ContentPacks?.GetAllActivePackImages() ?? new List<(string, PackFileEntry)>();
-            _packImageQueue = new Queue<(string, PackFileEntry)>(packImages.OrderBy(_ => _random.Next()));
+            _packImageList = App.ContentPacks?.GetAllActivePackImages() ?? new List<(string, PackFileEntry)>();
 
-            App.Logger?.Debug("Image queues refilled: {RegularCount} regular, {PackCount} from packs",
-                _imageQueue.Count, _packImageQueue.Count);
+            App.Logger?.Information("Image lists refreshed: {RegularCount} regular images, {PackCount} pack images from {Path}",
+                _imageList.Count, _packImageList.Count, _imagesPath);
         }
 
         /// <summary>
@@ -1159,10 +1155,13 @@ namespace ConditioningControlPanel.Services
 
             // Scan directory (cache miss or expired)
             var files = new List<string>();
+            var blockedCount = 0;
+            var sanitizeFailedCount = 0;
 
             foreach (var ext in extensions)
             {
                 // Scan subfolders to support user-organized categories
+                // Note: Directory.GetFiles is case-insensitive on Windows NTFS
                 foreach (var file in Directory.GetFiles(folder, $"*{ext}", SearchOption.AllDirectories))
                 {
                     // Security: Validate path is within allowed directories (app dir, user assets, or custom path)
@@ -1178,12 +1177,24 @@ namespace ConditioningControlPanel.Services
                         {
                             files.Add(file);
                         }
+                        else
+                        {
+                            sanitizeFailedCount++;
+                            App.Logger?.Debug("File sanitization failed for: {Path}", file);
+                        }
                     }
                     else
                     {
+                        blockedCount++;
                         App.Logger?.Warning("Blocked file outside allowed directory: {Path}", file);
                     }
                 }
+            }
+
+            if (blockedCount > 0 || sanitizeFailedCount > 0)
+            {
+                App.Logger?.Information("GetMediaFiles: Found {FileCount} files, blocked {BlockedCount}, sanitize failed {SanitizeCount} in {Folder}",
+                    files.Count, blockedCount, sanitizeFailedCount, folder);
             }
 
             // Filter out disabled assets (blacklist approach)

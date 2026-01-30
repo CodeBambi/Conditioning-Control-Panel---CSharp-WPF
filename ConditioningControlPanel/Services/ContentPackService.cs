@@ -21,8 +21,8 @@ namespace ConditioningControlPanel.Services
     public class ContentPackService : IDisposable
     {
         private readonly HttpClient _httpClient;
-        private readonly string _packsFolder;
-        private readonly string _manifestCachePath;
+        private string _packsFolder;
+        private string _manifestCachePath;
         private List<ContentPack> _availablePacks = new();
         private Dictionary<string, InstalledPackManifest> _installedManifests = new();
         private bool _disposed;
@@ -101,6 +101,43 @@ namespace ConditioningControlPanel.Services
             // Load installed pack manifests
             LoadInstalledManifests();
         }
+
+        /// <summary>
+        /// Refreshes the packs folder path when the assets directory changes.
+        /// Call this after changing CustomAssetsPath.
+        /// </summary>
+        public void RefreshPacksPath()
+        {
+            var oldPacksFolder = _packsFolder;
+            var newPacksFolder = Path.Combine(App.EffectiveAssetsPath, ".packs");
+
+            // Only refresh if path actually changed
+            if (string.Equals(oldPacksFolder, newPacksFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _packsFolder = newPacksFolder;
+            _manifestCachePath = Path.Combine(_packsFolder, ".manifest_cache.enc");
+
+            // Create hidden directory if it doesn't exist
+            if (!Directory.Exists(_packsFolder))
+            {
+                var di = Directory.CreateDirectory(_packsFolder);
+                di.Attributes |= FileAttributes.Hidden;
+            }
+
+            // Clear cached data and reload
+            _installedManifests.Clear();
+            LoadInstalledManifests();
+
+            App.Logger?.Information("ContentPackService: Packs path refreshed from {OldPath} to {NewPath}", oldPacksFolder, _packsFolder);
+        }
+
+        /// <summary>
+        /// Gets the current packs folder path.
+        /// </summary>
+        public string PacksFolder => _packsFolder;
 
         /// <summary>
         /// Gets the list of available packs (from remote or built-in).

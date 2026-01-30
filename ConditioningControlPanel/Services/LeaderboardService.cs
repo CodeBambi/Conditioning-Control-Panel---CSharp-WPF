@@ -309,6 +309,9 @@ public class UserLookupResult
     [JsonProperty("achievements_count")]
     public int AchievementsCount { get; set; }
 
+    [JsonProperty("achievements")]
+    public List<string>? Achievements { get; set; }
+
     [JsonProperty("is_online")]
     public bool IsOnline { get; set; }
 
