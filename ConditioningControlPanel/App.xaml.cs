@@ -203,6 +203,7 @@ namespace ConditioningControlPanel
         public static ContentPackService ContentPacks { get; private set; } = null!;
         public static CompanionService Companion { get; private set; } = null!;
         public static CommunityPromptService CommunityPrompts { get; private set; } = null!;
+        public static PersonalityService Personality { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with either Patreon or Discord (required for progression tracking)
@@ -480,6 +481,10 @@ namespace ConditioningControlPanel
             CompanionService.MigrateFromLegacy(Settings.Current);
             Companion = new CompanionService();
             CommunityPrompts = new CommunityPromptService();
+
+            // Initialize personality preset system (v5.5) - migrate from legacy SlutModeEnabled
+            Personality = new PersonalityService();
+            Personality.MigrateFromLegacy(Settings.Current);
 
             Subliminal = new SubliminalService();
             Overlay = new OverlayService();

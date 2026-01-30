@@ -2129,14 +2129,6 @@ namespace ConditioningControlPanel
             AwarenessLocked.Visibility = level2Unlocked ? Visibility.Collapsed : Visibility.Visible;
             AwarenessUnlocked.Visibility = level2Unlocked ? Visibility.Visible : Visibility.Collapsed;
 
-            // Slut Mode lock overlay (disabled when custom prompts are active)
-            var customPromptsActive = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
-            SlutModeLocked.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
-            ChkSlutMode.IsEnabled = hasPremiumAccess && !customPromptsActive;
-            ChkSlutMode.ToolTip = customPromptsActive
-                ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
-                : "Enable explicit AI responses (Patreon only)";
-
             // Haptics - unlock for all Patreon supporters
             var hasHapticsAccess = hasPremiumAccess;
             HapticsContentGrid.Opacity = hasHapticsAccess ? 1.0 : 0.3;
@@ -2392,6 +2384,29 @@ namespace ConditioningControlPanel
             }
         }
 
+        private async void ChkShowOnlineStatus_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current != null && sender is CheckBox chk)
+            {
+                var isChecked = chk.IsChecked == true;
+                App.Settings.Current.ShowOnlineStatus = isChecked;
+
+                // Sync both checkboxes (Patreon tab and Discord tab)
+                if (ChkShowOnlineStatus != null && ChkShowOnlineStatus != chk)
+                    ChkShowOnlineStatus.IsChecked = isChecked;
+                if (ChkDiscordTabShowOnline != null && ChkDiscordTabShowOnline != chk)
+                    ChkDiscordTabShowOnline.IsChecked = isChecked;
+
+                App.Logger?.Information("Online status visibility changed: {Visible}", isChecked);
+
+                // Sync immediately so the setting takes effect
+                if (App.ProfileSync != null)
+                {
+                    await App.ProfileSync.SyncProfileAsync();
+                }
+            }
+        }
+
         private void BtnVisitPatreon_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -2447,16 +2462,6 @@ namespace ConditioningControlPanel
             SliderTriggerIntervalCompanion.Value = settings.TriggerIntervalSeconds;
             TxtTriggerIntervalCompanion.Text = $"{settings.TriggerIntervalSeconds}s";
             TriggerSettingsPanelCompanion.Visibility = settings.TriggerModeEnabled ? Visibility.Visible : Visibility.Collapsed;
-
-            // Slut Mode settings (Patreon only, disabled when custom prompts active)
-            var slutModeAvailable = App.Patreon?.HasPremiumAccess == true;
-            var customPromptsActiveForSlut = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
-            ChkSlutMode.IsChecked = slutModeAvailable && settings.SlutModeEnabled && !customPromptsActiveForSlut;
-            ChkSlutMode.IsEnabled = slutModeAvailable && !customPromptsActiveForSlut;
-            ChkSlutMode.ToolTip = customPromptsActiveForSlut
-                ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
-                : null;
-            SlutModeLocked.Visibility = slutModeAvailable ? Visibility.Collapsed : Visibility.Visible;
 
             // Hide avatar if disabled
             if (!settings.AvatarEnabled)
@@ -2516,22 +2521,6 @@ namespace ConditioningControlPanel
 
             // Refresh UI to reflect any prompt changes
             UpdateCommunityPromptsUI();
-
-            // Sync slut mode checkbox (custom prompts may have auto-disabled it)
-            _isLoading = true;
-            try
-            {
-                var customActive = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
-                ChkSlutMode.IsChecked = App.Settings?.Current?.SlutModeEnabled == true && !customActive;
-                ChkSlutMode.IsEnabled = (App.Patreon?.HasPremiumAccess == true) && !customActive;
-                ChkSlutMode.ToolTip = customActive
-                    ? "Disabled: Custom Prompt is active. Disable custom prompts to use Slut Mode."
-                    : null;
-            }
-            finally
-            {
-                _isLoading = false;
-            }
         }
 
         private void ChkAiChat_Changed(object sender, RoutedEventArgs e)
@@ -2634,41 +2623,6 @@ namespace ConditioningControlPanel
                 MessageBox.Show($"Error opening trigger editor: {ex.Message}", "Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        // ============================================================
-        // SLUT MODE (Patreon only)
-        // ============================================================
-
-        private void ChkSlutMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = ChkSlutMode.IsChecked == true;
-
-            // Check Patreon access
-            if (isEnabled && App.Patreon?.HasPremiumAccess != true)
-            {
-                ChkSlutMode.IsChecked = false;
-                MessageBox.Show(
-                    "Slut Mode requires Patreon subscription.",
-                    "Patreon Only",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-                return;
-            }
-
-            // Block when custom prompts are active
-            if (isEnabled && App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
-            {
-                ChkSlutMode.IsChecked = false;
-                return;
-            }
-
-            App.Settings.Current.SlutModeEnabled = isEnabled;
-            App.Settings.Save();
-
-            App.Logger?.Information("Slut Mode {State}", isEnabled ? "enabled" : "disabled");
         }
 
         private void ChkAwarenessMode_Changed(object sender, RoutedEventArgs e)
@@ -3182,22 +3136,6 @@ namespace ConditioningControlPanel
 
                 // Companion tab - ChkMuteWhispersCompanion represents "whispers muted" (inverted)
                 ChkMuteWhispersCompanion.IsChecked = !enabled;
-            }
-            finally
-            {
-                _isLoading = false;
-            }
-        }
-
-        /// <summary>
-        /// Sync slut mode state across all UI controls
-        /// </summary>
-        public void SyncSlutModeUI(bool enabled)
-        {
-            _isLoading = true;
-            try
-            {
-                ChkSlutMode.IsChecked = enabled;
             }
             finally
             {
@@ -5771,6 +5709,7 @@ namespace ConditioningControlPanel
                 if (ChkDiscordTabShareLevelUps != null) ChkDiscordTabShareLevelUps.IsChecked = s.DiscordShareLevelUps;
                 if (ChkDiscordTabAllowDm != null) ChkDiscordTabAllowDm.IsChecked = s.AllowDiscordDm;
                 if (ChkDiscordTabSharePfp != null) ChkDiscordTabSharePfp.IsChecked = s.ShareProfilePicture;
+                if (ChkDiscordTabShowOnline != null) ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
             }
 
             // Pre-fill search bar with user's display name and auto-display own profile
@@ -6323,6 +6262,26 @@ namespace ConditioningControlPanel
                             {
                                 App.Logger?.Warning(ex, "Failed to load profile avatar from {Url}", avatarUrl);
                             }
+                        }
+                    }
+
+                    // Load achievements from lookup result (for other users)
+                    if (lookup.Achievements != null && lookup.Achievements.Count > 0)
+                    {
+                        var achievementSet = new HashSet<string>(lookup.Achievements);
+                        LoadProfileAchievementImages(achievementSet);
+                    }
+                    else if (lookup.AchievementsCount > 0)
+                    {
+                        // Fallback: server returned count but no list (shouldn't happen with updated server)
+                        if (TxtNoAchievements != null)
+                        {
+                            TxtNoAchievements.Text = $"{lookup.AchievementsCount} achievements unlocked";
+                            TxtNoAchievements.Visibility = Visibility.Visible;
+                        }
+                        if (ProfileAchievementGrid != null)
+                        {
+                            ProfileAchievementGrid.ItemsSource = null;
                         }
                     }
                 });
@@ -7120,12 +7079,15 @@ namespace ConditioningControlPanel
         private void ApplySettingsLive()
         {
             if (_isLoading) return;
-            
+
             var s = App.Settings.Current;
-            
-            // Track if flash frequency changed
+
+            // Track previous values to detect changes
             var oldFlashFreq = s.FlashFrequency;
-            
+            var wasFlashEnabled = s.FlashEnabled;
+            var wasVideoEnabled = s.MandatoryVideosEnabled;
+            var wasSubliminalEnabled = s.SubliminalEnabled;
+
             // Flash settings
             s.FlashEnabled = ChkFlashEnabled.IsChecked ?? true;
             s.FlashClickable = ChkClickable.IsChecked ?? true;
@@ -7136,7 +7098,7 @@ namespace ConditioningControlPanel
             s.ImageScale = (int)SliderSize.Value;
             s.FlashOpacity = (int)SliderOpacity.Value;
             s.FadeDuration = (int)SliderFade.Value;
-            
+
             // Video settings
             s.MandatoryVideosEnabled = ChkVideoEnabled.IsChecked ?? false;
             s.VideosPerHour = (int)SliderPerHour.Value;
@@ -7154,8 +7116,8 @@ namespace ConditioningControlPanel
             s.SubliminalOpacity = (int)SliderSubOpacity.Value;
             s.SubAudioEnabled = ChkAudioWhispers.IsChecked ?? false;
             s.SubAudioVolume = (int)SliderWhisperVol.Value;
-            
-            // Audio settings  
+
+            // Audio settings
             s.MasterVolume = (int)SliderMaster.Value;
             s.AudioDuckingEnabled = ChkAudioDuck.IsChecked ?? true;
             s.DuckingLevel = (int)SliderDuck.Value;
@@ -7164,20 +7126,49 @@ namespace ConditioningControlPanel
             // Overlay settings
             s.SpiralOpacity = (int)SliderSpiralOpacity.Value;
             s.PinkFilterOpacity = (int)SliderPinkOpacity.Value;
-            
+
             // Refresh services if running
             if (_isRunning)
             {
+                // Handle Flash service toggle
+                if (s.FlashEnabled != wasFlashEnabled)
+                {
+                    if (s.FlashEnabled)
+                        App.Flash.Start();
+                    else
+                        App.Flash.Stop();
+                    App.Logger?.Information("Flash images toggled via ApplySettingsLive: {Enabled}", s.FlashEnabled);
+                }
                 // Reschedule flash timer if frequency changed
-                if (s.FlashFrequency != oldFlashFreq)
+                else if (s.FlashFrequency != oldFlashFreq)
                 {
                     App.Flash.RefreshSchedule();
                 }
-                
+
+                // Handle Video service toggle
+                if (s.MandatoryVideosEnabled != wasVideoEnabled)
+                {
+                    if (s.MandatoryVideosEnabled)
+                        App.Video.Start();
+                    else
+                        App.Video.Stop();
+                    App.Logger?.Information("Mandatory videos toggled via ApplySettingsLive: {Enabled}", s.MandatoryVideosEnabled);
+                }
+
+                // Handle Subliminal service toggle
+                if (s.SubliminalEnabled != wasSubliminalEnabled)
+                {
+                    if (s.SubliminalEnabled)
+                        App.Subliminal.Start();
+                    else
+                        App.Subliminal.Stop();
+                    App.Logger?.Information("Subliminals toggled via ApplySettingsLive: {Enabled}", s.SubliminalEnabled);
+                }
+
                 // Refresh overlays (spiral, pink filter)
                 App.Overlay.RefreshOverlays();
             }
-            
+
             // Save settings to disk
             App.Settings.Save();
         }
@@ -7458,6 +7449,8 @@ namespace ConditioningControlPanel
             ChkShowLevelInPresence.IsChecked = s.DiscordShowLevelInPresence;
             ChkAllowDiscordDm.IsChecked = s.AllowDiscordDm;
             ChkShareProfilePicture.IsChecked = s.ShareProfilePicture;
+            if (ChkShowOnlineStatus != null) ChkShowOnlineStatus.IsChecked = s.ShowOnlineStatus;
+            if (ChkDiscordTabShowOnline != null) ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
 
             // Update Discord UI (both main tab and Patreon tab)
             UpdateQuickDiscordUI();
@@ -8354,6 +8347,118 @@ namespace ConditioningControlPanel
                 App.Logger?.Information("Lock Card toggled: {Enabled}", isEnabled);
             }
             
+            App.Settings.Save();
+        }
+
+        private void ChkFlashEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkFlashEnabled.IsChecked ?? true;
+            App.Settings.Current.FlashEnabled = isEnabled;
+
+            // Immediately start/stop flash service if engine is running
+            if (_isRunning)
+            {
+                if (isEnabled)
+                {
+                    App.Flash.Start();
+                }
+                else
+                {
+                    App.Flash.Stop();
+                }
+                App.Logger?.Information("Flash images toggled: {Enabled}", isEnabled);
+            }
+
+            App.Settings.Save();
+        }
+
+        private void ChkClickable_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isClickable = ChkClickable.IsChecked ?? true;
+            App.Settings.Current.FlashClickable = isClickable;
+            App.Logger?.Information("Flash clickable toggled: {Enabled}", isClickable);
+            App.Settings.Save();
+        }
+
+        private void ChkCorruption_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkCorruption.IsChecked ?? false;
+            App.Settings.Current.CorruptionMode = isEnabled;
+            App.Logger?.Information("Hydra mode toggled: {Enabled}", isEnabled);
+            App.Settings.Save();
+        }
+
+        private void ChkVideoEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkVideoEnabled.IsChecked ?? false;
+            App.Settings.Current.MandatoryVideosEnabled = isEnabled;
+
+            // Immediately start/stop video service if engine is running
+            if (_isRunning)
+            {
+                if (isEnabled)
+                {
+                    App.Video.Start();
+                }
+                else
+                {
+                    App.Video.Stop();
+                }
+                App.Logger?.Information("Mandatory videos toggled: {Enabled}", isEnabled);
+            }
+
+            App.Settings.Save();
+        }
+
+        private void ChkSubliminalEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkSubliminalEnabled.IsChecked ?? false;
+            App.Settings.Current.SubliminalEnabled = isEnabled;
+
+            // Immediately start/stop subliminal service if engine is running
+            if (_isRunning)
+            {
+                if (isEnabled)
+                {
+                    App.Subliminal.Start();
+                }
+                else
+                {
+                    App.Subliminal.Stop();
+                }
+                App.Logger?.Information("Subliminals toggled: {Enabled}", isEnabled);
+            }
+
+            App.Settings.Save();
+        }
+
+        private void ChkAudioWhispers_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkAudioWhispers.IsChecked ?? false;
+            App.Settings.Current.SubAudioEnabled = isEnabled;
+            App.Logger?.Information("Audio whispers toggled: {Enabled}", isEnabled);
+            App.Settings.Save();
+        }
+
+        private void ChkMiniGameEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkMiniGameEnabled.IsChecked ?? false;
+            App.Settings.Current.AttentionChecksEnabled = isEnabled;
+            App.Logger?.Information("Attention checks toggled: {Enabled}", isEnabled);
             App.Settings.Save();
         }
 
@@ -9980,7 +10085,7 @@ namespace ConditioningControlPanel
             };
 
             // Count files in this folder
-            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
             var files = Directory.GetFiles(path)
                 .Where(f => validExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
                 .ToList();
@@ -10042,7 +10147,7 @@ namespace ConditioningControlPanel
         private void RecalculateFolderCheckState(AssetTreeItem folder)
         {
             var basePath = App.EffectiveAssetsPath;
-            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
 
             // Handle pack virtual folders
             if (folder.IsPackFolder && !string.IsNullOrEmpty(folder.PackId) && !string.IsNullOrEmpty(folder.PackFileType))
@@ -10222,7 +10327,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
             var files = Directory.GetFiles(folderPath)
                 .Where(f => validExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
                 .OrderBy(f => Path.GetFileName(f))
@@ -10374,7 +10479,7 @@ namespace ConditioningControlPanel
         private void UpdateFolderFilesCheckState(AssetTreeItem folder, bool isChecked)
         {
             var basePath = App.EffectiveAssetsPath;
-            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
+            var validExtensions = new[] { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".webm" };
 
             // Handle pack virtual folders
             if (folder.IsPackFolder && !string.IsNullOrEmpty(folder.PackId) && !string.IsNullOrEmpty(folder.PackFileType))
@@ -10543,6 +10648,7 @@ namespace ConditioningControlPanel
             // Fully reload asset pools so services pick up new selection
             App.Flash?.LoadAssets();
             App.Video?.ReloadAssets();
+            App.BubbleCount?.ReloadAssets();
 
             var disabledCount = App.Settings.Current.DisabledAssetPaths.Count;
             var message = disabledCount > 0
@@ -11029,6 +11135,7 @@ namespace ConditioningControlPanel
                         RefreshAssetTree();
                         App.Flash?.LoadAssets();
                         App.Video?.ReloadAssets();
+                        App.BubbleCount?.ReloadAssets();
                         MessageBox.Show($"'{pack.Name}' has been uninstalled.", "Uninstalled", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (Exception ex)
@@ -11065,6 +11172,7 @@ namespace ConditioningControlPanel
                         RefreshAssetTree();
                         App.Flash?.LoadAssets();
                         App.Video?.ReloadAssets();
+                        App.BubbleCount?.ReloadAssets();
                         MessageBox.Show($"'{pack.Name}' installed successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (UnauthorizedAccessException)
@@ -11122,6 +11230,7 @@ namespace ConditioningControlPanel
                     RefreshAssetTree();
                     App.Flash?.LoadAssets();
                     App.Video?.ReloadAssets();
+                    App.BubbleCount?.ReloadAssets();
                 }
                 catch (Exception ex)
                 {
@@ -11160,6 +11269,7 @@ namespace ConditioningControlPanel
 
             // Start from current custom path if set, otherwise default
             var currentPath = App.Settings?.Current?.CustomAssetsPath;
+            var oldEffectivePath = App.EffectiveAssetsPath;
             if (!string.IsNullOrWhiteSpace(currentPath) && Directory.Exists(currentPath))
             {
                 dialog.SelectedPath = currentPath;
@@ -11172,28 +11282,161 @@ namespace ConditioningControlPanel
             if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
                 var selectedPath = dialog.SelectedPath;
+                var newPacksFolder = Path.Combine(selectedPath, ".packs");
+                var shouldMovePacks = false;
+                var packFoldersToMove = new List<(string SourceFolder, string PackName)>();
+                long totalBytes = 0;
+
+                // Check multiple locations for existing packs (retrocompatibility)
+                // 1. Current effective path (where user currently has assets)
+                // 2. Default path (in case packs were stranded there from before)
+                var locationsToCheck = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    Path.Combine(oldEffectivePath, ".packs"),
+                    Path.Combine(App.UserAssetsPath, ".packs")
+                };
+
+                // Don't check the new location (we're moving TO there)
+                locationsToCheck.Remove(newPacksFolder);
+
+                App.Logger?.Information("Asset folder change: checking {Count} locations for packs: {Locations}",
+                    locationsToCheck.Count, string.Join(", ", locationsToCheck));
+
+                foreach (var packsFolder in locationsToCheck)
+                {
+                    if (!Directory.Exists(packsFolder)) continue;
+
+                    foreach (var dir in Directory.GetDirectories(packsFolder))
+                    {
+                        var manifestPath = Path.Combine(dir, ".manifest.enc");
+                        if (!File.Exists(manifestPath)) continue;
+
+                        // Try to read pack name from manifest
+                        string packName = Path.GetFileName(dir); // Default to GUID if we can't read name
+                        try
+                        {
+                            var json = Services.PackEncryptionService.LoadEncryptedManifest(manifestPath);
+                            var manifest = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(json);
+                            if (manifest?.PackName != null)
+                            {
+                                packName = (string)manifest.PackName;
+                            }
+                        }
+                        catch { }
+
+                        packFoldersToMove.Add((dir, packName));
+
+                        // Calculate folder size
+                        try
+                        {
+                            foreach (var file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+                            {
+                                totalBytes += new FileInfo(file).Length;
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                App.Logger?.Information("Found {Count} packs to potentially move, total size: {Size} bytes",
+                    packFoldersToMove.Count, totalBytes);
+
+                if (packFoldersToMove.Count > 0)
+                {
+                    var sizeText = FormatFileSize(totalBytes);
+                    var packNames = string.Join("\n• ", packFoldersToMove.Select(p => p.PackName));
+
+                    var moveResult = MessageBox.Show(
+                        $"Found {packFoldersToMove.Count} downloaded content pack(s) ({sizeText}):\n\n" +
+                        $"• {packNames}\n\n" +
+                        "Do you want to move them to the new folder?\n\n" +
+                        "• Yes - Move packs to new location (recommended)\n" +
+                        "• No - Leave packs where they are (you may need to re-download)\n\n" +
+                        (totalBytes > 500_000_000 ? "⚠️ This may take a moment due to the file size." : ""),
+                        "Move Downloaded Packs?",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+                    shouldMovePacks = moveResult == MessageBoxResult.Yes;
+                }
 
                 // Create subfolders
                 Directory.CreateDirectory(Path.Combine(selectedPath, "images"));
                 Directory.CreateDirectory(Path.Combine(selectedPath, "videos"));
 
+                // Move packs if requested
+                if (shouldMovePacks && packFoldersToMove.Count > 0)
+                {
+                    try
+                    {
+                        // Create new packs folder if needed
+                        if (!Directory.Exists(newPacksFolder))
+                        {
+                            var di = Directory.CreateDirectory(newPacksFolder);
+                            di.Attributes |= FileAttributes.Hidden;
+                        }
+
+                        var movedCount = 0;
+                        foreach (var (sourceFolder, packName) in packFoldersToMove)
+                        {
+                            var destDir = Path.Combine(newPacksFolder, Path.GetFileName(sourceFolder));
+                            if (!Directory.Exists(destDir))
+                            {
+                                Directory.Move(sourceFolder, destDir);
+                                movedCount++;
+                                App.Logger?.Information("Moved pack '{PackName}' from {Source} to {Dest}", packName, sourceFolder, destDir);
+                            }
+                            else
+                            {
+                                App.Logger?.Warning("Pack folder already exists at destination, skipping: {Dest}", destDir);
+                            }
+                        }
+
+                        App.Logger?.Information("Moved {Count}/{Total} packs to {NewPath}", movedCount, packFoldersToMove.Count, newPacksFolder);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Error(ex, "Failed to move packs to new location");
+                        MessageBox.Show(
+                            $"Could not move packs to new location: {ex.Message}\n\nYou may need to re-download them.",
+                            "Warning",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
+                }
+
                 // Save to settings
                 App.Settings.Current.CustomAssetsPath = selectedPath;
                 App.Settings.Save();
 
-                // Refresh services to use new path
+                // Refresh all services to use new path
                 App.Flash?.RefreshImagesPath();
                 App.Video?.RefreshVideosPath();
                 App.BubbleCount?.RefreshVideosPath();
+                App.ContentPacks?.RefreshPacksPath();
+
+                // Refresh the asset tree to show new location
+                RefreshAssetTree();
 
                 MessageBox.Show(
-                    $"Custom assets folder set to:\n{selectedPath}\n\nSubfolders 'images' and 'videos' have been created.",
+                    $"Custom assets folder set to:\n{selectedPath}\n\nSubfolders 'images' and 'videos' have been created." +
+                    (shouldMovePacks ? "\n\nYour downloaded packs have been moved." : ""),
                     "Assets Folder Set",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
 
                 App.Logger?.Information("Custom assets path set to: {Path}", selectedPath);
             }
+        }
+
+        private static string FormatFileSize(long bytes)
+        {
+            if (bytes >= 1024L * 1024 * 1024)
+                return $"{bytes / (1024.0 * 1024.0 * 1024.0):F1} GB";
+            if (bytes >= 1024 * 1024)
+                return $"{bytes / (1024.0 * 1024.0):F1} MB";
+            if (bytes >= 1024)
+                return $"{bytes / 1024.0:F1} KB";
+            return $"{bytes} bytes";
         }
 
         private void BtnRefreshAssets_Click(object sender, RoutedEventArgs e)

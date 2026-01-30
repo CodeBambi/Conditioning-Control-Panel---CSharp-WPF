@@ -298,7 +298,9 @@ namespace ConditioningControlPanel.Services
                     LastSession = DateTime.Now.ToString("o"),
                     AllowDiscordDm = settings.AllowDiscordDm,
                     ShareProfilePicture = settings.ShareProfilePicture,
-                    DiscordId = App.Discord?.UserId  // Include Discord ID even when syncing via Patreon
+                    ShowOnlineStatus = settings.ShowOnlineStatus,
+                    DiscordId = App.Discord?.UserId,  // Include Discord ID even when syncing via Patreon
+                    AvatarUrl = App.Discord?.GetAvatarUrl(256)  // Include Discord avatar URL
                 };
 
                 // Use appropriate endpoint based on auth type
@@ -553,8 +555,14 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("share_profile_picture")]
             public bool ShareProfilePicture { get; set; }
 
+            [JsonProperty("show_online_status")]
+            public bool ShowOnlineStatus { get; set; } = true;
+
             [JsonProperty("discord_id")]
             public string? DiscordId { get; set; }
+
+            [JsonProperty("avatar_url")]
+            public string? AvatarUrl { get; set; }
         }
 
         #endregion

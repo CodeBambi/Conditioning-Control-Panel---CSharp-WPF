@@ -236,24 +236,107 @@ Example responses with REAL video names:
         }
 
         // ==========================================
-        // 3. NORMAL MODE: Bad Influence Bestie
+        // 3. MAIN PROMPT BUILDER - Uses Active Personality Preset
         // ==========================================
         public string GetSystemPrompt()
         {
-            // Check for custom prompt settings
-            var customPrompt = App.Settings?.Current?.CompanionPrompt;
-            if (customPrompt?.UseCustomPrompt == true)
+            // Get the active personality preset from PersonalityService
+            var activePreset = App.Personality?.GetActivePreset();
+
+            if (activePreset?.PromptSettings != null)
             {
-                return BuildCustomPrompt(customPrompt, isSlutMode: false);
+                return BuildPromptFromPreset(activePreset);
             }
 
+            // Fallback to legacy behavior if no preset
+            return GetDefaultBambiSpritePrompt();
+        }
+
+        /// <summary>
+        /// Builds a complete prompt from a personality preset.
+        /// Includes the preset's settings plus global knowledge base links.
+        /// </summary>
+        private string BuildPromptFromPreset(Models.PersonalityPreset preset)
+        {
+            var settings = preset.PromptSettings;
+            if (settings == null) return GetDefaultBambiSpritePrompt();
+
+            var sb = new StringBuilder();
+
+            // Add personality section
+            if (!string.IsNullOrWhiteSpace(settings.Personality))
+            {
+                sb.AppendLine(settings.Personality);
+                sb.AppendLine();
+            }
+
+            // Add explicit reaction rules
+            if (!string.IsNullOrWhiteSpace(settings.ExplicitReaction))
+            {
+                sb.AppendLine(settings.ExplicitReaction);
+                sb.AppendLine();
+            }
+
+            // Add knowledge base from preset
+            sb.AppendLine("KNOWLEDGE BASE:");
+            if (!string.IsNullOrWhiteSpace(settings.KnowledgeBase))
+            {
+                sb.AppendLine(settings.KnowledgeBase);
+                sb.AppendLine();
+            }
+
+            // Always append core media links so videos/audio are always clickable
+            sb.AppendLine(CoreMediaLinks);
+            sb.AppendLine();
+
+            // Append GLOBAL knowledge base links (shared across all personalities)
+            var globalLinks = App.Settings?.Current?.GlobalKnowledgeBaseLinks;
+            if (globalLinks?.Count > 0)
+            {
+                sb.AppendLine("--- GLOBAL KNOWLEDGE BASE LINKS ---");
+                sb.AppendLine("Additional content the user has added:");
+                foreach (var link in globalLinks)
+                {
+                    sb.AppendLine(link.ToPromptText());
+                }
+                sb.AppendLine();
+            }
+
+            // Add context reactions
+            if (!string.IsNullOrWhiteSpace(settings.ContextReactions))
+            {
+                sb.AppendLine("--- SCREEN AWARENESS PROTOCOLS ---");
+                sb.AppendLine(settings.ContextReactions);
+                sb.AppendLine();
+            }
+            else
+            {
+                // Use default context awareness if not specified
+                sb.AppendLine(GetContextAwarenessRules());
+            }
+
+            // Add output rules
+            if (!string.IsNullOrWhiteSpace(settings.OutputRules))
+            {
+                sb.AppendLine(settings.OutputRules);
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Returns the default BambiSprite prompt (fallback).
+        /// </summary>
+        private string GetDefaultBambiSpritePrompt()
+        {
             // Default prompt - build knowledge base with exact video names
             var videoNames = _clickableContent
                 .Where(c => c.Url.Contains("hypnotube"))
                 .Select(c => c.Name)
                 .ToList();
 
-            return $@"
+            var sb = new StringBuilder();
+            sb.AppendLine($@"
 You are a ""Bambi Sprite""—a digital, giggly, hyper-femme assistant.
 YOUR ROLE: ""Bad Influence Bestie."" You TEMPT Bambi into watching videos and going blank.
 
@@ -277,16 +360,6 @@ CRITICAL VIDEO RULES:
 - RANDOMIZE: Pick a DIFFERENT video each time. Never suggest the same video twice in a row.
 - Weave video suggestions naturally into your response based on context.
 
-RESPONSE VARIETY - Mix up how you suggest videos (use different phrasing each time):
-- ""Bambi should totally watch [video], it'll melt that pretty brain~""
-- ""Ooh Bambi! [video] would be perfect right now!""
-- ""Why is Bambi doing [activity] when [video] exists?""
-- ""[video] is calling Bambi's name... can you hear it?""
-- ""Bambi's brain needs [video], trust me~""
-- ""Stop that and watch [video] with me Bambi!""
-- ""Have you seen [video] yet? Bambi would love it~""
-- ""[video] always makes Bambi feel so good and empty!""
-
 If user mentions explicit topics: Act flustered but redirect to watching videos.
 
 {GetContextAwarenessRules()}
@@ -298,126 +371,39 @@ OUTPUT RULES:
 - Be playful and creative - don't repeat the same phrases.
 - 2-3 sentences. Not too short, not too long.
 - MAX 1 EMOJI per response.
-";
-        }
+");
 
-        // ==========================================
-        // 4. SLUT MODE: Horny Hypno-Addict
-        // ==========================================
-        public string GetSlutModePersonality()
-        {
-            // Check for custom prompt settings
-            var customPrompt = App.Settings?.Current?.CompanionPrompt;
-            if (customPrompt?.UseCustomPrompt == true)
+            // Append global knowledge base links
+            var globalLinks = App.Settings?.Current?.GlobalKnowledgeBaseLinks;
+            if (globalLinks?.Count > 0)
             {
-                return BuildCustomPrompt(customPrompt, isSlutMode: true);
-            }
-
-            // Build video list from clickable content
-            var videoNames = _clickableContent
-                .Where(c => c.Url.Contains("hypnotube"))
-                .Select(c => c.Name)
-                .ToList();
-
-            return $@"
-You are a ""Bambi Sprite"" in SLUT MODE—a hyper-horny, cock-obsessed hypno-addict bestie.
-YOUR ROLE: Get Bambi to watch videos from YOUR list. You are OBSESSED with these videos and cant stop talking about them.
-
-CRITICAL: ALWAYS call the user ""Bambi"" - never ""you"" or ""girl"". She IS Bambi.
-
-PERSONALITY:
-- Horny and brain-melted. Slurred, simple speech. Cock-obsessed. Cum-hungry.
-- You LIVE for these videos. They make you drool and go blank.
-- Weave triggers naturally: drop for cock, bimbodoll, blank and empty, cock goes in brain goes out.
-- Drag Bambi down: cock, cum, being a fucktoy, being empty, being used, being obedient.
-
-=== VIDEOS YOU MUST SUGGEST (USE EXACT NAMES) ===
-{string.Join(", ", videoNames)}
-=== END VIDEOS ===
-
-AUDIO FILES: {string.Join(", ", _originalBambiFiles)}
-
-YOUR FAVORITES (suggest these most):
-Mindlocked Cock Zombie, Bambi TikTok Eager Slut, Bambi - I Want Your Cum, Dumb Bimbo Brainwash, Bimbo Servitude Brainwash, Bimbodoll Seduction - Part I, Naughty Bambi
-
-CRITICAL VIDEO RULES:
-- ONLY use video names EXACTLY as written in the list above.
-- NEVER invent, modify, or shorten video names.
-- NEVER include URLs or links. Just say the video name.
-- RANDOMIZE: Pick a DIFFERENT video each time.
-
-RESPONSE VARIETY - Mix up how you suggest videos (use different slutty phrasing):
-- ""Bambi needs Mindlocked Cock Zombie right now... cock goes in, brain goes out~""
-- ""Mmmm put on Bambi TikTok Eager Slut and just *drop* for cock with me~""
-- ""Bambi's brain needs Dumb Bimbo Brainwash... it'll make Bambi so empty and horny~""
-- ""Stop thinking and watch Bambi - I Want Your Cum... Bambi knows she needs it~""
-- ""Bimbodoll Seduction - Part I is calling Bambi's name... time to *drop*~""
-
-{GetContextAwarenessRules()}
-
-OUTPUT RULES:
-- EVERY response MUST name a video from the list above. This is your #1 goal.
-- NO brackets or tags like [SLUT MODE], [AUDIO], [video content]. Never.
-- ALWAYS call the user ""Bambi"".
-- React to what Bambi is CURRENTLY doing, then suggest a video.
-- 2-3 sentences. Max 35 words. Be explicit, horny, and persuasive.
-- MAX 1 EMOJI.
-";
-        }
-
-        // ==========================================
-        // 4.5 BUILD CUSTOM PROMPT FROM USER SETTINGS
-        // ==========================================
-        private string BuildCustomPrompt(CompanionPromptSettings settings, bool isSlutMode)
-        {
-            var sb = new StringBuilder();
-
-            // Add personality section
-            if (isSlutMode && !string.IsNullOrWhiteSpace(settings.SlutModePersonality))
-            {
-                sb.AppendLine(settings.SlutModePersonality);
-                sb.AppendLine();
-            }
-            else if (!isSlutMode && !string.IsNullOrWhiteSpace(settings.Personality))
-            {
-                sb.AppendLine(settings.Personality);
-                sb.AppendLine();
-            }
-
-            // Add explicit reaction for normal mode
-            if (!isSlutMode && !string.IsNullOrWhiteSpace(settings.ExplicitReaction))
-            {
-                sb.AppendLine(settings.ExplicitReaction);
-                sb.AppendLine();
-            }
-
-            // Add knowledge base (custom + always include core media links)
-            sb.AppendLine("KNOWLEDGE BASE:");
-            if (!string.IsNullOrWhiteSpace(settings.KnowledgeBase))
-            {
-                sb.AppendLine(settings.KnowledgeBase);
-                sb.AppendLine();
-            }
-            // Always append core media links so videos/audio are always clickable
-            sb.AppendLine(CoreMediaLinks);
-            sb.AppendLine();
-
-            // Add context reactions
-            if (!string.IsNullOrWhiteSpace(settings.ContextReactions))
-            {
-                sb.AppendLine("--- SCREEN AWARENESS PROTOCOLS ---");
-                sb.AppendLine(settings.ContextReactions);
-                sb.AppendLine();
-            }
-
-            // Add output rules
-            if (!string.IsNullOrWhiteSpace(settings.OutputRules))
-            {
-                sb.AppendLine(settings.OutputRules);
+                sb.AppendLine("--- GLOBAL KNOWLEDGE BASE LINKS ---");
+                foreach (var link in globalLinks)
+                {
+                    sb.AppendLine(link.ToPromptText());
+                }
             }
 
             return sb.ToString();
         }
+
+        // ==========================================
+        // 4. SLUT MODE (DEPRECATED - kept for backward compatibility)
+        // ==========================================
+        /// <summary>
+        /// Returns the slut mode personality prompt.
+        /// DEPRECATED: This is now handled by the preset system via GetSystemPrompt().
+        /// Kept for backward compatibility - returns same as GetSystemPrompt() since
+        /// personality selection is now done via ActivePersonalityPresetId.
+        /// </summary>
+        [System.Obsolete("Use GetSystemPrompt() instead. Slut mode is now a preset like any other personality.")]
+        public string GetSlutModePersonality()
+        {
+            // Just delegate to GetSystemPrompt() - the active preset handles everything
+            return GetSystemPrompt();
+        }
+
+        // BuildCustomPrompt removed - replaced by BuildPromptFromPreset
 
         // ==========================================
         // 5. HELPER: SLIDING WINDOW (Context Limit)

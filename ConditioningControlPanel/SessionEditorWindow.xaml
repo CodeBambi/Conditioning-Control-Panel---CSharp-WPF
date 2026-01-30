@@ -26,216 +26,220 @@
     <Grid>
         <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
             <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>  <!-- Title bar -->
-                <RowDefinition Height="Auto"/>  <!-- Session name + stats -->
-                <RowDefinition Height="Auto"/>  <!-- Duration slider -->
-                <RowDefinition Height="*" MinHeight="150"/>  <!-- Timeline (expandable) -->
-                <RowDefinition Height="5"/>     <!-- Splitter -->
-                <RowDefinition Height="Auto"/>  <!-- Feature icons -->
-                <RowDefinition Height="Auto"/>  <!-- Description + buttons -->
-            </Grid.RowDefinitions>
-
-            <!-- Title Bar -->
-            <Grid Grid.Row="0" Background="#252542" Margin="2,2,2,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <TextBlock Text="Session Editor" Foreground="#E0E0E0" FontSize="14"
-                           VerticalAlignment="Center" Margin="15,10"/>
-
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,5,10,5">
-                    <Button x:Name="BtnHelp" Content="?" Click="BtnHelp_Click" Width="30" Height="30"
-                            Background="#FF69B4" Foreground="White" FontSize="16" FontWeight="Bold"
-                            BorderThickness="0" Cursor="Hand" ToolTip="How to use the Session Editor">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}" CornerRadius="15" Width="30" Height="30">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
-                    <Button Content="−" Click="BtnMinimize_Click" Width="30" Height="30"
-                            Background="Transparent" Foreground="#888" FontSize="18"
-                            BorderThickness="0" Cursor="Hand" Margin="5,0,0,0"/>
-                    <Button Content="✕" Click="BtnClose_Click" Width="30" Height="30"
-                            Background="Transparent" Foreground="#888" FontSize="14"
-                            BorderThickness="0" Cursor="Hand"/>
-                </StackPanel>
-            </Grid>
-
-            <!-- Session Name + Stats -->
-            <StackPanel Grid.Row="1" Margin="30,20,30,10">
-                <!-- Session Name (editable) -->
-                <TextBox x:Name="TxtSessionName" Text="My New Session"
-                         FontSize="32" FontWeight="Bold" Foreground="#FF69B4"
-                         Background="Transparent" BorderThickness="0"
-                         HorizontalAlignment="Center" TextAlignment="Center"
-                         CaretBrush="#FF69B4" SelectionBrush="#FF69B4"
-                         ToolTip="Click to edit session name"/>
-
-                <!-- Auto-calculated stats -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,10,0,0">
-                    <TextBlock x:Name="TxtDifficulty" Text="⭐ Easy"
-                               Foreground="#90EE90" FontSize="16" FontWeight="SemiBold" Margin="0,0,20,0"/>
-                    <TextBlock x:Name="TxtXP" Text="+300 XP"
-                               Foreground="#FFD700" FontSize="16" FontWeight="SemiBold" Margin="0,0,20,0"/>
-                    <TextBlock x:Name="TxtDuration" Text="30 min"
-                               Foreground="#E0E0E0" FontSize="16" Margin="0,0,0,0"/>
-                </StackPanel>
-            </StackPanel>
-
-            <!-- Duration Slider -->
-            <Grid Grid.Row="2" Margin="30,10,30,10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <TextBlock Text="Duration" Foreground="#B0B0B0" FontSize="14"
-                           VerticalAlignment="Center" Margin="0,0,15,0"/>
-
-                <Slider x:Name="SliderDuration" Grid.Column="1"
-                        Minimum="5" Maximum="181" Value="30"
-                        TickFrequency="5" IsSnapToTickEnabled="True"
-                        ValueChanged="SliderDuration_ValueChanged"/>
-
-                <TextBlock x:Name="TxtDurationValue" Grid.Column="2" Text="30 min"
-                           Foreground="#E0E0E0" FontSize="14" FontWeight="SemiBold"
-                           VerticalAlignment="Center" Margin="15,0,0,0" Width="50"/>
-            </Grid>
-
-            <!-- Timeline -->
-            <Border Grid.Row="3" Background="#1E1E3A" CornerRadius="8" Margin="30,10,30,10" Padding="15">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>  <!-- Minute markers -->
-                        <RowDefinition Height="*"/>     <!-- Timeline track (scrollable) -->
-                    </Grid.RowDefinitions>
-
-                    <!-- Minute Markers -->
-                    <Canvas x:Name="CanvasMarkers" Grid.Row="0" Height="20" Margin="0,0,0,5"/>
-
-                    <!-- Timeline Track (drop zone) - scrollable canvas without ScrollViewer for proper drag handling -->
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,20,0">
-                        <Border Background="#252542" CornerRadius="6"
-                            AllowDrop="True"
-                            DragEnter="Timeline_DragEnter"
-                            DragOver="Timeline_DragOver"
-                            DragLeave="Timeline_DragLeave"
-                            Drop="Timeline_Drop">
-                            <Canvas x:Name="CanvasTimeline" ClipToBounds="True" MinHeight="50" Background="Transparent">
-                                <!-- Timeline events will be added here dynamically -->
-                                <TextBlock Text="Drag features here to add them to the timeline"
-                                       Foreground="#555" FontSize="12" FontStyle="Italic"
-                                       Canvas.Left="10" Canvas.Top="15"
-                                       x:Name="TxtTimelineHint"/>
-                            </Canvas>
-                        </Border>
-                    </ScrollViewer>
-                </Grid>
-            </Border>
-
-            <!-- Splitter for resizing timeline -->
-            <GridSplitter Grid.Row="4" Height="5" HorizontalAlignment="Stretch"
-                          Background="#404060" Cursor="SizeNS" Margin="20,0"/>
-
-            <!-- Feature Icons Grid - Horizontal Layout -->
-            <ScrollViewer Grid.Row="5" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="20,10,20,10">
-                <Grid x:Name="FeatureIconsPanel">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- AUDIO Category -->
-                    <StackPanel Grid.Column="0" Margin="5,0">
-                        <TextBlock Text="AUDIO" Foreground="#FF69B4" FontSize="11" FontWeight="SemiBold"
-                                   HorizontalAlignment="Center" Margin="0,5,0,8"/>
-                        <StackPanel x:Name="AudioFeatures" HorizontalAlignment="Center"/>
-                    </StackPanel>
-
-                    <!-- VIDEO Category -->
-                    <StackPanel Grid.Column="1" Margin="5,0">
-                        <TextBlock Text="VIDEO" Foreground="#FF69B4" FontSize="11" FontWeight="SemiBold"
-                                   HorizontalAlignment="Center" Margin="0,5,0,8"/>
-                        <StackPanel x:Name="VideoFeatures" HorizontalAlignment="Center"/>
-                    </StackPanel>
-
-                    <!-- OVERLAYS Category -->
-                    <StackPanel Grid.Column="2" Margin="5,0">
-                        <TextBlock Text="OVERLAYS" Foreground="#FF69B4" FontSize="11" FontWeight="SemiBold"
-                                   HorizontalAlignment="Center" Margin="0,5,0,8"/>
-                        <StackPanel x:Name="OverlayFeatures" HorizontalAlignment="Center"/>
-                    </StackPanel>
-
-                    <!-- INTERACTIVE Category -->
-                    <StackPanel Grid.Column="3" Margin="5,0">
-                        <TextBlock Text="INTERACTIVE" Foreground="#FF69B4" FontSize="11" FontWeight="SemiBold"
-                                   HorizontalAlignment="Center" Margin="0,5,0,8"/>
-                        <StackPanel x:Name="InteractiveFeatures" HorizontalAlignment="Center"/>
-                    </StackPanel>
-
-                    <!-- EXTRAS Category -->
-                    <StackPanel Grid.Column="4" Margin="5,0">
-                        <TextBlock Text="EXTRAS" Foreground="#FF69B4" FontSize="11" FontWeight="SemiBold"
-                                   HorizontalAlignment="Center" Margin="0,5,0,8"/>
-                        <StackPanel x:Name="ExtrasFeatures" HorizontalAlignment="Center"/>
-                    </StackPanel>
-                </Grid>
-            </ScrollViewer>
-
-            <!-- Bottom Section: Description + Buttons -->
-            <Grid Grid.Row="6" Margin="30,10,30,20">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>  <!-- Title bar -->
+                    <RowDefinition Height="*"/>     <!-- Scrollable content -->
                 </Grid.RowDefinitions>
 
-                <!-- Buttons Row -->
-                <Grid Grid.Row="0" Margin="0,0,0,15">
+                <!-- Title Bar -->
+                <Grid Grid.Row="0" Background="#252542" Margin="2,2,2,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <Button Content="Import" Style="{StaticResource SecondaryButton}"
-                            Click="BtnImport_Click" Margin="0,0,10,0"/>
-                    <Button Grid.Column="1" Content="Export" Style="{StaticResource SecondaryButton}"
-                            Click="BtnExport_Click"/>
+                    <TextBlock Text="Session Editor" Foreground="#E0E0E0" FontSize="12"
+                               VerticalAlignment="Center" Margin="12,8"/>
 
-                    <Button Grid.Column="3" Content="Cancel" Style="{StaticResource SecondaryButton}"
-                            Click="BtnCancel_Click" Margin="0,0,10,0"/>
-                    <Button Grid.Column="4" Content="Save Session" Style="{StaticResource PinkButton}"
-                            Click="BtnSave_Click"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,4,8,4">
+                        <Button x:Name="BtnHelp" Content="?" Click="BtnHelp_Click" Width="24" Height="24"
+                                Background="#FF69B4" Foreground="White" FontSize="12" FontWeight="Bold"
+                                BorderThickness="0" Cursor="Hand" ToolTip="How to use the Session Editor">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}" CornerRadius="12" Width="24" Height="24">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                        <Button Content="−" Click="BtnMinimize_Click" Width="24" Height="24"
+                                Background="Transparent" Foreground="#888" FontSize="14"
+                                BorderThickness="0" Cursor="Hand" Margin="4,0,0,0"/>
+                        <Button Content="✕" Click="BtnClose_Click" Width="24" Height="24"
+                                Background="Transparent" Foreground="#888" FontSize="12"
+                                BorderThickness="0" Cursor="Hand"/>
+                    </StackPanel>
                 </Grid>
 
-                <!-- Vibe Description -->
-                <Grid Grid.Row="1">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                <!-- Scrollable Content Area -->
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>  <!-- Session name + stats -->
+                            <RowDefinition Height="Auto"/>  <!-- Duration slider -->
+                            <RowDefinition Height="Auto"/>  <!-- Timeline -->
+                            <RowDefinition Height="Auto"/>  <!-- Feature icons -->
+                            <RowDefinition Height="Auto"/>  <!-- Description + buttons -->
+                        </Grid.RowDefinitions>
 
-                    <TextBlock Text="Vibe Description" Foreground="#888" FontSize="12" Margin="0,0,0,5"/>
-                    <TextBox x:Name="TxtDescription" Grid.Row="1"
-                             Height="80" TextWrapping="Wrap" AcceptsReturn="True"
-                             Background="#252542" Foreground="#E0E0E0"
-                             BorderBrush="#353555" BorderThickness="1"
-                             Padding="10" FontSize="13" VerticalScrollBarVisibility="Auto"
-                             ToolTip="Enter a description for your session"/>
-                </Grid>
-            </Grid>
+                        <!-- Session Name + Stats -->
+                        <StackPanel Grid.Row="0" Margin="20,12,20,8">
+                            <!-- Session Name (editable) -->
+                            <TextBox x:Name="TxtSessionName" Text="My New Session"
+                                     FontSize="22" FontWeight="Bold" Foreground="#FF69B4"
+                                     Background="Transparent" BorderThickness="0"
+                                     HorizontalAlignment="Center" TextAlignment="Center"
+                                     CaretBrush="#FF69B4" SelectionBrush="#FF69B4"
+                                     ToolTip="Click to edit session name"/>
+
+                            <!-- Auto-calculated stats -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
+                                <TextBlock x:Name="TxtDifficulty" Text="⭐ Easy"
+                                           Foreground="#90EE90" FontSize="11" FontWeight="SemiBold" Margin="0,0,15,0"/>
+                                <TextBlock x:Name="TxtXP" Text="+300 XP"
+                                           Foreground="#FFD700" FontSize="11" FontWeight="SemiBold" Margin="0,0,15,0"/>
+                                <TextBlock x:Name="TxtDuration" Text="30 min"
+                                           Foreground="#E0E0E0" FontSize="11" Margin="0,0,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Duration Slider -->
+                        <Grid Grid.Row="1" Margin="20,6,20,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="Duration" Foreground="#B0B0B0" FontSize="11"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                            <Slider x:Name="SliderDuration" Grid.Column="1"
+                                    Minimum="5" Maximum="181" Value="30"
+                                    TickFrequency="5" IsSnapToTickEnabled="True"
+                                    ValueChanged="SliderDuration_ValueChanged"/>
+
+                            <TextBlock x:Name="TxtDurationValue" Grid.Column="2" Text="30 min"
+                                       Foreground="#E0E0E0" FontSize="11" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" Margin="10,0,0,0" Width="45"/>
+                        </Grid>
+
+                        <!-- Timeline -->
+                        <Border Grid.Row="2" Background="#1E1E3A" CornerRadius="6" Margin="20,6,20,6" Padding="10" MinHeight="100" MaxHeight="180">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>  <!-- Minute markers -->
+                                    <RowDefinition Height="*"/>     <!-- Timeline track (scrollable) -->
+                                </Grid.RowDefinitions>
+
+                                <!-- Minute Markers -->
+                                <Canvas x:Name="CanvasMarkers" Grid.Row="0" Height="16" Margin="0,0,0,4"/>
+
+                                <!-- Timeline Track (drop zone) -->
+                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,15,0">
+                                    <Border Background="#252542" CornerRadius="4"
+                                        AllowDrop="True"
+                                        DragEnter="Timeline_DragEnter"
+                                        DragOver="Timeline_DragOver"
+                                        DragLeave="Timeline_DragLeave"
+                                        Drop="Timeline_Drop">
+                                        <Canvas x:Name="CanvasTimeline" ClipToBounds="True" MinHeight="40" Background="Transparent">
+                                            <!-- Timeline events will be added here dynamically -->
+                                            <TextBlock Text="Drag features here to add them to the timeline"
+                                                   Foreground="#555" FontSize="10" FontStyle="Italic"
+                                                   Canvas.Left="8" Canvas.Top="12"
+                                                   x:Name="TxtTimelineHint"/>
+                                        </Canvas>
+                                    </Border>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+
+                        <!-- Feature Icons Grid - Horizontal Layout -->
+                        <Border Grid.Row="3" Margin="20,6,20,6">
+                            <Grid x:Name="FeatureIconsPanel">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- AUDIO Category -->
+                                <StackPanel Grid.Column="0" Margin="3,0">
+                                    <TextBlock Text="AUDIO" Foreground="#FF69B4" FontSize="9" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" Margin="0,3,0,5"/>
+                                    <StackPanel x:Name="AudioFeatures" HorizontalAlignment="Center"/>
+                                </StackPanel>
+
+                                <!-- VIDEO Category -->
+                                <StackPanel Grid.Column="1" Margin="3,0">
+                                    <TextBlock Text="VIDEO" Foreground="#FF69B4" FontSize="9" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" Margin="0,3,0,5"/>
+                                    <StackPanel x:Name="VideoFeatures" HorizontalAlignment="Center"/>
+                                </StackPanel>
+
+                                <!-- OVERLAYS Category -->
+                                <StackPanel Grid.Column="2" Margin="3,0">
+                                    <TextBlock Text="OVERLAYS" Foreground="#FF69B4" FontSize="9" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" Margin="0,3,0,5"/>
+                                    <StackPanel x:Name="OverlayFeatures" HorizontalAlignment="Center"/>
+                                </StackPanel>
+
+                                <!-- INTERACTIVE Category -->
+                                <StackPanel Grid.Column="3" Margin="3,0">
+                                    <TextBlock Text="INTERACTIVE" Foreground="#FF69B4" FontSize="9" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" Margin="0,3,0,5"/>
+                                    <StackPanel x:Name="InteractiveFeatures" HorizontalAlignment="Center"/>
+                                </StackPanel>
+
+                                <!-- EXTRAS Category -->
+                                <StackPanel Grid.Column="4" Margin="3,0">
+                                    <TextBlock Text="EXTRAS" Foreground="#FF69B4" FontSize="9" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" Margin="0,3,0,5"/>
+                                    <StackPanel x:Name="ExtrasFeatures" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Bottom Section: Description + Buttons -->
+                        <Grid Grid.Row="4" Margin="20,6,20,15">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Buttons Row -->
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Button Content="Import" Style="{StaticResource SecondaryButton}"
+                                        Click="BtnImport_Click" Margin="0,0,8,0" FontSize="11" Padding="12,6"/>
+                                <Button Grid.Column="1" Content="Export" Style="{StaticResource SecondaryButton}"
+                                        Click="BtnExport_Click" FontSize="11" Padding="12,6"/>
+
+                                <Button Grid.Column="3" Content="Cancel" Style="{StaticResource SecondaryButton}"
+                                        Click="BtnCancel_Click" Margin="0,0,8,0" FontSize="11" Padding="12,6"/>
+                                <Button Grid.Column="4" Content="Save Session" Style="{StaticResource PinkButton}"
+                                        Click="BtnSave_Click" FontSize="11" Padding="12,6"/>
+                            </Grid>
+
+                            <!-- Vibe Description -->
+                            <Grid Grid.Row="1">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="Vibe Description" Foreground="#888" FontSize="10" Margin="0,0,0,4"/>
+                                <TextBox x:Name="TxtDescription" Grid.Row="1"
+                                         Height="55" TextWrapping="Wrap" AcceptsReturn="True"
+                                         Background="#252542" Foreground="#E0E0E0"
+                                         BorderBrush="#353555" BorderThickness="1"
+                                         Padding="8" FontSize="11" VerticalScrollBarVisibility="Auto"
+                                         ToolTip="Enter a description for your session"/>
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </ScrollViewer>
             </Grid>
         </Border>
 

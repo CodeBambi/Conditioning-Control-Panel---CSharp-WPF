@@ -21,8 +21,8 @@ namespace ConditioningControlPanel.Services
     public class ContentPackService : IDisposable
     {
         private readonly HttpClient _httpClient;
-        private readonly string _packsFolder;
-        private readonly string _manifestCachePath;
+        private string _packsFolder;
+        private string _manifestCachePath;
         private List<ContentPack> _availablePacks = new();
         private Dictionary<string, InstalledPackManifest> _installedManifests = new();
         private bool _disposed;
@@ -101,6 +101,43 @@ namespace ConditioningControlPanel.Services
             // Load installed pack manifests
             LoadInstalledManifests();
         }
+
+        /// <summary>
+        /// Refreshes the packs folder path when the assets directory changes.
+        /// Call this after changing CustomAssetsPath.
+        /// </summary>
+        public void RefreshPacksPath()
+        {
+            var oldPacksFolder = _packsFolder;
+            var newPacksFolder = Path.Combine(App.EffectiveAssetsPath, ".packs");
+
+            // Only refresh if path actually changed
+            if (string.Equals(oldPacksFolder, newPacksFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _packsFolder = newPacksFolder;
+            _manifestCachePath = Path.Combine(_packsFolder, ".manifest_cache.enc");
+
+            // Create hidden directory if it doesn't exist
+            if (!Directory.Exists(_packsFolder))
+            {
+                var di = Directory.CreateDirectory(_packsFolder);
+                di.Attributes |= FileAttributes.Hidden;
+            }
+
+            // Clear cached data and reload
+            _installedManifests.Clear();
+            LoadInstalledManifests();
+
+            App.Logger?.Information("ContentPackService: Packs path refreshed from {OldPath} to {NewPath}", oldPacksFolder, _packsFolder);
+        }
+
+        /// <summary>
+        /// Gets the current packs folder path.
+        /// </summary>
+        public string PacksFolder => _packsFolder;
 
         /// <summary>
         /// Gets the list of available packs (from remote or built-in).
@@ -819,29 +856,63 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Checks if a pack is installed.
+        /// Checks if a pack is installed (both in settings AND manifest exists on disk).
         /// </summary>
         public bool IsPackInstalled(string packId)
         {
-            return App.Settings?.Current?.InstalledPackIds?.Contains(packId) ?? false;
+            // Must be in settings
+            var inSettings = App.Settings?.Current?.InstalledPackIds?.Contains(packId) ?? false;
+            if (!inSettings) return false;
+
+            // Get GUID from settings map
+            var guidMap = App.Settings?.Current?.PackGuidMap;
+            if (guidMap == null || !guidMap.TryGetValue(packId, out var guid))
+            {
+                App.Logger?.Debug("Pack {PackId} is in settings but has no GUID mapping", packId);
+                return false;
+            }
+
+            // Verify the manifest file actually exists in the current packs folder
+            var manifestPath = Path.Combine(_packsFolder, guid, ".manifest.enc");
+            var manifestExists = File.Exists(manifestPath);
+
+            if (!manifestExists)
+            {
+                App.Logger?.Debug("Pack {PackId} (GUID {Guid}) is in settings but manifest not found at {Path}", packId, guid, manifestPath);
+            }
+
+            return manifestExists;
         }
 
         /// <summary>
-        /// Checks if a pack is active.
+        /// Checks if a pack is active (must also be installed with file present).
         /// </summary>
         public bool IsPackActive(string packId)
         {
-            return App.Settings?.Current?.ActivePackIds?.Contains(packId) ?? false;
+            // Must be active in settings AND actually installed (file exists)
+            var isActive = App.Settings?.Current?.ActivePackIds?.Contains(packId) ?? false;
+            return isActive && IsPackInstalled(packId);
         }
 
         /// <summary>
-        /// Gets all active packs.
+        /// Gets all active packs that are actually installed (manifest exists on disk).
         /// </summary>
         public List<string> GetActivePackIds()
         {
-            var ids = App.Settings?.Current?.ActivePackIds?.ToList() ?? new List<string>();
-            App.Logger?.Information("ContentPackService.GetActivePackIds: Returning {Count} active packs: [{Ids}]",
-                ids.Count, string.Join(", ", ids));
+            var settingsIds = App.Settings?.Current?.ActivePackIds?.ToList() ?? new List<string>();
+            // Filter to only packs that are actually installed (manifest exists)
+            var ids = settingsIds.Where(id => IsPackInstalled(id)).ToList();
+
+            if (ids.Count != settingsIds.Count)
+            {
+                App.Logger?.Information("ContentPackService.GetActivePackIds: {SettingsCount} in settings, {ActualCount} actually installed: [{Ids}]",
+                    settingsIds.Count, ids.Count, string.Join(", ", ids));
+            }
+            else
+            {
+                App.Logger?.Debug("ContentPackService.GetActivePackIds: Returning {Count} active packs: [{Ids}]",
+                    ids.Count, string.Join(", ", ids));
+            }
             return ids;
         }
 

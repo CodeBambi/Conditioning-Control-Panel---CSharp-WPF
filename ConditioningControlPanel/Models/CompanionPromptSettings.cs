@@ -154,5 +154,23 @@ FREQUENCY RULE:
                 CustomDomains = new Dictionary<string, string>()
             };
         }
+
+        /// <summary>
+        /// Creates a deep copy of these settings.
+        /// </summary>
+        public CompanionPromptSettings Clone()
+        {
+            return new CompanionPromptSettings
+            {
+                UseCustomPrompt = UseCustomPrompt,
+                Personality = Personality,
+                ExplicitReaction = ExplicitReaction,
+                SlutModePersonality = SlutModePersonality,
+                KnowledgeBase = KnowledgeBase,
+                ContextReactions = ContextReactions,
+                OutputRules = OutputRules,
+                CustomDomains = new Dictionary<string, string>(CustomDomains)
+            };
+        }
     }
 }

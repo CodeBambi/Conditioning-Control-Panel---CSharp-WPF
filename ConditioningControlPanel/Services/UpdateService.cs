@@ -22,7 +22,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.7-Lockdown";
+        public const string AppVersion = "5.4.8-Lockdown";
 
         /// <summary>
         /// Whether this is the lockdown version (no auto-update, no escape)
@@ -33,7 +33,7 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.7 - LOCKDOWN VERSION
+        public const string CurrentPatchNotes = @"v5.4.8 - LOCKDOWN VERSION
 
 ⚠️ LOCKDOWN VERSION WARNING
 • Videos/challenges CANNOT be skipped or closed
@@ -46,38 +46,58 @@ This version is for advanced users who want maximum restriction.
 
 ---
 
-🔒 PRIVACY
-• App never exposes real Discord or Patreon names - only your chosen display name is shown
-• Removed 'Use Anonymous Name' option (privacy is now always on)
-• Level milestone webhooks use your display name, not Discord username
+v5.4.8 - Personality System & Major Overhaul
 
-👤 PROFILE VIEWER
-• Profile pictures! Opt-in 'Share Profile Picture' setting in Discord tab
-• Profiles now show live online status when viewed
-• Double-click any leaderboard entry to jump to their profile
-• Own profile always shows your avatar (local fallback)
+🎭 NEW PERSONALITY SYSTEM
+• 6 Built-in Personality Presets:
+  - BambiSprite (default) - Bubbly, cheeky bad influence bestie
+  - Slut Mode (Patreon) - Explicit, horny, cock-obsessed
+  - Gentle Trainer - Soft, encouraging, nurturing guide
+  - Strict Domme - Commanding, disciplined, authoritative
+  - Bimbo Coach - Transformation-focused, aesthetic obsessed
+  - Hypno Guide - Trance-focused, soothing suggestions
+• Quick switch personalities from avatar right-click menu
+• Shows 'Personality: [name]' with easy dropdown selector
+• Custom prompt indicator when using your own prompts
+• Global Knowledge Base Links - add URLs that apply to ALL personalities
+• Automatic migration from old Slut Mode toggle
 
-🔧 ACCOUNT FIXES
-• Users with missing display names are now auto-detected and prompted on startup
-• Cancelling registration now properly logs out (prevents orphan profiles with no name)
-• Server correctly reads settings from all profile sources (unified, Patreon, Discord)
+🎬 SESSION EDITOR IMPROVEMENTS
+• Completely redesigned layout - 30% more compact
+• All content now fits cleanly in the window
+• Scrollbar added for when content overflows
+• Smaller, cleaner feature icons (68x68 from 98x98)
+• Reduced timeline row height for more visible segments
+• Better visual hierarchy and spacing
 
-🎮 VIDEO & STABILITY
-• Bubble Count Challenge rewritten with LibVLC (no more MediaElement crashes)
-• Fixed video windows becoming orphaned on app exit
-• Fixed LibVLC crash-on-cleanup race conditions with proper shutdown ordering
-• Dual monitor video: fixed frame buffer race conditions during stop
-• LibVLC discovery improved - checks multiple paths for libvlc.dll
-• Ordered shutdown: bubbles stop before video to avoid UI thread contention
+📺 VIDEO STABILITY FIXES
+• Fixed dual-monitor video freeze - one window freezing no longer affects the other
+• Per-window bitmap isolation prevents cross-contamination
+• Parallel player.Stop() with timeout prevents hanging on cleanup
+• Panic key now reliably closes ALL video windows
 
-🫧 BUBBLES
-• Bubble pop animation now plays fully before removal
-• Fixed race condition when cleaning up bubbles during video playback
+🔒 PRIVACY & PROFILES
+• New 'Show Online Status' toggle - appear offline/invisible
+• View other users' achievement badges on profile pages
+• Setting syncs immediately to leaderboard
 
-☁️ SERVER
-• New profile lookup endpoint for fresh online status and avatars
-• Discord heartbeat now keeps unified accounts marked as online
-• Leaderboard correctly merges online status across linked accounts";
+🖼️ FLASH IMAGES
+• True random selection - no more predictable sequences
+• Support for more formats: .jpe, .jfif, .tif, .tiff, .heic, .avif
+
+📁 ASSET FOLDER
+• Detects and offers to move downloaded content packs when changing folders
+• Retrocompatible pack detection in both current and default locations
+
+🎨 UI IMPROVEMENTS
+• Removed Slut Mode checkbox from Patreon tab (now in personality menu)
+• Dark themed personality submenu in avatar context menu
+• Cleaner prompt editor with Global KB Links section
+
+🔧 ADDITIONAL FIXES
+• Settings save immediately when changed mid-session
+• Fixed LibVLC threading crashes and frame buffer race conditions
+• Fixed 'X active packs' showing phantom packs after folder change";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

@@ -194,11 +194,12 @@ namespace ConditioningControlPanel
             }
 
             var settings = App.Settings.Current;
+            var allScreens = App.GetAllScreensCached();
             var screens = settings.DualMonitorEnabled
-                ? Screen.AllScreens
-                : new[] { Screen.PrimaryScreen! };
+                ? allScreens
+                : new[] { allScreens.FirstOrDefault(s => s.Primary) ?? allScreens.FirstOrDefault()! };
 
-            if (screens.Length == 0)
+            if (screens.Length == 0 || screens[0] == null)
             {
                 App.Logger?.Error("BubbleCountWindow: No screens available");
                 onComplete?.Invoke(false);

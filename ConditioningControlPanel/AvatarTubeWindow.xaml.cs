@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -4550,34 +4551,121 @@ namespace ConditioningControlPanel
             ShowInputPanel();
         }
 
-        private void MenuItemSlutMode_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Populates the personality submenu with all available presets.
+        /// Shows "Custom Prompt" indicator when custom prompts are active.
+        /// </summary>
+        private void PopulatePersonalityMenu()
         {
-            // Check Patreon access
-            if (App.Patreon?.HasPremiumAccess != true)
-            {
-                Giggle("Patreon only~ *pouts*");
-                return;
-            }
+            MenuItemPersonality.Items.Clear();
 
-            // Block when custom prompts override slut mode
-            if (App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
-            {
-                Giggle("Custom prompt is active~ Disable it first!");
-                return;
-            }
+            // Check if custom prompt is active
+            var customPromptActive = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
 
-            var current = App.Settings?.Current?.SlutModeEnabled ?? false;
-            if (App.Settings?.Current != null)
-            {
-                App.Settings.Current.SlutModeEnabled = !current;
-                App.Settings.Save();
-                UpdateQuickMenuState();
-                Giggle(!current ? "Slut mode ON~ *drools*" : "Slut mode off~");
+            // Dark background for submenu items
+            var darkBg = new SolidColorBrush(Color.FromRgb(37, 37, 66)); // #252542
 
-                // Sync to MainWindow UI
-                if (_parentWindow is MainWindow mainWindow)
+            if (customPromptActive)
+            {
+                // Show custom prompt indicator
+                MenuItemPersonality.Header = "Personality: Custom Prompt";
+                MenuItemPersonality.Foreground = new SolidColorBrush(Color.FromRgb(255, 165, 0)); // Orange for custom
+
+                // Add info item
+                var infoItem = new MenuItem
                 {
-                    mainWindow.SyncSlutModeUI(!current);
+                    Header = "Custom Prompt Active",
+                    Foreground = new SolidColorBrush(Color.FromRgb(255, 165, 0)),
+                    Background = darkBg,
+                    IsEnabled = false
+                };
+                MenuItemPersonality.Items.Add(infoItem);
+
+                // Add separator
+                MenuItemPersonality.Items.Add(new Separator { Background = new SolidColorBrush(Color.FromRgb(255, 105, 180)) });
+
+                // Add option to disable custom prompt
+                var disableItem = new MenuItem
+                {
+                    Header = "Disable Custom Prompt",
+                    Foreground = new SolidColorBrush(Colors.White),
+                    Background = darkBg
+                };
+                disableItem.Click += (s, e) =>
+                {
+                    if (App.Settings?.Current?.CompanionPrompt != null)
+                    {
+                        App.Settings.Current.CompanionPrompt.UseCustomPrompt = false;
+                        App.Settings.Save();
+                        UpdateQuickMenuState();
+                        Giggle("Back to presets~ *giggles*");
+                    }
+                };
+                MenuItemPersonality.Items.Add(disableItem);
+
+                return;
+            }
+
+            // Normal preset menu
+            MenuItemPersonality.Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)); // Pink default
+
+            var presets = App.Personality?.GetAllPresets() ?? new List<PersonalityPreset>();
+            var activeId = App.Settings?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.BambiSpriteId;
+
+            foreach (var preset in presets)
+            {
+                var menuItem = new MenuItem
+                {
+                    Header = GetPersonalityMenuHeader(preset, activeId),
+                    Tag = preset.Id,
+                    Background = darkBg,
+                    Foreground = preset.Id == activeId
+                        ? new SolidColorBrush(Color.FromRgb(255, 105, 180)) // Pink for active
+                        : new SolidColorBrush(Colors.White)
+                };
+
+                // Check if locked (premium required but user doesn't have access)
+                if (preset.RequiresPremium && App.Patreon?.HasPremiumAccess != true)
+                {
+                    menuItem.Header = $"🔒 {preset.Name}";
+                    menuItem.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
+                    menuItem.IsEnabled = false;
+                }
+
+                menuItem.Click += PersonalityMenuItem_Click;
+                MenuItemPersonality.Items.Add(menuItem);
+            }
+
+            // Update parent menu header
+            var activePreset = App.Personality?.GetActivePreset();
+            MenuItemPersonality.Header = $"Personality: {activePreset?.Name ?? "BambiSprite"}";
+        }
+
+        private string GetPersonalityMenuHeader(PersonalityPreset preset, string activeId)
+        {
+            var check = preset.Id == activeId ? "☑" : "☐";
+            return $"{check} {preset.Name}";
+        }
+
+        private void PersonalityMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is string presetId)
+            {
+                var preset = App.Personality?.GetPresetById(presetId);
+                if (preset == null) return;
+
+                // Check premium access
+                if (preset.RequiresPremium && App.Patreon?.HasPremiumAccess != true)
+                {
+                    Giggle("Patreon only~ *pouts*");
+                    return;
+                }
+
+                // Set the new personality
+                if (App.Personality?.SetActivePreset(presetId) == true)
+                {
+                    UpdateQuickMenuState();
+                    Giggle($"Now using {preset.Name}~ *giggles*");
                 }
             }
         }
@@ -4704,23 +4792,8 @@ namespace ConditioningControlPanel
                 MenuItemBambiTakeover.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
             }
 
-            // Slut mode (Patreon only, disabled when custom prompts are active)
-            var slutOn = App.Settings?.Current?.SlutModeEnabled == true;
-            var slutAvailable = App.Patreon?.HasPremiumAccess == true;
-            var customPromptsActive = App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true;
-            MenuItemSlutMode.Header = slutOn ? "☑ Slut Mode" : "☐ Slut Mode";
-            MenuItemSlutMode.Foreground = slutOn ? new SolidColorBrush(Color.FromRgb(255, 105, 180)) : new SolidColorBrush(Colors.White);
-            MenuItemSlutMode.IsEnabled = slutAvailable && !customPromptsActive;
-            if (!slutAvailable)
-            {
-                MenuItemSlutMode.Header = "🔒 Slut Mode";
-                MenuItemSlutMode.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
-            }
-            else if (customPromptsActive)
-            {
-                MenuItemSlutMode.Header = "☐ Slut Mode (Custom Prompt)";
-                MenuItemSlutMode.Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 144)); // Grey
-            }
+            // Personality menu
+            PopulatePersonalityMenu();
 
             // Mute avatar
             MenuItemMute.Header = _isMuted ? "☑ Mute Avatar" : "☐ Mute Avatar";
@@ -4769,15 +4842,11 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Sync slut mode state from MainWindow
+        /// Refreshes the personality menu to reflect current selection.
+        /// Called when personality changes from another source.
         /// </summary>
-        public void SetSlutMode(bool enabled)
+        public void RefreshPersonalityMenu()
         {
-            if (App.Settings?.Current != null && App.Patreon?.HasPremiumAccess == true)
-            {
-                App.Settings.Current.SlutModeEnabled = enabled;
-                App.Settings.Save();
-            }
             UpdateQuickMenuState();
         }
 

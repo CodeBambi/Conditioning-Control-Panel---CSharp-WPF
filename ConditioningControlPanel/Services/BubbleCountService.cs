@@ -17,12 +17,17 @@ namespace ConditioningControlPanel.Services;
 public class BubbleCountService : IDisposable
 {
     public enum Difficulty { Easy, Medium, Hard }
-    
+
     private readonly Random _random = new();
     private DispatcherTimer? _schedulerTimer;
     private bool _isRunning;
     private bool _isBusy;
     private string _videosPath = "";
+
+    // Pack video support
+    private List<string> _regularVideos = new();
+    private List<(string PackId, PackFileEntry File)> _packVideos = new();
+    private readonly List<string> _tempPackFiles = new();  // Track temp files for cleanup
     
     public bool IsRunning => _isRunning;
     public bool IsBusy => _isBusy;
@@ -64,7 +69,8 @@ public class BubbleCountService : IDisposable
         _isRunning = false;
         _schedulerTimer?.Stop();
         _schedulerTimer = null;
-        
+        CleanupTempPackFiles();
+
         App.Logger?.Information("BubbleCountService stopped");
     }
 
@@ -203,22 +209,99 @@ public class BubbleCountService : IDisposable
     {
         try
         {
-            if (!Directory.Exists(_videosPath)) return null;
-            
-            var videos = Directory.GetFiles(_videosPath)
-                .Where(f => new[] { ".mp4", ".webm", ".avi", ".mkv" }
-                    .Contains(Path.GetExtension(f).ToLowerInvariant()))
-                .ToArray();
-            
-            if (videos.Length == 0) return null;
-            
-            return videos[_random.Next(videos.Length)];
+            // Refill lists if both are empty
+            if (_regularVideos.Count == 0 && _packVideos.Count == 0)
+            {
+                RefillVideoLists();
+            }
+
+            // If still empty after refill, no videos available
+            if (_regularVideos.Count == 0 && _packVideos.Count == 0)
+            {
+                App.Logger?.Warning("BubbleCountService: No videos found (regular or pack)");
+                return null;
+            }
+
+            // Randomly choose between regular and pack videos based on availability
+            bool usePackVideo = false;
+            if (_regularVideos.Count > 0 && _packVideos.Count > 0)
+            {
+                // Both available - pick randomly weighted by count
+                var totalCount = _regularVideos.Count + _packVideos.Count;
+                usePackVideo = _random.Next(totalCount) >= _regularVideos.Count;
+            }
+            else if (_packVideos.Count > 0)
+            {
+                usePackVideo = true;
+            }
+
+            if (usePackVideo && _packVideos.Count > 0)
+            {
+                // Get random pack video
+                var index = _random.Next(_packVideos.Count);
+                var packVideo = _packVideos[index];
+                _packVideos.RemoveAt(index);
+
+                // Decrypt pack video to temp file
+                var tempPath = App.ContentPacks?.GetPackFileTempPath(packVideo.PackId, packVideo.File);
+                if (!string.IsNullOrEmpty(tempPath))
+                {
+                    _tempPackFiles.Add(tempPath);
+                    App.Logger?.Debug("BubbleCountService: Using pack video from '{Pack}': {File}",
+                        packVideo.PackId, packVideo.File.OriginalName);
+                    return tempPath;
+                }
+                else
+                {
+                    App.Logger?.Warning("BubbleCountService: Failed to decrypt pack video");
+                    // Fall through to try regular video
+                }
+            }
+
+            // Use regular video
+            if (_regularVideos.Count > 0)
+            {
+                var index = _random.Next(_regularVideos.Count);
+                var video = _regularVideos[index];
+                _regularVideos.RemoveAt(index);
+                App.Logger?.Debug("BubbleCountService: Using regular video: {Path}", Path.GetFileName(video));
+                return video;
+            }
+
+            return null;
         }
         catch (Exception ex)
         {
             App.Logger?.Error(ex, "Failed to get random video");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Refill the video lists from filesystem and content packs
+    /// </summary>
+    private void RefillVideoLists()
+    {
+        _regularVideos.Clear();
+        _packVideos.Clear();
+
+        // Get regular videos from filesystem
+        if (Directory.Exists(_videosPath))
+        {
+            var files = Directory.GetFiles(_videosPath)
+                .Where(f => new[] { ".mp4", ".webm", ".avi", ".mkv", ".mov", ".wmv" }
+                    .Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .ToList();
+
+            _regularVideos = files.OrderBy(_ => _random.Next()).ToList();
+        }
+
+        // Get pack videos from active content packs
+        var packVideos = App.ContentPacks?.GetAllActivePackVideos() ?? new List<(string, PackFileEntry)>();
+        _packVideos = packVideos.OrderBy(_ => _random.Next()).ToList();
+
+        App.Logger?.Information("BubbleCountService: Video lists refilled - {RegularCount} regular, {PackCount} pack videos",
+            _regularVideos.Count, _packVideos.Count);
     }
 
     /// <summary>
@@ -247,10 +330,49 @@ public class BubbleCountService : IDisposable
     {
         _videosPath = Path.Combine(App.EffectiveAssetsPath, "videos");
         Directory.CreateDirectory(_videosPath);
+
+        // Clear video lists so they get refilled with new path
+        _regularVideos.Clear();
+        _packVideos.Clear();
+        CleanupTempPackFiles();
+    }
+
+    /// <summary>
+    /// Reload video assets (e.g., when pack activation changes)
+    /// </summary>
+    public void ReloadAssets()
+    {
+        _regularVideos.Clear();
+        _packVideos.Clear();
+        CleanupTempPackFiles();
+        App.Logger?.Information("BubbleCountService: Assets reloaded - cleared video lists");
+    }
+
+    /// <summary>
+    /// Cleans up temporary pack video files
+    /// </summary>
+    private void CleanupTempPackFiles()
+    {
+        foreach (var tempFile in _tempPackFiles)
+        {
+            try
+            {
+                if (File.Exists(tempFile))
+                {
+                    File.Delete(tempFile);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BubbleCountService: Failed to delete temp pack file: {Error}", ex.Message);
+            }
+        }
+        _tempPackFiles.Clear();
     }
 
     public void Dispose()
     {
         Stop();
+        CleanupTempPackFiles();
     }
 }
