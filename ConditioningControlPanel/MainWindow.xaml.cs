@@ -55,7 +55,6 @@ namespace ConditioningControlPanel
         private Window? _browserPopoutWindow = null;
         private bool _isDualMonitorPlaybackActive = false;
         private TrayIconService? _trayIcon;
-        private GlobalKeyboardHook? _keyboardHook;
         private bool _exitRequested = false;
         private int _panicPressCount = 0;
 
@@ -162,13 +161,12 @@ namespace ConditioningControlPanel
                 WakeBambiUp();
             };
 
-            // LOCKDOWN: Initialize global keyboard hook and enable lockdown mode
-            _keyboardHook = new GlobalKeyboardHook();
-            _keyboardHook.KeyPressed += OnGlobalKeyPressed;
-            _keyboardHook.Start(); // LOCKDOWN: Always start hook for key blocking
-            _keyboardHook.EnableLockdown(); // LOCKDOWN: Enable key blocking mode
-            App.Logger?.Warning("LOCKDOWN VERSION: Keyboard lockdown mode enabled");
-            
+            // LOCKDOWN: Subscribe to keyboard events (hook is managed by App, lockdown controlled by VideoService)
+            if (App.KeyboardHook != null)
+            {
+                App.KeyboardHook.KeyPressed += OnGlobalKeyPressed;
+            }
+
             // Subscribe to progression events for real-time XP updates
             App.Progression.XPChanged += OnXPChanged;
             App.Progression.LevelUp += OnLevelUp;
@@ -486,7 +484,7 @@ namespace ConditioningControlPanel
 
                 _exitRequested = true;
                 SaveSettings();
-                _keyboardHook?.Dispose();
+                App.KeyboardHook?.Dispose();
                 _trayIcon?.Dispose();
                 _browser?.Dispose();
                 Application.Current.Shutdown();
@@ -11573,7 +11571,7 @@ namespace ConditioningControlPanel
                 _schedulerTimer?.Stop();
                 _rampTimer?.Stop();
                 _packPreviewTimer?.Stop();
-                _keyboardHook?.Dispose();
+                App.KeyboardHook?.Dispose();
                 _trayIcon?.Dispose();
                 _browser?.Dispose();
                 _avatarTubeWindow?.Close();

@@ -34,6 +34,7 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _safetyTimer;
         private DispatcherTimer? _fallbackSafetyTimer;
         private DispatcherTimer? _topmostTimer; // LOCKDOWN: Aggressive topmost timer
+        private DispatcherTimer? _lockdownDisableTimer; // LOCKDOWN: Delayed lockdown disable timer
 
         private bool _isRunning;
         private bool _videoPlaying;
@@ -562,6 +563,12 @@ namespace ConditioningControlPanel.Services
             CloseAll(synchronous);
             App.Audio?.Unduck();
             _penalties = 0;
+
+            // LOCKDOWN: Immediately disable lockdown on force cleanup (panic key)
+            _lockdownDisableTimer?.Stop();
+            _lockdownDisableTimer = null;
+            App.KeyboardHook?.DisableLockdown();
+
             App.Logger?.Information("VideoService: Force cleanup completed (synchronous={Sync})", synchronous);
         }
 
@@ -587,6 +594,7 @@ namespace ConditioningControlPanel.Services
                 _videoPlaying = true;
                 _strictActive = false;
                 StartAggressiveTopmost(); // LOCKDOWN: Force windows to stay on top
+                EnableKeyboardLockdown(); // LOCKDOWN: Enable key blocking during video
 
                 var allScreens = App.GetAllScreensCached().ToList();
                 if (allScreens.Count == 0) return;
@@ -893,6 +901,7 @@ namespace ConditioningControlPanel.Services
                 });
 
                 VideoStarted?.Invoke(this, EventArgs.Empty);
+                EnableKeyboardLockdown(); // LOCKDOWN: Enable key blocking during video
                 _ = App.Haptics?.StartVideoBackgroundVibeAsync();
                 App.Logger?.Information("Playing: {File}", Path.GetFileName(path));
             }
@@ -1434,6 +1443,46 @@ namespace ConditioningControlPanel.Services
         {
             _topmostTimer?.Stop();
             _topmostTimer = null;
+        }
+
+        /// <summary>
+        /// LOCKDOWN: Enable keyboard lockdown when video starts
+        /// Cancels any pending disable timer
+        /// </summary>
+        private void EnableKeyboardLockdown()
+        {
+            // Cancel any pending disable
+            _lockdownDisableTimer?.Stop();
+            _lockdownDisableTimer = null;
+
+            // Enable lockdown
+            App.KeyboardHook?.EnableLockdown();
+        }
+
+        /// <summary>
+        /// LOCKDOWN: Schedule keyboard lockdown disable after video ends
+        /// Uses a delay to handle looping/back-to-back videos
+        /// </summary>
+        private void ScheduleKeyboardLockdownDisable()
+        {
+            // Cancel any existing timer
+            _lockdownDisableTimer?.Stop();
+
+            // Schedule disable after 3 seconds (allows for transition between videos)
+            _lockdownDisableTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _lockdownDisableTimer.Tick += (s, e) =>
+            {
+                _lockdownDisableTimer?.Stop();
+                _lockdownDisableTimer = null;
+
+                // Only disable if no video is currently playing
+                if (!_videoPlaying)
+                {
+                    App.KeyboardHook?.DisableLockdown();
+                    App.Logger?.Information("LOCKDOWN: Keyboard lockdown disabled (video ended)");
+                }
+            };
+            _lockdownDisableTimer.Start();
         }
 
         #region Attention Checks
@@ -2123,6 +2172,7 @@ namespace ConditioningControlPanel.Services
             App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
 
             VideoEnded?.Invoke(this, EventArgs.Empty);
+            ScheduleKeyboardLockdownDisable(); // LOCKDOWN: Schedule key blocking disable after delay
 
             if (_isRunning && App.Settings.Current.FlashEnabled)
             {
