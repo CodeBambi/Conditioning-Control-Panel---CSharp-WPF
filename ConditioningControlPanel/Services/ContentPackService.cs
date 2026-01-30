@@ -895,13 +895,24 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Gets all active packs.
+        /// Gets all active packs that are actually installed (manifest exists on disk).
         /// </summary>
         public List<string> GetActivePackIds()
         {
-            var ids = App.Settings?.Current?.ActivePackIds?.ToList() ?? new List<string>();
-            App.Logger?.Information("ContentPackService.GetActivePackIds: Returning {Count} active packs: [{Ids}]",
-                ids.Count, string.Join(", ", ids));
+            var settingsIds = App.Settings?.Current?.ActivePackIds?.ToList() ?? new List<string>();
+            // Filter to only packs that are actually installed (manifest exists)
+            var ids = settingsIds.Where(id => IsPackInstalled(id)).ToList();
+
+            if (ids.Count != settingsIds.Count)
+            {
+                App.Logger?.Information("ContentPackService.GetActivePackIds: {SettingsCount} in settings, {ActualCount} actually installed: [{Ids}]",
+                    settingsIds.Count, ids.Count, string.Join(", ", ids));
+            }
+            else
+            {
+                App.Logger?.Debug("ContentPackService.GetActivePackIds: Returning {Count} active packs: [{Ids}]",
+                    ids.Count, string.Join(", ", ids));
+            }
             return ids;
         }
 
