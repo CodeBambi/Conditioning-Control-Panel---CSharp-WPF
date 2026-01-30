@@ -22,46 +22,38 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.7";
+        public const string AppVersion = "5.4.8";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.7
+        public const string CurrentPatchNotes = @"v5.4.8
 
 🔒 PRIVACY
-• App never exposes real Discord or Patreon names - only your chosen display name is shown
-• Removed 'Use Anonymous Name' option (privacy is now always on)
-• Level milestone webhooks use your display name, not Discord username
+• New 'Show Online Status' toggle - appear offline/invisible to others
+• Setting syncs immediately and applies to leaderboard and profile viewer
 
 👤 PROFILE VIEWER
-• Profile pictures! Opt-in 'Share Profile Picture' setting in Discord tab
-• Profiles now show live online status when viewed
-• Double-click any leaderboard entry to jump to their profile
-• Own profile always shows your avatar (local fallback)
+• View other users' achievement badges on their profile page
+• Server now returns full achievement list for profile lookups
 
-🔧 ACCOUNT FIXES
-• Users with missing display names are now auto-detected and prompted on startup
-• Cancelling registration now properly logs out (prevents orphan profiles with no name)
-• Server correctly reads settings from all profile sources (unified, Patreon, Discord)
+🖼️ FLASH IMAGES
+• True random selection - no more predictable sequences
+• Added support for more image formats: .jpe, .jfif, .tif, .tiff, .heic, .avif
+• Diagnostic logging to help troubleshoot missing images
 
-🎮 VIDEO & STABILITY
-• Bubble Count Challenge rewritten with LibVLC (no more MediaElement crashes)
-• Fixed video windows becoming orphaned on app exit
-• Fixed LibVLC crash-on-cleanup race conditions with proper shutdown ordering
-• Dual monitor video: fixed frame buffer race conditions during stop
-• LibVLC discovery improved - checks multiple paths for libvlc.dll
-• Ordered shutdown: bubbles stop before video to avoid UI thread contention
+📁 ASSET FOLDER
+• Changing asset folder now detects and offers to move downloaded content packs
+• Shows pack names and total size before moving
+• Retrocompatible: finds stranded packs in both current and default locations
+• Packs correctly show as 'not installed' when files are missing
 
-🫧 BUBBLES
-• Bubble pop animation now plays fully before removal
-• Fixed race condition when cleaning up bubbles during video playback
-
-☁️ SERVER
-• New profile lookup endpoint for fresh online status and avatars
-• Discord heartbeat now keeps unified accounts marked as online
-• Leaderboard correctly merges online status across linked accounts";
+🔧 FIXES
+• Settings now save immediately when changed mid-session
+• Fixed LibVLC threading crashes in multi-monitor mode
+• Fixed frame buffer race conditions during video stop
+• Fixed 'X active packs' error showing phantom packs after folder change";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
