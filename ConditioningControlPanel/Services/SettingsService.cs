@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
 
@@ -70,6 +72,10 @@ namespace ConditioningControlPanel.Services
                         // NOTE: Don't validate level-locked features here - cloud sync hasn't happened yet.
                         // The cloud level may be higher than the local level, and we don't want to
                         // incorrectly disable features. Validation happens after cloud sync completes.
+
+                        // Merge any new default subliminal triggers that were added in updates
+                        MergeNewDefaultSubliminalTriggers(settings);
+
                         return settings;
                     }
                 }
@@ -81,6 +87,39 @@ namespace ConditioningControlPanel.Services
 
             App.Logger?.Information("Using default settings");
             return new AppSettings();
+        }
+
+        /// <summary>
+        /// Merges any new default subliminal triggers that were added in updates.
+        /// New triggers are added as disabled so users can opt-in.
+        /// </summary>
+        private void MergeNewDefaultSubliminalTriggers(AppSettings settings)
+        {
+            try
+            {
+                var defaults = ContentModeConfig.GetDefaultSubliminalPool(settings.ContentMode);
+                var added = new List<string>();
+
+                foreach (var trigger in defaults.Keys)
+                {
+                    if (!settings.SubliminalPool.ContainsKey(trigger))
+                    {
+                        // Add new triggers as enabled by default (matching default behavior)
+                        settings.SubliminalPool[trigger] = true;
+                        added.Add(trigger);
+                    }
+                }
+
+                if (added.Count > 0)
+                {
+                    App.Logger?.Information("Added {Count} new default subliminal triggers: {Triggers}",
+                        added.Count, string.Join(", ", added));
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to merge new subliminal triggers: {Error}", ex.Message);
+            }
         }
 
         /// <summary>

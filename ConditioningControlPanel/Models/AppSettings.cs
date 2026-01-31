@@ -384,7 +384,14 @@ namespace ConditioningControlPanel.Models
             { "ZAP COCK DRAIN OBEY", true },
             { "GIGGLETIME", true },
             { "BAMBI UNIFORM LOCK", true },
-            { "COCK ZOMBIE NOW", true }
+            { "COCK ZOMBIE NOW", true },
+            { "JUST OBEY", true },
+            { "TURN YOUR BRAIN OFF", true },
+            { "GOOD GIRLS DONT THINK", true },
+            { "DONT THINK SILLY", true },
+            { "COCK TURNS MY BRAIN OFF", true },
+            { "I CANT RESIST MY TRIGGERS", true },
+            { "THERES NO NEED TO THINK", true }
         };
         public Dictionary<string, bool> SubliminalPool
         {
@@ -451,6 +458,47 @@ namespace ConditioningControlPanel.Models
         #endregion
 
         #region System
+
+        private ContentMode _contentMode = ContentMode.BambiSleep;
+        /// <summary>
+        /// Content mode determines theming: Bambi Sleep specific or generic Sissy Hypno.
+        /// </summary>
+        public ContentMode ContentMode
+        {
+            get => _contentMode;
+            set
+            {
+                if (_contentMode != value)
+                {
+                    _contentMode = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsBambiMode));
+                    OnPropertyChanged(nameof(IsSissyMode));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Convenience property for XAML binding - true when in Bambi Sleep mode.
+        /// </summary>
+        [JsonIgnore]
+        public bool IsBambiMode => _contentMode == ContentMode.BambiSleep;
+
+        /// <summary>
+        /// Convenience property for XAML binding - true when in Sissy Hypno mode.
+        /// </summary>
+        [JsonIgnore]
+        public bool IsSissyMode => _contentMode == ContentMode.SissyHypno;
+
+        private bool _contentModeChosen = false;
+        /// <summary>
+        /// Whether the user has chosen a content mode (shown on first run).
+        /// </summary>
+        public bool ContentModeChosen
+        {
+            get => _contentModeChosen;
+            set { _contentModeChosen = value; OnPropertyChanged(); }
+        }
 
         private string _bambiCloudUrl = "https://bambicloud.com/";
         public string BambiCloudUrl
