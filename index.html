@@ -427,65 +427,126 @@
             background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-dark) 100%);
         }
 
-        .patreon-card {
-            max-width: 800px;
-            margin: 0 auto;
-            background: var(--bg-card);
-            border-radius: 32px;
-            padding: 3rem;
-            text-align: center;
-            border: 2px solid rgba(255, 105, 180, 0.2);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .patreon-card::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255, 105, 180, 0.1) 0%, transparent 50%);
-            animation: rotate 20s linear infinite;
-        }
-
-        @keyframes rotate {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        .patreon-card > * {
-            position: relative;
-            z-index: 1;
-        }
-
-        .patreon-card h2 {
-            font-size: 2rem;
-            margin-bottom: 1rem;
-        }
-
-        .patreon-card p {
-            color: var(--text-secondary);
-            margin-bottom: 2rem;
-        }
-
-        .patreon-features {
+        .patreon-features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
             gap: 1.5rem;
-            margin-bottom: 2rem;
-            text-align: left;
+            max-width: 1200px;
+            margin: 0 auto 3rem;
         }
 
-        .patreon-feature {
+        .patreon-feature-card {
+            background: var(--bg-card);
+            border-radius: 24px;
+            padding: 2rem;
+            border: 1px solid rgba(255, 66, 77, 0.2);
+            transition: all 0.3s;
+        }
+
+        .patreon-feature-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255, 66, 77, 0.5);
+            box-shadow: 0 10px 40px rgba(255, 66, 77, 0.15);
+        }
+
+        .patreon-feature-card.hero-feature {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            align-items: center;
+            padding: 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, var(--bg-card) 0%, rgba(255, 66, 77, 0.1) 100%);
+        }
+
+        .patreon-feature-card.hero-feature img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 24px 0 0 24px;
+            margin: 0;
+        }
+
+        .patreon-feature-content {
+            padding: 2rem;
+        }
+
+        .premium-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #FF424D 0%, #ff69b4 100%);
+            color: white;
+            padding: 0.35rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .patreon-feature-card h3 {
+            font-size: 1.35rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+        }
+
+        .patreon-feature-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .patreon-feature-card p strong {
+            color: var(--accent-pink);
+        }
+
+        .patreon-feature-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #FF424D 0%, #ff69b4 100%);
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            justify-content: center;
+            font-size: 1.8rem;
+            margin-bottom: 1.25rem;
         }
 
-        .patreon-feature span {
-            font-size: 1.5rem;
+        .haptic-logos {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .haptic-badge {
+            padding: 0.4rem 0.9rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .haptic-badge.lovense {
+            background: rgba(255, 105, 180, 0.15);
+            color: #ff69b4;
+            border: 1px solid rgba(255, 105, 180, 0.3);
+        }
+
+        .haptic-badge.buttplug {
+            background: rgba(155, 89, 182, 0.15);
+            color: #9b59b6;
+            border: 1px solid rgba(155, 89, 182, 0.3);
+        }
+
+        .patreon-cta {
+            text-align: center;
+            margin-top: 2rem;
+        }
+
+        .patreon-note {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 1rem;
         }
 
         .btn-patreon {
@@ -497,6 +558,21 @@
         .btn-patreon:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 30px rgba(255, 66, 77, 0.5);
+        }
+
+        @media (max-width: 900px) {
+            .patreon-feature-card.hero-feature {
+                grid-template-columns: 1fr;
+            }
+
+            .patreon-feature-card.hero-feature img {
+                border-radius: 24px 24px 0 0;
+                max-height: 250px;
+            }
+
+            .patreon-features-grid {
+                grid-template-columns: 1fr;
+            }
         }
 
         /* Requirements Section */
@@ -1083,47 +1159,70 @@
     </section>
 
     <section class="patreon" id="patreon">
-        <div class="patreon-card">
-            <h2>Unlock Premium Features</h2>
-            <p>Support development and get access to exclusive AI-powered features</p>
+        <div class="section-header">
+            <h2>Patreon Exclusive Features</h2>
+            <p>Support development and unlock powerful AI-driven features</p>
+        </div>
 
-            <div class="patreon-features">
-                <div class="patreon-feature">
-                    <span>🤖</span>
-                    <div>
-                        <strong>AI Chat</strong>
-                        <p style="color: var(--text-muted); font-size: 0.85rem;">Chat with your companion</p>
-                    </div>
-                </div>
-                <div class="patreon-feature">
-                    <span>👁️</span>
-                    <div>
-                        <strong>Window Awareness</strong>
-                        <p style="color: var(--text-muted); font-size: 0.85rem;">Context-aware reactions</p>
-                    </div>
-                </div>
-                <div class="patreon-feature">
-                    <span>🔥</span>
-                    <div>
-                        <strong>Slut Mode</strong>
-                        <p style="color: var(--text-muted); font-size: 0.85rem;">Explicit AI responses</p>
-                    </div>
-                </div>
-                <div class="patreon-feature">
-                    <span>☁️</span>
-                    <div>
-                        <strong>Cloud Sync</strong>
-                        <p style="color: var(--text-muted); font-size: 0.85rem;">Sync progress &amp; leaderboard</p>
-                    </div>
+        <div class="patreon-features-grid">
+            <!-- Bambi Takeover - Hero Feature -->
+            <div class="patreon-feature-card hero-feature">
+                <img src="images/features/bambi takeover.png" alt="Bambi Takeover">
+                <div class="patreon-feature-content">
+                    <div class="premium-badge">Premium</div>
+                    <h3>Bambi Takeover</h3>
+                    <p>Let your companion take full control. Autonomy mode activates after idle periods - she'll control your flashes, videos, overlays, and whisper commands. Complete surrender to your AI companion.</p>
                 </div>
             </div>
 
+            <!-- AI Chat -->
+            <div class="patreon-feature-card">
+                <div class="patreon-feature-icon">🤖</div>
+                <h3>AI Companion Chat</h3>
+                <p>Have real conversations with your companion. She responds with personality, remembers context, and reacts to what you say. Multiple personality presets available including the exclusive <strong>Slut Mode</strong> for explicit interactions.</p>
+            </div>
+
+            <!-- Haptic Feedback -->
+            <div class="patreon-feature-card">
+                <div class="patreon-feature-icon">📳</div>
+                <h3>Haptic Feedback</h3>
+                <p>Connect your <strong>Lovense</strong> or <strong>Buttplug.io</strong> compatible devices for synchronized vibrations during conditioning. Triggers, subliminals, and videos pulse through your body.</p>
+                <div class="haptic-logos">
+                    <span class="haptic-badge lovense">Lovense</span>
+                    <span class="haptic-badge buttplug">Buttplug.io</span>
+                </div>
+            </div>
+
+            <!-- Window Awareness -->
+            <div class="patreon-feature-card">
+                <div class="patreon-feature-icon">👁️</div>
+                <h3>Browser Awareness</h3>
+                <p>Your companion watches what you browse. Visit <strong>HypnoTube</strong>, <strong>BambiCloud</strong>, or other hypno sites and she'll react with encouragement. She knows when you're being a good girl.</p>
+            </div>
+
+            <!-- Content Packs Bandwidth -->
+            <div class="patreon-feature-card">
+                <div class="patreon-feature-icon">📦</div>
+                <h3>10x Download Bandwidth</h3>
+                <p>Get <strong>100 GB/month</strong> bandwidth for premium content packs (vs 10 GB for free users). Download exclusive flash packs, video collections, and audio sets.</p>
+            </div>
+
+            <!-- Cloud Sync -->
+            <div class="patreon-feature-card">
+                <div class="patreon-feature-icon">☁️</div>
+                <h3>Cloud Sync &amp; Leaderboard</h3>
+                <p>Sync your progress across devices. Compete on the global leaderboard. Your XP, level, and achievements follow you everywhere.</p>
+            </div>
+        </div>
+
+        <div class="patreon-cta">
             <a href="https://www.patreon.com/CodeBambi" class="btn btn-patreon" target="_blank">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M14.82 2.41c3.96 0 7.18 3.24 7.18 7.21 0 3.96-3.22 7.18-7.18 7.18-3.97 0-7.21-3.22-7.21-7.18 0-3.97 3.24-7.21 7.21-7.21M2 21.6h3.5V2.41H2V21.6z"/>
                 </svg>
                 Support on Patreon
             </a>
+            <p class="patreon-note">All tiers unlock all features &bull; Cancel anytime &bull; 14-day grace period</p>
         </div>
     </section>
 
