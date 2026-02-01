@@ -624,7 +624,33 @@
 
                 <!-- Title + Player Title + App Name + Version -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="⭐" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <!-- Content Mode Toggle (BS/SH) -->
+                    <Border x:Name="ContentModeToggleBorder" Background="#252545" CornerRadius="8" Padding="6,3" Margin="0,0,10,0"
+                            VerticalAlignment="Center" ToolTip="Switch between Bambi Sleep and Sissy Hypno content modes">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="TxtModeBS" Text="BS" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"
+                                       Foreground="#FF69B4" Margin="0,0,4,0"/>
+                            <CheckBox x:Name="ChkContentMode" VerticalAlignment="Center" Margin="0"
+                                      Checked="ChkContentMode_Changed" Unchecked="ChkContentMode_Changed">
+                                <CheckBox.Template>
+                                    <ControlTemplate TargetType="CheckBox">
+                                        <Border x:Name="track" Width="28" Height="14" Background="#404060" CornerRadius="7" Cursor="Hand">
+                                            <Ellipse x:Name="thumb" Width="10" Height="10" Fill="White" HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="track" Property="Background" Value="#FF69B4"/>
+                                                <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right"/>
+                                                <Setter TargetName="thumb" Property="Margin" Value="0,0,2,0"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </CheckBox.Template>
+                            </CheckBox>
+                            <TextBlock x:Name="TxtModeSH" Text="SH" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"
+                                       Foreground="#606080" Margin="4,0,0,0"/>
+                        </StackPanel>
+                    </Border>
                     <TextBlock x:Name="TxtPlayerTitle" Text="Basic Bimbo" Foreground="#FF69B4"
                                FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0">
                         <TextBlock.Effect>
@@ -4354,7 +4380,7 @@
                                         <TextBlock Text="She will autonomously trigger effects based on your settings"
                                                    Foreground="#808080" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,12"/>
                                         <Border Background="#1E1E3A" CornerRadius="8" Padding="8">
-                                            <Image Source="pack://application:,,,/Resources/features/bambi takeover.png"
+                                            <Image x:Name="ImgTakeover" Source="pack://application:,,,/Resources/features/bambi takeover.png"
                                                    Stretch="Uniform" MaxHeight="200"
                                                    ToolTip="Bambi Takeover - Let her take control~"/>
                                         </Border>

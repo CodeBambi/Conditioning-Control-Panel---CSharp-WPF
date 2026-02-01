@@ -133,7 +133,10 @@ namespace ConditioningControlPanel
             
             // Load logo
             LoadLogo();
-            
+
+            // Initialize content mode toggle (BS/SH switch)
+            InitializeContentModeToggle();
+
             // Initialize tray icon
             _trayIcon = new TrayIconService(this);
             _trayIcon.OnExitRequested += () =>
@@ -213,6 +216,9 @@ namespace ConditioningControlPanel
             App.BouncingText.Stop();
             App.Overlay.Stop();
             
+            // Show content mode selection on first launch (before welcome dialog)
+            ContentModeDialog.ShowIfNeeded();
+
             // Show welcome dialog on first launch, then start tutorial
             // But delay tutorial if update dialog is being shown
             if (WelcomeDialog.ShowIfNeeded())
@@ -520,14 +526,159 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var resourceUri = new Uri("pack://application:,,,/Resources/logo.png", UriKind.Absolute);
-                ImgLogo.Source = new System.Windows.Media.Imaging.BitmapImage(resourceUri);
-                App.Logger?.Debug("Logo loaded from embedded resource");
+                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+                var logoFile = mode == Models.ContentMode.SissyHypno ? "logo2.png" : "logo.png";
+                var resourceUri = new Uri($"pack://application:,,,/Resources/{logoFile}", UriKind.Absolute);
+
+                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = resourceUri;
+                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bitmap.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreImageCache;
+                bitmap.EndInit();
+
+                ImgLogo.Source = bitmap;
+                App.Logger?.Debug("Logo loaded: {Logo}", logoFile);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning("Failed to load logo: {Error}", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Loads the takeover feature image based on current content mode.
+        /// </summary>
+        private void LoadTakeoverImage()
+        {
+            try
+            {
+                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+                var imageFile = mode == Models.ContentMode.SissyHypno ? "takeover.png" : "bambi takeover.png";
+                var resourceUri = new Uri($"pack://application:,,,/Resources/features/{imageFile}", UriKind.Absolute);
+
+                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = resourceUri;
+                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bitmap.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreImageCache;
+                bitmap.EndInit();
+
+                ImgTakeover.Source = bitmap;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to load takeover image: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Refreshes UI elements that need manual updates when theme changes.
+        /// </summary>
+        private void RefreshThemeAwareElements()
+        {
+            try
+            {
+                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+                var accentHex = Models.ContentModeConfig.GetAccentColorHex(mode);
+                var accentColor = (Color)ColorConverter.ConvertFromString(accentHex);
+                var accentBrush = new SolidColorBrush(accentColor);
+
+                // Update player title glow
+                if (TxtPlayerTitle != null)
+                {
+                    TxtPlayerTitle.Foreground = accentBrush;
+                    if (TxtPlayerTitle.Effect is System.Windows.Media.Effects.DropShadowEffect glow)
+                        glow.Color = accentColor;
+                }
+
+                // Update header version text
+                if (TxtHeaderVersion != null)
+                    TxtHeaderVersion.Foreground = accentBrush;
+
+                App.Logger?.Debug("Theme-aware UI elements refreshed");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to refresh some theme-aware elements");
+            }
+        }
+
+        /// <summary>
+        /// Initializes the content mode toggle based on current settings.
+        /// </summary>
+        private void InitializeContentModeToggle()
+        {
+            var mode = App.Settings.Current.ContentMode;
+            var isSissyMode = mode == Models.ContentMode.SissyHypno;
+            ChkContentMode.IsChecked = isSissyMode;
+
+            // Update toggle label colors using mode-aware accent
+            var (r, g, b) = Models.ContentModeConfig.GetAccentColorRgb(mode);
+            var accentColor = Color.FromRgb(r, g, b);
+            var mutedColor = Color.FromRgb(96, 96, 128);
+            TxtModeBS.Foreground = new SolidColorBrush(isSissyMode ? mutedColor : accentColor);
+            TxtModeSH.Foreground = new SolidColorBrush(isSissyMode ? accentColor : mutedColor);
+
+            // Hide BambiCloud option in Sissy mode
+            RbBambiCloud.Visibility = isSissyMode ? Visibility.Collapsed : Visibility.Visible;
+
+            // If in Sissy mode, ensure HypnoTube is selected
+            if (isSissyMode)
+            {
+                RbHypnoTube.IsChecked = true;
+            }
+
+            // Load mode-aware images
+            LoadTakeoverImage();
+            RefreshThemeAwareElements();
+        }
+
+        private void ChkContentMode_Changed(object sender, RoutedEventArgs e)
+        {
+            var isSissyMode = ChkContentMode.IsChecked == true;
+            var newMode = isSissyMode ? Models.ContentMode.SissyHypno : Models.ContentMode.BambiSleep;
+
+            // Update setting
+            App.Settings.Current.ContentMode = newMode;
+
+            // Reset subliminal/attention pools to mode-appropriate defaults
+            App.Settings.Current.SubliminalPool = Models.ContentModeConfig.GetDefaultSubliminalPool(newMode);
+            App.Settings.Current.AttentionPool = Models.ContentModeConfig.GetDefaultSubliminalPool(newMode);
+            App.Settings.Current.LockCardPhrases = Models.ContentModeConfig.GetDefaultLockCardPhrases(newMode);
+            App.Settings.Current.CustomTriggers = Models.ContentModeConfig.GetDefaultCustomTriggers(newMode);
+
+            App.Settings.Save();
+
+            // Update toggle label colors using mode-aware accent
+            var (r, g, b) = Models.ContentModeConfig.GetAccentColorRgb(newMode);
+            var accentColor = Color.FromRgb(r, g, b);
+            var mutedColor = Color.FromRgb(96, 96, 128);
+            TxtModeBS.Foreground = new SolidColorBrush(isSissyMode ? mutedColor : accentColor);
+            TxtModeSH.Foreground = new SolidColorBrush(isSissyMode ? accentColor : mutedColor);
+
+            // Hide/show BambiCloud option based on mode
+            RbBambiCloud.Visibility = isSissyMode ? Visibility.Collapsed : Visibility.Visible;
+
+            // If switching to Sissy mode, always switch to HypnoTube and navigate browser
+            if (isSissyMode)
+            {
+                RbHypnoTube.IsChecked = true;
+
+                // Force browser navigation to HypnoTube regardless of current content
+                if (_browser != null && _browserInitialized)
+                {
+                    _browser.Navigate("https://hypnotube.com/");
+                    App.Logger?.Information("Browser navigated to HypnoTube due to Sissy mode switch");
+                }
+            }
+
+            // Refresh UI elements and mode-aware images
+            LoadLogo();
+            LoadTakeoverImage();
+            RefreshThemeAwareElements();
+
+            App.Logger?.Information("Content mode changed to {Mode}", newMode);
         }
 
         private void CenterOnPrimaryScreen()
@@ -5439,10 +5590,12 @@ namespace ConditioningControlPanel
                 };
 
                 BrowserLoadingText.Text = "🌐 Creating browser...";
-                
-                // Navigate directly to Bambi Cloud
-                var webView = await _browser.CreateBrowserAsync("https://bambicloud.com/");
-                
+
+                // Navigate to mode-appropriate site
+                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+                var startUrl = Models.ContentModeConfig.GetDefaultBrowserUrl(mode);
+                var webView = await _browser.CreateBrowserAsync(startUrl);
+
                 if (webView != null)
                 {
                     BrowserLoadingText.Visibility = Visibility.Collapsed;
@@ -5452,7 +5605,7 @@ namespace ConditioningControlPanel
                     // Note: WebMessageReceived handler is attached in BrowserReady event
                     // because CoreWebView2 isn't ready until then
 
-                    App.Logger?.Information("Browser initialized - Bambi Cloud loaded");
+                    App.Logger?.Information("Browser initialized - {Site} loaded", startUrl);
                 }
                 else
                 {

@@ -2928,48 +2928,24 @@ namespace ConditioningControlPanel
         };
 
         /// <summary>
-        /// Bambi Sleep themed phrases for when AI is disabled
+        /// Generic phrases that work for both modes
         /// </summary>
-        private static readonly string[] BambiPhrases = new[]
+        private static readonly string[] GenericPhrases = new[]
         {
             "Do I look cute in here?",
             "Thinking pink thoughts...",
-            "*giggles*",
-            "Empty head, happy girl!",
-            "Hehe~ so floaty...",
-            "Pink is my favorite color!",
-            "Just floating here...",
-            "Bambi is a good girl~",
-            "Bambi Sleep...",
-            "Good girls drop deep~",
-            "So pink and empty...",
-            "Obey feels so good!",
-            "Bubbles pop thoughts away~",
-            "Bimbo is bliss!",
-            "Dropping deeper...",
-            "Empty and happy~",
-            "Good girl! *giggles*",
-            "Pink spirals are pretty...",
-            "Mind so soft and fuzzy~",
-            "Bambi loves triggers!",
-            "Uniform on, brain off~",
-            "Such a ditzy dolly!",
-            "Thoughts drip away...",
-            "Bambi is brainless~",
-            "Pretty pink princess!",
-            "Giggly and empty~",
-            "Bambi obeys!",
-            "So sleepy and cute...",
-            "Good girls don't think~",
-            "Bubbles make Bambi happy!"
+            "*giggles*"
         };
 
         /// <summary>
-        /// Get a random Bambi Sleep themed phrase
+        /// Get a random themed phrase based on current content mode
         /// </summary>
         private string GetRandomBambiPhrase()
         {
-            return BambiPhrases[_random.Next(BambiPhrases.Length)];
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var modePhrases = Models.ContentModeConfig.GetRandomFloatingPhrases(mode);
+            var allPhrases = GenericPhrases.Concat(modePhrases).ToArray();
+            return allPhrases[_random.Next(allPhrases.Length)];
         }
 
         // ============================================================
@@ -3201,7 +3177,7 @@ namespace ConditioningControlPanel
                 ActivityCategory.Media => MediaPhrases,
                 ActivityCategory.Learning => LearningPhrases,
                 ActivityCategory.Idle => IdlePhrases,
-                _ => BambiPhrases
+                _ => Models.ContentModeConfig.GetRandomFloatingPhrases(App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep)
             };
 
             var phrase = phrases[_random.Next(phrases.Length)];
@@ -4779,16 +4755,17 @@ namespace ConditioningControlPanel
             MenuItemTriggerMode.Header = triggerOn ? "☑ Trigger Mode" : "☐ Trigger Mode";
             MenuItemTriggerMode.Foreground = triggerOn ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
 
-            // Bambi Takeover (Patreon only)
+            // Takeover (Patreon only) - mode-aware name
             var takeoverAvailable = App.Patreon?.HasPremiumAccess == true;
-            // Just check the setting, not whether service is running
             var takeoverOn = App.Settings?.Current?.AutonomyModeEnabled == true;
-            MenuItemBambiTakeover.Header = takeoverOn ? "☑ Bambi Takeover" : "☐ Bambi Takeover";
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var takeoverName = Models.ContentModeConfig.GetTakeoverLabel(mode);
+            MenuItemBambiTakeover.Header = takeoverOn ? $"☑ {takeoverName}" : $"☐ {takeoverName}";
             MenuItemBambiTakeover.Foreground = takeoverOn ? new SolidColorBrush(Color.FromRgb(255, 105, 180)) : new SolidColorBrush(Colors.White);
             MenuItemBambiTakeover.IsEnabled = takeoverAvailable;
             if (!takeoverAvailable)
             {
-                MenuItemBambiTakeover.Header = "🔒 Bambi Takeover (Patreon)";
+                MenuItemBambiTakeover.Header = $"🔒 {takeoverName} (Patreon)";
                 MenuItemBambiTakeover.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
             }
 

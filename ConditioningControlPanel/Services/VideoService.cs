@@ -1646,10 +1646,11 @@ namespace ConditioningControlPanel.Services
             if (loop && !string.IsNullOrEmpty(_retryPath))
             {
                 _penalties++;
+                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
                 if (_penalties >= 3 && settings.MercySystemEnabled)
-                    ShowMessage("BAMBI GETS MERCY", 2500, Cleanup);
+                    ShowMessage(Models.ContentModeConfig.GetAttentionCheckMercyMessage(mode), 2500, Cleanup);
                 else
-                    ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😜" : "DUMB BAMBI!\nTRY AGAIN", 2000, () =>
+                    ShowMessage(troll ? "GOOD GIRL!\nWATCH AGAIN 😜" : Models.ContentModeConfig.GetAttentionCheckFailMessage(mode), 2000, () =>
                     {
                         // ShowMessage already set _videoPlaying = false and called CloseAll()
                         // Reset attention tracking for retry

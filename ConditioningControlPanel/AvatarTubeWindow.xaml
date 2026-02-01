@@ -195,8 +195,8 @@
                         <Separator Background="#FF69B4"/>
                         <MenuItem x:Name="MenuItemEngine" Header="▶ Start Engine" Click="MenuItemEngine_Click" Foreground="#90EE90"/>
                         <MenuItem x:Name="MenuItemTriggerMode" Header="☐ Trigger Mode" Click="MenuItemTriggerMode_Click" Foreground="White"/>
-                        <MenuItem x:Name="MenuItemBambiTakeover" Header="☐ Bambi Takeover" Click="MenuItemBambiTakeover_Click" Foreground="White"/>
-                        <MenuItem x:Name="MenuItemPersonality" Header="Personality: BambiSprite" Foreground="#FF69B4">
+                        <MenuItem x:Name="MenuItemBambiTakeover" Header="☐ Takeover" Click="MenuItemBambiTakeover_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemPersonality" Header="Personality" Foreground="#FF69B4">
                             <MenuItem.ItemContainerStyle>
                                 <Style TargetType="MenuItem">
                                     <Setter Property="Background" Value="#252542"/>

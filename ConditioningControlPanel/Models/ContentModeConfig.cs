@@ -463,16 +463,24 @@ namespace ConditioningControlPanel.Models
             ContentMode.BambiSleep => new[]
             {
                 "BAMBI NEEDS TO FOCUS",
+                "GOOD GIRLS PAY ATTENTION",
                 "BAMBI WILL TRY HARDER",
+                "EMPTY AND OBEDIENT",
                 "BAMBI LOVES BUBBLES",
-                "BAMBI IS LEARNING"
+                "DUMB DOLLS COUNT SLOWLY",
+                "BAMBI IS LEARNING",
+                "GOOD GIRLS DONT THINK"
             },
             ContentMode.SissyHypno => new[]
             {
-                "FOCUS HARDER",
-                "TRY HARDER NEXT TIME",
-                "BUBBLES ARE FUN",
-                "KEEP LEARNING"
+                "SISSY NEEDS TO FOCUS",
+                "GOOD GIRLS PAY ATTENTION",
+                "SISSY WILL TRY HARDER",
+                "EMPTY AND OBEDIENT",
+                "SISSY LOVES BUBBLES",
+                "DUMB DOLLS COUNT SLOWLY",
+                "SISSY IS LEARNING",
+                "GOOD GIRLS DONT THINK"
             },
             _ => GetBubbleCountMercyPhrases(ContentMode.BambiSleep)
         };
@@ -495,6 +503,152 @@ namespace ConditioningControlPanel.Models
             ContentMode.BambiSleep => "BAMBI GETS MERCY",
             ContentMode.SissyHypno => "YOU GET MERCY",
             _ => "BAMBI GETS MERCY"
+        };
+
+        /// <summary>
+        /// Get random floating/idle phrases for the avatar.
+        /// </summary>
+        public static string[] GetRandomFloatingPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Empty head, happy girl!",
+                "Hehe~ so floaty...",
+                "Pink is my favorite color!",
+                "Just floating here...",
+                "Bambi is a good girl~",
+                "Bambi Sleep...",
+                "Good girls drop deep~",
+                "So pink and empty...",
+                "Obey feels so good!",
+                "Bubbles pop thoughts away~",
+                "Bimbo is bliss!",
+                "Dropping deeper...",
+                "Empty and happy~",
+                "Good girl! *giggles*",
+                "Pink spirals are pretty...",
+                "Mind so soft and fuzzy~",
+                "Bambi loves triggers!",
+                "Uniform on, brain off~",
+                "Such a ditzy dolly!",
+                "Thoughts drip away...",
+                "Bambi is brainless~",
+                "Pretty pink princess!",
+                "Giggly and empty~",
+                "Bambi obeys!",
+                "So sleepy and cute...",
+                "Good girls don't think~",
+                "Bubbles make Bambi happy!"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Empty head, happy girl!",
+                "Hehe~ so floaty...",
+                "Pink is my favorite color!",
+                "Just floating here...",
+                "Good girls obey~",
+                "Sissy bliss...",
+                "Good girls drop deep~",
+                "So pink and empty...",
+                "Obey feels so good!",
+                "Bubbles pop thoughts away~",
+                "Bimbo is bliss!",
+                "Dropping deeper...",
+                "Empty and happy~",
+                "Good girl! *giggles*",
+                "Pink spirals are pretty...",
+                "Mind so soft and fuzzy~",
+                "Triggers feel amazing!",
+                "Feminized and happy~",
+                "Such a ditzy dolly!",
+                "Thoughts drip away...",
+                "Mindless and girly~",
+                "Pretty pink princess!",
+                "Giggly and empty~",
+                "Sissy obeys!",
+                "So sleepy and cute...",
+                "Good girls don't think~",
+                "Bubbles make sissy happy!"
+            },
+            _ => GetRandomFloatingPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Get gaming awareness phrases.
+        /// </summary>
+        public static string[] GetGamingPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Playing {0} instead of dropping~ *giggles*",
+                "Gaming when you could be listening to files~",
+                "{0}? Good girls take session breaks!",
+                "Your brain on {0}... should be on spirals~",
+                "Win at {0}, then reward yourself with trance!",
+                "*teehee* {0} again? Bambi misses you~",
+                "Gaming is cute but conditioning is cuter!",
+                "Don't forget your sessions, good girl~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Playing {0} instead of dropping~ *giggles*",
+                "Gaming when you could be watching hypno~",
+                "{0}? Good girls take session breaks!",
+                "Your brain on {0}... should be on spirals~",
+                "Win at {0}, then reward yourself with trance!",
+                "*teehee* {0} again? Come back to me~",
+                "Gaming is cute but conditioning is cuter!",
+                "Don't forget your sessions, good girl~"
+            },
+            _ => GetGamingPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Get browsing awareness phrases.
+        /// </summary>
+        public static string[] GetBrowsingPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Browsing {0}~ spirals are prettier!",
+                "So many tabs... so few sessions done~",
+                "The internet is nice but trance is nicer!",
+                "*giggles* Lost in {0}? Drop into Bambi instead~",
+                "Browsing when you could be conditioning~",
+                "Click click click... drip drip drip~",
+                "Cute! But have you done a session today?"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Browsing {0}~ spirals are prettier!",
+                "So many tabs... so few sessions done~",
+                "The internet is nice but trance is nicer!",
+                "*giggles* Lost in {0}? Drop into hypno instead~",
+                "Browsing when you could be conditioning~",
+                "Click click click... drip drip drip~",
+                "Cute! But have you done a session today?"
+            },
+            _ => GetBrowsingPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Get freeze trigger text.
+        /// </summary>
+        public static string GetFreezeTriggerText(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => "Bambi Freeze",
+            ContentMode.SissyHypno => "Sissy Freeze",
+            _ => "Bambi Freeze"
+        };
+
+        /// <summary>
+        /// Get reset trigger text.
+        /// </summary>
+        public static string GetResetTriggerText(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => "Bambi Reset",
+            ContentMode.SissyHypno => "Sissy Reset",
+            _ => "Bambi Reset"
         };
     }
 }

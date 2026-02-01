@@ -301,7 +301,7 @@ namespace ConditioningControlPanel
 
                 // Get a random text from the attention pool
                 var pool = settings.AttentionPool;
-                string text = "BAMBI";
+                string text = "GOOD GIRL"; // Default, will be replaced if pool has items
                 foreach (var kvp in pool)
                 {
                     if (kvp.Value)

@@ -276,19 +276,10 @@ namespace ConditioningControlPanel
                 window.Hide();
             }
             
-            // Bambi Sleep themed mercy phrases (no answer included!)
-            var mercyPhrases = new[]
-            {
-                "BAMBI NEEDS TO FOCUS",
-                "GOOD GIRLS PAY ATTENTION",
-                "BAMBI WILL TRY HARDER",
-                "EMPTY AND OBEDIENT",
-                "BAMBI LOVES BUBBLES",
-                "DUMB DOLLS COUNT SLOWLY",
-                "BAMBI IS LEARNING",
-                "GOOD GIRLS DONT THINK"
-            };
-            
+            // Mode-aware mercy phrases (no answer included!)
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var mercyPhrases = Models.ContentModeConfig.GetBubbleCountMercyPhrases(mode);
+
             var random = new Random();
             var phrase = mercyPhrases[random.Next(mercyPhrases.Length)];
             

@@ -171,7 +171,8 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("Triggering Bambi Freeze (subliminals disabled but special trigger allowed)");
             }
 
-            var text = "Bambi Freeze";
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var text = Models.ContentModeConfig.GetFreezeTriggerText(mode);
             string? audioPath = FindLinkedAudio(text);
 
             if (audioPath != null)
@@ -265,7 +266,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void PlayBambiReset()
         {
-            var resetText = "Bambi Reset";
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var resetText = Models.ContentModeConfig.GetResetTriggerText(mode);
             string? resetAudio = FindLinkedAudio(resetText);
 
             if (resetAudio != null && App.Settings.Current.SubAudioEnabled)

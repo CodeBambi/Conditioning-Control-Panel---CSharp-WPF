@@ -113,6 +113,7 @@
     <!-- App icon -->
     <Resource Include="Resources\app.ico" />
     <Resource Include="Resources\logo.png" />
+    <Resource Include="Resources\logo2.png" />
     <Resource Include="Resources\bubble.png" />
     <Resource Include="Resources\speechbubble1.png" />
     <Resource Include="Resources\speechbubble2.png" />

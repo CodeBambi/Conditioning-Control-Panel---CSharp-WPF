@@ -29,7 +29,7 @@
                     <Border.Effect>
                         <DropShadowEffect Color="Black" BlurRadius="15" ShadowDepth="5" Opacity="0.6"/>
                     </Border.Effect>
-                    <TextBlock x:Name="PreviewText" Text="BAMBI"
+                    <TextBlock x:Name="PreviewText" Text="GOOD GIRL"
                                FontSize="40" FontWeight="Bold"
                                HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock.Effect>

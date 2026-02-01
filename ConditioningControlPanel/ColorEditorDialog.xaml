@@ -97,7 +97,7 @@
         <!-- Preview -->
         <Border Grid.Row="2" x:Name="PreviewBorder" Background="Black" CornerRadius="8" 
                 Height="80" Margin="0,0,0,20">
-            <TextBlock x:Name="PreviewText" Text="BAMBI SLEEP" 
+            <TextBlock x:Name="PreviewText" Text="GOOD GIRL"
                        FontSize="28" FontWeight="Bold" FontFamily="Arial"
                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Border>
