@@ -1,0 +1,101 @@
+<Window x:Class="ConditioningControlPanel.ContentModeDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Choose Your Mode"
+        Height="420" Width="580"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True">
+
+    <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
+        <Grid Margin="30">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <TextBlock Grid.Row="0" Text="Choose Your Experience"
+                       Foreground="#FF69B4" FontSize="24" FontWeight="Bold"
+                       HorizontalAlignment="Center" Margin="0,0,0,10"/>
+
+            <!-- Subtitle -->
+            <TextBlock Grid.Row="1" Text="Select which content mode best fits your interests. You can change this later."
+                       Foreground="#B0B0B0" FontSize="13"
+                       HorizontalAlignment="Center" Margin="0,0,0,25" TextWrapping="Wrap" TextAlignment="Center"/>
+
+            <!-- Mode Selection Cards -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Bambi Sleep Card -->
+                <Border x:Name="CardBambi" Grid.Column="0" Background="#252542" CornerRadius="10"
+                        Cursor="Hand" MouseLeftButtonDown="CardBambi_Click">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="BorderBrush" Value="#404060"/>
+                            <Setter Property="BorderThickness" Value="2"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="BorderBrush" Value="#FF69B4"/>
+                                    <Setter Property="Background" Value="#2A2A4A"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel VerticalAlignment="Center" Margin="20">
+                        <TextBlock Text="BS" FontSize="36" FontWeight="Bold" Foreground="#FF69B4"
+                                   HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                        <TextBlock Text="Bambi Sleep" FontSize="18" FontWeight="SemiBold" Foreground="White"
+                                   HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                        <TextBlock TextWrapping="Wrap" TextAlignment="Center" Foreground="#A0A0A0" FontSize="12" LineHeight="18">
+                            <Run Text="Bambi Sleep specific content."/>
+                            <LineBreak/>
+                            <Run Text="Includes BambiCloud browser,"/>
+                            <LineBreak/>
+                            <Run Text="Bambi-themed triggers and prompts."/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <!-- Sissy Hypno Card -->
+                <Border x:Name="CardSissy" Grid.Column="2" Background="#252542" CornerRadius="10"
+                        Cursor="Hand" MouseLeftButtonDown="CardSissy_Click">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="BorderBrush" Value="#404060"/>
+                            <Setter Property="BorderThickness" Value="2"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="BorderBrush" Value="#FF69B4"/>
+                                    <Setter Property="Background" Value="#2A2A4A"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel VerticalAlignment="Center" Margin="20">
+                        <TextBlock Text="SH" FontSize="36" FontWeight="Bold" Foreground="#FF69B4"
+                                   HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                        <TextBlock Text="Sissy Hypno" FontSize="18" FontWeight="SemiBold" Foreground="White"
+                                   HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                        <TextBlock TextWrapping="Wrap" TextAlignment="Center" Foreground="#A0A0A0" FontSize="12" LineHeight="18">
+                            <Run Text="Generic sissy hypno content."/>
+                            <LineBreak/>
+                            <Run Text="HypnoTube browser only,"/>
+                            <LineBreak/>
+                            <Run Text="universal triggers and prompts."/>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
