@@ -194,6 +194,7 @@ namespace ConditioningControlPanel
         public static ProfileSyncService ProfileSync { get; private set; } = null!;
         public static LeaderboardService Leaderboard { get; private set; } = null!;
         public static HapticService Haptics { get; private set; } = null!;
+        public static AudioSyncService? AudioSync { get; private set; }
         public static DiscordRichPresenceService DiscordRpc { get; private set; } = null!;
         public static DiscordService Discord { get; private set; } = null!;
         public static DualMonitorVideoService DualMonitorVideo { get; private set; } = null!;
@@ -507,6 +508,7 @@ namespace ConditioningControlPanel
             ProfileSync = new ProfileSyncService();
             Leaderboard = new LeaderboardService();
             Haptics = new HapticService(Settings.Current.Haptics);
+            AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
 
             // Initialize Discord Rich Presence
             DiscordRpc = new DiscordRichPresenceService();

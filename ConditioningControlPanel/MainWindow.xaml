@@ -4174,6 +4174,25 @@
                                                 <ComboBoxItem Content="Earthquake" Foreground="#FF69B4"/>
                                             </ComboBox>
                                         </Grid>
+
+                                        <!-- Audio Sync - Web Video -->
+                                        <Border BorderBrush="#9B59B6" BorderThickness="0,1,0,0" Margin="0,8,0,0" Padding="0,8,0,0">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="44"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <CheckBox x:Name="ChkHapticAudioSync" Style="{StaticResource ToggleStyle}" IsChecked="False"
+                                                          VerticalAlignment="Center" Checked="ChkHapticAudioSync_Changed" Unchecked="ChkHapticAudioSync_Changed"/>
+                                                <StackPanel Grid.Column="1" Margin="30,0,0,0">
+                                                    <TextBlock Text="Sync to Video Audio" Foreground="White" FontSize="10"/>
+                                                    <TextBlock Text="Analyzes audio to sync haptics to web videos" Foreground="#606080" FontSize="9"/>
+                                                </StackPanel>
+                                                <TextBlock x:Name="TxtAudioSyncStatus" Grid.Column="2" Text="" Foreground="#808080" FontSize="9"
+                                                           VerticalAlignment="Center" Margin="5,0,0,0"/>
+                                            </Grid>
+                                        </Border>
                                     </StackPanel>
                                 </Border>
                                 <!-- Lock Overlay for Right Box -->

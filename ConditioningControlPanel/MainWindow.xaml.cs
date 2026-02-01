@@ -2735,6 +2735,18 @@ namespace ConditioningControlPanel
             App.Settings.Save();
         }
 
+        private void ChkHapticAudioSync_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var isEnabled = ChkHapticAudioSync.IsChecked == true;
+
+            App.Settings.Current.Haptics.AudioSync.Enabled = isEnabled;
+            App.Settings.Save();
+
+            // Update status text
+            TxtAudioSyncStatus.Text = isEnabled ? "Enabled" : "";
+        }
+
         private void CmbHapticProvider_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (_isLoading || CmbHapticProvider.SelectedItem == null) return;
@@ -5573,6 +5585,12 @@ namespace ConditioningControlPanel
 
             try
             {
+                // Inject audio sync script if enabled
+                if (App.Settings.Current.Haptics.AudioSync.Enabled && App.Haptics?.IsConnected == true)
+                {
+                    await _browser.InjectAudioSyncScriptAsync();
+                }
+
                 // Wait a moment for the page to fully render
                 await Task.Delay(1500);
 
@@ -5670,11 +5688,111 @@ namespace ConditioningControlPanel
                     App.Autonomy?.OnWebVideoEnded();
                     ExitBrowserFullscreen();
                 }
+                // Audio sync messages
+                else if (message.Contains("\"type\":\"audioSyncVideoDetected\""))
+                {
+                    HandleAudioSyncVideoDetected(message);
+                }
+                else if (message.Contains("\"type\":\"audioSyncState\""))
+                {
+                    HandleAudioSyncState(message);
+                }
+                else if (message.Contains("\"type\":\"audioSyncSeek\""))
+                {
+                    HandleAudioSyncSeek(message);
+                }
+                else if (message.Contains("\"type\":\"audioSyncEnded\""))
+                {
+                    HandleAudioSyncEnded();
+                }
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to process browser web message");
             }
+        }
+
+        private void HandleAudioSyncVideoDetected(string message)
+        {
+            if (App.AudioSync == null) return;
+
+            try
+            {
+                // Extract URL from message
+                var urlMatch = System.Text.RegularExpressions.Regex.Match(message, "\"url\":\"([^\"]+)\"");
+                if (urlMatch.Success)
+                {
+                    var videoUrl = urlMatch.Groups[1].Value;
+                    App.Logger?.Information("Audio sync: Video detected - {Url}", videoUrl);
+
+                    // Start processing in background
+                    _ = Task.Run(async () =>
+                    {
+                        await App.AudioSync.OnVideoDetectedAsync(videoUrl);
+
+                        // Signal browser that processing is done
+                        await Dispatcher.InvokeAsync(async () =>
+                        {
+                            if (_browser != null)
+                            {
+                                await _browser.SignalHapticReadyAsync();
+                            }
+                        });
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to handle audio sync video detected");
+            }
+        }
+
+        private void HandleAudioSyncState(string message)
+        {
+            if (App.AudioSync == null) return;
+
+            try
+            {
+                // Extract currentTime and paused from message
+                var timeMatch = System.Text.RegularExpressions.Regex.Match(message, "\"currentTime\":([\\d.]+)");
+                var pausedMatch = System.Text.RegularExpressions.Regex.Match(message, "\"paused\":(true|false)");
+
+                if (timeMatch.Success)
+                {
+                    var currentTime = double.Parse(timeMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+                    var paused = pausedMatch.Success && pausedMatch.Groups[1].Value == "true";
+
+                    App.AudioSync.OnPlaybackStateUpdate(currentTime, paused);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to handle audio sync state: {Error}", ex.Message);
+            }
+        }
+
+        private void HandleAudioSyncSeek(string message)
+        {
+            if (App.AudioSync == null) return;
+
+            try
+            {
+                var timeMatch = System.Text.RegularExpressions.Regex.Match(message, "\"currentTime\":([\\d.]+)");
+                if (timeMatch.Success)
+                {
+                    var newTime = double.Parse(timeMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+                    App.AudioSync.OnVideoSeek(newTime);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to handle audio sync seek: {Error}", ex.Message);
+            }
+        }
+
+        private void HandleAudioSyncEnded()
+        {
+            App.AudioSync?.OnVideoEnded();
         }
 
         private void BtnDiscordTab_Click(object sender, RoutedEventArgs e)

@@ -334,6 +334,29 @@ namespace ConditioningControlPanel.Services
             HapticTriggered?.Invoke(this, $"Live: {(int)(clampedIntensity * 100)}%");
         }
 
+        /// <summary>
+        /// Set continuous intensity for audio sync playback.
+        /// Optimized for frequent calls (~20-50Hz) during video playback.
+        /// </summary>
+        /// <param name="intensity">Intensity value from 0.0 to 1.0</param>
+        public async Task SetSyncIntensityAsync(double intensity)
+        {
+            if (!Settings.Enabled || !Settings.AudioSync.Enabled)
+                return;
+
+            if (_activeProvider == null || !_activeProvider.IsConnected)
+                return;
+
+            // Apply min/max from audio sync settings
+            var clampedIntensity = Math.Clamp(intensity,
+                Settings.AudioSync.MinIntensity,
+                Settings.AudioSync.MaxIntensity);
+
+            // Send short duration - will be overwritten by next sync call
+            // Using 80ms gives smooth overlap with 50ms update rate
+            await _activeProvider.VibrateAsync(clampedIntensity, 80);
+        }
+
         // === SPECIAL PATTERNS ===
 
         public async Task LevelUpPatternAsync()

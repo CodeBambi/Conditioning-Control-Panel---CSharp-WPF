@@ -264,6 +264,18 @@ namespace ConditioningControlPanel.Models
             set { _buttplugUrl = value; OnPropertyChanged(); }
         }
 
+        // Audio Sync settings
+        private AudioSyncSettings _audioSync = new();
+
+        /// <summary>
+        /// Settings for audio-synced haptics during video playback
+        /// </summary>
+        public AudioSyncSettings AudioSync
+        {
+            get => _audioSync;
+            set { _audioSync = value ?? new(); OnPropertyChanged(); }
+        }
+
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));

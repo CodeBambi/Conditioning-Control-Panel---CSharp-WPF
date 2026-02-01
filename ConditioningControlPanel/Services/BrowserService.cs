@@ -401,6 +401,176 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Inject audio sync monitoring script that reports video playback state.
+        /// Call this after navigating to a video page.
+        /// </summary>
+        public async Task InjectAudioSyncScriptAsync()
+        {
+            if (_webView?.CoreWebView2 == null) return;
+
+            try
+            {
+                var script = @"
+                    (function() {
+                        if (window.__hapticSyncInjected) return;
+                        window.__hapticSyncInjected = true;
+                        window.__hapticReady = false;
+
+                        // Find video element
+                        const findVideo = () => document.querySelector('video');
+
+                        // Report video detected
+                        const checkForVideo = () => {
+                            const video = findVideo();
+                            if (video && video.src) {
+                                const url = video.src || video.currentSrc;
+                                if (url && url.startsWith('http')) {
+                                    window.chrome.webview.postMessage(JSON.stringify({
+                                        type: 'audioSyncVideoDetected',
+                                        url: url,
+                                        duration: video.duration || 0
+                                    }));
+                                }
+                            }
+                        };
+
+                        // Check immediately and periodically
+                        checkForVideo();
+                        const checkInterval = setInterval(() => {
+                            if (window.__hapticReady) {
+                                clearInterval(checkInterval);
+                                return;
+                            }
+                            checkForVideo();
+                        }, 500);
+
+                        // Report playback state continuously
+                        let syncInterval = null;
+                        const startSync = () => {
+                            if (syncInterval) return;
+                            syncInterval = setInterval(() => {
+                                const video = findVideo();
+                                if (video && window.__hapticReady) {
+                                    window.chrome.webview.postMessage(JSON.stringify({
+                                        type: 'audioSyncState',
+                                        currentTime: video.currentTime,
+                                        paused: video.paused,
+                                        duration: video.duration || 0
+                                    }));
+                                }
+                            }, 50);
+                        };
+
+                        // Listen for video events
+                        const setupVideoListeners = (video) => {
+                            if (!video || video.__hapticListenersAdded) return;
+                            video.__hapticListenersAdded = true;
+
+                            video.addEventListener('play', () => {
+                                startSync();
+                            });
+
+                            video.addEventListener('pause', () => {
+                                window.chrome.webview.postMessage(JSON.stringify({
+                                    type: 'audioSyncState',
+                                    currentTime: video.currentTime,
+                                    paused: true
+                                }));
+                            });
+
+                            video.addEventListener('seeked', () => {
+                                window.chrome.webview.postMessage(JSON.stringify({
+                                    type: 'audioSyncSeek',
+                                    currentTime: video.currentTime
+                                }));
+                            });
+
+                            video.addEventListener('ended', () => {
+                                window.chrome.webview.postMessage(JSON.stringify({
+                                    type: 'audioSyncEnded'
+                                }));
+                            });
+                        };
+
+                        // Setup listeners on existing and new videos
+                        const video = findVideo();
+                        if (video) setupVideoListeners(video);
+
+                        // Watch for dynamically added videos
+                        const observer = new MutationObserver(() => {
+                            const v = findVideo();
+                            if (v) setupVideoListeners(v);
+                        });
+                        observer.observe(document.body, { childList: true, subtree: true });
+
+                        console.log('Haptic audio sync script injected');
+                    })();
+                ";
+
+                await _webView.CoreWebView2.ExecuteScriptAsync(script);
+                App.Logger?.Debug("Audio sync monitoring script injected");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to inject audio sync script: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Signal to the browser that haptic processing is ready and video can play
+        /// </summary>
+        public async Task SignalHapticReadyAsync()
+        {
+            if (_webView?.CoreWebView2 == null) return;
+
+            try
+            {
+                await _webView.CoreWebView2.ExecuteScriptAsync("window.__hapticReady = true;");
+                App.Logger?.Debug("Signaled haptic ready to browser");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to signal haptic ready: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Pause video playback in browser
+        /// </summary>
+        public async Task PauseVideoAsync()
+        {
+            if (_webView?.CoreWebView2 == null) return;
+
+            try
+            {
+                await _webView.CoreWebView2.ExecuteScriptAsync(
+                    "document.querySelector('video')?.pause();");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to pause video: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Resume video playback in browser
+        /// </summary>
+        public async Task PlayVideoAsync()
+        {
+            if (_webView?.CoreWebView2 == null) return;
+
+            try
+            {
+                await _webView.CoreWebView2.ExecuteScriptAsync(
+                    "document.querySelector('video')?.play();");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to play video: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Navigate to a URL (only HTTPS allowed for security)
         /// </summary>
         public void Navigate(string url)
