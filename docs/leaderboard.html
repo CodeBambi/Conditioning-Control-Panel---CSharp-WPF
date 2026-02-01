@@ -366,7 +366,7 @@
             `;
 
             try {
-                const response = await fetch(`${API_URL}?sort_by=${currentSort}&limit=500`);
+                const response = await fetch(`${API_URL}?sort_by=${currentSort}&limit=10000`);
                 if (!response.ok) throw new Error('Failed to fetch');
 
                 const data = await response.json();
