@@ -139,7 +139,7 @@ namespace ConditioningControlPanel.Services.Audio
                     currentTime = endTime;
                 }
 
-                Log.Information("ChunkManager: Initialized with {ChunkCount} chunks for video duration {Duration}",
+                App.Logger?.Information("ChunkManager: Initialized with {ChunkCount} chunks for video duration {Duration}",
                     _chunks.Count, _videoDuration);
             }
         }
@@ -178,7 +178,7 @@ namespace ConditioningControlPanel.Services.Audio
                         var chunk = _chunks[nextChunkIndex];
                         if (chunk.State == ChunkState.NotStarted)
                         {
-                            Log.Information("ChunkManager: Buffer low ({Buffer:F1}s), starting chunk {Index}",
+                            App.Logger?.Information("ChunkManager: Buffer low ({Buffer:F1}s), starting chunk {Index}",
                                 bufferAhead.TotalSeconds, nextChunkIndex);
 
                             // Start background processing
@@ -249,7 +249,7 @@ namespace ConditioningControlPanel.Services.Audio
                 Progress?.Invoke(this, new ChunkProgressEventArgs(chunkIndex, "Ready", 100));
                 ChunkReady?.Invoke(this, chunk);
 
-                Log.Information("ChunkManager: Chunk {Index} ready with {Samples} intensity samples",
+                App.Logger?.Information("ChunkManager: Chunk {Index} ready with {Samples} intensity samples",
                     chunkIndex, intensities.Length);
             }
             catch (OperationCanceledException)
@@ -269,7 +269,7 @@ namespace ConditioningControlPanel.Services.Audio
                 }
                 CleanupTempFile(chunk.TempVideoPath);
                 Error?.Invoke(this, $"Chunk {chunkIndex} failed: {ex.Message}");
-                Log.Error(ex, "ChunkManager: Failed to process chunk {Index}", chunkIndex);
+                App.Logger?.Error(ex, "ChunkManager: Failed to process chunk {Index}", chunkIndex);
             }
         }
 
@@ -304,8 +304,18 @@ namespace ConditioningControlPanel.Services.Audio
                     }
                 }
 
-                Log.Debug("ChunkManager: Extracted {Count} audio samples from {Path}",
+                // Calculate some audio stats for debugging
+                float minSample = float.MaxValue, maxSample = float.MinValue;
+                foreach (var s in samples)
+                {
+                    minSample = MathF.Min(minSample, s);
+                    maxSample = MathF.Max(maxSample, s);
+                }
+
+                App.Logger?.Information("ChunkManager: Extracted {Count} audio samples from {Path}",
                     samples.Count, videoPath);
+                App.Logger?.Information("ChunkManager: Audio sample range: Min={Min:F4}, Max={Max:F4}",
+                    minSample, maxSample);
 
                 return samples.ToArray();
             }, ct);

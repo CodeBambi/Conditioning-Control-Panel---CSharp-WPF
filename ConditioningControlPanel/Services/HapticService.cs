@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Haptics;
@@ -286,17 +287,26 @@ namespace ConditioningControlPanel.Services
         {
             if (_activeProvider == null || !_activeProvider.IsConnected)
             {
+                App.Logger?.Warning("TestAsync: Not connected - provider={Provider}, connected={Connected}",
+                    _activeProvider?.Name ?? "null", _activeProvider?.IsConnected);
                 Error?.Invoke(this, "Not connected to any device");
                 return;
             }
 
-            // Run a test pattern at fixed levels
-            var g = 1.0;
-            await _activeProvider.VibrateAsync(0.3 * g, 200);
-            await Task.Delay(300);
-            await _activeProvider.VibrateAsync(0.6 * g, 200);
-            await Task.Delay(300);
-            await _activeProvider.VibrateAsync(1.0 * g, 400);
+            App.Logger?.Information("TestAsync: Starting test pattern on {Provider}", _activeProvider.Name);
+
+            // Run a test pattern at fixed levels (use longer duration to trigger timeSec mode)
+            // Level 6, 12, 20 out of 20
+            await _activeProvider.VibrateAsync(0.3, 500);
+            await Task.Delay(600);
+            await _activeProvider.VibrateAsync(0.6, 500);
+            await Task.Delay(600);
+            await _activeProvider.VibrateAsync(1.0, 800);
+            await Task.Delay(900);
+
+            // Stop after test
+            await _activeProvider.StopAsync();
+            App.Logger?.Information("TestAsync: Test pattern completed");
         }
 
         public async Task StopAsync()
@@ -342,19 +352,66 @@ namespace ConditioningControlPanel.Services
         public async Task SetSyncIntensityAsync(double intensity)
         {
             if (!Settings.Enabled || !Settings.AudioSync.Enabled)
+            {
+                // Log occasionally to avoid spam
                 return;
+            }
 
             if (_activeProvider == null || !_activeProvider.IsConnected)
+            {
+                App.Logger?.Debug("SetSyncIntensity: No active provider or not connected");
                 return;
+            }
 
             // Apply min/max from audio sync settings
             var clampedIntensity = Math.Clamp(intensity,
                 Settings.AudioSync.MinIntensity,
                 Settings.AudioSync.MaxIntensity);
 
-            // Send short duration - will be overwritten by next sync call
-            // Using 80ms gives smooth overlap with 50ms update rate
-            await _activeProvider.VibrateAsync(clampedIntensity, 80);
+            // Send short duration for continuous sync
+            App.Logger?.Information("SetSyncIntensity: Sending {Intensity:F2} to {Provider}", clampedIntensity, _activeProvider.Name);
+            await _activeProvider.VibrateAsync(clampedIntensity, 200);
+        }
+
+        /// <summary>
+        /// Send a pattern of intensity values to play as a smooth continuous sequence.
+        /// Much smoother than individual commands - device interpolates between values.
+        /// </summary>
+        /// <param name="intensities">Array of intensity values (0.0-1.0)</param>
+        /// <param name="totalDurationMs">Total duration for the pattern</param>
+        public async Task SetSyncPatternAsync(float[] intensities, int totalDurationMs)
+        {
+            if (!Settings.Enabled || !Settings.AudioSync.Enabled)
+                return;
+
+            if (_activeProvider == null || !_activeProvider.IsConnected)
+            {
+                App.Logger?.Debug("SetSyncPattern: No active provider or not connected");
+                return;
+            }
+
+            // Convert to device levels
+            var levels = new int[intensities.Length];
+            for (int i = 0; i < intensities.Length; i++)
+            {
+                var clamped = Math.Clamp(intensities[i],
+                    (float)Settings.AudioSync.MinIntensity,
+                    (float)Settings.AudioSync.MaxIntensity);
+                levels[i] = Haptics.LovenseProvider.IntensityToLevel(clamped);
+            }
+
+            // Send pattern if provider supports it
+            if (_activeProvider is Haptics.LovenseProvider lovense)
+            {
+                await lovense.VibratePatternAsync(levels, totalDurationMs);
+            }
+            else
+            {
+                // Fallback: just send the average intensity
+                var avgLevel = levels.Length > 0 ? levels.Sum() / levels.Length : 0;
+                var avgIntensity = avgLevel / 20.0;
+                await _activeProvider.VibrateAsync(avgIntensity, totalDurationMs);
+            }
         }
 
         // === SPECIAL PATTERNS ===

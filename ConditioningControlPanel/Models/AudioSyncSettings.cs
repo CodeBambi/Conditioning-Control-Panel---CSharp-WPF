@@ -18,7 +18,7 @@ namespace ConditioningControlPanel.Models
         private double _rmsWeight = 0.35;
         private double _onsetWeight = 0.25;
         private double _smoothing = 0.3;
-        private double _minIntensity = 0.05;
+        private double _minIntensity = 0.0;  // Allow full range - quiet parts can be off
         private double _maxIntensity = 1.0;
         private int _manualLatencyOffsetMs = 0;
         private int _chunkDurationSeconds = 300;  // 5 minutes

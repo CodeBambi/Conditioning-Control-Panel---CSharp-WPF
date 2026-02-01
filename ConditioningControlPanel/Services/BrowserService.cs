@@ -402,6 +402,7 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Inject audio sync monitoring script that reports video playback state.
+        /// This script intercepts play events and pauses video until haptic processing is ready.
         /// Call this after navigating to a video page.
         /// </summary>
         public async Task InjectAudioSyncScriptAsync()
@@ -415,42 +416,96 @@ namespace ConditioningControlPanel.Services
                         if (window.__hapticSyncInjected) return;
                         window.__hapticSyncInjected = true;
                         window.__hapticReady = false;
+                        window.__hapticVideoReported = false;
+                        window.__hapticProcessing = false;
+                        window.__hapticOverlay = null;
+
+                        console.log('[HapticSync] Script injected');
+
+                        // Create processing overlay - supports both normal and fullscreen modes
+                        const createOverlay = () => {
+                            if (window.__hapticOverlay) return window.__hapticOverlay;
+
+                            const overlay = document.createElement('div');
+                            overlay.id = 'hapticSyncOverlay';
+                            overlay.style.cssText = `
+                                position: fixed;
+                                top: 0; left: 0; right: 0; bottom: 0;
+                                background: rgba(0, 0, 0, 0.85);
+                                display: flex;
+                                flex-direction: column;
+                                justify-content: center;
+                                align-items: center;
+                                z-index: 2147483647;
+                                color: white;
+                                font-family: 'Segoe UI', sans-serif;
+                            `;
+                            overlay.innerHTML = `
+                                <div style='font-size: 24px; margin-bottom: 20px; color: #FF69B4;'>Preparing Haptic Sync...</div>
+                                <div style='width: 200px; height: 4px; background: #333; border-radius: 2px; overflow: hidden;'>
+                                    <div id='hapticProgress' style='width: 0%; height: 100%; background: linear-gradient(90deg, #FF69B4, #FF1493); transition: width 0.3s;'></div>
+                                </div>
+                                <div id='hapticStatus' style='margin-top: 15px; font-size: 14px; color: #aaa;'>Analyzing audio...</div>
+                            `;
+
+                            // For fullscreen support, try to attach near the video element
+                            const video = document.querySelector('video');
+                            const fullscreenEl = document.fullscreenElement || document.webkitFullscreenElement;
+                            if (fullscreenEl) {
+                                // Attach to fullscreen container for visibility
+                                fullscreenEl.appendChild(overlay);
+                            } else if (video && video.parentElement) {
+                                // Attach to video's parent so overlay works when video goes fullscreen
+                                video.parentElement.style.position = 'relative';
+                                video.parentElement.appendChild(overlay);
+                            } else {
+                                document.body.appendChild(overlay);
+                            }
+                            window.__hapticOverlay = overlay;
+                            return overlay;
+                        };
+
+                        const showOverlay = () => {
+                            const overlay = createOverlay();
+                            overlay.style.display = 'flex';
+                        };
+
+                        const hideOverlay = () => {
+                            if (window.__hapticOverlay) {
+                                window.__hapticOverlay.style.display = 'none';
+                            }
+                        };
+
+                        const updateProgress = (percent, status) => {
+                            const progress = document.getElementById('hapticProgress');
+                            const statusEl = document.getElementById('hapticStatus');
+                            if (progress) progress.style.width = percent + '%';
+                            if (statusEl) statusEl.textContent = status;
+                        };
+
+                        // Expose progress update for C# to call
+                        window.__hapticUpdateProgress = updateProgress;
 
                         // Find video element
                         const findVideo = () => document.querySelector('video');
 
-                        // Report video detected
-                        const checkForVideo = () => {
-                            const video = findVideo();
-                            if (video && video.src) {
-                                const url = video.src || video.currentSrc;
-                                if (url && url.startsWith('http')) {
-                                    window.chrome.webview.postMessage(JSON.stringify({
-                                        type: 'audioSyncVideoDetected',
-                                        url: url,
-                                        duration: video.duration || 0
-                                    }));
-                                }
-                            }
+                        // Get best available video URL
+                        const getVideoUrl = (video) => {
+                            if (video.currentSrc && video.currentSrc.startsWith('http')) return video.currentSrc;
+                            if (video.src && video.src.startsWith('http')) return video.src;
+                            const source = video.querySelector('source');
+                            if (source && source.src && source.src.startsWith('http')) return source.src;
+                            return null;
                         };
-
-                        // Check immediately and periodically
-                        checkForVideo();
-                        const checkInterval = setInterval(() => {
-                            if (window.__hapticReady) {
-                                clearInterval(checkInterval);
-                                return;
-                            }
-                            checkForVideo();
-                        }, 500);
 
                         // Report playback state continuously
                         let syncInterval = null;
                         const startSync = () => {
                             if (syncInterval) return;
+                            console.log('[HapticSync] Starting sync interval');
                             syncInterval = setInterval(() => {
                                 const video = findVideo();
-                                if (video && window.__hapticReady) {
+                                if (video && window.__hapticReady && !video.paused) {
                                     window.chrome.webview.postMessage(JSON.stringify({
                                         type: 'audioSyncState',
                                         currentTime: video.currentTime,
@@ -461,49 +516,118 @@ namespace ConditioningControlPanel.Services
                             }, 50);
                         };
 
-                        // Listen for video events
-                        const setupVideoListeners = (video) => {
-                            if (!video || video.__hapticListenersAdded) return;
-                            video.__hapticListenersAdded = true;
+                        const stopSync = () => {
+                            if (syncInterval) {
+                                clearInterval(syncInterval);
+                                syncInterval = null;
+                            }
+                        };
 
-                            video.addEventListener('play', () => {
-                                startSync();
-                            });
+                        // Setup video interception
+                        const setupVideoInterception = (video) => {
+                            if (!video || video.__hapticIntercepted) return;
+                            video.__hapticIntercepted = true;
+                            console.log('[HapticSync] Setting up video interception');
 
+                            // Store original play function
+                            const originalPlay = video.play.bind(video);
+
+                            // Intercept play
+                            video.play = function() {
+                                console.log('[HapticSync] Play intercepted, ready=' + window.__hapticReady + ', processing=' + window.__hapticProcessing);
+
+                                if (window.__hapticReady) {
+                                    // Haptics ready, allow play
+                                    console.log('[HapticSync] Haptics ready, allowing play');
+                                    startSync();
+                                    return originalPlay();
+                                }
+
+                                if (!window.__hapticProcessing && !window.__hapticVideoReported) {
+                                    // First play attempt - start processing
+                                    window.__hapticProcessing = true;
+                                    window.__hapticVideoReported = true;
+
+                                    const url = getVideoUrl(video);
+                                    if (url) {
+                                        console.log('[HapticSync] Intercepting play, starting processing for: ' + url);
+                                        showOverlay();
+
+                                        // Report video URL to C#
+                                        window.chrome.webview.postMessage(JSON.stringify({
+                                            type: 'audioSyncVideoDetected',
+                                            url: url,
+                                            duration: video.duration || 0
+                                        }));
+                                    }
+                                }
+
+                                // Return a promise that resolves when ready
+                                return Promise.resolve();
+                            };
+
+                            // Setup other event listeners
                             video.addEventListener('pause', () => {
-                                window.chrome.webview.postMessage(JSON.stringify({
-                                    type: 'audioSyncState',
-                                    currentTime: video.currentTime,
-                                    paused: true
-                                }));
+                                console.log('[HapticSync] Video pause event');
+                                if (window.__hapticReady) {
+                                    window.chrome.webview.postMessage(JSON.stringify({
+                                        type: 'audioSyncState',
+                                        currentTime: video.currentTime,
+                                        paused: true
+                                    }));
+                                }
                             });
 
                             video.addEventListener('seeked', () => {
-                                window.chrome.webview.postMessage(JSON.stringify({
-                                    type: 'audioSyncSeek',
-                                    currentTime: video.currentTime
-                                }));
+                                console.log('[HapticSync] Video seeked to ' + video.currentTime);
+                                if (window.__hapticReady) {
+                                    window.chrome.webview.postMessage(JSON.stringify({
+                                        type: 'audioSyncSeek',
+                                        currentTime: video.currentTime
+                                    }));
+                                }
                             });
 
                             video.addEventListener('ended', () => {
+                                console.log('[HapticSync] Video ended');
+                                stopSync();
                                 window.chrome.webview.postMessage(JSON.stringify({
                                     type: 'audioSyncEnded'
                                 }));
                             });
                         };
 
-                        // Setup listeners on existing and new videos
+                        // Function to signal haptics ready and resume video
+                        window.__hapticSignalReady = () => {
+                            console.log('[HapticSync] Ready signal received');
+                            window.__hapticReady = true;
+                            window.__hapticProcessing = false;
+                            hideOverlay();
+
+                            // Auto-play the video
+                            const video = findVideo();
+                            if (video) {
+                                console.log('[HapticSync] Starting video playback');
+                                const originalPlay = HTMLMediaElement.prototype.play.bind(video);
+                                startSync();
+                                originalPlay().catch(e => console.log('[HapticSync] Play failed:', e));
+                            }
+                        };
+
+                        // Setup on existing video
                         const video = findVideo();
-                        if (video) setupVideoListeners(video);
+                        if (video) {
+                            setupVideoInterception(video);
+                        }
 
                         // Watch for dynamically added videos
                         const observer = new MutationObserver(() => {
                             const v = findVideo();
-                            if (v) setupVideoListeners(v);
+                            if (v) setupVideoInterception(v);
                         });
                         observer.observe(document.body, { childList: true, subtree: true });
 
-                        console.log('Haptic audio sync script injected');
+                        console.log('[HapticSync] Script fully initialized with play interception');
                     })();
                 ";
 
@@ -525,12 +649,40 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                await _webView.CoreWebView2.ExecuteScriptAsync("window.__hapticReady = true;");
-                App.Logger?.Debug("Signaled haptic ready to browser");
+                // Call the ready function which hides overlay and starts playback
+                var script = @"
+                    if (window.__hapticSignalReady) {
+                        window.__hapticSignalReady();
+                    } else {
+                        window.__hapticReady = true;
+                        console.log('[HapticSync] Haptic ready (fallback)');
+                    }
+                ";
+                await _webView.CoreWebView2.ExecuteScriptAsync(script);
+                App.Logger?.Information("Signaled haptic ready to browser");
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("Failed to signal haptic ready: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Update the haptic processing overlay with progress
+        /// </summary>
+        public async Task UpdateHapticProgressAsync(int percent, string status)
+        {
+            if (_webView?.CoreWebView2 == null) return;
+
+            try
+            {
+                var escapedStatus = status.Replace("'", "\\'");
+                var script = $"if (window.__hapticUpdateProgress) window.__hapticUpdateProgress({percent}, '{escapedStatus}');";
+                await _webView.CoreWebView2.ExecuteScriptAsync(script);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to update haptic progress: {Error}", ex.Message);
             }
         }
 

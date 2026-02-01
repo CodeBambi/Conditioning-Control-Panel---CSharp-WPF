@@ -674,6 +674,9 @@ namespace ConditioningControlPanel
             ChkDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
             ChkQuickDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
 
+            // Initialize Audio Sync checkbox
+            ChkHapticAudioSync.IsChecked = App.Settings.Current.Haptics.AudioSync.Enabled;
+
             // Initialize Quick Links login buttons
             UpdateQuickPatreonUI();
             UpdateQuickDiscordUI();
@@ -5409,10 +5412,24 @@ namespace ConditioningControlPanel
                 
                 _browser.NavigationCompleted += (s, url) =>
                 {
-                    Dispatcher.Invoke(() =>
+                    Dispatcher.Invoke(async () =>
                     {
                         TxtBrowserStatus.Text = "● Connected";
                         TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(0, 230, 118)); // Green
+
+                        // Inject audio sync script when navigating to video sites
+                        var audioSyncEnabled = App.Settings.Current.Haptics.AudioSync.Enabled;
+                        var hapticsConnected = App.Haptics?.IsConnected == true;
+                        var isHypnotube = url.Contains("hypnotube", StringComparison.OrdinalIgnoreCase);
+
+                        App.Logger?.Information("AudioSync check: Enabled={Enabled}, HapticsConnected={Connected}, IsHypnotube={IsHT}, URL={Url}",
+                            audioSyncEnabled, hapticsConnected, isHypnotube, url);
+
+                        if (audioSyncEnabled && hapticsConnected && isHypnotube)
+                        {
+                            App.Logger?.Information("AudioSync: Injecting script for HypnoTube page");
+                            await _browser.InjectAudioSyncScriptAsync();
+                        }
                     });
                 };
 
@@ -5677,8 +5694,23 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var message = e.WebMessageAsJson;
-                App.Logger?.Debug("Browser web message received: {Message}", message);
+                // Use TryGetWebMessageAsString to get the raw JSON (not double-encoded)
+                var message = e.TryGetWebMessageAsString();
+                if (string.IsNullOrEmpty(message))
+                {
+                    // Fallback to WebMessageAsJson if string is not available
+                    message = e.WebMessageAsJson;
+                }
+
+                // Log audio sync messages at Information level for debugging
+                if (message.Contains("audioSync"))
+                {
+                    App.Logger?.Information("AudioSync message received: {Message}", message);
+                }
+                else
+                {
+                    App.Logger?.Debug("Browser web message received: {Message}", message);
+                }
 
                 // Parse the JSON message
                 if (message.Contains("\"type\":\"videoEnded\""))
@@ -5691,6 +5723,7 @@ namespace ConditioningControlPanel
                 // Audio sync messages
                 else if (message.Contains("\"type\":\"audioSyncVideoDetected\""))
                 {
+                    App.Logger?.Information("AudioSync: Video detected message received");
                     HandleAudioSyncVideoDetected(message);
                 }
                 else if (message.Contains("\"type\":\"audioSyncState\""))
@@ -5699,10 +5732,12 @@ namespace ConditioningControlPanel
                 }
                 else if (message.Contains("\"type\":\"audioSyncSeek\""))
                 {
+                    App.Logger?.Information("AudioSync: Seek message received");
                     HandleAudioSyncSeek(message);
                 }
                 else if (message.Contains("\"type\":\"audioSyncEnded\""))
                 {
+                    App.Logger?.Information("AudioSync: Video ended message received");
                     HandleAudioSyncEnded();
                 }
             }
@@ -5714,7 +5749,13 @@ namespace ConditioningControlPanel
 
         private void HandleAudioSyncVideoDetected(string message)
         {
-            if (App.AudioSync == null) return;
+            if (App.AudioSync == null)
+            {
+                App.Logger?.Warning("AudioSync: Service is null, cannot process video");
+                // Signal ready anyway so video plays (without haptics)
+                _ = _browser?.SignalHapticReadyAsync();
+                return;
+            }
 
             try
             {
@@ -5723,27 +5764,72 @@ namespace ConditioningControlPanel
                 if (urlMatch.Success)
                 {
                     var videoUrl = urlMatch.Groups[1].Value;
-                    App.Logger?.Information("Audio sync: Video detected - {Url}", videoUrl);
+                    App.Logger?.Information("AudioSync: Starting processing for video URL: {Url}", videoUrl);
 
-                    // Start processing in background
-                    _ = Task.Run(async () =>
+                    // Wire up progress events
+                    void OnProgress(object? sender, Services.Audio.ChunkProgressEventArgs e)
                     {
-                        await App.AudioSync.OnVideoDetectedAsync(videoUrl);
-
-                        // Signal browser that processing is done
-                        await Dispatcher.InvokeAsync(async () =>
+                        Dispatcher.BeginInvoke(async () =>
                         {
+                            if (_browser != null)
+                            {
+                                await _browser.UpdateHapticProgressAsync(e.PercentComplete, e.Status);
+                            }
+                        });
+                    }
+
+                    void OnCompleted(object? sender, EventArgs e)
+                    {
+                        // Unsubscribe
+                        App.AudioSync!.ProcessingProgress -= OnProgress;
+                        App.AudioSync.ProcessingCompleted -= OnCompleted;
+
+                        Dispatcher.BeginInvoke(async () =>
+                        {
+                            App.Logger?.Information("AudioSync: Processing completed, signaling browser");
                             if (_browser != null)
                             {
                                 await _browser.SignalHapticReadyAsync();
                             }
                         });
+                    }
+
+                    App.AudioSync.ProcessingProgress += OnProgress;
+                    App.AudioSync.ProcessingCompleted += OnCompleted;
+
+                    // Start processing in background
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await App.AudioSync.OnVideoDetectedAsync(videoUrl);
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Error(ex, "AudioSync: Processing failed");
+                            // Signal ready anyway so video plays (without haptics)
+                            await Dispatcher.InvokeAsync(async () =>
+                            {
+                                if (_browser != null)
+                                {
+                                    await _browser.SignalHapticReadyAsync();
+                                }
+                            });
+                        }
                     });
+                }
+                else
+                {
+                    // No URL found, signal ready so video plays
+                    App.Logger?.Warning("AudioSync: No URL found in message");
+                    _ = _browser?.SignalHapticReadyAsync();
                 }
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to handle audio sync video detected");
+                // Signal ready anyway so video plays (without haptics)
+                _ = _browser?.SignalHapticReadyAsync();
             }
         }
 

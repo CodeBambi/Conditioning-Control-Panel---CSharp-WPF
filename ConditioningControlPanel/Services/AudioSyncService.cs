@@ -73,20 +73,22 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task OnVideoDetectedAsync(string videoUrl)
         {
+            App.Logger?.Information("AudioSyncService.OnVideoDetectedAsync called with URL length={UrlLen}", videoUrl?.Length ?? 0);
+
             if (!_settings.Enabled || !_hapticService.IsConnected)
             {
-                Log.Debug("AudioSyncService: Skipping - Enabled={Enabled}, Connected={Connected}",
+                App.Logger?.Warning("AudioSyncService: Skipping - Enabled={Enabled}, Connected={Connected}",
                     _settings.Enabled, _hapticService.IsConnected);
                 return;
             }
 
             if (!VideoDownloader.IsLikelyVideoUrl(videoUrl))
             {
-                Log.Debug("AudioSyncService: URL doesn't look like a video: {Url}", videoUrl);
+                App.Logger?.Warning("AudioSyncService: URL doesn't look like a video: {Url}", videoUrl);
                 return;
             }
 
-            Log.Information("AudioSyncService: Video detected, starting processing: {Url}", videoUrl);
+            App.Logger?.Information("AudioSyncService: Video detected, starting processing: {Url}", videoUrl);
 
             try
             {
@@ -100,9 +102,13 @@ namespace ConditioningControlPanel.Services
                 _chunkManager.Progress += OnChunkProgress;
                 _chunkManager.Error += OnChunkError;
 
+                App.Logger?.Information("AudioSyncService: ChunkManager created, initializing...");
+
                 // Initialize and start first chunk
                 _chunkManager.Initialize(videoUrl);
+                App.Logger?.Information("AudioSyncService: ChunkManager initialized, starting first chunk...");
                 await _chunkManager.StartFirstChunkAsync();
+                App.Logger?.Information("AudioSyncService: StartFirstChunkAsync completed, waiting for first chunk...");
 
                 // Wait for first chunk to be ready (with timeout)
                 var timeout = TimeSpan.FromMinutes(2);
@@ -115,18 +121,20 @@ namespace ConditioningControlPanel.Services
 
                 if (!_chunkManager.IsFirstChunkReady)
                 {
+                    App.Logger?.Error("AudioSyncService: Timeout waiting for first chunk!");
                     throw new AudioSyncException("Timeout waiting for first chunk to process");
                 }
 
                 _isProcessing = false;
                 ProcessingCompleted?.Invoke(this, EventArgs.Empty);
 
-                Log.Information("AudioSyncService: First chunk ready, video can start playing");
+                App.Logger?.Information("AudioSyncService: First chunk ready! Track has {ChunkCount} chunks, duration {Duration}",
+                    _chunkManager.Track.ChunkCount, _chunkManager.Track.Duration);
             }
             catch (Exception ex)
             {
                 _isProcessing = false;
-                Log.Error(ex, "AudioSyncService: Failed to process video");
+                App.Logger?.Error(ex, "AudioSyncService: Failed to process video");
                 Error?.Invoke(this, $"Failed to prepare haptic sync: {ex.Message}");
 
                 // Allow video to play without haptics
@@ -136,9 +144,17 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Called when JS reports video playback state (currentTime, paused)
+        /// Sends individual intensity commands for responsive haptic feedback.
         /// </summary>
         public void OnPlaybackStateUpdate(double currentTimeSeconds, bool paused)
         {
+            // Log every 5 seconds
+            if ((int)(currentTimeSeconds * 10) % 50 == 0)
+            {
+                App.Logger?.Information("AudioSyncService.OnPlaybackStateUpdate: time={Time:F1}s, paused={Paused}, enabled={Enabled}, chunkMgr={HasChunkMgr}",
+                    currentTimeSeconds, paused, _settings.Enabled, _chunkManager != null);
+            }
+
             if (!_settings.Enabled || _chunkManager == null)
                 return;
 
@@ -150,14 +166,14 @@ namespace ConditioningControlPanel.Services
                 _isPaused = true;
                 _isPlaying = false;
                 _ = _hapticService.StopAsync();
-                Log.Debug("AudioSyncService: Playback paused at {Time}", currentTime);
+                App.Logger?.Debug("AudioSyncService: Playback paused at {Time}", currentTime);
                 return;
             }
 
             if (!paused && _isPaused)
             {
                 _isPaused = false;
-                Log.Debug("AudioSyncService: Playback resumed at {Time}", currentTime);
+                App.Logger?.Information("AudioSyncService: Playback resumed at {Time}", currentTime);
             }
 
             if (paused)
@@ -171,19 +187,29 @@ namespace ConditioningControlPanel.Services
             _chunkManager.CheckBufferAndProcess(currentTime);
 
             // Calculate look-ahead time with latency compensation
-            var latencyMs = _hapticService.SubliminalAnticipationMs + _settings.ManualLatencyOffsetMs;
+            // Total ~1600ms to account for device latency + network + processing + 200ms earlier
+            var latencyMs = _hapticService.SubliminalAnticipationMs + 1350 + _settings.ManualLatencyOffsetMs;
             var lookAheadTime = currentTime + TimeSpan.FromMilliseconds(latencyMs);
 
             // Get intensity from track
             var track = _chunkManager.Track;
             if (!track.HasDataForTime(lookAheadTime))
             {
-                // No data yet - this shouldn't happen if buffer management is working
-                Log.Warning("AudioSyncService: No haptic data for time {Time}", lookAheadTime);
+                if ((int)currentTime.TotalSeconds % 5 == 0)
+                {
+                    App.Logger?.Warning("AudioSyncService: No haptic data for time {Time}", lookAheadTime);
+                }
                 return;
             }
 
             var intensity = track.GetIntensityAt(lookAheadTime);
+
+            // Log every 5 seconds
+            if ((int)(currentTime.TotalSeconds * 2) % 10 == 0)
+            {
+                App.Logger?.Information("AudioSyncService: Sending intensity {Intensity:F3} at time {Time:F1}s",
+                    intensity, currentTime.TotalSeconds);
+            }
 
             // Send to haptic device
             _ = SendHapticAsync(intensity);
@@ -198,7 +224,7 @@ namespace ConditioningControlPanel.Services
                 return;
 
             var newTime = TimeSpan.FromSeconds(newTimeSeconds);
-            Log.Information("AudioSyncService: User seeked to {Time}", newTime);
+            App.Logger?.Information("AudioSyncService: User seeked to {Time}", newTime);
 
             _lastPlaybackPosition = newTime;
 
@@ -216,7 +242,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void OnVideoEnded()
         {
-            Log.Information("AudioSyncService: Video ended");
+            App.Logger?.Information("AudioSyncService: Video ended");
             StopSync();
         }
 
@@ -229,7 +255,6 @@ namespace ConditioningControlPanel.Services
             _isPaused = false;
             _syncCts?.Cancel();
             _ = _hapticService.StopAsync();
-
             _chunkManager?.Stop();
         }
 
@@ -253,13 +278,14 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                Log.Debug("AudioSyncService: Failed to send haptic: {Error}", ex.Message);
+                App.Logger?.Debug("AudioSyncService: Failed to send haptic: {Error}", ex.Message);
             }
         }
 
+
         private void OnChunkReady(object? sender, AudioChunk chunk)
         {
-            Log.Debug("AudioSyncService: Chunk {Index} ready", chunk.Index);
+            App.Logger?.Debug("AudioSyncService: Chunk {Index} ready", chunk.Index);
         }
 
         private void OnChunkProgress(object? sender, ChunkProgressEventArgs e)
