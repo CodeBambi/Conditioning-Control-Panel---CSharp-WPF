@@ -825,8 +825,26 @@ namespace ConditioningControlPanel
             ChkDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
             ChkQuickDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
 
-            // Initialize Audio Sync checkbox
+            // Initialize Audio Sync checkbox and sliders
             ChkHapticAudioSync.IsChecked = App.Settings.Current.Haptics.AudioSync.Enabled;
+            if (SliderAudioSyncLatency != null)
+            {
+                SliderAudioSyncLatency.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
+                var latencyMs = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
+                var sign = latencyMs >= 0 ? "+" : "";
+                TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
+            }
+            if (SliderAudioSyncIntensity != null)
+            {
+                var intensityPercent = (int)(App.Settings.Current.Haptics.AudioSync.LiveIntensity * 100);
+                SliderAudioSyncIntensity.Value = intensityPercent;
+                TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
+            }
+            if (AudioSyncLatencyPanel != null)
+            {
+                AudioSyncLatencyPanel.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
+                    ? Visibility.Visible : Visibility.Collapsed;
+            }
 
             // Initialize Quick Links login buttons
             UpdateQuickPatreonUI();
@@ -2899,6 +2917,43 @@ namespace ConditioningControlPanel
 
             // Update status text
             TxtAudioSyncStatus.Text = isEnabled ? "Enabled" : "";
+
+            // Show/hide the latency slider panel
+            if (AudioSyncLatencyPanel != null)
+            {
+                AudioSyncLatencyPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        private void SliderAudioSyncLatency_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+
+            var latencyMs = (int)SliderAudioSyncLatency.Value;
+            App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs = latencyMs;
+            App.Settings.Save();
+
+            // Update display text
+            if (TxtAudioSyncLatency != null)
+            {
+                var sign = latencyMs >= 0 ? "+" : "";
+                TxtAudioSyncLatency.Text = $"{sign}{latencyMs}ms";
+            }
+        }
+
+        private void SliderAudioSyncIntensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+
+            var intensityPercent = (int)SliderAudioSyncIntensity.Value;
+            App.Settings.Current.Haptics.AudioSync.LiveIntensity = intensityPercent / 100.0;
+            // Don't save on every change - too frequent. Settings auto-save on close.
+
+            // Update display text (live feedback)
+            if (TxtAudioSyncIntensity != null)
+            {
+                TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
+            }
         }
 
         private void CmbHapticProvider_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -3067,6 +3122,12 @@ namespace ConditioningControlPanel
                 App.Settings.Current.Haptics.LovenseUrl = TxtHapticUrl.Text;
             else if (provider == Services.Haptics.HapticProviderType.Buttplug)
                 App.Settings.Current.Haptics.ButtplugUrl = TxtHapticUrl.Text;
+        }
+
+        private void ChkHapticAutoConnect_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.Haptics.AutoConnect = ChkHapticAutoConnect.IsChecked == true;
         }
 
         private void ChkHapticFeature_Changed(object sender, RoutedEventArgs e)
@@ -5947,8 +6008,35 @@ namespace ConditioningControlPanel
                         });
                     }
 
+                    // Wire up chunk loading events (for seek to unloaded sections)
+                    void OnChunkLoadingRequired(object? sender, int chunkIndex)
+                    {
+                        Dispatcher.BeginInvoke(async () =>
+                        {
+                            App.Logger?.Information("AudioSync: Chunk {Index} loading required, showing overlay", chunkIndex);
+                            if (_browser != null)
+                            {
+                                await _browser.ShowChunkLoadingOverlayAsync(chunkIndex);
+                            }
+                        });
+                    }
+
+                    void OnChunkLoadingCompleted(object? sender, EventArgs e)
+                    {
+                        Dispatcher.BeginInvoke(async () =>
+                        {
+                            App.Logger?.Information("AudioSync: Chunk loading completed, hiding overlay");
+                            if (_browser != null)
+                            {
+                                await _browser.HideChunkLoadingOverlayAsync();
+                            }
+                        });
+                    }
+
                     App.AudioSync.ProcessingProgress += OnProgress;
                     App.AudioSync.ProcessingCompleted += OnCompleted;
+                    App.AudioSync.ChunkLoadingRequired += OnChunkLoadingRequired;
+                    App.AudioSync.ChunkLoadingCompleted += OnChunkLoadingCompleted;
 
                     // Start processing in background
                     _ = Task.Run(async () =>
@@ -7792,6 +7880,9 @@ namespace ConditioningControlPanel
                 Services.Haptics.HapticProviderType.Buttplug => "Buttplug: Start Intiface Central, use default ws://localhost:12345",
                 _ => "Lovense: Enter IP from Lovense Remote → Settings → Game Mode (http://IP:30010)"
             };
+
+            // Auto-connect setting
+            ChkHapticAutoConnect.IsChecked = s.Haptics.AutoConnect;
 
             // Per-feature haptic settings
             ChkHapticBubble.IsChecked = s.Haptics.BubblePopEnabled;

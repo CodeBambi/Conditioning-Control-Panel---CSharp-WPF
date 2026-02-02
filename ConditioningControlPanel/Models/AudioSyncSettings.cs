@@ -18,11 +18,12 @@ namespace ConditioningControlPanel.Models
         private double _rmsWeight = 0.35;
         private double _onsetWeight = 0.25;
         private double _smoothing = 0.3;
-        private double _minIntensity = 0.0;  // Allow full range - quiet parts can be off
+        private double _minIntensity = 0.05;
         private double _maxIntensity = 1.0;
         private int _manualLatencyOffsetMs = 0;
         private int _chunkDurationSeconds = 300;  // 5 minutes
         private int _minBufferAheadSeconds = 120; // 2 minutes
+        private double _liveIntensity = 1.0;      // Live intensity multiplier (0-1)
 
         /// <summary>
         /// Enable audio-synced haptics for web videos
@@ -114,7 +115,7 @@ namespace ConditioningControlPanel.Models
         public int ManualLatencyOffsetMs
         {
             get => _manualLatencyOffsetMs;
-            set { _manualLatencyOffsetMs = Math.Clamp(value, -2000, 2000); OnPropertyChanged(); }
+            set { _manualLatencyOffsetMs = Math.Clamp(value, -600, 600); OnPropertyChanged(); }
         }
 
         /// <summary>
@@ -135,6 +136,17 @@ namespace ConditioningControlPanel.Models
         {
             get => _minBufferAheadSeconds;
             set { _minBufferAheadSeconds = Math.Clamp(value, 30, 300); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Live intensity multiplier (0-1) - can be adjusted on the fly
+        /// Applied to haptic output in real-time without reprocessing audio
+        /// </summary>
+        [JsonProperty("live_intensity")]
+        public double LiveIntensity
+        {
+            get => _liveIntensity;
+            set { _liveIntensity = Math.Clamp(value, 0, 1.0); OnPropertyChanged(); }
         }
 
         protected void OnPropertyChanged([CallerMemberName] string? name = null)

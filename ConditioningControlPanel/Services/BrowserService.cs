@@ -483,8 +483,16 @@ namespace ConditioningControlPanel.Services
                             if (statusEl) statusEl.textContent = status;
                         };
 
-                        // Expose progress update for C# to call
+                        // Expose functions for C# to call
                         window.__hapticUpdateProgress = updateProgress;
+                        window.__hapticShowOverlay = (message) => {
+                            showOverlay();
+                            if (message) {
+                                const statusEl = document.getElementById('hapticStatus');
+                                if (statusEl) statusEl.textContent = message;
+                            }
+                        };
+                        window.__hapticHideOverlay = hideOverlay;
 
                         // Find video element
                         const findVideo = () => document.querySelector('video');
@@ -498,12 +506,18 @@ namespace ConditioningControlPanel.Services
                             return null;
                         };
 
-                        // Report playback state continuously
-                        let syncInterval = null;
-                        const startSync = () => {
-                            if (syncInterval) return;
-                            console.log('[HapticSync] Starting sync interval');
-                            syncInterval = setInterval(() => {
+                        // Report playback state continuously using requestAnimationFrame
+                        // rAF is more consistent than setInterval and less prone to browser throttling
+                        let syncActive = false;
+                        let lastSyncTime = 0;
+                        const SYNC_INTERVAL_MS = 33; // ~30fps for haptic updates (smooth but not excessive)
+
+                        const syncLoop = (timestamp) => {
+                            if (!syncActive) return;
+
+                            // Throttle to ~30fps to avoid flooding
+                            if (timestamp - lastSyncTime >= SYNC_INTERVAL_MS) {
+                                lastSyncTime = timestamp;
                                 const video = findVideo();
                                 if (video && window.__hapticReady && !video.paused) {
                                     window.chrome.webview.postMessage(JSON.stringify({
@@ -513,14 +527,22 @@ namespace ConditioningControlPanel.Services
                                         duration: video.duration || 0
                                     }));
                                 }
-                            }, 50);
+                            }
+
+                            requestAnimationFrame(syncLoop);
+                        };
+
+                        const startSync = () => {
+                            if (syncActive) return;
+                            console.log('[HapticSync] Starting sync with requestAnimationFrame');
+                            syncActive = true;
+                            lastSyncTime = 0;
+                            requestAnimationFrame(syncLoop);
                         };
 
                         const stopSync = () => {
-                            if (syncInterval) {
-                                clearInterval(syncInterval);
-                                syncInterval = null;
-                            }
+                            syncActive = false;
+                            console.log('[HapticSync] Stopping sync');
                         };
 
                         // Setup video interception
@@ -683,6 +705,60 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Debug("Failed to update haptic progress: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Show overlay when loading a new chunk (user seeked to unloaded section)
+        /// </summary>
+        public async Task ShowChunkLoadingOverlayAsync(int chunkIndex)
+        {
+            if (_webView?.CoreWebView2 == null) return;
+
+            try
+            {
+                // Show loading overlay and pause video
+                var script = @"
+                    (function() {
+                        document.querySelector('video')?.pause();
+                        if (window.__hapticShowOverlay) {
+                            window.__hapticShowOverlay('Loading haptic data...');
+                        }
+                    })();
+                ";
+                await _webView.CoreWebView2.ExecuteScriptAsync(script);
+                App.Logger?.Information("Showing chunk loading overlay for chunk {Index}", chunkIndex);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to show chunk loading overlay: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Hide chunk loading overlay and resume video
+        /// </summary>
+        public async Task HideChunkLoadingOverlayAsync()
+        {
+            if (_webView?.CoreWebView2 == null) return;
+
+            try
+            {
+                // Hide overlay and resume video
+                var script = @"
+                    (function() {
+                        if (window.__hapticHideOverlay) {
+                            window.__hapticHideOverlay();
+                        }
+                        document.querySelector('video')?.play();
+                    })();
+                ";
+                await _webView.CoreWebView2.ExecuteScriptAsync(script);
+                App.Logger?.Information("Hiding chunk loading overlay");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to hide chunk loading overlay: {Error}", ex.Message);
             }
         }
 
