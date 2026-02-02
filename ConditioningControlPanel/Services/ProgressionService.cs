@@ -37,6 +37,9 @@ namespace ConditioningControlPanel.Services
 
             // Route XP to the active companion (v5.3 companion leveling system)
             App.Companion?.AddCompanionXP(amount, source, context);
+
+            // Track for quests (only for "earn X XP" type quests)
+            App.Quests?.TrackXPEarned((int)amount);
             
             // Check for level up
             var xpNeeded = GetXPForLevel(settings.PlayerLevel);

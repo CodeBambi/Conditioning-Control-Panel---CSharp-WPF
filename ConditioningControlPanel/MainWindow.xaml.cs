@@ -206,6 +206,13 @@ namespace ConditioningControlPanel
                 App.Achievements.AchievementUnlocked += OnAchievementUnlockedInMainWindow;
             }
 
+            // Subscribe to quest events
+            if (App.Quests != null)
+            {
+                App.Quests.QuestCompleted += OnQuestCompleted;
+                App.Quests.QuestProgressChanged += OnQuestProgressChanged;
+            }
+
             // Initialize Avatar tab settings
             InitializePatreonTab();
 
@@ -574,6 +581,7 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Refreshes UI elements that need manual updates when theme changes.
+        /// Updates colors based on content mode (Bambi Sleep = Pink, Sissy Hypno = Purple).
         /// </summary>
         private void RefreshThemeAwareElements()
         {
@@ -581,10 +589,23 @@ namespace ConditioningControlPanel
             {
                 var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
                 var accentHex = Models.ContentModeConfig.GetAccentColorHex(mode);
-                var accentColor = (Color)ColorConverter.ConvertFromString(accentHex);
-                var accentBrush = new SolidColorBrush(accentColor);
+                var accentLightHex = Models.ContentModeConfig.GetAccentLightColorHex(mode);
+                var accentDarkHex = Models.ContentModeConfig.GetAccentDarkColorHex(mode);
 
-                // Update player title glow
+                var accentColor = (Color)ColorConverter.ConvertFromString(accentHex);
+                var accentLightColor = (Color)ColorConverter.ConvertFromString(accentLightHex);
+                var accentDarkColor = (Color)ColorConverter.ConvertFromString(accentDarkHex);
+
+                var accentBrush = new SolidColorBrush(accentColor);
+                var accentLightBrush = new SolidColorBrush(accentLightColor);
+                var accentDarkBrush = new SolidColorBrush(accentDarkColor);
+
+                // === TITLE BAR (most visible) ===
+                if (TitleBarBorder != null)
+                    TitleBarBorder.Background = accentBrush;
+
+                // === HEADER AREA ===
+                // Player title and glow
                 if (TxtPlayerTitle != null)
                 {
                     TxtPlayerTitle.Foreground = accentBrush;
@@ -592,11 +613,28 @@ namespace ConditioningControlPanel
                         glow.Color = accentColor;
                 }
 
-                // Update header version text
+                // Header version text
                 if (TxtHeaderVersion != null)
                     TxtHeaderVersion.Foreground = accentBrush;
 
-                App.Logger?.Debug("Theme-aware UI elements refreshed");
+                // === XP/LEVEL DISPLAY ===
+                // Level label (e.g., "LVL 42")
+                if (TxtLevelLabel != null)
+                    TxtLevelLabel.Foreground = accentBrush;
+
+                // XP progress bar fill
+                if (XPBar != null)
+                    XPBar.Background = accentBrush;
+
+                // === BANNER AREA ===
+                if (TxtBannerPrimary != null)
+                    TxtBannerPrimary.Foreground = accentBrush;
+                if (TxtBannerSecondary != null)
+                    TxtBannerSecondary.Foreground = accentBrush;
+                if (TxtBannerTertiary != null)
+                    TxtBannerTertiary.Foreground = accentBrush;
+
+                App.Logger?.Debug("Theme-aware UI elements refreshed for mode {Mode}", mode);
             }
             catch (Exception ex)
             {
@@ -1148,6 +1186,149 @@ namespace ConditioningControlPanel
             ShowTab("progression");
         }
 
+        private void BtnQuests_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("quests");
+        }
+
+        private void BtnRerollDaily_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Quests?.RerollDailyQuest() == true)
+            {
+                RefreshQuestUI();
+            }
+            else
+            {
+                var hasPatreon = App.Patreon?.HasPremiumAccess == true;
+                var msg = hasPatreon
+                    ? "You've used all 3 daily rerolls! Rerolls reset at midnight."
+                    : "You've used your daily reroll! Patreon supporters get 2 extra rerolls.";
+                MessageBox.Show(msg, "Reroll Limit", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        private void BtnRerollWeekly_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Quests?.RerollWeeklyQuest() == true)
+            {
+                RefreshQuestUI();
+            }
+            else
+            {
+                var hasPatreon = App.Patreon?.HasPremiumAccess == true;
+                var msg = hasPatreon
+                    ? "You've used all 3 weekly rerolls! Rerolls reset on Sunday."
+                    : "You've used your weekly reroll! Patreon supporters get 2 extra rerolls.";
+                MessageBox.Show(msg, "Reroll Limit", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        private void RefreshQuestUI()
+        {
+            var questService = App.Quests;
+            if (questService == null) return;
+
+            // Refresh daily quest display
+            var dailyDef = questService.GetCurrentDailyDefinition();
+            var dailyProgress = questService.Progress.DailyQuest;
+            if (dailyDef != null && dailyProgress != null)
+            {
+                TxtDailyQuestIcon.Text = dailyDef.Icon;
+                TxtDailyQuestName.Text = dailyDef.Name;
+                TxtDailyQuestDesc.Text = dailyDef.Description;
+                TxtDailyProgress.Text = $"{dailyProgress.CurrentProgress} / {dailyDef.TargetValue}";
+                TxtDailyXP.Text = $"🎁 {dailyDef.XPReward} XP";
+
+                // Load quest image
+                try
+                {
+                    if (!string.IsNullOrEmpty(dailyDef.ImagePath))
+                    {
+                        ImgDailyQuest.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(dailyDef.ImagePath));
+                    }
+                }
+                catch { /* Image load failed, leave blank */ }
+
+                // Update progress bar
+                double progressPercent = dailyDef.TargetValue > 0
+                    ? Math.Min(1.0, (double)dailyProgress.CurrentProgress / dailyDef.TargetValue)
+                    : 0;
+                DailyProgressFill.Width = DailyQuestCard.ActualWidth > 30
+                    ? (DailyQuestCard.ActualWidth - 130) * progressPercent
+                    : 0;
+
+                // Show completed overlay if done
+                if (dailyProgress.IsCompleted)
+                {
+                    DailyCompletedOverlay.Visibility = Visibility.Visible;
+                    BtnRerollDaily.IsEnabled = false;
+                    BtnRerollDaily.Content = "✅ Completed";
+                }
+                else
+                {
+                    DailyCompletedOverlay.Visibility = Visibility.Collapsed;
+                    int remainingRerolls = questService.GetRemainingDailyRerolls();
+                    BtnRerollDaily.IsEnabled = remainingRerolls > 0;
+                    BtnRerollDaily.Content = remainingRerolls > 0 ? $"🔄 Reroll ({remainingRerolls} left)" : "🔄 No rerolls left";
+                }
+            }
+
+            // Refresh weekly quest display
+            var weeklyDef = questService.GetCurrentWeeklyDefinition();
+            var weeklyProgress = questService.Progress.WeeklyQuest;
+            if (weeklyDef != null && weeklyProgress != null)
+            {
+                TxtWeeklyQuestIcon.Text = weeklyDef.Icon;
+                TxtWeeklyQuestName.Text = weeklyDef.Name;
+                TxtWeeklyQuestDesc.Text = weeklyDef.Description;
+                TxtWeeklyProgress.Text = $"{weeklyProgress.CurrentProgress} / {weeklyDef.TargetValue}";
+                TxtWeeklyXP.Text = $"🎁 {weeklyDef.XPReward} XP";
+
+                // Load quest image
+                try
+                {
+                    if (!string.IsNullOrEmpty(weeklyDef.ImagePath))
+                    {
+                        ImgWeeklyQuest.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(weeklyDef.ImagePath));
+                    }
+                }
+                catch { /* Image load failed, leave blank */ }
+
+                // Update progress bar
+                double progressPercent = weeklyDef.TargetValue > 0
+                    ? Math.Min(1.0, (double)weeklyProgress.CurrentProgress / weeklyDef.TargetValue)
+                    : 0;
+                WeeklyProgressFill.Width = WeeklyQuestCard.ActualWidth > 30
+                    ? (WeeklyQuestCard.ActualWidth - 130) * progressPercent
+                    : 0;
+
+                // Show completed overlay if done
+                if (weeklyProgress.IsCompleted)
+                {
+                    WeeklyCompletedOverlay.Visibility = Visibility.Visible;
+                    BtnRerollWeekly.IsEnabled = false;
+                    BtnRerollWeekly.Content = "✅ Completed";
+                }
+                else
+                {
+                    WeeklyCompletedOverlay.Visibility = Visibility.Collapsed;
+                    int remainingRerolls = questService.GetRemainingWeeklyRerolls();
+                    BtnRerollWeekly.IsEnabled = remainingRerolls > 0;
+                    BtnRerollWeekly.Content = remainingRerolls > 0 ? $"🔄 Reroll ({remainingRerolls} left)" : "🔄 No rerolls left";
+                }
+            }
+
+            // Update statistics
+            TxtTotalDailyCompleted.Text = questService.Progress.TotalDailyQuestsCompleted.ToString();
+            TxtTotalWeeklyCompleted.Text = questService.Progress.TotalWeeklyQuestsCompleted.ToString();
+            TxtTotalQuestXP.Text = questService.Progress.TotalXPFromQuests.ToString();
+
+            // Update header stats
+            int completedThisWeek = (dailyProgress?.IsCompleted == true ? 1 : 0) +
+                                    (weeklyProgress?.IsCompleted == true ? 1 : 0);
+            TxtQuestStats.Text = $"{completedThisWeek} completed this week";
+        }
+
         private void BtnAchievements_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("achievements");
@@ -1478,6 +1659,7 @@ namespace ConditioningControlPanel
             SettingsTab.Visibility = Visibility.Collapsed;
             PresetsTab.Visibility = Visibility.Collapsed;
             ProgressionTab.Visibility = Visibility.Collapsed;
+            QuestsTab.Visibility = Visibility.Collapsed;
             AchievementsTab.Visibility = Visibility.Collapsed;
             CompanionTab.Visibility = Visibility.Collapsed;
             PatreonTab.Visibility = Visibility.Collapsed;
@@ -1491,6 +1673,7 @@ namespace ConditioningControlPanel
             BtnSettings.Style = inactiveStyle;
             BtnPresets.Style = inactiveStyle;
             BtnProgression.Style = inactiveStyle;
+            BtnQuests.Style = inactiveStyle;
             BtnAchievements.Style = inactiveStyle;
             BtnCompanion.Style = inactiveStyle;
             BtnLeaderboard.Style = inactiveStyle;
@@ -1522,6 +1705,12 @@ namespace ConditioningControlPanel
                         throw;
                     }
                     BtnProgression.Style = activeStyle;
+                    break;
+
+                case "quests":
+                    QuestsTab.Visibility = Visibility.Visible;
+                    BtnQuests.Style = activeStyle;
+                    RefreshQuestUI();
                     break;
 
                 case "achievements":
@@ -3648,6 +3837,49 @@ namespace ConditioningControlPanel
             {
                 RefreshAchievementTile(achievement.Id);
                 App.Logger?.Information("Achievement tile refreshed: {Name}", achievement.Name);
+            });
+        }
+
+        #endregion
+
+        #region Quests
+
+        private void OnQuestCompleted(object? sender, Services.QuestCompletedEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                // Show completion banner
+                QuestCompleteBanner.Visibility = Visibility.Visible;
+                TxtQuestComplete.Text = $"{e.QuestDefinition.Name} COMPLETE! +{e.XPAwarded} XP";
+
+                // Refresh the quest UI
+                RefreshQuestUI();
+
+                // Hide banner after 5 seconds
+                Task.Delay(5000).ContinueWith(_ =>
+                {
+                    if (Application.Current?.Dispatcher != null)
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            QuestCompleteBanner.Visibility = Visibility.Collapsed;
+                        });
+                    }
+                });
+
+                App.Logger?.Information("Quest completed: {Name} (+{XP} XP)", e.QuestDefinition.Name, e.XPAwarded);
+            });
+        }
+
+        private void OnQuestProgressChanged(object? sender, Services.QuestProgressEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                // Only refresh if we're on the quests tab
+                if (QuestsTab.Visibility == Visibility.Visible)
+                {
+                    RefreshQuestUI();
+                }
             });
         }
 

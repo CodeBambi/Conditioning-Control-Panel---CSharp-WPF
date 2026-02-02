@@ -195,6 +195,7 @@ public class BubbleCountService : IDisposable
         if (success)
         {
             App.Progression?.AddXP(100, XPSource.BubbleCount);
+            App.Quests?.TrackBubbleCountCompleted();
             GameCompleted?.Invoke(this, EventArgs.Empty);
             App.Logger?.Information("Bubble count game completed successfully! +100 XP");
         }

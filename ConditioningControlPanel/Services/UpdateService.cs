@@ -22,61 +22,47 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.8";
+        public const string AppVersion = "5.4.9";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.8 - Personality System & Major Overhaul
+        public const string CurrentPatchNotes = @"v5.4.9 - Bug Fixes & Quality of Life
 
-🎭 NEW PERSONALITY SYSTEM
-• 6 Built-in Personality Presets:
-  - BambiSprite (default) - Bubbly, cheeky bad influence bestie
-  - Slut Mode (Patreon) - Explicit, horny, cock-obsessed
-  - Gentle Trainer - Soft, encouraging, nurturing guide
-  - Strict Domme - Commanding, disciplined, authoritative
-  - Bimbo Coach - Transformation-focused, aesthetic obsessed
-  - Hypno Guide - Trance-focused, soothing suggestions
-• Quick switch personalities from avatar right-click menu
-• Shows 'Personality: [name]' with easy dropdown selector
-• Custom prompt indicator when using your own prompts
-• Global Knowledge Base Links - add URLs that apply to ALL personalities
-• Automatic migration from old Slut Mode toggle
+📁 CONTENT PACK FIXES
+• Fixed packs not showing after moving assets folder
+• Packs now properly register in settings after move
+• Orphan pack detection on startup and folder change
+• Auto-activates discovered packs so they appear immediately
 
-🎬 SESSION EDITOR IMPROVEMENTS
-• Completely redesigned layout - 30% more compact
-• All content now fits cleanly in the window
-• Scrollbar added for when content overflows
-• Smaller, cleaner feature icons (68x68 from 98x98)
-• Reduced timeline row height for more visible segments
-• Better visual hierarchy and spacing
+📥 DOWNLOAD IMPROVEMENTS
+• Bandwidth no longer charged on failed/cancelled downloads
+• New pending download system - only charges on success
+• Server confirms completion before deducting bandwidth
 
-📺 VIDEO STABILITY FIXES
-• Fixed dual-monitor video freeze - one window freezing no longer affects the other
-• Per-window bitmap isolation prevents cross-contamination
-• Parallel player.Stop() with timeout prevents hanging on cleanup
-• Panic key now reliably closes ALL video windows
+🎮 HAPTICS
+• New 'Auto-connect on startup' option
+• Automatically connects to your haptic device when app opens
 
-🔒 PRIVACY & PROFILES
-• New 'Show Online Status' toggle - appear offline/invisible
-• View other users' achievement badges on profile pages
-• Setting syncs immediately to leaderboard
+💬 AVATAR SPEECH BUBBLE
+• Fixed bubble sometimes appearing behind UI (z-order fix)
+• AI responses now protected from being overwritten
+• Preset phrases discarded while AI bubble is visible
+• Increased cooldown after AI responses for reading time
 
-🖼️ FLASH IMAGES
-• True random selection - no more predictable sequences
-• Support for more formats: .jpe, .jfif, .tif, .tiff, .heic, .avif
+🎨 CONTENT MODE THEMING
+• More UI elements now change color in Sissy Hypno mode
+• Title bar, XP bar, level label all reflect mode color
+• Much more noticeable visual difference between modes
 
-📁 ASSET FOLDER
-• Detects and offers to move downloaded content packs when changing folders
-• Retrocompatible pack detection in both current and default locations
-
-🎨 UI IMPROVEMENTS
-• Removed Slut Mode checkbox from Patreon tab (now in personality menu)
-• Dark themed personality submenu in avatar context menu
-• Cleaner prompt editor with Global KB Links section
+💬 DISCORD RICH PRESENCE
+• Added detailed tooltip explaining visibility
+• Clarifies who can see your status and how it works
 
 🔧 ADDITIONAL FIXES
+• Various stability improvements
+• Better error handling
 • Settings save immediately when changed mid-session
 • Fixed LibVLC threading crashes and frame buffer race conditions
 • Fixed 'X active packs' showing phantom packs after folder change";

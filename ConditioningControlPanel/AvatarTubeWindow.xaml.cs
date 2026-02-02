@@ -74,6 +74,7 @@ namespace ConditioningControlPanel
         private readonly List<DateTime> _rapidClickTimestamps = new(); // Track clicks for 50-in-1-minute trigger
         private bool _isMuted = false; // Mute avatar speech and sounds
         private bool _isMouseOverSpeechBubble = false; // Track mouse over speech bubble to keep it open
+        private bool _isShowingAiBubble = false; // Track when AI bubble is visible (presets get discarded)
         private readonly DateTime _startupTime = DateTime.Now; // Track startup to prevent race conditions
         private const double StartupCooldownSeconds = 3.0; // Don't allow non-greeting speech for 3 seconds
 
@@ -87,9 +88,9 @@ namespace ConditioningControlPanel
 
         // Speech delay constants
         private const double MinSpeechDelaySeconds = 2.0;      // Minimum delay between any speech
-        private const double AiSpeechBonusSeconds = 1.0;       // Extra delay for AI responses
+        private const double AiSpeechBonusSeconds = 5.0;       // Extra delay after AI responses (users need time to read)
         private const int LongTextThreshold = 100;             // Characters before adding per-char delay
-        private const double PerCharDelaySeconds = 0.01;       // Delay per character over threshold
+        private const double PerCharDelaySeconds = 0.02;       // Delay per character over threshold (doubled for readability)
         // Note: Whispers mute state is now read from App.Settings.Current.SubAudioEnabled
         private bool _isBrowserPaused = false; // Browser audio paused state
 
@@ -1885,7 +1886,7 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Queues a speech bubble to be displayed. Bubbles are shown one at a time.
-        /// Blocked while waiting for AI response.
+        /// Blocked while waiting for AI response or while AI bubble is visible.
         /// Plays giggle sound 1 in 5 times for preset phrases.
         /// </summary>
         public void Giggle(string text)
@@ -1897,9 +1898,23 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // Block (discard) preset phrases while AI bubble is visible - don't queue them
+            if (_isShowingAiBubble)
+            {
+                App.Logger?.Debug("Giggle discarded - AI bubble visible: {Text}", text);
+                return;
+            }
+
             // Use BeginInvoke for non-blocking UI update
             Application.Current.Dispatcher.BeginInvoke(() =>
             {
+                // Double-check AI bubble state on UI thread
+                if (_isShowingAiBubble)
+                {
+                    App.Logger?.Debug("Giggle discarded (UI thread) - AI bubble visible: {Text}", text);
+                    return;
+                }
+
                 if (_isGiggling)
                 {
                     _speechQueue.Enqueue((text, SpeechSource.Preset));
@@ -1978,6 +1993,7 @@ namespace ConditioningControlPanel
             }
 
             _isGiggling = true;
+            _isShowingAiBubble = (source == SpeechSource.AI);
 
             // Play sound for the speech bubble
             if (playSound)
@@ -2003,6 +2019,10 @@ namespace ConditioningControlPanel
             // Force layout update before showing to prevent flickering
             SpeechBubble.UpdateLayout();
             SpeechBubble.Visibility = Visibility.Visible;
+
+            // Start z-order refresh to keep bubble on top of main window
+            StartZOrderRefreshTimer();
+            BringToFrontTemporarily();
 
             // Calculate display duration based on text length
             // Base: 5 seconds, plus ~0.05s per character, min 5s, max 14s
@@ -2032,6 +2052,7 @@ namespace ConditioningControlPanel
                 _speechTimer.Stop();
                 StopZOrderRefreshTimer();
                 SpeechBubble.Visibility = Visibility.Collapsed;
+                _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
 
                 // Track this speech's properties for delay calculation on next speech
                 _lastSpeechEndTime = DateTime.Now;
@@ -2701,6 +2722,10 @@ namespace ConditioningControlPanel
                 SpeechBubble.UpdateLayout();
                 SpeechBubble.Visibility = Visibility.Visible;
 
+                // Start z-order refresh to keep bubble on top of main window
+                StartZOrderRefreshTimer();
+                BringToFrontTemporarily();
+
                 // Play the voice line audio in sync with the bubble
                 PlayVoiceLineAudio(filePath);
 
@@ -2724,6 +2749,7 @@ namespace ConditioningControlPanel
                     }
                     _speechTimer.Stop();
                     _isGiggling = false;
+                    _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
                     SpeechBubble.Visibility = Visibility.Collapsed;
                     StopZOrderRefreshTimer();
 
@@ -2838,6 +2864,10 @@ namespace ConditioningControlPanel
             SpeechBubble.UpdateLayout();
             SpeechBubble.Visibility = Visibility.Visible;
 
+            // Start z-order refresh to keep bubble on top of main window
+            StartZOrderRefreshTimer();
+            BringToFrontTemporarily();
+
             App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
 
             // Calculate display duration based on text length
@@ -2865,6 +2895,7 @@ namespace ConditioningControlPanel
                 _speechTimer.Stop();
                 StopZOrderRefreshTimer();
                 SpeechBubble.Visibility = Visibility.Collapsed;
+                _isShowingAiBubble = false; // Clear AI bubble flag when any bubble hides
 
                 // Track this speech's properties for delay calculation on next speech
                 _lastSpeechEndTime = DateTime.Now;

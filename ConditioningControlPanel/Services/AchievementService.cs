@@ -122,16 +122,19 @@ public class AchievementService : IDisposable
             {
                 _progress.TotalPinkFilterMinutes += elapsed;
                 _isDirty = true;
-                
+
                 // Check Rose-Tinted Reality (10 hours = 600 minutes)
                 if (_progress.TotalPinkFilterMinutes >= 600)
                 {
                     TryUnlock("rose_tinted_reality");
                 }
+
+                // Track for quests (accumulate until we have a full minute)
+                App.Quests?.TrackPinkFilterMinutes(elapsed);
             }
         }
         _lastPinkFilterCheck = now;
-        
+
         // Track Spiral time
         if (settings.SpiralEnabled)
         {
@@ -141,12 +144,15 @@ public class AchievementService : IDisposable
                 _progress.TotalSpiralMinutes += elapsed;
                 _progress.ContinuousSpiralMinutes += elapsed;
                 _isDirty = true;
-                
+
                 // Check Spiral Eyes (20 minutes continuous)
                 if (_progress.ContinuousSpiralMinutes >= 20)
                 {
                     TryUnlock("spiral_eyes");
                 }
+
+                // Track for quests
+                App.Quests?.TrackSpiralMinutes(elapsed);
             }
         }
         else
@@ -211,11 +217,14 @@ public class AchievementService : IDisposable
     {
         _progress.TotalFlashImages++;
         _isDirty = true;
-        
+
         if (_progress.TotalFlashImages >= 5000)
         {
             TryUnlock("retinal_burn");
         }
+
+        // Track for quests
+        App.Quests?.TrackFlashImage();
     }
     
     /// <summary>
@@ -225,11 +234,14 @@ public class AchievementService : IDisposable
     {
         _progress.TotalBubblesPopped++;
         _isDirty = true;
-        
+
         if (_progress.TotalBubblesPopped >= 1000)
         {
             TryUnlock("pop_the_thought");
         }
+
+        // Track for quests
+        App.Quests?.TrackBubblePopped();
     }
     
     /// <summary>
@@ -267,6 +279,9 @@ public class AchievementService : IDisposable
         App.Logger?.Information("Lock card tracked! Total lock cards completed: {Count}", _progress.TotalLockCardsCompleted);
         Save(); // Save immediately so sync picks up the new count
 
+        // Track for quests
+        App.Quests?.TrackLockCardCompleted();
+
         // Check for perfect accuracy
         if (errors == 0)
         {
@@ -298,6 +313,9 @@ public class AchievementService : IDisposable
         App.Logger?.Information("Video watched: {Duration}s ({Minutes:F2} min). Total: {Total:F1} minutes",
             durationSeconds, minutes, _progress.TotalVideoMinutes);
         Save(); // Save immediately so sync picks up the new value
+
+        // Track for quests
+        App.Quests?.TrackVideoMinutes(minutes);
     }
 
     /// <summary>
@@ -465,7 +483,10 @@ public class AchievementService : IDisposable
             _progress.CompletedGamerGirlNoAltTab = true;
             TryUnlock("player_2_disconnected");
         }
-        
+
+        // Track for quests
+        App.Quests?.TrackSessionCompleted();
+
         _isDirty = true;
     }
     

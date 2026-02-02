@@ -302,9 +302,10 @@ namespace ConditioningControlPanel.Services
 
             // Get signed download URL from proxy server
             string downloadUrl;
+            string? downloadId = null;
             try
             {
-                downloadUrl = await GetSignedDownloadUrlAsync(pack.Id, accessToken);
+                (downloadUrl, downloadId) = await GetSignedDownloadUrlAsync(pack.Id, accessToken);
             }
             catch (PackRateLimitException ex)
             {
@@ -321,6 +322,7 @@ namespace ConditioningControlPanel.Services
             var packGuid = Guid.NewGuid().ToString("N");
             var packFolder = Path.Combine(_packsFolder, packGuid);
             var tempZipPath = Path.Combine(_packsFolder, $".{packGuid}_temp.zip");
+            var downloadSucceeded = false;
 
             try
             {
@@ -544,6 +546,10 @@ namespace ConditioningControlPanel.Services
                 pack.IsDownloaded = true;
                 pack.IsDownloading = false;
                 pack.DownloadProgress = 100;
+                downloadSucceeded = true;
+
+                // Report successful download to server - bandwidth will be charged
+                await ReportDownloadCompletionAsync(downloadId, true, accessToken);
 
                 App.Logger?.Information("Pack installed successfully: {Name} ({FileCount} files encrypted)",
                     pack.Name, manifest.Files.Count);
@@ -554,6 +560,12 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Error(ex, "Failed to install pack: {Name}", pack.Name);
                 pack.IsDownloading = false;
                 pack.DownloadProgress = 0;
+
+                // Report failed download to server - bandwidth will be refunded
+                if (!downloadSucceeded && !string.IsNullOrEmpty(downloadId))
+                {
+                    _ = ReportDownloadCompletionAsync(downloadId, false, accessToken);
+                }
 
                 // Clean up on failure
                 CleanupFailedInstall(tempZipPath, packFolder);
@@ -566,8 +578,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Gets a signed download URL from the proxy server.
         /// Requires Patreon authentication.
+        /// Returns both the download URL and a downloadId for completion reporting.
         /// </summary>
-        private async Task<string> GetSignedDownloadUrlAsync(string packId, string accessToken)
+        private async Task<(string DownloadUrl, string? DownloadId)> GetSignedDownloadUrlAsync(string packId, string accessToken)
         {
             var requestUrl = $"{ProxyBaseUrl}/pack/download-url";
             var requestBody = new { packId };
@@ -615,10 +628,56 @@ namespace ConditioningControlPanel.Services
                 throw new Exception("Server returned empty download URL");
             }
 
-            App.Logger?.Information("Got signed download URL for pack: {PackId}, remaining downloads: {Remaining}",
-                packId, successResponse.RateLimit?.Remaining ?? -1);
+            App.Logger?.Information("Got signed download URL for pack: {PackId}, downloadId: {DownloadId}, remaining downloads: {Remaining}",
+                packId, successResponse.DownloadId, successResponse.RateLimit?.Remaining ?? -1);
 
-            return successResponse.DownloadUrl;
+            return (successResponse.DownloadUrl, successResponse.DownloadId);
+        }
+
+        /// <summary>
+        /// Reports download completion status to the server.
+        /// On success, bandwidth is charged. On failure, bandwidth is refunded.
+        /// </summary>
+        private async Task ReportDownloadCompletionAsync(string downloadId, bool success, string accessToken)
+        {
+            if (string.IsNullOrEmpty(downloadId))
+            {
+                App.Logger?.Debug("No downloadId to report completion for");
+                return;
+            }
+
+            try
+            {
+                var requestUrl = $"{ProxyBaseUrl}/pack/download-complete";
+                var requestBody = new { downloadId, success };
+                var jsonContent = new StringContent(
+                    JsonConvert.SerializeObject(requestBody),
+                    Encoding.UTF8,
+                    "application/json");
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                request.Content = jsonContent;
+
+                using var response = await _httpClient.SendAsync(request);
+                var responseJson = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    App.Logger?.Information("Reported download completion: downloadId={DownloadId}, success={Success}",
+                        downloadId, success);
+                }
+                else
+                {
+                    App.Logger?.Warning("Failed to report download completion: {Status} - {Response}",
+                        response.StatusCode, responseJson);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Don't throw - this is best-effort reporting
+                App.Logger?.Warning(ex, "Failed to report download completion for {DownloadId}", downloadId);
+            }
         }
 
         /// <summary>
@@ -1311,6 +1370,9 @@ namespace ConditioningControlPanel.Services
 
         [JsonProperty("downloadUrl")]
         public string? DownloadUrl { get; set; }
+
+        [JsonProperty("downloadId")]
+        public string? DownloadId { get; set; }
 
         [JsonProperty("packId")]
         public string? PackId { get; set; }

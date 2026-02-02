@@ -186,6 +186,7 @@ namespace ConditioningControlPanel
         public static MindWipeService MindWipe { get; private set; } = null!;
         public static BrainDrainService BrainDrain { get; private set; } = null!;
         public static AchievementService Achievements { get; private set; } = null!;
+        public static QuestService Quests { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
         public static AiService Ai { get; private set; } = null!;
         public static WindowAwarenessService WindowAwareness { get; private set; } = null!;
@@ -499,6 +500,7 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.75, "Loading achievements...");
             Achievements = new AchievementService();
+            Quests = new QuestService();
             Tutorial = new TutorialService();
 
             splash.SetProgress(0.85, "Initializing companion...");
@@ -509,6 +511,12 @@ namespace ConditioningControlPanel
             Leaderboard = new LeaderboardService();
             Haptics = new HapticService(Settings.Current.Haptics);
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
+
+            // Auto-connect haptics if enabled (runs in background)
+            if (Settings.Current.Haptics.AutoConnect && Settings.Current.Haptics.Provider != Services.Haptics.HapticProviderType.Mock)
+            {
+                _ = AutoConnectHapticsAsync();
+            }
 
             // Initialize Discord Rich Presence
             DiscordRpc = new DiscordRichPresenceService();
@@ -551,6 +559,9 @@ namespace ConditioningControlPanel
             // Check daily maintenance achievement (7 days streak)
             Achievements.CheckDailyMaintenance();
             Logger.Information("Checked daily maintenance achievement");
+
+            // Update quest streak tracking
+            Quests?.TrackStreak(Achievements.Progress.ConsecutiveDays);
 
             Logger.Information("Services initialized");
 
@@ -749,6 +760,36 @@ namespace ConditioningControlPanel
             {
                 Logger?.Warning(ex, "Background update check failed");
                 // Silently fail - don't disrupt user
+            }
+        }
+
+        /// <summary>
+        /// Auto-connect to haptics device on startup if enabled
+        /// </summary>
+        private async Task AutoConnectHapticsAsync()
+        {
+            try
+            {
+                // Short delay to let app fully initialize
+                await Task.Delay(2000);
+
+                Logger?.Information("Auto-connecting haptics: Provider={Provider}", Settings.Current.Haptics.Provider);
+
+                var connected = await Haptics.ConnectAsync();
+
+                if (connected)
+                {
+                    Logger?.Information("Haptics auto-connected successfully to {Provider}", Haptics.ProviderName);
+                }
+                else
+                {
+                    Logger?.Warning("Haptics auto-connect failed for {Provider}", Settings.Current.Haptics.Provider);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Haptics auto-connect error");
+                // Silently fail - user can manually connect later
             }
         }
 
