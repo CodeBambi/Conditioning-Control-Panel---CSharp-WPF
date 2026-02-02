@@ -11778,9 +11778,11 @@ namespace ConditioningControlPanel
                         }
 
                         var movedCount = 0;
+                        var registeredCount = 0;
                         foreach (var (sourceFolder, packName) in packFoldersToMove)
                         {
-                            var destDir = Path.Combine(newPacksFolder, Path.GetFileName(sourceFolder));
+                            var guid = Path.GetFileName(sourceFolder);
+                            var destDir = Path.Combine(newPacksFolder, guid);
                             if (!Directory.Exists(destDir))
                             {
                                 Directory.Move(sourceFolder, destDir);
@@ -11791,9 +11793,52 @@ namespace ConditioningControlPanel
                             {
                                 App.Logger?.Warning("Pack folder already exists at destination, skipping: {Dest}", destDir);
                             }
+
+                            // Register pack in settings (fix for packs not being detected after move)
+                            var manifestPath = Path.Combine(destDir, ".manifest.enc");
+                            if (File.Exists(manifestPath))
+                            {
+                                try
+                                {
+                                    var json = Services.PackEncryptionService.LoadEncryptedManifest(manifestPath);
+                                    var manifest = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(json);
+                                    var packId = (string?)manifest?.PackId;
+
+                                    if (!string.IsNullOrEmpty(packId))
+                                    {
+                                        // Ensure settings collections exist
+                                        App.Settings.Current.InstalledPackIds ??= new List<string>();
+                                        App.Settings.Current.PackGuidMap ??= new Dictionary<string, string>();
+                                        App.Settings.Current.ActivePackIds ??= new List<string>();
+
+                                        // Add to InstalledPackIds if not present
+                                        if (!App.Settings.Current.InstalledPackIds.Contains(packId))
+                                        {
+                                            App.Settings.Current.InstalledPackIds.Add(packId);
+                                        }
+
+                                        // Update PackGuidMap (overwrite if different GUID was stored)
+                                        App.Settings.Current.PackGuidMap[packId] = guid;
+
+                                        // Auto-activate pack so it shows immediately
+                                        if (!App.Settings.Current.ActivePackIds.Contains(packId))
+                                        {
+                                            App.Settings.Current.ActivePackIds.Add(packId);
+                                        }
+
+                                        registeredCount++;
+                                        App.Logger?.Information("Registered pack in settings: {PackId} -> {Guid}", packId, guid);
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    App.Logger?.Warning(ex, "Failed to register pack from manifest: {Path}", manifestPath);
+                                }
+                            }
                         }
 
-                        App.Logger?.Information("Moved {Count}/{Total} packs to {NewPath}", movedCount, packFoldersToMove.Count, newPacksFolder);
+                        App.Logger?.Information("Moved {MovedCount}/{Total} packs, registered {RegCount} in settings",
+                            movedCount, packFoldersToMove.Count, registeredCount);
                     }
                     catch (Exception ex)
                     {

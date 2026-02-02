@@ -98,6 +98,9 @@ namespace ConditioningControlPanel.Services
                 di.Attributes |= FileAttributes.Hidden;
             }
 
+            // Scan for orphaned packs (on disk but not in settings) and register them
+            ScanAndRegisterOrphanedPacks();
+
             // Load installed pack manifests
             LoadInstalledManifests();
         }
@@ -105,6 +108,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Refreshes the packs folder path when the assets directory changes.
         /// Call this after changing CustomAssetsPath.
+        /// Also detects and registers any orphaned packs (packs on disk not in settings).
         /// </summary>
         public void RefreshPacksPath()
         {
@@ -127,11 +131,92 @@ namespace ConditioningControlPanel.Services
                 di.Attributes |= FileAttributes.Hidden;
             }
 
+            // Scan for orphaned packs (on disk but not in settings) and register them
+            ScanAndRegisterOrphanedPacks();
+
             // Clear cached data and reload
             _installedManifests.Clear();
             LoadInstalledManifests();
 
             App.Logger?.Information("ContentPackService: Packs path refreshed from {OldPath} to {NewPath}", oldPacksFolder, _packsFolder);
+        }
+
+        /// <summary>
+        /// Scans the packs folder for packs that exist on disk but aren't registered in settings.
+        /// This handles cases where packs were manually copied or settings were lost.
+        /// </summary>
+        private void ScanAndRegisterOrphanedPacks()
+        {
+            if (!Directory.Exists(_packsFolder))
+                return;
+
+            try
+            {
+                var registeredCount = 0;
+
+                foreach (var dir in Directory.GetDirectories(_packsFolder))
+                {
+                    var guid = Path.GetFileName(dir);
+                    var manifestPath = Path.Combine(dir, ".manifest.enc");
+
+                    if (!File.Exists(manifestPath))
+                        continue;
+
+                    try
+                    {
+                        var json = PackEncryptionService.LoadEncryptedManifest(manifestPath);
+                        var manifest = Newtonsoft.Json.JsonConvert.DeserializeObject<InstalledPackManifest>(json);
+                        var packId = manifest?.PackId;
+
+                        if (string.IsNullOrEmpty(packId))
+                            continue;
+
+                        // Check if this pack is already properly registered
+                        var isInSettings = App.Settings?.Current?.InstalledPackIds?.Contains(packId) ?? false;
+                        var hasCorrectGuid = App.Settings?.Current?.PackGuidMap?.TryGetValue(packId, out var existingGuid) == true
+                            && string.Equals(existingGuid, guid, StringComparison.OrdinalIgnoreCase);
+
+                        if (isInSettings && hasCorrectGuid)
+                            continue; // Already properly registered
+
+                        // Register the orphaned pack
+                        App.Settings.Current.InstalledPackIds ??= new List<string>();
+                        App.Settings.Current.PackGuidMap ??= new Dictionary<string, string>();
+                        App.Settings.Current.ActivePackIds ??= new List<string>();
+
+                        if (!App.Settings.Current.InstalledPackIds.Contains(packId))
+                        {
+                            App.Settings.Current.InstalledPackIds.Add(packId);
+                        }
+
+                        App.Settings.Current.PackGuidMap[packId] = guid;
+
+                        // Auto-activate orphaned packs so they're immediately visible
+                        if (!App.Settings.Current.ActivePackIds.Contains(packId))
+                        {
+                            App.Settings.Current.ActivePackIds.Add(packId);
+                        }
+
+                        registeredCount++;
+                        App.Logger?.Information("Registered orphaned pack: {PackId} ({PackName}) -> {Guid}",
+                            packId, manifest?.PackName ?? "Unknown", guid);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to read manifest for potential orphaned pack: {Path}", manifestPath);
+                    }
+                }
+
+                if (registeredCount > 0)
+                {
+                    App.Settings.Save();
+                    App.Logger?.Information("Registered {Count} orphaned pack(s) found in {Path}", registeredCount, _packsFolder);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to scan for orphaned packs in {Path}", _packsFolder);
+            }
         }
 
         /// <summary>
