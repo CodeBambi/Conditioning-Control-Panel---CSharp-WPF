@@ -65,7 +65,7 @@
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="MinWidth" Value="130"/>
+            <Setter Property="MinWidth" Value="110"/>
             <Setter Property="Height" Value="36"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -97,7 +97,7 @@
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="MinWidth" Value="130"/>
+            <Setter Property="MinWidth" Value="110"/>
             <Setter Property="Height" Value="36"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -660,8 +660,6 @@
                     <Border Background="{StaticResource PinkBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,20,0">
                         <TextBlock x:Name="TxtLevel" Text="Lvl 1" Foreground="White" FontWeight="Bold" FontSize="12"/>
                     </Border>
-                    <TextBlock Text="💗" FontSize="15" Margin="0,0,8,0"/>
-                    <TextBlock Text="Conditioning Control Panel" Foreground="White" FontSize="18" FontWeight="Bold"/>
                     <TextBlock x:Name="TxtHeaderVersion" Text="" Foreground="{StaticResource PinkBrush}" FontSize="12" FontWeight="Normal"
                                VerticalAlignment="Bottom" Margin="6,0,0,2"/>
                 </StackPanel>
@@ -809,7 +807,7 @@
                             <Style TargetType="Button">
                                 <Setter Property="Background" Value="#3D1A3D"/>
                                 <Setter Property="Foreground" Value="#FF69B4"/>
-                                <Setter Property="MinWidth" Value="130"/>
+                                <Setter Property="MinWidth" Value="110"/>
                                 <Setter Property="Height" Value="32"/>
                                 <Setter Property="Padding" Value="12,6"/>
                                 <Setter Property="Tag" Value="NoUpdate"/>
