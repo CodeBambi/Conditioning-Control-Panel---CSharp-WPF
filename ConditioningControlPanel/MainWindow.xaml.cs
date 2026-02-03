@@ -11816,7 +11816,7 @@ namespace ConditioningControlPanel
                 // For pack files, we need to extract to temp first
                 if (file.IsPackFile && file.PackFileEntry != null)
                 {
-                    var tempPath = App.ContentPacks?.ExtractPackFileToTemp(file.PackId!, file.PackFileEntry);
+                    var tempPath = App.ContentPacks?.GetPackFileTempPath(file.PackId!, file.PackFileEntry);
                     if (!string.IsNullOrEmpty(tempPath))
                     {
                         filePath = tempPath;
@@ -11837,6 +11837,11 @@ namespace ConditioningControlPanel
                 var previewWindow = new MiniPlayerWindow
                 {
                     Owner = this
+                };
+                previewWindow.Closed += (s, args) =>
+                {
+                    // Reactivate main window when preview closes to prevent it going behind other apps
+                    Activate();
                 };
                 previewWindow.LoadFile(filePath);
                 previewWindow.Show();

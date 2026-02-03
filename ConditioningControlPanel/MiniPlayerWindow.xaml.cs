@@ -303,27 +303,60 @@ namespace ConditioningControlPanel
 
         protected override void OnClosed(EventArgs e)
         {
-            // Clean up resources
-            _positionTimer?.Stop();
-
-            if (_mediaPlayer != null)
+            try
             {
-                _mediaPlayer.Stop();
-                _mediaPlayer.Dispose();
-                _mediaPlayer = null;
-            }
+                // Stop position timer first
+                _positionTimer?.Stop();
+                _positionTimer = null;
 
-            _media?.Dispose();
-            _media = null;
+                // Detach VideoView from MediaPlayer before disposing
+                if (_videoView != null)
+                {
+                    _videoView.MediaPlayer = null;
+                }
 
-            if (_videoView != null)
-            {
-                _videoView.MediaPlayer = null;
+                // Stop and dispose media player safely
+                if (_mediaPlayer != null)
+                {
+                    try
+                    {
+                        if (_mediaPlayer.IsPlaying)
+                        {
+                            _mediaPlayer.Stop();
+                        }
+                    }
+                    catch { /* Ignore stop errors */ }
+
+                    try
+                    {
+                        _mediaPlayer.Dispose();
+                    }
+                    catch { /* Ignore dispose errors */ }
+
+                    _mediaPlayer = null;
+                }
+
+                // Dispose media
+                try
+                {
+                    _media?.Dispose();
+                }
+                catch { /* Ignore dispose errors */ }
+                _media = null;
+
                 _videoView = null;
-            }
 
-            // Clear GIF animation
-            AnimationBehavior.SetSourceUri(ImagePreview, null);
+                // Clear GIF animation
+                try
+                {
+                    AnimationBehavior.SetSourceUri(ImagePreview, null);
+                }
+                catch { /* Ignore GIF cleanup errors */ }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Error during MiniPlayerWindow cleanup");
+            }
 
             base.OnClosed(e);
         }

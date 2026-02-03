@@ -30,11 +30,32 @@
                            Foreground="#FF69B4" FontSize="12" FontWeight="SemiBold"
                            VerticalAlignment="Center" Margin="12,0,0,0"
                            TextTrimming="CharacterEllipsis"/>
-                <Button Grid.Column="1" Content="X" Width="32" Height="32"
-                        Background="Transparent" Foreground="#808080"
-                        BorderThickness="0" FontSize="12" Cursor="Hand"
+                <Button Grid.Column="1" Content="✕" Width="32" Height="32"
+                        BorderThickness="0" FontSize="14" Cursor="Hand"
                         Click="BtnClose_Click"
-                        ToolTip="Close (Escape)"/>
+                        ToolTip="Close (Escape)">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Foreground" Value="#808080"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="border" Background="{TemplateBinding Background}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="border" Property="Background" Value="#E81123"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
             </Grid>
 
             <!-- Content Area -->
