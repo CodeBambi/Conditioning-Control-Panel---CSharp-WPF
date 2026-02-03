@@ -3299,15 +3299,27 @@
             <Border Style="{StaticResource SectionPanel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
-                        <!-- Header -->
-                        <Grid Margin="0,0,0,20">
-                            <TextBlock Text="📜 QUESTS" Foreground="#FF69B4" FontSize="18" FontWeight="Bold"/>
-                            <TextBlock x:Name="TxtQuestStats" Text="0 completed this week"
-                                       Foreground="#888888" FontSize="12" HorizontalAlignment="Right"
-                                       VerticalAlignment="Center"/>
-                        </Grid>
+                        <!-- Sub-tab Navigation -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                            <Button x:Name="BtnQuestSubDaily" Content="Daily/Weekly"
+                                    Style="{StaticResource TabButtonActive}"
+                                    Click="BtnQuestSubDaily_Click" Width="120"/>
+                            <Button x:Name="BtnQuestSubRoadmap" Content="Transformation"
+                                    Style="{StaticResource TabButton}"
+                                    Click="BtnQuestSubRoadmap_Click" Margin="10,0,0,0" Width="130"/>
+                        </StackPanel>
 
-                        <!-- Two-column layout for Daily and Weekly -->
+                        <!-- Daily/Weekly Quests Panel -->
+                        <StackPanel x:Name="DailyWeeklyPanel">
+                            <!-- Header -->
+                            <Grid Margin="0,0,0,20">
+                                <TextBlock Text="📜 QUESTS" Foreground="#FF69B4" FontSize="18" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtQuestStats" Text="0 completed this week"
+                                           Foreground="#888888" FontSize="12" HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Two-column layout for Daily and Weekly -->
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -3372,26 +3384,27 @@
                                                 </Border>
                                             </StackPanel>
                                             <!-- Quest Image -->
-                                            <Border Grid.Column="1" CornerRadius="8" Margin="10,0,0,0"
-                                                    Width="90" Height="90" Background="#1A1A2E">
+                                            <Border Grid.Column="1" CornerRadius="12" Margin="10,0,0,0"
+                                                    Width="150" Height="150" Background="#1A1A2E">
                                                 <Border.Clip>
-                                                    <RectangleGeometry RadiusX="8" RadiusY="8" Rect="0,0,90,90"/>
+                                                    <RectangleGeometry RadiusX="12" RadiusY="12" Rect="0,0,150,150"/>
                                                 </Border.Clip>
-                                                <Image x:Name="ImgDailyQuest" Stretch="UniformToFill"/>
+                                                <Grid>
+                                                    <Image x:Name="ImgDailyQuest" Stretch="UniformToFill"/>
+                                                    <!-- Checkmark overlay for completed state -->
+                                                    <Border x:Name="DailyCompletedOverlay" Background="#802D4A2D"
+                                                            Visibility="Collapsed">
+                                                        <TextBlock Text="✓" Foreground="#00E676" FontSize="64"
+                                                                   FontWeight="Bold" HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center">
+                                                            <TextBlock.Effect>
+                                                                <DropShadowEffect Color="Black" BlurRadius="8" ShadowDepth="2"/>
+                                                            </TextBlock.Effect>
+                                                        </TextBlock>
+                                                    </Border>
+                                                </Grid>
                                             </Border>
                                         </Grid>
-                                    </Border>
-
-                                    <!-- Completed Overlay -->
-                                    <Border x:Name="DailyCompletedOverlay" Background="#2D4A2D"
-                                            CornerRadius="10" Padding="15" Margin="0,-180,0,0"
-                                            Visibility="Collapsed">
-                                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                            <TextBlock Text="✅" FontSize="48" HorizontalAlignment="Center"/>
-                                            <TextBlock Text="COMPLETED!" Foreground="#00E676"
-                                                       FontSize="18" FontWeight="Bold"
-                                                       HorizontalAlignment="Center" Margin="0,10,0,0"/>
-                                        </StackPanel>
                                     </Border>
 
                                     <!-- Reroll Button -->
@@ -3459,26 +3472,27 @@
                                                 </Border>
                                             </StackPanel>
                                             <!-- Quest Image -->
-                                            <Border Grid.Column="1" CornerRadius="8" Margin="10,0,0,0"
-                                                    Width="90" Height="90" Background="#1A1A2E">
+                                            <Border Grid.Column="1" CornerRadius="12" Margin="10,0,0,0"
+                                                    Width="150" Height="150" Background="#1A1A2E">
                                                 <Border.Clip>
-                                                    <RectangleGeometry RadiusX="8" RadiusY="8" Rect="0,0,90,90"/>
+                                                    <RectangleGeometry RadiusX="12" RadiusY="12" Rect="0,0,150,150"/>
                                                 </Border.Clip>
-                                                <Image x:Name="ImgWeeklyQuest" Stretch="UniformToFill"/>
+                                                <Grid>
+                                                    <Image x:Name="ImgWeeklyQuest" Stretch="UniformToFill"/>
+                                                    <!-- Checkmark overlay for completed state -->
+                                                    <Border x:Name="WeeklyCompletedOverlay" Background="#802D4A2D"
+                                                            Visibility="Collapsed">
+                                                        <TextBlock Text="✓" Foreground="#00E676" FontSize="64"
+                                                                   FontWeight="Bold" HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center">
+                                                            <TextBlock.Effect>
+                                                                <DropShadowEffect Color="Black" BlurRadius="8" ShadowDepth="2"/>
+                                                            </TextBlock.Effect>
+                                                        </TextBlock>
+                                                    </Border>
+                                                </Grid>
                                             </Border>
                                         </Grid>
-                                    </Border>
-
-                                    <!-- Completed Overlay -->
-                                    <Border x:Name="WeeklyCompletedOverlay" Background="#2D4A2D"
-                                            CornerRadius="10" Padding="15" Margin="0,-180,0,0"
-                                            Visibility="Collapsed">
-                                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                            <TextBlock Text="✅" FontSize="48" HorizontalAlignment="Center"/>
-                                            <TextBlock Text="COMPLETED!" Foreground="#00E676"
-                                                       FontSize="18" FontWeight="Bold"
-                                                       HorizontalAlignment="Center" Margin="0,10,0,0"/>
-                                        </StackPanel>
                                     </Border>
 
                                     <!-- Reroll Button -->
@@ -3490,53 +3504,149 @@
                             </Border>
                         </Grid>
 
-                        <!-- Quest Complete Banner (shown briefly when quest completes) -->
-                        <Border x:Name="QuestCompleteBanner" Background="#2D4A2D" CornerRadius="10"
-                                Padding="15" Margin="0,20,0,0" Visibility="Collapsed">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <TextBlock Text="✨" FontSize="24"/>
-                                <TextBlock x:Name="TxtQuestComplete" Text="QUEST COMPLETE!"
-                                           Foreground="#00E676" FontSize="18" FontWeight="Bold"
-                                           Margin="10,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="✨" FontSize="24"/>
-                            </StackPanel>
-                        </Border>
+                            <!-- Quest Complete Banner (shown briefly when quest completes) -->
+                            <Border x:Name="QuestCompleteBanner" Background="#2D4A2D" CornerRadius="10"
+                                    Padding="15" Margin="0,20,0,0" Visibility="Collapsed">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="✨" FontSize="24"/>
+                                    <TextBlock x:Name="TxtQuestComplete" Text="QUEST COMPLETE!"
+                                               Foreground="#00E676" FontSize="18" FontWeight="Bold"
+                                               Margin="10,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="✨" FontSize="24"/>
+                                </StackPanel>
+                            </Border>
 
-                        <!-- Quest Statistics Section -->
-                        <Border Background="#1E1E3A" CornerRadius="10" Padding="15" Margin="0,20,0,0">
-                            <StackPanel>
-                                <TextBlock Text="📊 Quest Statistics" Foreground="White"
-                                           FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
+                            <!-- Quest Statistics Section -->
+                            <Border Background="#1E1E3A" CornerRadius="10" Padding="15" Margin="0,20,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="📊 Quest Statistics" Foreground="White"
+                                               FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="TxtTotalDailyCompleted" Text="0"
+                                                       Foreground="#FFD700" FontSize="28" FontWeight="Bold"
+                                                       HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Daily Completed" Foreground="#888888"
+                                                       FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="TxtTotalWeeklyCompleted" Text="0"
+                                                       Foreground="#9370DB" FontSize="28" FontWeight="Bold"
+                                                       HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Weekly Completed" Foreground="#888888"
+                                                       FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="TxtTotalQuestXP" Text="0"
+                                                       Foreground="#FF69B4" FontSize="28" FontWeight="Bold"
+                                                       HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Total XP Earned" Foreground="#888888"
+                                                       FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <!-- End Daily/Weekly Panel -->
+
+                        <!-- Transformation Roadmap Panel -->
+                        <StackPanel x:Name="RoadmapPanel" Visibility="Collapsed">
+                            <!-- Track Selector Tabs -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <Button x:Name="BtnTrack1" Content="The Empty Doll"
+                                        Style="{StaticResource TabButtonActive}"
+                                        Click="BtnTrack_Click" Tag="EmptyDoll" Width="130"/>
+                                <Button x:Name="BtnTrack2" Content="The Obedient Puppet"
+                                        Style="{StaticResource TabButton}"
+                                        Click="BtnTrack_Click" Tag="ObedientPuppet" Margin="10,0,0,0" Width="150"/>
+                                <Button x:Name="BtnTrack3" Content="The Slutty Blowdoll"
+                                        Style="{StaticResource TabButton}"
+                                        Click="BtnTrack_Click" Tag="SluttyBlowdoll" Margin="10,0,0,0" Width="150"/>
+                            </StackPanel>
+
+                            <!-- Track Info Header -->
+                            <Border Background="#1E1E3A" CornerRadius="10" Padding="15" Margin="0,0,0,15">
                                 <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                                        <TextBlock x:Name="TxtTotalDailyCompleted" Text="0"
-                                                   Foreground="#FFD700" FontSize="28" FontWeight="Bold"
-                                                   HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Daily Completed" Foreground="#888888"
-                                                   FontSize="11" HorizontalAlignment="Center"/>
+                                    <StackPanel>
+                                        <TextBlock x:Name="TxtRoadmapTrackName" Text="The Empty Doll"
+                                                   Foreground="#FF69B4" FontSize="20" FontWeight="Bold"/>
+                                        <TextBlock x:Name="TxtRoadmapTrackSubtitle" Text="Gateway Phase"
+                                                   Foreground="#888888" FontSize="14"/>
+                                        <TextBlock x:Name="TxtRoadmapTrackProgress" Text="0 / 7 steps completed"
+                                                   Foreground="#AAAAAA" FontSize="12" Margin="0,5,0,0"/>
                                     </StackPanel>
-                                    <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                                        <TextBlock x:Name="TxtTotalWeeklyCompleted" Text="0"
-                                                   Foreground="#9370DB" FontSize="28" FontWeight="Bold"
-                                                   HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Weekly Completed" Foreground="#888888"
-                                                   FontSize="11" HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                                        <TextBlock x:Name="TxtTotalQuestXP" Text="0"
-                                                   Foreground="#FF69B4" FontSize="28" FontWeight="Bold"
-                                                   HorizontalAlignment="Center"/>
-                                        <TextBlock Text="Total XP Earned" Foreground="#888888"
-                                                   FontSize="11" HorizontalAlignment="Center"/>
+                                    <!-- Badge indicator for final track -->
+                                    <StackPanel x:Name="BadgeIndicator" Orientation="Horizontal"
+                                                HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                Visibility="Collapsed">
+                                        <TextBlock Text="🏆" FontSize="24"/>
+                                        <TextBlock Text="Badge Earned!" Foreground="#FFD700" FontSize="14"
+                                                   FontWeight="Bold" VerticalAlignment="Center" Margin="5,0,0,0"/>
                                     </StackPanel>
                                 </Grid>
-                            </StackPanel>
-                        </Border>
+                            </Border>
+
+                            <!-- Locked Track Overlay -->
+                            <Border x:Name="TrackLockedOverlay" Background="#CC1A1A2E" CornerRadius="10"
+                                    Padding="40" Visibility="Collapsed">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtLockReason" Text="Complete the previous track to unlock"
+                                               Foreground="White" FontSize="16" Margin="0,15,0,0"
+                                               HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Horizontal Scrolling Roadmap -->
+                            <Border x:Name="RoadmapScrollContainer" Background="#1E1E3A" CornerRadius="10"
+                                    Padding="10" MinHeight="220">
+                                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                    <StackPanel x:Name="RoadmapNodesPanel" Orientation="Horizontal" Margin="10,15"/>
+                                </ScrollViewer>
+                            </Border>
+
+                            <!-- Roadmap Statistics -->
+                            <Border Background="#1E1E3A" CornerRadius="10" Padding="15" Margin="0,15,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="📊 Transformation Progress" Foreground="White"
+                                               FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="TxtRoadmapTotalSteps" Text="0 / 21"
+                                                       Foreground="#FF69B4" FontSize="24" FontWeight="Bold"
+                                                       HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Steps Completed" Foreground="#888888"
+                                                       FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="TxtRoadmapPhotos" Text="0"
+                                                       Foreground="#9370DB" FontSize="24" FontWeight="Bold"
+                                                       HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Photos Submitted" Foreground="#888888"
+                                                       FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                                            <TextBlock x:Name="TxtRoadmapJourneyDays" Text="--"
+                                                       Foreground="#FFD700" FontSize="24" FontWeight="Bold"
+                                                       HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Days on Journey" Foreground="#888888"
+                                                       FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <!-- End Roadmap Panel -->
                     </StackPanel>
                 </ScrollViewer>
             </Border>

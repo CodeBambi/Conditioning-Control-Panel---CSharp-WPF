@@ -1133,6 +1133,28 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Plays a random sound from the flashes audio folder.
+        /// Used for quest completion and other celebratory events.
+        /// </summary>
+        public void PlayRandomSound()
+        {
+            try
+            {
+                var soundPath = GetNextSound();
+                if (!string.IsNullOrEmpty(soundPath) && File.Exists(soundPath))
+                {
+                    var volume = App.Settings?.Current?.MasterVolume ?? 50;
+                    PlaySound(soundPath, volume);
+                    App.Logger?.Debug("Playing random flash sound for event: {Path}", soundPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to play random sound: {Error}", ex.Message);
+            }
+        }
+
         private List<string> GetMediaFiles(string folder, string[] extensions)
         {
             if (!Directory.Exists(folder)) return new List<string>();

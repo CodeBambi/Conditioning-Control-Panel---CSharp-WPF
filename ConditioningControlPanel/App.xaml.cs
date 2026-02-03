@@ -206,6 +206,7 @@ namespace ConditioningControlPanel
         public static CompanionService Companion { get; private set; } = null!;
         public static CommunityPromptService CommunityPrompts { get; private set; } = null!;
         public static PersonalityService Personality { get; private set; } = null!;
+        public static RoadmapService Roadmap { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with either Patreon or Discord (required for progression tracking)
@@ -501,6 +502,7 @@ namespace ConditioningControlPanel
             splash.SetProgress(0.75, "Loading achievements...");
             Achievements = new AchievementService();
             Quests = new QuestService();
+            Roadmap = new RoadmapService();
             Tutorial = new TutorialService();
 
             splash.SetProgress(0.85, "Initializing companion...");
@@ -1612,6 +1614,7 @@ Application State:
             ScreenMirror?.Dispose();
             Autonomy?.Dispose();
             ContentPacks?.Dispose();
+            Roadmap?.Dispose();
             Audio?.Dispose();
             Settings?.Save();
 
