@@ -173,42 +173,132 @@
                     MouseRightButtonDown="ImgAvatar_MouseRightButtonDown"
                     CornerRadius="20" ClipToBounds="True">
                 <Border.ContextMenu>
-                    <ContextMenu x:Name="AvatarContextMenu" Background="#252542" BorderBrush="#FF69B4" BorderThickness="2" Opened="AvatarContextMenu_Opened">
+                    <ContextMenu x:Name="AvatarContextMenu" Opened="AvatarContextMenu_Opened">
                         <ContextMenu.Resources>
-                            <!-- Style for submenu popups to have dark background -->
+                            <!-- Dark themed MenuItem style with custom template -->
                             <Style TargetType="{x:Type MenuItem}">
-                                <Setter Property="Background" Value="#252542"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsHighlighted" Value="True">
-                                        <Setter Property="Background" Value="#3A3A5C"/>
-                                    </Trigger>
-                                </Style.Triggers>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="Padding" Value="10,6"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="{x:Type MenuItem}">
+                                            <Grid>
+                                                <Border x:Name="Border" Background="{TemplateBinding Background}"
+                                                        BorderThickness="0" Padding="{TemplateBinding Padding}">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" SharedSizeGroup="Icon"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto" SharedSizeGroup="Arrow"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <ContentPresenter x:Name="Icon" Grid.Column="0" ContentSource="Icon"
+                                                                          VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                        <ContentPresenter Grid.Column="1" ContentSource="Header"
+                                                                          VerticalAlignment="Center"/>
+                                                        <Path x:Name="Arrow" Grid.Column="2" Data="M0,0 L4,4 L0,8"
+                                                              Fill="{TemplateBinding Foreground}" Margin="8,0,0,0"
+                                                              VerticalAlignment="Center" Visibility="Collapsed"/>
+                                                    </Grid>
+                                                </Border>
+                                                <!-- Submenu popup for items with children -->
+                                                <Popup x:Name="PART_Popup" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                                       Placement="Right" HorizontalOffset="-2" AllowsTransparency="True" Focusable="False"
+                                                       PopupAnimation="Fade">
+                                                    <Border Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="2"
+                                                            CornerRadius="8" Padding="4">
+                                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                                    </Border>
+                                                </Popup>
+                                            </Grid>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsHighlighted" Value="True">
+                                                    <Setter TargetName="Border" Property="Background" Value="#3D3D60"/>
+                                                </Trigger>
+                                                <Trigger Property="HasItems" Value="True">
+                                                    <Setter TargetName="Arrow" Property="Visibility" Value="Visible"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter Property="Foreground" Value="#666666"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                            <!-- Dark themed Separator -->
+                            <Style TargetType="{x:Type Separator}">
+                                <Setter Property="Height" Value="1"/>
+                                <Setter Property="Margin" Value="8,4"/>
+                                <Setter Property="Background" Value="#FF69B4"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="{x:Type Separator}">
+                                            <Border Background="{TemplateBinding Background}" Height="{TemplateBinding Height}"/>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
                             </Style>
                         </ContextMenu.Resources>
+                        <ContextMenu.Style>
+                            <Style TargetType="{x:Type ContextMenu}">
+                                <Setter Property="Background" Value="#1A1A2E"/>
+                                <Setter Property="BorderBrush" Value="#FF69B4"/>
+                                <Setter Property="BorderThickness" Value="2"/>
+                                <Setter Property="Padding" Value="4"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="{x:Type ContextMenu}">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ContextMenu.Style>
                         <MenuItem x:Name="MenuItemTalkToBambi" Header="💬 Talk to Bambi" Click="MenuItemTalkToBambi_Click" Foreground="#FF69B4" FontWeight="Bold"/>
-                        <Separator Background="#FF69B4"/>
-                        <MenuItem x:Name="MenuItemDetach" Header="Detach" Click="MenuItemDetach_Click" Foreground="White"/>
-                        <MenuItem x:Name="MenuItemAttach" Header="Attach to Main Window" Click="MenuItemAttach_Click" Foreground="White" Visibility="Collapsed"/>
-                        <MenuItem x:Name="MenuItemShrink" Header="－ Shrink" Click="MenuItemShrink_Click" Foreground="White" Visibility="Collapsed"/>
-                        <MenuItem x:Name="MenuItemGrow" Header="＋ Grow" Click="MenuItemGrow_Click" Foreground="White" Visibility="Collapsed"/>
-                        <MenuItem x:Name="MenuItemDismiss" Header="Dismiss" Click="MenuItemDismiss_Click" Foreground="White" Visibility="Collapsed"/>
-                        <Separator Background="#FF69B4"/>
+                        <Separator/>
+                        <MenuItem x:Name="MenuItemDetach" Header="📌 Detach" Click="MenuItemDetach_Click"/>
+                        <MenuItem x:Name="MenuItemAttach" Header="📌 Attach to Main Window" Click="MenuItemAttach_Click" Visibility="Collapsed"/>
+                        <MenuItem x:Name="MenuItemShrink" Header="➖ Shrink" Click="MenuItemShrink_Click" Visibility="Collapsed"/>
+                        <MenuItem x:Name="MenuItemGrow" Header="➕ Grow" Click="MenuItemGrow_Click" Visibility="Collapsed"/>
+                        <MenuItem x:Name="MenuItemDismiss" Header="✖ Dismiss" Click="MenuItemDismiss_Click" Visibility="Collapsed"/>
+                        <Separator/>
                         <MenuItem x:Name="MenuItemEngine" Header="▶ Start Engine" Click="MenuItemEngine_Click" Foreground="#90EE90"/>
-                        <MenuItem x:Name="MenuItemTriggerMode" Header="☐ Trigger Mode" Click="MenuItemTriggerMode_Click" Foreground="White"/>
-                        <MenuItem x:Name="MenuItemBambiTakeover" Header="☐ Takeover" Click="MenuItemBambiTakeover_Click" Foreground="White"/>
-                        <MenuItem x:Name="MenuItemPersonality" Header="Personality" Foreground="#FF69B4">
+                        <MenuItem x:Name="MenuItemTriggerMode" Header="☐ Trigger Mode" Click="MenuItemTriggerMode_Click"/>
+                        <MenuItem x:Name="MenuItemBambiTakeover" Header="☐ Bimbo Takeover" Click="MenuItemBambiTakeover_Click"/>
+                        <MenuItem x:Name="MenuItemPersonality" Header="👤 Personality" Foreground="#FF69B4">
                             <MenuItem.ItemContainerStyle>
                                 <Style TargetType="MenuItem">
-                                    <Setter Property="Background" Value="#252542"/>
-                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="Padding" Value="10,6"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="{x:Type MenuItem}">
+                                                <Border x:Name="Border" Background="{TemplateBinding Background}"
+                                                        BorderThickness="0" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsHighlighted" Value="True">
+                                                        <Setter TargetName="Border" Property="Background" Value="#3D3D60"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
                                 </Style>
                             </MenuItem.ItemContainerStyle>
-                            <!-- Items populated dynamically -->
                         </MenuItem>
-                        <MenuItem x:Name="MenuItemMute" Header="☐ Mute Avatar" Click="MenuItemMute_Click" Foreground="White"/>
-                        <Separator Background="#FF69B4"/>
-                        <MenuItem x:Name="MenuItemMuteWhispers" Header="☐ Mute Whispers" Click="MenuItemMuteWhispers_Click" Foreground="White"/>
-                        <MenuItem x:Name="MenuItemPauseBrowser" Header="⏸ Pause Browser" Click="MenuItemPauseBrowser_Click" Foreground="White"/>
+                        <MenuItem x:Name="MenuItemMute" Header="☐ Mute Avatar" Click="MenuItemMute_Click"/>
+                        <Separator/>
+                        <MenuItem x:Name="MenuItemMuteWhispers" Header="☐ Mute Whispers" Click="MenuItemMuteWhispers_Click"/>
+                        <MenuItem x:Name="MenuItemPauseBrowser" Header="⏸ Pause Browser" Click="MenuItemPauseBrowser_Click"/>
                     </ContextMenu>
                 </Border.ContextMenu>
                 <Grid>

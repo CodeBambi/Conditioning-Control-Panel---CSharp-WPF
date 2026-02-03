@@ -54,6 +54,12 @@ public class QuestService : IDisposable
     private readonly Random _random = new();
     private bool _isDirty;
 
+    // Accumulators for fractional minutes (time-based quests are called with small increments)
+    private double _spiralMinutesAccumulator;
+    private double _pinkFilterMinutesAccumulator;
+    private double _videoMinutesAccumulator;
+    private double _combinedMinutesAccumulator;
+
     public QuestProgress Progress { get; private set; }
 
     public event EventHandler<QuestCompletedEventArgs>? QuestCompleted;
@@ -313,8 +319,23 @@ public class QuestService : IDisposable
     /// </summary>
     public void TrackSpiralMinutes(double minutes)
     {
-        UpdateQuestProgress(QuestCategory.Spiral, (int)Math.Floor(minutes));
-        UpdateQuestProgress(QuestCategory.Combined, (int)Math.Floor(minutes)); // Overlay time
+        // Accumulate fractional minutes until we have at least 1 full minute
+        _spiralMinutesAccumulator += minutes;
+        _combinedMinutesAccumulator += minutes;
+
+        if (_spiralMinutesAccumulator >= 1.0)
+        {
+            int wholeMinutes = (int)Math.Floor(_spiralMinutesAccumulator);
+            UpdateQuestProgress(QuestCategory.Spiral, wholeMinutes);
+            _spiralMinutesAccumulator -= wholeMinutes;
+        }
+
+        if (_combinedMinutesAccumulator >= 1.0)
+        {
+            int wholeMinutes = (int)Math.Floor(_combinedMinutesAccumulator);
+            UpdateQuestProgress(QuestCategory.Combined, wholeMinutes);
+            _combinedMinutesAccumulator -= wholeMinutes;
+        }
     }
 
     /// <summary>
@@ -322,8 +343,23 @@ public class QuestService : IDisposable
     /// </summary>
     public void TrackPinkFilterMinutes(double minutes)
     {
-        UpdateQuestProgress(QuestCategory.PinkFilter, (int)Math.Floor(minutes));
-        UpdateQuestProgress(QuestCategory.Combined, (int)Math.Floor(minutes)); // Overlay time
+        // Accumulate fractional minutes until we have at least 1 full minute
+        _pinkFilterMinutesAccumulator += minutes;
+        _combinedMinutesAccumulator += minutes;
+
+        if (_pinkFilterMinutesAccumulator >= 1.0)
+        {
+            int wholeMinutes = (int)Math.Floor(_pinkFilterMinutesAccumulator);
+            UpdateQuestProgress(QuestCategory.PinkFilter, wholeMinutes);
+            _pinkFilterMinutesAccumulator -= wholeMinutes;
+        }
+
+        if (_combinedMinutesAccumulator >= 1.0)
+        {
+            int wholeMinutes = (int)Math.Floor(_combinedMinutesAccumulator);
+            UpdateQuestProgress(QuestCategory.Combined, wholeMinutes);
+            _combinedMinutesAccumulator -= wholeMinutes;
+        }
     }
 
     /// <summary>
@@ -339,7 +375,15 @@ public class QuestService : IDisposable
     /// </summary>
     public void TrackVideoMinutes(double minutes)
     {
-        UpdateQuestProgress(QuestCategory.Video, (int)Math.Floor(minutes));
+        // Accumulate fractional minutes until we have at least 1 full minute
+        _videoMinutesAccumulator += minutes;
+
+        if (_videoMinutesAccumulator >= 1.0)
+        {
+            int wholeMinutes = (int)Math.Floor(_videoMinutesAccumulator);
+            UpdateQuestProgress(QuestCategory.Video, wholeMinutes);
+            _videoMinutesAccumulator -= wholeMinutes;
+        }
     }
 
     /// <summary>
