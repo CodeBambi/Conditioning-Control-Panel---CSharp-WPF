@@ -525,22 +525,27 @@ public class QuestService : IDisposable
         {
             Progress.TotalWeeklyQuestsCompleted++;
         }
-        Progress.TotalXPFromQuests += def.XPReward;
+
+        // Scale XP reward based on player level (+2% per level)
+        var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+        var scaledXP = (int)Math.Round(def.XPReward * (1 + playerLevel * 0.02));
+
+        Progress.TotalXPFromQuests += scaledXP;
 
         _isDirty = true;
         Save();
 
         // Award XP (use a different source to avoid recursion with TrackXPEarned)
-        App.Progression?.AddXP(def.XPReward, XPSource.Other);
+        App.Progression?.AddXP(scaledXP, XPSource.Other);
 
         // Play celebration effects
         PlayCompletionEffects();
 
-        App.Logger?.Information("Quest completed: {QuestName} ({Type}) - Awarded {XP} XP",
-            def.Name, type, def.XPReward);
+        App.Logger?.Information("Quest completed: {QuestName} ({Type}) - Awarded {XP} XP (base: {BaseXP}, level: {Level})",
+            def.Name, type, scaledXP, def.XPReward, playerLevel);
 
         // Fire event
-        QuestCompleted?.Invoke(this, new QuestCompletedEventArgs(def, def.XPReward, type));
+        QuestCompleted?.Invoke(this, new QuestCompletedEventArgs(def, scaledXP, type));
     }
 
     /// <summary>

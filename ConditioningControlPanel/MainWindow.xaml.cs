@@ -1715,7 +1715,10 @@ namespace ConditioningControlPanel
                 TxtDailyQuestName.Text = dailyDef.Name;
                 TxtDailyQuestDesc.Text = dailyDef.Description;
                 TxtDailyProgress.Text = $"{dailyProgress.CurrentProgress} / {dailyDef.TargetValue}";
-                TxtDailyXP.Text = $"🎁 {dailyDef.XPReward} XP";
+                // Show scaled XP based on level (+2% per level)
+                var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+                var scaledDailyXP = (int)Math.Round(dailyDef.XPReward * (1 + playerLevel * 0.02));
+                TxtDailyXP.Text = $"🎁 {scaledDailyXP} XP";
 
                 // Load quest image
                 try
@@ -1760,7 +1763,9 @@ namespace ConditioningControlPanel
                 TxtWeeklyQuestName.Text = weeklyDef.Name;
                 TxtWeeklyQuestDesc.Text = weeklyDef.Description;
                 TxtWeeklyProgress.Text = $"{weeklyProgress.CurrentProgress} / {weeklyDef.TargetValue}";
-                TxtWeeklyXP.Text = $"🎁 {weeklyDef.XPReward} XP";
+                // Show scaled XP based on level (+2% per level)
+                var scaledWeeklyXP = (int)Math.Round(weeklyDef.XPReward * (1 + (App.Settings?.Current?.PlayerLevel ?? 1) * 0.02));
+                TxtWeeklyXP.Text = $"🎁 {scaledWeeklyXP} XP";
 
                 // Load quest image
                 try
