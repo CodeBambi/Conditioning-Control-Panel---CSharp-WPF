@@ -26,6 +26,8 @@ namespace ConditioningControlPanel.Services
         private bool _isWaitingForChunk;
         private TimeSpan _lastPlaybackPosition;
         private DateTime _lastSyncTime;
+        private DateTime _lastResyncTime;
+        private const int RESYNC_INTERVAL_MS = 5000; // Force resync every 5 seconds
         private CancellationTokenSource? _syncCts;
 
         /// <summary>
@@ -175,6 +177,7 @@ namespace ConditioningControlPanel.Services
             if (!paused && _isPaused)
             {
                 _isPaused = false;
+                _lastResyncTime = DateTime.UtcNow; // Reset resync timer on resume
                 Log.Debug("AudioSyncService: Playback resumed at {Time}", currentTime);
             }
 
@@ -188,10 +191,27 @@ namespace ConditioningControlPanel.Services
             // Check buffer and trigger next chunk processing if needed
             _chunkManager.CheckBufferAndProcess(currentTime);
 
-            // Calculate look-ahead time with latency compensation
-            // Base 300ms for device response + network + processing latency
-            var latencyMs = 300 + _hapticService.SubliminalAnticipationMs + _settings.ManualLatencyOffsetMs;
-            var lookAheadTime = currentTime + TimeSpan.FromMilliseconds(latencyMs);
+            // Check if we need a forced resync (every 5 seconds)
+            // This prevents drift between haptics and video over time
+            var now = DateTime.UtcNow;
+            var needsResync = (now - _lastResyncTime).TotalMilliseconds >= RESYNC_INTERVAL_MS;
+
+            TimeSpan lookAheadTime;
+            if (needsResync)
+            {
+                // Force resync: use exact current time (no latency compensation)
+                // This snaps haptics back to precise video position
+                lookAheadTime = currentTime;
+                _lastResyncTime = now;
+                Log.Debug("AudioSyncService: Forced resync at {Time}", currentTime);
+            }
+            else
+            {
+                // Normal operation: calculate look-ahead time with latency compensation
+                // Base 300ms for device response + network + processing latency
+                var latencyMs = 300 + _hapticService.SubliminalAnticipationMs + _settings.ManualLatencyOffsetMs;
+                lookAheadTime = currentTime + TimeSpan.FromMilliseconds(latencyMs);
+            }
 
             // Get intensity from track
             var track = _chunkManager.Track;
@@ -220,6 +240,7 @@ namespace ConditioningControlPanel.Services
             Log.Information("AudioSyncService: User seeked to {Time}", newTime);
 
             _lastPlaybackPosition = newTime;
+            _lastResyncTime = DateTime.UtcNow; // Reset resync timer on seek
 
             // Check if we have data for this position
             var chunkIndex = _chunkManager.GetChunkIndexForTime(newTime);
