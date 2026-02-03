@@ -2185,8 +2185,9 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("VideoService: {Before} -> {After} after disabled filter", beforeCount, files.Count);
             }
 
-            // Shuffle and enqueue regular videos
-            _videoQueue = new Queue<string>(files.OrderBy(_ => _random.Next()));
+            // Shuffle using Fisher-Yates algorithm for reliable randomization
+            ShuffleList(files);
+            _videoQueue = new Queue<string>(files);
 
             // Load pack videos from active packs
             var packVideos = App.ContentPacks?.GetAllActivePackVideos() ?? new List<(string, PackFileEntry)>();
@@ -2198,7 +2199,10 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("VideoService: Pack '{PackId}' contributing {Count} videos", group.Key, group.Count());
             }
 
-            _packVideoQueue = new Queue<(string, PackFileEntry)>(packVideos.OrderBy(_ => _random.Next()));
+            // Shuffle pack videos using Fisher-Yates for reliable randomization
+            var packVideosList = packVideos.ToList();
+            ShuffleList(packVideosList);
+            _packVideoQueue = new Queue<(string, PackFileEntry)>(packVideosList);
 
             App.Logger?.Information("VideoService: Queues refilled - {RegularCount} regular videos, {PackCount} pack videos (path: {Path})",
                 _videoQueue.Count, _packVideoQueue.Count, _videosPath);
@@ -2207,6 +2211,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Cleans up temporary pack video files.
         /// </summary>
+        /// <summary>
+        /// Fisher-Yates shuffle for reliable randomization.
+        /// </summary>
+        private void ShuffleList<T>(List<T> list)
+        {
+            for (int i = list.Count - 1; i > 0; i--)
+            {
+                int j = _random.Next(i + 1);
+                (list[i], list[j]) = (list[j], list[i]);
+            }
+        }
+
         private void CleanupTempPackFiles()
         {
             foreach (var tempFile in _tempPackFiles)
