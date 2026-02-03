@@ -1,0 +1,92 @@
+<Window x:Class="ConditioningControlPanel.MiniPlayerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
+        xmlns:gif="https://github.com/XamlAnimatedGif/XamlAnimatedGif"
+        Title="Preview" Height="350" Width="450"
+        MinHeight="200" MinWidth="300"
+        WindowStartupLocation="CenterOwner"
+        Background="#1A1A2E"
+        WindowStyle="None" AllowsTransparency="True"
+        ResizeMode="CanResizeWithGrip"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        KeyDown="Window_KeyDown">
+
+    <Border CornerRadius="8" Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="32"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title Bar -->
+            <Grid Grid.Row="0" Background="#252542">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TxtFileName" Text="Preview"
+                           Foreground="#FF69B4" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Margin="12,0,0,0"
+                           TextTrimming="CharacterEllipsis"/>
+                <Button Grid.Column="1" Content="X" Width="32" Height="32"
+                        Background="Transparent" Foreground="#808080"
+                        BorderThickness="0" FontSize="12" Cursor="Hand"
+                        Click="BtnClose_Click"
+                        ToolTip="Close (Escape)"/>
+            </Grid>
+
+            <!-- Content Area -->
+            <Grid Grid.Row="1" Background="#000000">
+                <!-- Video Player (LibVLC) -->
+                <Border x:Name="VideoContainer" Visibility="Collapsed">
+                    <!-- VideoView added programmatically -->
+                </Border>
+
+                <!-- Image/GIF Display -->
+                <Image x:Name="ImagePreview" Stretch="Uniform" Visibility="Collapsed"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                <!-- Loading Indicator -->
+                <Grid x:Name="LoadingOverlay" Visibility="Collapsed">
+                    <TextBlock Text="Loading..." Foreground="#808080" FontSize="14"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+            </Grid>
+
+            <!-- Video Controls (only shown for videos) -->
+            <Grid x:Name="VideoControls" Grid.Row="2" Background="#252542" Height="40" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Play/Pause Button -->
+                <Button x:Name="BtnPlayPause" Grid.Column="0"
+                        Content="▶" Width="36" Height="28"
+                        Background="#353555" Foreground="#FF69B4"
+                        BorderThickness="0" FontSize="12" Cursor="Hand"
+                        Margin="8,0,0,0"
+                        Click="BtnPlayPause_Click"
+                        ToolTip="Play/Pause (Space)"/>
+
+                <!-- Seek Slider -->
+                <Slider x:Name="SeekSlider" Grid.Column="1"
+                        Minimum="0" Maximum="100" Value="0"
+                        VerticalAlignment="Center" Margin="10,0"
+                        PreviewMouseDown="SeekSlider_PreviewMouseDown"
+                        PreviewMouseUp="SeekSlider_PreviewMouseUp"
+                        ValueChanged="SeekSlider_ValueChanged"
+                        Style="{StaticResource {x:Type Slider}}"/>
+
+                <!-- Time Display -->
+                <TextBlock x:Name="TxtTime" Grid.Column="2"
+                           Text="00:00 / 00:00" Foreground="#808080" FontSize="11"
+                           VerticalAlignment="Center" Margin="0,0,12,0"
+                           FontFamily="Consolas"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

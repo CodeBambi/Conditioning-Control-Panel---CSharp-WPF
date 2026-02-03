@@ -5849,6 +5849,13 @@
                                                 <Border Width="100" Height="120" Margin="4" CornerRadius="6"
                                                         Background="#1A1A32" BorderBrush="#404060" BorderThickness="2" Cursor="Hand"
                                                         MouseLeftButtonDown="ThumbnailItem_Click">
+                                                    <Border.ContextMenu>
+                                                        <ContextMenu>
+                                                            <MenuItem Header="Preview" Click="ThumbnailItem_Preview_Click"/>
+                                                            <Separator/>
+                                                            <MenuItem Header="Open in Explorer" Click="ThumbnailItem_OpenInExplorer_Click"/>
+                                                        </ContextMenu>
+                                                    </Border.ContextMenu>
                                                     <Grid>
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition Height="*"/>

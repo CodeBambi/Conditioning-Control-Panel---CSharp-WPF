@@ -11755,11 +11755,95 @@ namespace ConditioningControlPanel
 
         private void ThumbnailItem_Click(object sender, MouseButtonEventArgs e)
         {
-            // Toggle selection on click
             if (sender is Border border && border.DataContext is AssetFileItem file)
             {
-                file.IsChecked = !file.IsChecked;
-                UpdateFileCheckState(file);
+                if (e.ClickCount == 2)
+                {
+                    // Double-click: open preview
+                    OpenAssetPreview(file);
+                    e.Handled = true;
+                }
+                else
+                {
+                    // Single click: toggle selection
+                    file.IsChecked = !file.IsChecked;
+                    UpdateFileCheckState(file);
+                }
+            }
+        }
+
+        private void ThumbnailItem_Preview_Click(object sender, RoutedEventArgs e)
+        {
+            // Open preview from context menu
+            if (sender is MenuItem menuItem &&
+                menuItem.Parent is ContextMenu contextMenu &&
+                contextMenu.PlacementTarget is Border border &&
+                border.DataContext is AssetFileItem file)
+            {
+                OpenAssetPreview(file);
+            }
+        }
+
+        private void ThumbnailItem_OpenInExplorer_Click(object sender, RoutedEventArgs e)
+        {
+            // Open file location in Explorer
+            if (sender is MenuItem menuItem &&
+                menuItem.Parent is ContextMenu contextMenu &&
+                contextMenu.PlacementTarget is Border border &&
+                border.DataContext is AssetFileItem file)
+            {
+                try
+                {
+                    var filePath = file.FullPath;
+                    if (System.IO.File.Exists(filePath))
+                    {
+                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{filePath}\"");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to open file in Explorer");
+                }
+            }
+        }
+
+        private void OpenAssetPreview(AssetFileItem file)
+        {
+            try
+            {
+                var filePath = file.FullPath;
+
+                // For pack files, we need to extract to temp first
+                if (file.IsPackFile && file.PackFileEntry != null)
+                {
+                    var tempPath = App.ContentPacks?.ExtractPackFileToTemp(file.PackId!, file.PackFileEntry);
+                    if (!string.IsNullOrEmpty(tempPath))
+                    {
+                        filePath = tempPath;
+                    }
+                    else
+                    {
+                        App.Logger?.Warning("Failed to extract pack file for preview: {File}", file.Name);
+                        return;
+                    }
+                }
+
+                if (!System.IO.File.Exists(filePath))
+                {
+                    App.Logger?.Warning("File not found for preview: {File}", filePath);
+                    return;
+                }
+
+                var previewWindow = new MiniPlayerWindow
+                {
+                    Owner = this
+                };
+                previewWindow.LoadFile(filePath);
+                previewWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open asset preview for {File}", file.Name);
             }
         }
 
