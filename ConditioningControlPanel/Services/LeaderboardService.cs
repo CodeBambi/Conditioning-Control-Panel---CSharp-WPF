@@ -45,12 +45,12 @@ public class LeaderboardService : IDisposable
     {
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 
-        // Auto-refresh every 5 minutes
-        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
+        // Auto-refresh every 10 minutes (server caches for 2 min, so this is plenty)
+        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
         _refreshTimer.Tick += async (s, e) => await RefreshAsync();
         _refreshTimer.Start();
 
-        App.Logger?.Information("LeaderboardService initialized with 5-minute auto-refresh");
+        App.Logger?.Information("LeaderboardService initialized with 10-minute auto-refresh");
     }
 
     /// <summary>
