@@ -571,6 +571,77 @@
             <Setter Property="RadiusY" Value="15"/>
             <Setter Property="Margin" Value="10,0,0,0"/>
         </Style>
+
+        <!-- Help Button Style - Small circular (?) icon for section help -->
+        <Style x:Key="HelpButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#808090"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#505060"/>
+            <Setter Property="Cursor" Value="Help"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="ToolTipService.InitialShowDelay" Value="100"/>
+            <Setter Property="ToolTipService.ShowDuration" Value="60000"/>
+            <Setter Property="ToolTipService.BetweenShowDelay" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="9"
+                                Width="18" Height="18">
+                            <TextBlock Text="?"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Margin="0,-1,0,0"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+                                <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="#20FF69B4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Enhanced Help Tooltip Style -->
+        <Style x:Key="HelpTooltipStyle" TargetType="ToolTip">
+            <Setter Property="Background" Value="#F0252542"/>
+            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="MaxWidth" Value="380"/>
+            <Setter Property="Placement" Value="Right"/>
+            <Setter Property="HorizontalOffset" Value="10"/>
+            <Setter Property="HasDropShadow" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                            </Border.Effect>
+                            <ContentPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <!-- Viewbox scales all content proportionally with window size -->
@@ -1050,10 +1121,12 @@
                 <StackPanel>
                     
                     <!-- Flash Images Section -->
-                    <Border x:Name="FlashSection" Style="{StaticResource SectionPanel}" Padding="10,6"
-                            ToolTip="Random images that appear on screen periodically.&#x0a;Add your own images to assets/images folder.&#x0a;Supports PNG, JPG, GIF formats.">
+                    <Border x:Name="FlashSection" Style="{StaticResource SectionPanel}" Padding="10,6">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="⚡ Flash Images" Margin="0,0,0,2"/>
+                            <Grid Margin="0,0,0,2">
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="⚡ Flash Images" Margin="0"/>
+                                <Button x:Name="HelpBtnFlash" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="FlashImages"/>
+                            </Grid>
                             
                             <!-- Enable / Clickable / Hydra in one row -->
                             <Grid Margin="0,2">
@@ -1113,10 +1186,12 @@
                     </Border>
 
                     <!-- Visuals Section -->
-                    <Border x:Name="VisualsSection" Style="{StaticResource SectionPanel}" Padding="10,6"
-                            ToolTip="Visual appearance settings for flash images.&#x0a;Customize size, transparency, and animations.">
+                    <Border x:Name="VisualsSection" Style="{StaticResource SectionPanel}" Padding="10,6">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="👁 Visuals" Margin="0,0,0,2"/>
+                            <Grid Margin="0,0,0,2">
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="👁 Visuals" Margin="0"/>
+                                <Button x:Name="HelpBtnVisuals" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Visuals"/>
+                            </Grid>
                             
                             <!-- Size / Opacity in two columns -->
                             <Grid Margin="0,2,0,0">
@@ -1185,14 +1260,16 @@
                 <StackPanel>
                     
                     <!-- Mandatory Video Section -->
-                    <Border x:Name="VideoSection" Style="{StaticResource SectionPanel}" Padding="10,10"
-                            ToolTip="Fullscreen videos that play periodically.&#x0a;Add videos to assets/videos folder.&#x0a;Supports MP4, WebM, AVI formats.">
+                    <Border x:Name="VideoSection" Style="{StaticResource SectionPanel}" Padding="10,10">
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="🎬 Mandatory Video"/>
-                                <Button x:Name="BtnTestVideo" Content="▶ Test" Style="{StaticResource OutlineButton}"
-                                        HorizontalAlignment="Right" Padding="10,4" Click="BtnTestVideo_Click"
-                                        ToolTip="Play a random video now to test"/>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button x:Name="HelpBtnVideo" Style="{StaticResource HelpButtonStyle}" Tag="Video" Margin="0,0,8,0"/>
+                                    <Button x:Name="BtnTestVideo" Content="▶ Test" Style="{StaticResource OutlineButton}"
+                                            Padding="10,4" Click="BtnTestVideo_Click"
+                                            ToolTip="Play a random video now to test"/>
+                                </StackPanel>
                             </Grid>
 
                             <!-- Enable + Strict + Per Hour -->
@@ -1218,11 +1295,13 @@
                             </Grid>
 
                             <!-- Mini-Game Sub-Section -->
-                            <Border Background="#1E1E3A" CornerRadius="6" Padding="10,10" Margin="0,10,0,0"
-                                    ToolTip="Attention check during videos.&#x0a;Click targets that appear to prove you're watching.&#x0a;Failing in Strict mode restarts the video!">
+                            <Border Background="#1E1E3A" CornerRadius="6" Padding="10,10" Margin="0,10,0,0">
                                 <StackPanel>
                                     <Grid>
-                                        <TextBlock Text="🎯 Mini-Game" Foreground="{StaticResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🎯 Mini-Game" Foreground="{StaticResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
+                                            <Button x:Name="HelpBtnMiniGame" Style="{StaticResource HelpButtonStyle}" Tag="MiniGame"/>
+                                        </StackPanel>
                                         <CheckBox x:Name="ChkMiniGameEnabled" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right"
                                                   Checked="ChkMiniGameEnabled_Changed" Unchecked="ChkMiniGameEnabled_Changed"
                                                   ToolTip="Enable attention check targets"/>
@@ -1271,12 +1350,12 @@
                     </Border>
 
                     <!-- Subliminals Section -->
-                    <Border x:Name="SubliminalSection" Style="{StaticResource SectionPanel}" Padding="10,10"
-                            ToolTip="Brief text messages that flash on screen.&#x0a;Customize messages in the Messages editor.&#x0a;Can be paired with whispered audio.">
+                    <Border x:Name="SubliminalSection" Style="{StaticResource SectionPanel}" Padding="10,10">
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="💭 Subliminals"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button x:Name="HelpBtnSubliminals" Style="{StaticResource HelpButtonStyle}" Tag="Subliminals" Margin="0,0,8,0"/>
                                     <Button Content="📝" Style="{StaticResource OutlineButton}" Padding="6,3" Click="BtnManageMessages_Click" Margin="0,0,4,0"
                                             ToolTip="Edit subliminal messages"/>
                                     <Button Content="⚙" Style="{StaticResource OutlineButton}" Padding="6,3" Click="BtnSubliminalSettings_Click" Margin="0,0,8,0"
@@ -1324,12 +1403,12 @@
                     </Border>
 
                     <!-- System Section -->
-                    <Border x:Name="SystemSection" Style="{StaticResource SectionPanel}" Padding="10,10"
-                            ToolTip="Application behavior and startup settings.">
+                    <Border x:Name="SystemSection" Style="{StaticResource SectionPanel}" Padding="10,10">
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="⚙ System"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button x:Name="HelpBtnSystem" Style="{StaticResource HelpButtonStyle}" Tag="System" Margin="0,0,8,0"/>
                                     <Button Content="📁" Style="{StaticResource OutlineButton}"
                                             Padding="6,3" Click="BtnPickAssetsFolder_Click" Margin="0,0,4,0"
                                             ToolTip="Set custom assets folder"/>
@@ -1438,7 +1517,10 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="🌐 Browser" Margin="0" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="🌐 Browser" Margin="0"/>
+                                <Button x:Name="HelpBtnBrowser" Style="{StaticResource HelpButtonStyle}" Tag="Browser"/>
+                            </StackPanel>
                             <!-- Site Toggle - inline -->
                             <Border Grid.Column="1" Background="#252545" CornerRadius="10" Padding="2" Margin="10,0,0,0" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal">
@@ -1612,9 +1694,9 @@
                     <Border x:Name="AudioSection" Grid.Column="0" Style="{StaticResource SectionPanel}" VerticalAlignment="Stretch">
                         <StackPanel>
                             <Grid>
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="📊 Audio" FontSize="12"
-                                           ToolTip="Audio volume and ducking settings"/>
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="📊 Audio" FontSize="12"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Button x:Name="HelpBtnAudio" Style="{StaticResource HelpButtonStyle}" Tag="Audio" Margin="0,0,8,0"/>
                                     <TextBlock Text="Duck" Foreground="#808090" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                     <CheckBox x:Name="ChkAudioDuck" Style="{StaticResource ToggleStyle}"
                                               IsChecked="True"
@@ -1682,7 +1764,10 @@
                     <!-- Quick Actions (right half) -->
                     <Border Grid.Column="2" Style="{StaticResource SectionPanel}" VerticalAlignment="Stretch">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="🔗 Quick Links" FontSize="12" Margin="0,0,0,6"/>
+                            <Grid Margin="0,0,0,6">
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="🔗 Quick Links" FontSize="12" Margin="0"/>
+                                <Button x:Name="HelpBtnQuickLinks" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="QuickLinks"/>
+                            </Grid>
 
                             <!-- Patreon Login Button -->
                             <Button x:Name="BtnQuickPatreonLogin" Content="⭐ Login with Patreon"
@@ -1857,7 +1942,10 @@
                     <!-- Top Section: Preset Cards Row -->
                     <Border Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5,5,5,0" Padding="10">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="📋 Presets" Margin="0,0,0,8"/>
+                            <Grid Margin="0,0,0,8">
+                                <TextBlock Style="{StaticResource SectionHeader}" Text="📋 Presets" Margin="0"/>
+                                <Button x:Name="HelpBtnPresets" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Presets"/>
+                            </Grid>
                             
                             <!-- Horizontal Scrolling Preset Cards -->
                             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
@@ -1906,6 +1994,7 @@
 
                         <Grid Grid.Row="0" Margin="0,0,0,10">
                             <TextBlock Style="{StaticResource SectionHeader}" Text="🎯 Sessions"/>
+                            <Button x:Name="HelpBtnSessions" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Sessions"/>
                         </Grid>
 
                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -2224,9 +2313,12 @@
                     
                     <!-- Header -->
                     <StackPanel Grid.Row="0" Margin="0,0,0,12">
-                        <TextBlock x:Name="TxtDetailTitle" Text="Select a Preset" 
-                                   Foreground="{StaticResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
-                        <TextBlock x:Name="TxtDetailSubtitle" Text="Click on a preset or session to see details" 
+                        <Grid>
+                            <TextBlock x:Name="TxtDetailTitle" Text="Select a Preset"
+                                       Foreground="{StaticResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
+                            <Button x:Name="HelpBtnSessionDetails" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="SessionDetails"/>
+                        </Grid>
+                        <TextBlock x:Name="TxtDetailSubtitle" Text="Click on a preset or session to see details"
                                    Foreground="#909090" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
                     </StackPanel>
                     
@@ -2443,8 +2535,10 @@
                     ToolTip="Features that unlock as you level up.&#x0a;Keep conditioning to earn XP and unlock new features!">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Style="{StaticResource SectionHeader}" Text="🎁 Unlockables"
-                               ToolTip="Level-gated features - higher levels unlock more!"/>
+                    <Grid>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="🎁 Unlockables" Margin="0"/>
+                        <Button x:Name="HelpBtnUnlockables" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Unlockables"/>
+                    </Grid>
                     
                     <!-- Spiral Overlay - Lvl 10 -->
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
@@ -3042,7 +3136,10 @@
                 <!-- Scheduler Box -->
                 <Border x:Name="SchedulerPanel" Style="{StaticResource SectionPanel}" Margin="5">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="📅 Scheduler" FontSize="14"/>
+                        <Grid>
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="📅 Scheduler" FontSize="14" Margin="0"/>
+                            <Button x:Name="HelpBtnScheduler" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Scheduler"/>
+                        </Grid>
                         
                         <!-- Enable -->
                         <Grid Margin="0,3">
@@ -3082,7 +3179,10 @@
                 <!-- Intensity Ramp Box -->
                 <Border x:Name="RampPanel" Style="{StaticResource SectionPanel}" Margin="5">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="⚡ Intensity Ramp" FontSize="14"/>
+                        <Grid>
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="⚡ Intensity Ramp" FontSize="14" Margin="0"/>
+                            <Button x:Name="HelpBtnRamp" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="IntensityRamp"/>
+                        </Grid>
                         
                         <!-- Enable Ramp -->
                         <Grid Margin="0,3">
@@ -3152,11 +3252,12 @@
                 </Border>
                 
                 <!-- Community Discord -->
-                <Border Style="{StaticResource SectionPanel}" Margin="5" MinHeight="100"
-                        ToolTip="Join our Discord community!">
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="💬 Community" Foreground="{StaticResource PinkBrush}"
-                                   FontSize="13" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,5,0,5"/>
+                <Border Style="{StaticResource SectionPanel}" Margin="5" MinHeight="100">
+                    <Grid>
+                        <Button x:Name="HelpBtnCommunity" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Tag="Community"/>
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="💬 Community" Foreground="{StaticResource PinkBrush}"
+                                       FontSize="13" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,5,0,5"/>
                         <Button x:Name="BtnDiscord" Click="BtnDiscord_Click" Cursor="Hand"
                                 ToolTip="Click to join our Discord server!">
                             <Button.Template>
@@ -3248,14 +3349,17 @@
                                 </ControlTemplate>
                             </CheckBox.Template>
                         </CheckBox>
-                    </StackPanel>
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!-- App Info / Updates -->
                 <Border Style="{StaticResource SectionPanel}" Margin="5" Padding="10,8">
-                    <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="App Info" Foreground="{StaticResource PinkBrush}"
-                                   FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                    <Grid>
+                        <Button x:Name="HelpBtnAppInfo" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,0,0,0" Tag="AppInfo"/>
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="App Info" Foreground="{StaticResource PinkBrush}"
+                                       FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,8"/>
                         <TextBlock x:Name="TxtVersion" Text="Version" Foreground="#888888"
                                    FontSize="12" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                         <Button x:Name="BtnCheckUpdates" Content="Check for Updates"
@@ -3289,7 +3393,8 @@
                                 </Style>
                             </Button.Style>
                         </Button>
-                    </StackPanel>
+                        </StackPanel>
+                    </Grid>
                 </Border>
             </StackPanel>
         </Grid>
@@ -3313,7 +3418,10 @@
                         <StackPanel x:Name="DailyWeeklyPanel">
                             <!-- Header -->
                             <Grid Margin="0,0,0,20">
-                                <TextBlock Text="📜 QUESTS" Foreground="#FF69B4" FontSize="18" FontWeight="Bold"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="📜 QUESTS" Foreground="#FF69B4" FontSize="18" FontWeight="Bold"/>
+                                    <Button x:Name="HelpBtnQuests" Style="{StaticResource HelpButtonStyle}" Tag="Quests"/>
+                                </StackPanel>
                                 <TextBlock x:Name="TxtQuestStats" Text="0 completed this week"
                                            Foreground="#888888" FontSize="12" HorizontalAlignment="Right"
                                            VerticalAlignment="Center"/>
@@ -3519,8 +3627,11 @@
                             <!-- Quest Statistics Section -->
                             <Border Background="#1E1E3A" CornerRadius="10" Padding="15" Margin="0,20,0,0">
                                 <StackPanel>
-                                    <TextBlock Text="📊 Quest Statistics" Foreground="White"
-                                               FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
+                                    <Grid Margin="0,0,0,15">
+                                        <TextBlock Text="📊 Quest Statistics" Foreground="White"
+                                                   FontSize="14" FontWeight="Bold"/>
+                                        <Button x:Name="HelpBtnQuestStats" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="QuestStats"/>
+                                    </Grid>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -3572,6 +3683,7 @@
                             <!-- Track Info Header -->
                             <Border Background="#1E1E3A" CornerRadius="10" Padding="15" Margin="0,0,0,15">
                                 <Grid>
+                                    <Button x:Name="HelpBtnRoadmap" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Tag="Roadmap"/>
                                     <StackPanel>
                                         <TextBlock x:Name="TxtRoadmapTrackName" Text="The Empty Doll"
                                                    Foreground="#FF69B4" FontSize="20" FontWeight="Bold"/>
@@ -3613,8 +3725,11 @@
                             <!-- Roadmap Statistics -->
                             <Border Background="#1E1E3A" CornerRadius="10" Padding="15" Margin="0,15,0,0">
                                 <StackPanel>
-                                    <TextBlock Text="📊 Transformation Progress" Foreground="White"
-                                               FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
+                                    <Grid Margin="0,0,0,15">
+                                        <TextBlock Text="📊 Transformation Progress" Foreground="White"
+                                                   FontSize="14" FontWeight="Bold"/>
+                                        <Button x:Name="HelpBtnRoadmapStats" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="RoadmapStats"/>
+                                    </Grid>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -3657,7 +3772,10 @@
                 Style="{StaticResource SectionPanel}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Style="{StaticResource SectionHeader}" Text="🏆 Achievements" Margin="0,0,0,10"/>
+                    <Grid Margin="0,0,0,10">
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="🏆 Achievements" Margin="0"/>
+                        <Button x:Name="HelpBtnAchievements" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Achievements"/>
+                    </Grid>
                     <TextBlock Text="Complete challenges to unlock achievements! Locked achievements are blurred until earned." 
                                Foreground="#888888" FontSize="12" Margin="0,0,0,15"/>
                     
@@ -3697,12 +3815,15 @@
                             <!-- COMPANIONS BOX -->
                             <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="10" Padding="15">
                                 <StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                        <TextBlock Text="COMPANIONS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
-                                        <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                                            <TextBlock Text="BETA" Foreground="White" FontSize="9" FontWeight="Bold"/>
-                                        </Border>
-                                    </StackPanel>
+                                    <Grid Margin="0,0,0,12">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="COMPANIONS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
+                                            <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock Text="BETA" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <Button x:Name="HelpBtnCompanions" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Companions"/>
+                                    </Grid>
 
                                     <!-- Companion Cards 2x2 - Unlock at levels 50, 100, 125, 150 -->
                                     <UniformGrid Rows="2" Columns="2" Margin="0,0,0,12">
@@ -3836,6 +3957,7 @@
                                             <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
                                                 <TextBlock Text="BETA" Foreground="White" FontSize="9" FontWeight="Bold"/>
                                             </Border>
+                                            <Button x:Name="HelpBtnPrompts" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="CommunityPrompts"/>
                                         </StackPanel>
                                         <Button x:Name="BtnRefreshPrompts" Content="Refresh" HorizontalAlignment="Right"
                                                 Background="Transparent" Foreground="#808080" BorderThickness="0"
@@ -3903,7 +4025,10 @@
                             <!-- SETTINGS BOX -->
                             <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="10" Padding="15">
                                 <StackPanel>
-                                    <TextBlock Text="COMPANION SETTINGS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
+                                    <Grid Margin="0,0,0,15">
+                                        <TextBlock Text="COMPANION SETTINGS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
+                                        <Button x:Name="HelpBtnCompanionSettings" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="CompanionSettings"/>
+                                    </Grid>
 
                                     <!-- Show Companion -->
                                     <Grid Margin="0,0,0,12">
@@ -3954,7 +4079,10 @@
                             <!-- QUICK CONTROLS BOX -->
                             <Border Grid.Column="2" Background="#1A1A2E" CornerRadius="10" Padding="15">
                                 <StackPanel>
-                                    <TextBlock Text="QUICK CONTROLS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold" Margin="0,0,0,15"/>
+                                    <Grid Margin="0,0,0,15">
+                                        <TextBlock Text="QUICK CONTROLS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
+                                        <Button x:Name="HelpBtnQuickControls" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="QuickControls"/>
+                                    </Grid>
 
                                     <!-- Mute Avatar -->
                                     <Grid Margin="0,0,0,12">
@@ -4048,7 +4176,10 @@
             <Border Style="{StaticResource SectionPanel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="Patreon Exclusives" FontSize="18" Margin="0,0,0,15"/>
+                        <Grid Margin="0,0,0,15">
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="Patreon Exclusives" FontSize="18" Margin="0"/>
+                            <Button x:Name="HelpBtnPatreon" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="PatreonExclusives"/>
+                        </Grid>
 
                         <!-- Patreon Login Status -->
                         <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,15"
@@ -4108,12 +4239,14 @@
 
                             <!-- LEVEL 1: AI Chatbot Feature Box -->
                             <Border Grid.Column="0" Background="#1E1E3A" CornerRadius="8" Padding="15">
+                                <Grid>
+                                    <Button x:Name="HelpBtnAiChat" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Tag="AiChat"/>
                                 <StackPanel>
                                     <!-- Locked State -->
                                     <StackPanel x:Name="AiChatLocked" Visibility="Collapsed">
                                         <Grid>
                                             <TextBlock Text="AI Companion Chat" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                            <TextBlock Text="Level 1" Foreground="#666666" HorizontalAlignment="Right" FontSize="12"/>
+                                            <TextBlock Text="Level 1" Foreground="#666666" HorizontalAlignment="Right" FontSize="12" Margin="0,0,25,0"/>
                                         </Grid>
                                         <TextBlock Text="Support on Patreon to unlock AI-powered conversations"
                                                    Foreground="{StaticResource PinkBrush}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
@@ -4139,16 +4272,19 @@
                                         </Grid>
                                     </StackPanel>
                                 </StackPanel>
+                                </Grid>
                             </Border>
 
                             <!-- Window Awareness Feature Box (Patreon) -->
                             <Border Grid.Column="2" Background="#1E1E3A" CornerRadius="8" Padding="15">
+                                <Grid>
+                                    <Button x:Name="HelpBtnAwareness" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Tag="WindowAwareness"/>
                                 <StackPanel>
                                     <!-- Locked State -->
                                     <StackPanel x:Name="AwarenessLocked" Visibility="Collapsed">
                                         <Grid>
                                             <TextBlock Text="Window Awareness" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                            <TextBlock Text="🔒 Patreon" Foreground="#9B59B6" HorizontalAlignment="Right" FontSize="12"/>
+                                            <TextBlock Text="🔒 Patreon" Foreground="#9B59B6" HorizontalAlignment="Right" FontSize="12" Margin="0,0,25,0"/>
                                         </Grid>
                                         <TextBlock Text="Support on Patreon to unlock smart activity detection"
                                                    Foreground="{StaticResource PinkBrush}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
@@ -4193,6 +4329,7 @@
                                         </Border>
                                     </StackPanel>
                                 </StackPanel>
+                                </Grid>
                             </Border>
                         </Grid>
 
@@ -4238,6 +4375,7 @@
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="Haptic Connection" Foreground="#9B59B6" FontSize="14" FontWeight="Bold"/>
                                             <TextBlock Text=" (Patreon)" Foreground="#9B59B6" FontSize="12" VerticalAlignment="Center"/>
+                                            <Button x:Name="HelpBtnHaptics" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="Haptics"/>
                                         </StackPanel>
                                         <CheckBox x:Name="ChkHapticsEnabled" Style="{StaticResource ToggleStyle}"
                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -4928,7 +5066,10 @@
 <!-- Discord Tab -->        <Grid x:Name="DiscordTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="10"/><RowDefinition Height="*"/></Grid.RowDefinitions>            <Border Grid.Column="0" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
-                        <TextBlock Text="Profile Viewer" Foreground="#5865F2" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                        <Grid Margin="0,0,0,15">
+                            <TextBlock Text="Profile Viewer" Foreground="#5865F2" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+                            <Button x:Name="HelpBtnDiscordProfile" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="DiscordProfile"/>
+                        </Grid>
 
                         <!-- Search Input -->
                         <Border Background="#1A1A32" CornerRadius="8" Padding="10" Margin="0,0,0,15">
@@ -5206,6 +5347,9 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
+                            <!-- Help button -->
+                            <Button x:Name="HelpBtnLeaderboard" Grid.Column="0" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Tag="Leaderboard"/>
+
                             <!-- Big LEADERBOARD title with stroke effect -->
                             <Grid Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <!-- Shadow/outline layer -->
@@ -5425,8 +5569,11 @@
 
             <!-- Header with title and actions -->
             <Grid Grid.Row="0" Margin="0,0,0,10">
-                <TextBlock Text="📦 Assets &amp; Content Packs" Style="{StaticResource SectionHeader}"
-                           FontSize="18" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="📦 Assets &amp; Content Packs" Style="{StaticResource SectionHeader}"
+                               FontSize="18" VerticalAlignment="Center"/>
+                    <Button x:Name="HelpBtnAssets" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="Assets"/>
+                </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="BtnRefreshPacks" Content="🔄 Refresh"
                             Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
@@ -5453,8 +5600,11 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="🎁 Community Content Packs"
-                                   Style="{StaticResource SectionHeader}"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🎁 Community Content Packs"
+                                       Style="{StaticResource SectionHeader}"/>
+                            <Button x:Name="HelpBtnPacks" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="ContentPacks"/>
+                        </StackPanel>
 
                         <!-- Bandwidth usage bar -->
                         <StackPanel x:Name="BandwidthPanel" Grid.Column="1" Orientation="Horizontal"
@@ -5699,7 +5849,10 @@
 
                     <!-- Header -->
                     <Grid Grid.Row="0" Margin="0,0,0,8">
-                        <TextBlock Text="📂 Asset Browser" Style="{StaticResource SectionHeader}"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="📂 Asset Browser" Style="{StaticResource SectionHeader}"/>
+                            <Button x:Name="HelpBtnAssetBrowser" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="AssetBrowser"/>
+                        </StackPanel>
                         <TextBlock x:Name="TxtAssetCounts" Text="0 images, 0 videos"
                                    Foreground="{StaticResource TextMutedBrush}" FontSize="12"
                                    HorizontalAlignment="Right" VerticalAlignment="Center"/>
