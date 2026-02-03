@@ -871,8 +871,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.4.8 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.4.8 - Personality System, Session Editor overhaul, Video fixes"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.4.10 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.4.10 - Help System, Asset Previews, Quest XP Scaling"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">

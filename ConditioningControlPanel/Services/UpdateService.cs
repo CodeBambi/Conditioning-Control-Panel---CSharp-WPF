@@ -22,50 +22,38 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.9";
+        public const string AppVersion = "5.4.10";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.9 - Bug Fixes & Quality of Life
+        public const string CurrentPatchNotes = @"v5.4.10 - Help System & Asset Previews
 
-📁 CONTENT PACK FIXES
-• Fixed packs not showing after moving assets folder
-• Packs now properly register in settings after move
-• Orphan pack detection on startup and folder change
-• Auto-activates discovered packs so they appear immediately
+❓ COMPREHENSIVE HELP SYSTEM
+• Added (?) help buttons to ALL 35 sections across every tab
+• Rich tooltips explain what each feature does
+• Practical tips for getting the most out of each setting
+• Technical 'How it Works' details for curious users
+• Covers: Settings, Presets, Progression, Quests, Assets, and all side panels
 
-📥 DOWNLOAD IMPROVEMENTS
-• Bandwidth no longer charged on failed/cancelled downloads
-• New pending download system - only charges on success
-• Server confirms completion before deducting bandwidth
+🖼️ MINI ASSET PREVIEW PLAYER
+• Right-click any thumbnail to preview assets instantly
+• Videos play with full controls (play/pause, seek, volume)
+• GIFs animate smoothly in the preview window
+• Images display at optimal size with zoom support
+• Preview window remembers position and size
 
-🎮 HAPTICS
-• New 'Auto-connect on startup' option
-• Automatically connects to your haptic device when app opens
+⚡ QUEST XP SCALING
+• Quest rewards now scale with your level for better progression
+• Higher levels earn more XP from daily and weekly quests
+• Keeps quests rewarding at all stages of your journey
+• Fixed preview window positioning issues
 
-💬 AVATAR SPEECH BUBBLE
-• Fixed bubble sometimes appearing behind UI (z-order fix)
-• AI responses now protected from being overwritten
-• Preset phrases discarded while AI bubble is visible
-• Increased cooldown after AI responses for reading time
-
-🎨 CONTENT MODE THEMING
-• More UI elements now change color in Sissy Hypno mode
-• Title bar, XP bar, level label all reflect mode color
-• Much more noticeable visual difference between modes
-
-💬 DISCORD RICH PRESENCE
-• Added detailed tooltip explaining visibility
-• Clarifies who can see your status and how it works
-
-🔧 ADDITIONAL FIXES
-• Various stability improvements
-• Better error handling
-• Settings save immediately when changed mid-session
-• Fixed LibVLC threading crashes and frame buffer race conditions
-• Fixed 'X active packs' showing phantom packs after folder change";
+🎬 VIDEO SHUFFLE FIX
+• Replaced shuffle algorithm with reliable Fisher-Yates method
+• Videos now shuffle properly without repeats or bias
+• More random and fair distribution of content";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
