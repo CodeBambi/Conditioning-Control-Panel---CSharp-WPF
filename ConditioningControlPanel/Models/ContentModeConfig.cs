@@ -650,5 +650,257 @@ namespace ConditioningControlPanel.Models
             ContentMode.SissyHypno => "Sissy Reset",
             _ => "Bambi Reset"
         };
+
+        /// <summary>
+        /// Get engine stop phrases when conditioning stops.
+        /// </summary>
+        public static string[] GetEngineStopPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "I feel dizzy...",
+                "Aw... Bambi was having fun...",
+                "*blinks* W-what happened?",
+                "Mmmm that was nice~",
+                "Already? But we were vibing!",
+                "My head feels so fuzzy...",
+                "*wobbles* Whoa...",
+                "Can we do that again soon?~",
+                "So floaty right now...",
+                "*dreamy sigh* That was good~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "I feel dizzy...",
+                "Aw... that was fun...",
+                "*blinks* W-what happened?",
+                "Mmmm that was nice~",
+                "Already? But we were vibing!",
+                "My head feels so fuzzy...",
+                "*wobbles* Whoa...",
+                "Can we do that again soon?~",
+                "So floaty right now...",
+                "*dreamy sigh* That was good~"
+            },
+            _ => GetEngineStopPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Get random bubble spawn phrases.
+        /// </summary>
+        public static string[] GetRandomBubblePhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Be a good girl and burst that bubble!",
+                "Oh... here's a bubble for you~",
+                "*Pop* Catch it, Bambi!",
+                "Bubble time! Pop it~",
+                "Look! A pretty bubble!",
+                "*giggles* Pop it quick!",
+                "Ooh, get the bubble!",
+                "Pop it for me, good girl~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Be a good girl and burst that bubble!",
+                "Oh... here's a bubble for you~",
+                "*Pop* Catch it, babe!",
+                "Bubble time! Pop it~",
+                "Look! A pretty bubble!",
+                "*giggles* Pop it quick!",
+                "Ooh, get the bubble!",
+                "Pop it for me, good girl~"
+            },
+            _ => GetRandomBubblePhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Get app startup greeting phrases.
+        /// </summary>
+        public static string[] GetStartupGreetingPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Hi Bambi! Ready to get conditioned?~",
+                "*bounces* Yay! You're back!",
+                "Welcome back, bestie!~",
+                "Ooh! Time for some fun~",
+                "Hi cutie! Let's get ditzy!",
+                "*giggles* There you are!~",
+                "Ready to drop, good girl?",
+                "Pink thoughts incoming!~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Hi babe! Ready to get conditioned?~",
+                "*bounces* Yay! You're back!",
+                "Welcome back, bestie!~",
+                "Ooh! Time for some fun~",
+                "Hi cutie! Let's get ditzy!",
+                "*giggles* There you are!~",
+                "Ready to drop, good girl?",
+                "Pink thoughts incoming!~"
+            },
+            _ => GetStartupGreetingPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Get phrases said before flash images appear.
+        /// </summary>
+        public static string[] GetFlashPrePhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Ooh look at the pretty picture~",
+                "Watch this!",
+                "*giggles* Pretty!",
+                "Bambi stare and obey~",
+                "Look look look!",
+                "Eyes on the picture~",
+                "So pretty! *stares*",
+                "Oooh shiny~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Ooh look at the pretty picture~",
+                "Watch this!",
+                "*giggles* Pretty!",
+                "Stare and obey~",
+                "Look look look!",
+                "Eyes on the picture~",
+                "So pretty! *stares*",
+                "Oooh shiny~"
+            },
+            _ => GetFlashPrePhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Get phrases said after subliminals appear.
+        /// </summary>
+        public static string[] GetSubliminalAckPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Did you see that?",
+                "What was that? Bambi feels fuzzy~",
+                "Hehe something flashed~",
+                "*blinks* What?",
+                "So fast! Can't think~",
+                "Bambi's brain goes brrr~",
+                "Ooh tingles!",
+                "Words go in, thoughts go out~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Did you see that?",
+                "What was that? Feeling fuzzy~",
+                "Hehe something flashed~",
+                "*blinks* What?",
+                "So fast! Can't think~",
+                "Brain goes brrr~",
+                "Ooh tingles!",
+                "Words go in, thoughts go out~"
+            },
+            _ => GetSubliminalAckPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Get media watching awareness phrases.
+        /// </summary>
+        public static string[] GetMediaPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Watching {0}~ spirals are prettier to watch!",
+                "*teehee* Entertainment! But have you dropped today?",
+                "{0} is nice but Bambi files are nicer~",
+                "Relaxing? Trance is the best relaxation!",
+                "Media time! Session time next? Good girl~",
+                "Watching stuff when you could watch spirals~",
+                "*giggles* Cozy! Perfect time for conditioning~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Watching {0}~ spirals are prettier to watch!",
+                "*teehee* Entertainment! But have you dropped today?",
+                "{0} is nice but hypno files are nicer~",
+                "Relaxing? Trance is the best relaxation!",
+                "Media time! Session time next? Good girl~",
+                "Watching stuff when you could watch spirals~",
+                "*giggles* Cozy! Perfect time for conditioning~"
+            },
+            _ => GetMediaPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Get learning/reading awareness phrases.
+        /// </summary>
+        public static string[] GetLearningPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Reading {0}? Empty heads are happier~",
+                "*teehee* Learning things? Let them drip away~",
+                "{0} makes you think... Bambi helps you stop!",
+                "So much reading! Good girls need empty time~",
+                "Studying? Trance is easier than thinking!",
+                "*giggles* {0}? Pink thoughts are better~",
+                "Learning is cute but dropping is cuter!",
+                "Big brain stuff? Bimbo brain is better~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Reading {0}? Empty heads are happier~",
+                "*teehee* Learning things? Let them drip away~",
+                "{0} makes you think... Hypno helps you stop!",
+                "So much reading! Good girls need empty time~",
+                "Studying? Trance is easier than thinking!",
+                "*giggles* {0}? Pink thoughts are better~",
+                "Learning is cute but dropping is cuter!",
+                "Big brain stuff? Bimbo brain is better~"
+            },
+            _ => GetLearningPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Get window awareness idle/zoned out phrases (different from avatar idle phrases).
+        /// </summary>
+        public static string[] GetWindowAwarenessIdlePhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Zoned out? Drop deeper~",
+                "*pokes* Still there, good girl?",
+                "So still~ already in trance? *giggles*",
+                "Empty and idle... perfect for conditioning!",
+                "Staring blankly? That's a good start~",
+                "Hellooo~ ready to listen to files?",
+                "*teehee* Mind wandering? Let it float away~",
+                "Idle time is session time!"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Zoned out? Drop deeper~",
+                "*pokes* Still there, good girl?",
+                "So still~ already in trance? *giggles*",
+                "Empty and idle... perfect for conditioning!",
+                "Staring blankly? That's a good start~",
+                "Hellooo~ ready to watch some hypno?",
+                "*teehee* Mind wandering? Let it float away~",
+                "Idle time is session time!"
+            },
+            _ => GetWindowAwarenessIdlePhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Get phrase when autonomy mode turns on.
+        /// </summary>
+        public static string GetAutonomyOnPhrase(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => "Bambi takes over~ *giggles*",
+            ContentMode.SissyHypno => "Bimbo takes over~ *giggles*",
+            _ => "Bambi takes over~ *giggles*"
+        };
     }
 }

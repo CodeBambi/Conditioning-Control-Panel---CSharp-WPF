@@ -727,6 +727,9 @@ namespace ConditioningControlPanel
             // Update hypnotube links UI for new mode
             RefreshHypnotubeLinksUI();
 
+            // Update avatar context menu for new mode
+            _avatarTubeWindow?.UpdateQuickMenuState();
+
             App.Logger?.Information("Content mode changed to {Mode}", newMode);
         }
 

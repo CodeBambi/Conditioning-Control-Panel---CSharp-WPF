@@ -22,38 +22,39 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.10";
+        public const string AppVersion = "5.4.11";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.10 - Help System & Asset Previews
+        public const string CurrentPatchNotes = @"v5.4.11 - Sissy Hypno Mode Polish & Video Haptic Sync
 
-❓ COMPREHENSIVE HELP SYSTEM
-• Added (?) help buttons to ALL 35 sections across every tab
-• Rich tooltips explain what each feature does
-• Practical tips for getting the most out of each setting
-• Technical 'How it Works' details for curious users
-• Covers: Settings, Presets, Progression, Quests, Assets, and all side panels
+🎀 SISSY HYPNO MODE - FULLY MODE-AWARE
+• Companion now uses mode-appropriate terms ('babe' instead of 'Bambi')
+• All personality presets adapt their language to current mode
+• Video suggestions filtered by mode - no Bambi videos in SH mode
+• Empty SH video pool now gives generic 'browse HypnoTube' suggestions
+• Menu items, tray icon, and UI elements all respect content mode
+• Fixed 'Talk to Bambi' menu not updating when switching modes
 
-🖼️ MINI ASSET PREVIEW PLAYER
-• Right-click any thumbnail to preview assets instantly
-• Videos play with full controls (play/pause, seek, volume)
-• GIFs animate smoothly in the preview window
-• Images display at optimal size with zoom support
-• Preview window remembers position and size
+🎵 VIDEO HAPTIC SYNC - ENHANCED UI
+• Prominent featured card with algorithm selection
+• Visual preview image for the feature
+• Algorithm cards: Audio Reactive (active), Beat Detection & AI Enhanced (coming soon)
+• Integrated delay and power sliders
+• Help button with detailed tooltip
 
-⚡ QUEST XP SCALING
-• Quest rewards now scale with your level for better progression
-• Higher levels earn more XP from daily and weekly quests
-• Keeps quests rewarding at all stages of your journey
-• Fixed preview window positioning issues
+🌈 UI IMPROVEMENTS
+• Animated gradient backgrounds on Profile tab
+• HypnoTube links feature for custom video pools
+• Mode-aware quest images
 
-🎬 VIDEO SHUFFLE FIX
-• Replaced shuffle algorithm with reliable Fisher-Yates method
-• Videos now shuffle properly without repeats or bias
-• More random and fair distribution of content";
+🐄 BAMBI COW FIXES
+• Bimbo Cow personality now fully mode-aware
+• AI prompts dynamically adapt to content mode
+• Video suggestions respect mode settings
+• Fixed personality name display in menus";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

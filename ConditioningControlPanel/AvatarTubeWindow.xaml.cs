@@ -2572,8 +2572,10 @@ namespace ConditioningControlPanel
 
         private void SpawnRandomBubble()
         {
-            // Pick a random phrase
-            var phrase = RandomBubblePhrases[_random.Next(RandomBubblePhrases.Length)];
+            // Pick a random phrase (mode-aware)
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var phrases = Models.ContentModeConfig.GetRandomBubblePhrases(mode);
+            var phrase = phrases[_random.Next(phrases.Length)];
 
             // Show the phrase in speech bubble
             Giggle(phrase);
@@ -3221,42 +3223,39 @@ namespace ConditioningControlPanel
         {
             // Check for special services first
             var lowerName = detectedName?.ToLowerInvariant() ?? "";
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
 
             // Discord - special phrases
             if (lowerName.Contains("discord"))
             {
-                return DiscordPhrases[_random.Next(DiscordPhrases.Length)];
+                var discordPhrases = Models.ContentModeConfig.GetDiscordPhrases(mode);
+                return discordPhrases[_random.Next(discordPhrases.Length)];
             }
 
-            // BambiCloud - positive reinforcement
-            if (lowerName.Contains("bambicloud"))
+            // BambiCloud/Hypnotube - positive reinforcement (training sites)
+            if (lowerName.Contains("bambicloud") || lowerName.Contains("hypnotube"))
             {
-                return BambiCloudPhrases[_random.Next(BambiCloudPhrases.Length)];
+                var sitePhrases = Models.ContentModeConfig.GetTrainingSitePhrases(mode);
+                return sitePhrases[_random.Next(sitePhrases.Length)];
             }
 
-            // Hypnotube - also positive (similar to BambiCloud)
-            if (lowerName.Contains("hypnotube"))
+            // Hypno content in tab name - congratulate for bimbofication
+            if (lowerName.Contains("bambi") || lowerName.Contains("sissy") || lowerName.Contains("hypno"))
             {
-                return BambiCloudPhrases[_random.Next(BambiCloudPhrases.Length)];
+                var hypnoPhrases = Models.ContentModeConfig.GetHypnoContentPhrases(mode);
+                return hypnoPhrases[_random.Next(hypnoPhrases.Length)];
             }
-
-            // "Bambi" in tab name (but not bambicloud which is already handled) - congratulate for bimbofication
-            if (lowerName.Contains("bambi") && !lowerName.Contains("bambicloud"))
-            {
-                return BambiContentPhrases[_random.Next(BambiContentPhrases.Length)];
-            }
-
             var phrases = category switch
             {
-                ActivityCategory.Gaming => GamingPhrases,
-                ActivityCategory.Browsing => BrowsingPhrases,
+                ActivityCategory.Gaming => Models.ContentModeConfig.GetGamingPhrases(mode),
+                ActivityCategory.Browsing => Models.ContentModeConfig.GetBrowsingPhrases(mode),
                 ActivityCategory.Shopping => ShoppingPhrases,
                 ActivityCategory.Social => SocialPhrases,
-                ActivityCategory.Working => WorkingPhrases,
-                ActivityCategory.Media => MediaPhrases,
-                ActivityCategory.Learning => LearningPhrases,
-                ActivityCategory.Idle => IdlePhrases,
-                _ => Models.ContentModeConfig.GetRandomFloatingPhrases(App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep)
+                ActivityCategory.Working => Models.ContentModeConfig.GetWorkingPhrases(mode),
+                ActivityCategory.Media => Models.ContentModeConfig.GetMediaPhrases(mode),
+                ActivityCategory.Learning => Models.ContentModeConfig.GetLearningPhrases(mode),
+                ActivityCategory.Idle => Models.ContentModeConfig.GetWindowAwarenessIdlePhrases(mode),
+                _ => Models.ContentModeConfig.GetRandomFloatingPhrases(mode)
             };
 
             var phrase = phrases[_random.Next(phrases.Length)];
@@ -3630,7 +3629,9 @@ namespace ConditioningControlPanel
             // Only announce ~1 in 4 flashes to avoid being annoying
             if (_flashCounter % 4 == 1)
             {
-                var phrase = FlashPrePhrases[_random.Next(FlashPrePhrases.Length)];
+                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+                var phrases = Models.ContentModeConfig.GetFlashPrePhrases(mode);
+                var phrase = phrases[_random.Next(phrases.Length)];
                 Giggle(phrase);
             }
         }
@@ -3677,7 +3678,9 @@ namespace ConditioningControlPanel
             // Only acknowledge ~1 in 10 subliminals
             if (_subliminalCounter % 10 == 0)
             {
-                var phrase = SubliminalAckPhrases[_random.Next(SubliminalAckPhrases.Length)];
+                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+                var phrases = Models.ContentModeConfig.GetSubliminalAckPhrases(mode);
+                var phrase = phrases[_random.Next(phrases.Length)];
                 Giggle(phrase);
             }
         }
@@ -3869,7 +3872,9 @@ namespace ConditioningControlPanel
         /// </summary>
         private void ShowGreeting()
         {
-            var phrase = GreetingPhrases[_random.Next(GreetingPhrases.Length)];
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var phrases = Models.ContentModeConfig.GetStartupGreetingPhrases(mode);
+            var phrase = phrases[_random.Next(phrases.Length)];
             Giggle(phrase);
             App.Logger?.Information("Avatar greeting: {Phrase}", phrase);
         }
@@ -3879,7 +3884,9 @@ namespace ConditioningControlPanel
         /// </summary>
         private void OnEngineStopped(object? sender, EventArgs e)
         {
-            var phrase = EngineStopPhrases[_random.Next(EngineStopPhrases.Length)];
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var phrases = Models.ContentModeConfig.GetEngineStopPhrases(mode);
+            var phrase = phrases[_random.Next(phrases.Length)];
             GigglePriority(phrase);
             App.Logger?.Debug("Avatar engine stop reaction: {Phrase}", phrase);
         }
@@ -4569,7 +4576,8 @@ namespace ConditioningControlPanel
             if (!current)
             {
                 App.Autonomy?.Start();
-                Giggle("Bambi takes over~ *giggles*");
+                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+                Giggle(Models.ContentModeConfig.GetAutonomyOnPhrase(mode));
             }
             else
             {
@@ -4691,15 +4699,19 @@ namespace ConditioningControlPanel
                 MenuItemPersonality.Items.Add(menuItem);
             }
 
-            // Update parent menu header
+            // Update parent menu header with mode-aware name
             var activePreset = App.Personality?.GetActivePreset();
-            MenuItemPersonality.Header = $"Personality: {activePreset?.Name ?? "BambiSprite"}";
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var displayName = Models.ContentModeConfig.GetPersonalityDisplayName(activePreset?.Name ?? "BambiSprite", mode);
+            MenuItemPersonality.Header = $"Personality: {displayName}";
         }
 
         private string GetPersonalityMenuHeader(PersonalityPreset preset, string activeId)
         {
             var check = preset.Id == activeId ? "☑" : "☐";
-            return $"{check} {preset.Name}";
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var displayName = Models.ContentModeConfig.GetPersonalityDisplayName(preset.Name, mode);
+            return $"{check} {displayName}";
         }
 
         private void PersonalityMenuItem_Click(object sender, RoutedEventArgs e)
@@ -4810,17 +4822,19 @@ namespace ConditioningControlPanel
         /// </summary>
         public void UpdateQuickMenuState()
         {
-            // Talk to Bambi (Patreon only)
+            // Talk to companion (Patreon only) - mode-aware label
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var talkToLabel = Models.ContentModeConfig.GetTalkToLabel(mode);
             var chatAvailable = App.Patreon?.HasAiAccess == true;
             MenuItemTalkToBambi.IsEnabled = chatAvailable;
             if (chatAvailable)
             {
-                MenuItemTalkToBambi.Header = "💬 Talk to Bambi";
+                MenuItemTalkToBambi.Header = $"💬 {talkToLabel}";
                 MenuItemTalkToBambi.Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)); // Pink
             }
             else
             {
-                MenuItemTalkToBambi.Header = "🔒 Talk to Bambi";
+                MenuItemTalkToBambi.Header = $"🔒 {talkToLabel}";
                 MenuItemTalkToBambi.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
             }
 
@@ -4837,7 +4851,6 @@ namespace ConditioningControlPanel
             // Takeover (Patreon only) - mode-aware name
             var takeoverAvailable = App.Patreon?.HasPremiumAccess == true;
             var takeoverOn = App.Settings?.Current?.AutonomyModeEnabled == true;
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
             var takeoverName = Models.ContentModeConfig.GetTakeoverLabel(mode);
             MenuItemBambiTakeover.Header = takeoverOn ? $"☑ {takeoverName}" : $"☐ {takeoverName}";
             MenuItemBambiTakeover.Foreground = takeoverOn ? new SolidColorBrush(Color.FromRgb(255, 105, 180)) : new SolidColorBrush(Colors.White);

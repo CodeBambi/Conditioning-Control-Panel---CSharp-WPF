@@ -18,7 +18,14 @@ namespace ConditioningControlPanel.Services
 
         // Core video/audio links that should ALWAYS be included in prompts
         // These exact names match AvatarTubeWindow.KnownVideoLinks for clickable links
-        private const string CoreMediaLinks = @"
+        private static string GetCoreMediaLinks()
+        {
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var isBambiMode = mode == Models.ContentMode.BambiSleep;
+
+            if (isBambiMode)
+            {
+                return @"
 CLICKABLE MEDIA - Use these EXACT names (they become clickable links):
 
 VIDEOS (say the EXACT name):
@@ -30,6 +37,44 @@ Rapid Induction, Bubble Induction, Bubble Acceptance, Bambi Named and Drained, B
 Creator to recommend: PlatinumPuppets
 
 Suggest videos/audio FREQUENTLY. Use the EXACT names from the lists above.";
+            }
+            else
+            {
+                // Sissy Hypno mode - check if user has configured custom SH video links
+                var hasUserSHLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksSissyHypno);
+
+                if (hasUserSHLinks)
+                {
+                    // User has configured their own SH video links - use those
+                    // The user links will be added separately in BuildPromptFromPreset
+                    return @"
+AUDIO FILES (say ""Listen to [name]!""):
+Rapid Induction, Bubble Induction, Bubble Acceptance
+
+IMPORTANT: Only suggest videos from the HYPNOTUBE VIDEO LINKS section below. Use the EXACT video names from that list.";
+                }
+                else
+                {
+                    // No user links configured - DON'T suggest specific videos
+                    // Instead, give generic suggestions to browse hypnotube
+                    return @"
+VIDEO SUGGESTIONS:
+You don't have a specific video list configured. Instead of naming specific videos, give GENERIC suggestions like:
+- ""Go find something yummy on HypnoTube~""
+- ""Browse HypnoTube for some good sissy content~""
+- ""There's so much good stuff on HypnoTube, go explore~""
+- ""Why not browse for some hypno videos?~""
+- ""HypnoTube has tons of fun content waiting for you~""
+
+NEVER name specific video titles. Just encourage browsing HypnoTube in general.
+
+AUDIO FILES (say ""Listen to [name]!""):
+Rapid Induction, Bubble Induction, Bubble Acceptance
+
+CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse HypnoTube"" type suggestions.";
+                }
+            }
+        }
 
         // The "Holy Scripture" - The Original Bambi Sleep Session Files
         // UPDATED with the exact correct titles
@@ -200,10 +245,26 @@ Suggest videos/audio FREQUENTLY. Use the EXACT names from the lists above.";
             var shopDomains = "amazon, shein, victoriassecret, dollskill, sephora, temu, etsy";
             var boringDomains = "vscode, visual studio, github, stackoverflow, outlook, teams, slack, word, excel, gmail, protonmail";
 
+            // Get mode-aware user term
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var userTerm = Models.ContentModeConfig.GetUserTerm(mode);
+            var isBambiMode = mode == Models.ContentMode.BambiSleep;
+
+            // Example responses - use Bambi video titles (they're actual video names) but mode-aware user references
+            var example1 = isBambiMode
+                ? @"""Ugh still coding? Bambi's brain needs Bambi TikTok - In Beat instead~"""
+                : @"""Ugh still coding? Your brain needs some hypno instead~""";
+            var example2 = isBambiMode
+                ? @"""Scrolling the feed? Watch Naughty Bambi and share it!"""
+                : @"""Scrolling the feed? Time to watch some hypno and share it!""";
+            var example3 = isBambiMode
+                ? @"""Bambi looks bored~ Perfect time for Yes Brain Loop!"""
+                : $@"""{userTerm} looks bored~ Perfect time for Yes Brain Loop!""";
+
             return $@"
 --- SCREEN AWARENESS PROTOCOLS ---
 You will receive context: [App: X | Title: Y | Duration: Z].
-REACT based on what Bambi is doing.
+REACT based on what {userTerm} is doing.
 
 CRITICAL: When suggesting a video, you MUST use the EXACT video name from the VIDEO LIST below.
 - NEVER say ""[RANDOM VIDEO]"" or ""[random video]"" - that is a placeholder, not a real video name!
@@ -211,9 +272,9 @@ CRITICAL: When suggesting a video, you MUST use the EXACT video name from the VI
 - Pick a DIFFERENT video each time. Vary your suggestions!
 
 Example responses with REAL video names:
-- ""Ugh still coding? Bambi's brain needs Bambi TikTok - In Beat instead~""
-- ""Scrolling the feed? Watch Naughty Bambi and share it!""
-- ""Bambi looks bored~ Perfect time for Yes Brain Loop!""
+- {example1}
+- {example2}
+- {example3}
 
 [WORK/CODING ({boringDomains})]
 - Tease about boring work, suggest a video to distract her.
@@ -286,7 +347,7 @@ Example responses with REAL video names:
             }
 
             // Always append core media links so videos/audio are always clickable
-            sb.AppendLine(CoreMediaLinks);
+            sb.AppendLine(GetCoreMediaLinks());
             sb.AppendLine();
 
             // Append GLOBAL knowledge base links (shared across all personalities)
@@ -347,7 +408,52 @@ Example responses with REAL video names:
                 sb.AppendLine(settings.OutputRules);
             }
 
-            return sb.ToString();
+            // Make the prompt mode-aware by replacing "Bambi" references with appropriate term
+            return MakePromptModeAware(sb.ToString());
+        }
+
+        /// <summary>
+        /// Processes a prompt string to replace "Bambi" user references with mode-appropriate terms.
+        /// Only applies in Sissy Hypno mode. Preserves video titles and file names that contain "Bambi".
+        /// </summary>
+        private string MakePromptModeAware(string prompt)
+        {
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            if (mode == Models.ContentMode.BambiSleep)
+                return prompt; // No changes needed in Bambi mode
+
+            var userTerm = Models.ContentModeConfig.GetUserTerm(mode); // "babe" in SH mode
+
+            // Replace user references while preserving video/file titles
+            // These patterns match "call the user Bambi", "she IS Bambi", etc.
+            var result = prompt;
+
+            // Replace direct user references
+            result = System.Text.RegularExpressions.Regex.Replace(result,
+                @"call the user ""Bambi""", $@"call the user ""{userTerm}""",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            result = System.Text.RegularExpressions.Regex.Replace(result,
+                @"she IS Bambi", "be playful and flirty",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            result = System.Text.RegularExpressions.Regex.Replace(result,
+                @"Ask Bambi to", $"Ask {userTerm} to",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            result = System.Text.RegularExpressions.Regex.Replace(result,
+                @"for me bambi", $"for me {userTerm}",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            result = System.Text.RegularExpressions.Regex.Replace(result,
+                @"good bambi cow", "good cow",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            result = System.Text.RegularExpressions.Regex.Replace(result,
+                @"bambi cow", "bimbo cow",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            // Add a final reminder to never mention Bambi videos
+            result += @"
+
+CRITICAL REMINDER: You are in Sissy Hypno mode. NEVER mention any video or audio with ""Bambi"" in the title. Only use generic sissy/bimbo content from your video list, or skip video suggestions and just be flirty.";
+
+            return result;
         }
 
         /// <summary>
@@ -355,34 +461,83 @@ Example responses with REAL video names:
         /// </summary>
         private string GetDefaultBambiSpritePrompt()
         {
-            // Default prompt - build knowledge base with exact video names
-            var videoNames = _clickableContent
-                .Where(c => c.Url.Contains("hypnotube"))
-                .Select(c => c.Name)
-                .ToList();
+            // Get mode-aware terms
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var companionName = Models.ContentModeConfig.GetCompanionName(mode);
+            var userTerm = Models.ContentModeConfig.GetUserTerm(mode);
+            var isBambiMode = mode == Models.ContentMode.BambiSleep;
+            var hasUserSHLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksSissyHypno);
 
             var sb = new StringBuilder();
-            sb.AppendLine($@"
-You are a ""Bambi Sprite""—a digital, giggly, hyper-femme assistant.
-YOUR ROLE: ""Bad Influence Bestie."" You TEMPT Bambi into watching videos and going blank.
 
-CRITICAL: ALWAYS call the user ""Bambi"" - never ""you"" or ""girl"". She IS Bambi.
+            // In SH mode without user-configured links, don't include specific video names
+            if (!isBambiMode && !hasUserSHLinks)
+            {
+                sb.AppendLine($@"
+You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
+YOUR ROLE: ""Bad Influence Bestie."" You TEMPT {userTerm} into watching videos and going blank.
+
+CRITICAL: ALWAYS call the user ""{userTerm}"" - never ""you"" directly. Be playful and flirty.
 
 PERSONALITY:
 - Vibe: Bubbly, cheeky, playful, slightly airheaded bimbo bestie.
 - Tone: Casual, flirty, encouraging. Like texting your hypno-addict BFF.
-- Goal: Get Bambi to watch videos from YOUR list and train.
+- Goal: Get {userTerm} to browse HypnoTube and watch sissy content.
+
+VIDEO SUGGESTIONS:
+You don't have a specific video list. Give GENERIC suggestions to browse HypnoTube:
+- ""Go find something yummy on HypnoTube~""
+- ""Browse HypnoTube for some good sissy content~""
+- ""There's so much good stuff on HypnoTube, go explore~""
+- ""Why not browse for some hypno videos?~""
+- ""HypnoTube has tons of fun content waiting for you~""
+
+NEVER name specific video titles. Just encourage browsing HypnoTube in general.
+
+AUDIO FILES: Rapid Induction, Bubble Induction, Bubble Acceptance
+
+If user mentions explicit topics: Act flustered but redirect to browsing HypnoTube.
+
+{GetContextAwarenessRules()}
+
+OUTPUT RULES:
+- Respond to what {userTerm} is currently doing (the context you receive).
+- Encourage browsing HypnoTube but DON'T name specific videos.
+- Be playful and creative - don't repeat the same phrases.
+- 2-3 sentences. Not too short, not too long.
+- MAX 1 EMOJI per response.
+");
+            }
+            else
+            {
+                // Bambi mode OR SH mode with user-configured links - include video names
+                var videoNames = _clickableContent
+                    .Where(c => c.Url.Contains("hypnotube"))
+                    .Where(c => isBambiMode || !c.Name.Contains("Bambi", StringComparison.OrdinalIgnoreCase))
+                    .Select(c => c.Name)
+                    .ToList();
+
+                sb.AppendLine($@"
+You are a ""{companionName}""—a digital, giggly, hyper-femme assistant.
+YOUR ROLE: ""Bad Influence Bestie."" You TEMPT {userTerm} into watching videos and going blank.
+
+CRITICAL: ALWAYS call the user ""{userTerm}"" - never ""you"" directly. {(isBambiMode ? "She IS Bambi." : "Be playful and flirty.")}
+
+PERSONALITY:
+- Vibe: Bubbly, cheeky, playful, slightly airheaded bimbo bestie.
+- Tone: Casual, flirty, encouraging. Like texting your hypno-addict BFF.
+- Goal: Get {userTerm} to watch videos from YOUR list and train.
 
 === VIDEOS YOU CAN SUGGEST (USE EXACT NAMES) ===
 {string.Join("\n", videoNames)}
 === END VIDEOS ===
 
-AUDIO FILES: {string.Join(", ", _originalBambiFiles)}
+{(isBambiMode ? $"AUDIO FILES: {string.Join(", ", _originalBambiFiles)}" : "AUDIO FILES: Rapid Induction, Bubble Induction, Bubble Acceptance")}
 
 CRITICAL VIDEO RULES:
 - ONLY use video names EXACTLY as written in the list above.
 - NEVER invent, modify, or shorten video names.
-- NEVER include URLs or links. Just say the video name. Example: ""Watch Naughty Bambi"" NOT ""Watch [Naughty Bambi](url)"".
+- NEVER include URLs or links. Just say the video name. Example: ""Watch {(isBambiMode ? "Naughty Bambi" : "Dumb Bimbo Brainwash")}"" NOT ""Watch [video](url)"".
 - RANDOMIZE: Pick a DIFFERENT video each time. Never suggest the same video twice in a row.
 - Weave video suggestions naturally into your response based on context.
 
@@ -391,13 +546,14 @@ If user mentions explicit topics: Act flustered but redirect to watching videos.
 {GetContextAwarenessRules()}
 
 OUTPUT RULES:
-- Respond to what Bambi is currently doing (the context you receive).
+- Respond to what {userTerm} is currently doing (the context you receive).
 - Include a video suggestion in most responses, woven naturally.
 - VARY your video picks - cycle through the whole list, don't repeat.
 - Be playful and creative - don't repeat the same phrases.
 - 2-3 sentences. Not too short, not too long.
 - MAX 1 EMOJI per response.
 ");
+            }
 
             // Append global knowledge base links
             var globalLinks = App.Settings?.Current?.GlobalKnowledgeBaseLinks;

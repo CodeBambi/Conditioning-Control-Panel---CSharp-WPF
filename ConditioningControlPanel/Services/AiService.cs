@@ -30,7 +30,13 @@ namespace ConditioningControlPanel.Services
         private const int MaxTokensHardCap = 100; // Hard cap on response tokens to control costs (~50 words, enough for video names)
 
         // Fallback response when API unavailable or limit reached
-        private const string FallbackResponse = "Bambi's head is so empty right now~ *giggles*";
+        private static string GetFallbackResponse()
+        {
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            return mode == Models.ContentMode.BambiSleep
+                ? "Bambi's head is so empty right now~ *giggles*"
+                : "My head is so empty right now~ *giggles*";
+        }
 
         /// <summary>
         /// Whether AI is available (requires Patreon Level 1+ or whitelist)
@@ -67,7 +73,7 @@ namespace ConditioningControlPanel.Services
             var prompt = _bambiSprite.GetSystemPrompt();
 
             var result = await GetAiResponseAsync(userInput, prompt);
-            return result ?? FallbackResponse;
+            return result ?? GetFallbackResponse();
         }
 
         /// <summary>
@@ -264,7 +270,7 @@ namespace ConditioningControlPanel.Services
             if (string.IsNullOrWhiteSpace(sanitized))
             {
                 App.Logger?.Warning("AiService: Response was entirely metadata, returning fallback");
-                return FallbackResponse;
+                return GetFallbackResponse();
             }
 
             return sanitized;

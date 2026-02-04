@@ -92,7 +92,9 @@ namespace ConditioningControlPanel.Services;
             showItem.Click += (s, e) => ShowWindow();
             contextMenu.Items.Add(showItem);
 
-            var wakeBambiItem = new ToolStripMenuItem("Wake Bambi Up!");
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var wakeLabel = mode == Models.ContentMode.BambiSleep ? "Wake Bambi Up!" : "Wake Up!";
+            var wakeBambiItem = new ToolStripMenuItem(wakeLabel);
             wakeBambiItem.Click += (s, e) => OnWakeBambiRequested?.Invoke();
             contextMenu.Items.Add(wakeBambiItem);
 
