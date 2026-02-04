@@ -1474,27 +1474,15 @@ namespace ConditioningControlPanel.Services
                     return null; // Already on latest
                 }
 
-                // Parse release notes (body field)
+                // Parse using proper JSON parsing
                 var releaseNotes = "";
-                var bodyMatch = System.Text.RegularExpressions.Regex.Match(response, "\"body\"\\s*:\\s*\"([^\"]*(?:\\\\.[^\"]*)*)\"");
-                if (bodyMatch.Success)
-                {
-                    releaseNotes = bodyMatch.Groups[1].Value
-                        .Replace("\\r\\n", "\n")
-                        .Replace("\\n", "\n")
-                        .Replace("\\\"", "\"");
-
-                    // Clean up markdown headers for plain text display
-                    releaseNotes = System.Text.RegularExpressions.Regex.Replace(releaseNotes, @"^###\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
-                    releaseNotes = System.Text.RegularExpressions.Regex.Replace(releaseNotes, @"^##\s*", "", System.Text.RegularExpressions.RegexOptions.Multiline);
-                    releaseNotes = releaseNotes.Replace("\\", ""); // Remove escape backslashes
-                }
-
-                // Parse file size from assets array (look for .exe installer)
                 long fileSizeBytes = 0;
                 try
                 {
                     var json = Newtonsoft.Json.Linq.JObject.Parse(response);
+
+                    // Parse release notes (body field)
+                    releaseNotes = json["body"]?.ToString() ?? "";
                     var assets = json["assets"] as Newtonsoft.Json.Linq.JArray;
                     if (assets != null)
                     {
