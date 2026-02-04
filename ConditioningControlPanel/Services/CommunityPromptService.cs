@@ -68,6 +68,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task<List<CommunityPromptManifestEntry>> GetAvailablePromptsAsync(bool forceRefresh = false)
         {
+            // Skip network request if offline mode is enabled
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                App.Logger?.Debug("Offline mode enabled, using cached prompts only");
+                return _availablePrompts;
+            }
+
             if (!forceRefresh && _availablePrompts.Count > 0)
             {
                 return _availablePrompts;
@@ -135,6 +142,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task<CommunityPrompt?> InstallPromptAsync(string promptId)
         {
+            // Block downloads in offline mode
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                App.Logger?.Information("Offline mode enabled, prompt download blocked");
+                return null;
+            }
+
             try
             {
                 var url = $"{PromptsDownloadUrl}/{promptId}";

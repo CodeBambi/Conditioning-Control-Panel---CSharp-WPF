@@ -42,7 +42,8 @@ namespace ConditioningControlPanel
             "SYNTHETIC BLOWDOLL",   // Set 3: Level 35-49
             "PERFECT FUCKPUPPET",   // Set 4: Level 50-124
             "BRAINWASHED SLAVEDOLL",// Set 5: Level 125-149
-            "PLATINUM PUPPET"       // Set 6: Level 150+
+            "PLATINUM PUPPET",      // Set 6: Level 150+
+            "BAMBI COW"             // Set 7: Level 75+ (companion-only)
         };
 
         // Companion speech and chat
@@ -378,24 +379,58 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Determines which avatar set to use based on player level
+        /// Determines the highest avatar set unlocked based on player level.
+        /// Note: Sets are not unlocked sequentially - set 7 (Bambi Cow) unlocks at level 75.
         /// </summary>
         /// <param name="level">Player's current level</param>
-        /// <returns>Avatar set number (1-6)</returns>
+        /// <returns>Avatar set number (1-7)</returns>
         public static int GetAvatarSetForLevel(int level)
         {
-            // Avatar Set 6: Level 150+
-            if (level >= 150) return 6;
-            // Avatar Set 5: Level 125-149
-            if (level >= 125) return 5;
-            // Avatar Set 4: Level 50-124
-            if (level >= 50) return 4;
-            // Avatar Set 3: Level 35-49
-            if (level >= 35) return 3;
-            // Avatar Set 2: Level 20-34
-            if (level >= 20) return 2;
-            // Avatar Set 1: Level 1-19 (default)
-            return 1;
+            // Find the highest unlocked set
+            int maxSet = 1;
+            if (level >= 20) maxSet = 2;
+            if (level >= 35) maxSet = 3;
+            if (level >= 50) maxSet = 4;
+            if (level >= 75) maxSet = 7;  // Bambi Cow unlocks at 75 (set 7 > set 4)
+            if (level >= 100) maxSet = 7; // Still 7 since 7 > 4
+            if (level >= 125) maxSet = 7; // Still 7 since 7 > 5
+            if (level >= 150) maxSet = 7; // Still 7 since 7 > 6
+            return maxSet;
+        }
+
+        /// <summary>
+        /// Checks if a specific avatar set is unlocked for the given level.
+        /// </summary>
+        public static bool IsAvatarSetUnlocked(int setNumber, int level)
+        {
+            return setNumber switch
+            {
+                1 => true,                    // Always unlocked
+                2 => level >= 20,             // Level 20
+                3 => level >= 35,             // Level 35
+                4 => level >= 50,             // Level 50 (CultBunny companion requirement is 100, but avatar unlocks at 50)
+                5 => level >= 125,            // Level 125
+                6 => level >= 150,            // Level 150
+                7 => level >= 75,             // Level 75 (Bambi Cow)
+                _ => false
+            };
+        }
+
+        /// <summary>
+        /// Gets all unlocked avatar sets for the given level, in unlock-level order.
+        /// Order: 1 (Lv1), 2 (Lv20), 3 (Lv35), 4 (Lv50), 7 (Lv75), 5 (Lv125), 6 (Lv150)
+        /// </summary>
+        public static int[] GetUnlockedAvatarSets(int level)
+        {
+            // Sets in unlock-level order (not numerical order)
+            int[] setsInOrder = { 1, 2, 3, 4, 7, 5, 6 };
+            var unlocked = new System.Collections.Generic.List<int>();
+            foreach (int set in setsInOrder)
+            {
+                if (IsAvatarSetUnlocked(set, level))
+                    unlocked.Add(set);
+            }
+            return unlocked.ToArray();
         }
 
         /// <summary>
@@ -517,7 +552,8 @@ namespace ConditioningControlPanel
         /// </summary>
         private void SwitchToAvatarSet(int setNumber, bool animate = true)
         {
-            if (setNumber < 1 || setNumber > _maxUnlockedSet) return;
+            int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+            if (!IsAvatarSetUnlocked(setNumber, playerLevel)) return;
 
             _currentAvatarSet = setNumber;
             _selectedAvatarSet = setNumber;
@@ -603,6 +639,7 @@ namespace ConditioningControlPanel
                 4 => Models.CompanionId.CultBunny,          // Level 100: Perfect Fuckpuppet
                 5 => Models.CompanionId.BrainParasite,      // Level 125: Brainwashed Slavedoll
                 6 => Models.CompanionId.BambiTrainer,       // Level 150: Platinum Puppet
+                7 => Models.CompanionId.BimboCow,           // Level 75: Bambi Cow
                 _ => null                                    // Sets 1-2 have no companion
             };
         }
@@ -619,6 +656,7 @@ namespace ConditioningControlPanel
                 Models.CompanionId.CultBunny => 4,       // Perfect Fuckpuppet
                 Models.CompanionId.BrainParasite => 5,   // Brainwashed Slavedoll
                 Models.CompanionId.BambiTrainer => 6,    // Platinum Puppet
+                Models.CompanionId.BimboCow => 7,        // Bambi Cow
                 _ => 1
             };
         }
@@ -636,8 +674,9 @@ namespace ConditioningControlPanel
             {
                 var companionDef = Models.CompanionDefinition.GetById(companionId.Value);
                 var companionProgress = App.Companion.GetProgress(companionId.Value);
+                bool isSlutMode = App.Settings?.Current?.SlutModeEnabled ?? false;
 
-                TxtAvatarTitle.Text = companionDef.Name.ToUpperInvariant();
+                TxtAvatarTitle.Text = companionDef.GetDisplayName(isSlutMode).ToUpperInvariant();
                 TxtAvatarLevel.Visibility = Visibility.Visible;
                 TxtAvatarLevel.Text = companionProgress.IsMaxLevel
                     ? "MAX!"
@@ -692,7 +731,8 @@ namespace ConditioningControlPanel
             int targetSet = GetAvatarSetForCompanion(companionId);
 
             // Only switch if set is unlocked
-            if (targetSet <= _maxUnlockedSet)
+            int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+            if (IsAvatarSetUnlocked(targetSet, playerLevel))
             {
                 SwitchToAvatarSet(targetSet, animate: true);
             }
@@ -703,15 +743,17 @@ namespace ConditioningControlPanel
         /// </summary>
         private void UpdateNavigationArrows()
         {
-            // Show arrows only if user has multiple avatars unlocked
-            bool hasMultiple = _maxUnlockedSet > 1;
+            int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+            var unlockedSets = GetUnlockedAvatarSets(playerLevel);
+            bool hasMultiple = unlockedSets.Length > 1;
+            int currentIndex = System.Array.IndexOf(unlockedSets, _currentAvatarSet);
 
-            // Previous arrow: show if not at set 1
-            BtnPrevAvatar.Visibility = hasMultiple && _currentAvatarSet > 1
+            // Previous arrow: show if not at first unlocked set
+            BtnPrevAvatar.Visibility = hasMultiple && currentIndex > 0
                 ? Visibility.Visible : Visibility.Collapsed;
 
-            // Next arrow: show if not at max unlocked
-            BtnNextAvatar.Visibility = hasMultiple && _currentAvatarSet < _maxUnlockedSet
+            // Next arrow: show if not at last unlocked set
+            BtnNextAvatar.Visibility = hasMultiple && currentIndex < unlockedSets.Length - 1
                 ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -742,9 +784,12 @@ namespace ConditioningControlPanel
         /// </summary>
         private void BtnPrevAvatar_Click(object sender, MouseButtonEventArgs e)
         {
-            if (_currentAvatarSet > 1)
+            int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+            var unlockedSets = GetUnlockedAvatarSets(playerLevel);
+            int currentIndex = System.Array.IndexOf(unlockedSets, _currentAvatarSet);
+            if (currentIndex > 0)
             {
-                SwitchToAvatarSet(_currentAvatarSet - 1);
+                SwitchToAvatarSet(unlockedSets[currentIndex - 1]);
             }
         }
 
@@ -753,9 +798,12 @@ namespace ConditioningControlPanel
         /// </summary>
         private void BtnNextAvatar_Click(object sender, MouseButtonEventArgs e)
         {
-            if (_currentAvatarSet < _maxUnlockedSet)
+            int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+            var unlockedSets = GetUnlockedAvatarSets(playerLevel);
+            int currentIndex = System.Array.IndexOf(unlockedSets, _currentAvatarSet);
+            if (currentIndex >= 0 && currentIndex < unlockedSets.Length - 1)
             {
-                SwitchToAvatarSet(_currentAvatarSet + 1);
+                SwitchToAvatarSet(unlockedSets[currentIndex + 1]);
             }
         }
 

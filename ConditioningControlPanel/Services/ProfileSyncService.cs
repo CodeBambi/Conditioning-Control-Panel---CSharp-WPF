@@ -108,6 +108,9 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private async Task SendHeartbeatAsync()
         {
+            // Skip if offline mode is enabled
+            if (App.Settings?.Current?.OfflineMode == true) return;
+
             if (!IsSyncEnabled) return;
 
             try
@@ -147,6 +150,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task<bool> LoadProfileAsync()
         {
+            // Skip if offline mode is enabled
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                App.Logger?.Debug("Profile sync skipped - offline mode enabled");
+                return false;
+            }
+
             if (!IsSyncEnabled)
             {
                 App.Logger?.Debug("Profile sync skipped - not authenticated");
@@ -243,6 +253,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task<bool> SyncProfileAsync()
         {
+            // Skip if offline mode is enabled
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                App.Logger?.Debug("Profile sync skipped - offline mode enabled");
+                return false;
+            }
+
             if (!IsSyncEnabled)
             {
                 App.Logger?.Debug("Profile sync skipped - not authenticated");

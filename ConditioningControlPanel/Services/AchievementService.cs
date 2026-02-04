@@ -194,6 +194,7 @@ public class AchievementService : IDisposable
         if (level >= 10) TryUnlock("plastic_initiation");
         if (level >= 20) TryUnlock("dumb_bimbo");
         if (level >= 50) TryUnlock("fully_synthetic");
+        if (level >= 75) TryUnlock("docile_cow");
         if (level >= 100) TryUnlock("perfect_plastic_puppet");
         if (level >= 125) TryUnlock("brainwashed_slavedoll");
         if (level >= 150) TryUnlock("platinum_puppet");
@@ -364,9 +365,16 @@ public class AchievementService : IDisposable
     /// </summary>
     public void TrackAvatarClick()
     {
+        // Easter egg only available in Bambi Sleep mode, not in General Sissy Hypno
+        var contentMode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+        if (contentMode == Models.ContentMode.SissyHypno)
+        {
+            return; // Skip Easter egg tracking in Sissy Hypno mode
+        }
+
         var clickCount = _progress.AvatarClickCount + 1;
         App.Logger?.Debug("TrackAvatarClick called. Current count will be: {Count}", clickCount);
-        
+
         if (_progress.TrackAvatarClick())
         {
             App.Logger?.Information("🎯 20 clicks reached! Unlocking Neon Obsession...");

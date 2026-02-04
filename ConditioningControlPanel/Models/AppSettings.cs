@@ -59,7 +59,7 @@ namespace ConditioningControlPanel.Models
         public int SelectedAvatarSet
         {
             get => _selectedAvatarSet;
-            set { _selectedAvatarSet = Math.Clamp(value, 0, 6); OnPropertyChanged(); }
+            set { _selectedAvatarSet = Math.Clamp(value, 0, 7); OnPropertyChanged(); }
         }
 
         private bool _welcomed = false;
@@ -801,6 +801,18 @@ namespace ConditioningControlPanel.Models
             set { _offlineMode = value; OnPropertyChanged(); }
         }
 
+        private string _offlineUsername = "";
+        /// <summary>
+        /// Username used when in offline mode. This name is stored locally only
+        /// and is never synced to the cloud or leaderboard.
+        /// </summary>
+        [JsonProperty("offline_username")]
+        public string OfflineUsername
+        {
+            get => _offlineUsername;
+            set { _offlineUsername = value ?? ""; OnPropertyChanged(); }
+        }
+
         private DateTime? _patreonPremiumValidUntil = null;
         /// <summary>
         /// Cached premium access validity. When a user logs in with Patreon and has premium,
@@ -1432,7 +1444,7 @@ namespace ConditioningControlPanel.Models
         public int ActiveCompanionId
         {
             get => _activeCompanionId;
-            set { _activeCompanionId = Math.Clamp(value, 0, 3); OnPropertyChanged(); }
+            set { _activeCompanionId = Math.Clamp(value, 0, 4); OnPropertyChanged(); }
         }
 
         private Dictionary<int, CompanionProgress>? _companionProgressData;

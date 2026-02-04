@@ -57,6 +57,13 @@ public class DiscordRichPresenceService : IDisposable
     /// </summary>
     public void Connect()
     {
+        // Don't connect in offline mode
+        if (App.Settings?.Current?.OfflineMode == true)
+        {
+            App.Logger?.Debug("Offline mode enabled, Discord Rich Presence disabled");
+            return;
+        }
+
         if (_client != null && _client.IsInitialized)
             return;
 

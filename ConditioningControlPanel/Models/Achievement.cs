@@ -48,6 +48,15 @@ public class Achievement
             ImageName = "lv_50.png",
             Category = AchievementCategory.Progression
         },
+        ["docile_cow"] = new Achievement
+        {
+            Id = "docile_cow",
+            Name = "Docile Cow",
+            Requirement = "Reach Level 75",
+            FlavorText = "Moo~ Such a good, obedient cow. Content to graze and be milked.",
+            ImageName = "docile_cow.png",
+            Category = AchievementCategory.Progression
+        },
         ["perfect_plastic_puppet"] = new Achievement
         {
             Id = "perfect_plastic_puppet",

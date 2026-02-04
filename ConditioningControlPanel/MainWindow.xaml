@@ -513,7 +513,7 @@
 
         <!-- Section Panel Style -->
         <Style x:Key="SectionPanel" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource PanelBgBrush}"/>
+            <Setter Property="Background" Value="{StaticResource PanelBgTransparentBrush}"/>
             <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="Padding" Value="9"/>
             <Setter Property="Margin" Value="0,0,0,9"/>
@@ -642,6 +642,408 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Animated Gradient Panel Style with Particles (using ContentControl) -->
+        <Style x:Key="AnimatedGradientPanel" TargetType="ContentControl">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContentControl">
+                        <Border x:Name="OuterBorder" CornerRadius="15"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                ClipToBounds="True">
+                            <Grid>
+                                <!-- Animated Gradient Background -->
+                                <Rectangle RadiusX="15" RadiusY="15">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush x:Name="GradientFill" StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop x:Name="Stop1" Color="#1E1E3A" Offset="0"/>
+                                            <GradientStop x:Name="Stop2" Color="#2A1A35" Offset="0.5"/>
+                                            <GradientStop x:Name="Stop3" Color="#1A1A2E" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+
+                                <!-- Radial Glow Effect (pulsing) -->
+                                <Ellipse x:Name="GlowPink" Width="200" Height="200" Opacity="0.15"
+                                         HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-50,-50,0,0">
+                                    <Ellipse.Fill>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#FF69B4" Offset="0"/>
+                                            <GradientStop Color="Transparent" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                                <Ellipse x:Name="GlowPurple" Width="180" Height="180" Opacity="0.12"
+                                         HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-40,-40">
+                                    <Ellipse.Fill>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#9B59B6" Offset="0"/>
+                                            <GradientStop Color="Transparent" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+
+                                <!-- Floating Particles -->
+                                <Canvas IsHitTestVisible="False">
+                                    <!-- Particle 1 -->
+                                    <Ellipse Width="4" Height="4" Fill="#FF69B4" Opacity="0.4" Canvas.Left="20" Canvas.Top="80">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle1Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <!-- Particle 2 -->
+                                    <Ellipse Width="3" Height="3" Fill="#9B59B6" Opacity="0.35" Canvas.Left="80" Canvas.Top="120">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle2Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <!-- Particle 3 -->
+                                    <Ellipse Width="5" Height="5" Fill="#FF69B4" Opacity="0.3" Canvas.Left="150" Canvas.Top="60">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle3Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <!-- Particle 4 -->
+                                    <Ellipse Width="3" Height="3" Fill="#DDA0DD" Opacity="0.35" Canvas.Left="220" Canvas.Top="100">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle4Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <!-- Particle 5 -->
+                                    <Ellipse Width="4" Height="4" Fill="#9B59B6" Opacity="0.3" Canvas.Left="280" Canvas.Top="40">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle5Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <!-- Particle 6 -->
+                                    <Ellipse Width="3" Height="3" Fill="#FF69B4" Opacity="0.4" Canvas.Left="50" Canvas.Top="150">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle6Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                </Canvas>
+
+                                <!-- Content -->
+                                <Border Padding="20">
+                                    <ContentPresenter/>
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsVisible" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard x:Name="PanelAnimationStoryboard">
+                                        <Storyboard RepeatBehavior="Forever">
+                                            <!-- Particle floating animations -->
+                                            <DoubleAnimation Storyboard.TargetName="Particle1Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-60" Duration="0:0:8" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle1Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="15" Duration="0:0:6" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle2Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-50" Duration="0:0:10" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle2Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="-10" Duration="0:0:7" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle3Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-70" Duration="0:0:12" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle3Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="20" Duration="0:0:9" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle4Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-55" Duration="0:0:9" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle4Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="-15" Duration="0:0:11" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle5Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-65" Duration="0:0:11" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle5Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="12" Duration="0:0:8" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle6Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-45" Duration="0:0:7" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle6Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="-8" Duration="0:0:10" AutoReverse="True"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <StopStoryboard BeginStoryboardName="PanelAnimationStoryboard"/>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Animated Gradient Panel for Roadmap (wider, less padding) -->
+        <Style x:Key="AnimatedGradientPanelWide" TargetType="ContentControl">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContentControl">
+                        <Border x:Name="OuterBorder" CornerRadius="10"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                ClipToBounds="True">
+                            <Grid>
+                                <!-- Animated Gradient Background -->
+                                <Rectangle RadiusX="10" RadiusY="10">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush x:Name="GradientFill" StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop x:Name="Stop1" Color="#1E1E3A" Offset="0"/>
+                                            <GradientStop x:Name="Stop2" Color="#2A1A35" Offset="0.5"/>
+                                            <GradientStop x:Name="Stop3" Color="#1A1A2E" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+
+                                <!-- Radial Glow Effect (pulsing) -->
+                                <Ellipse x:Name="GlowPink" Width="250" Height="150" Opacity="0.12"
+                                         HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-80,-40,0,0">
+                                    <Ellipse.Fill>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#FF69B4" Offset="0"/>
+                                            <GradientStop Color="Transparent" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                                <Ellipse x:Name="GlowPurple" Width="200" Height="120" Opacity="0.1"
+                                         HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-60,-30">
+                                    <Ellipse.Fill>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#9B59B6" Offset="0"/>
+                                            <GradientStop Color="Transparent" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+
+                                <!-- Floating Particles (more spread out for wider panel) -->
+                                <Canvas IsHitTestVisible="False">
+                                    <Ellipse Width="4" Height="4" Fill="#FF69B4" Opacity="0.4" Canvas.Left="30" Canvas.Top="60">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle1Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <Ellipse Width="3" Height="3" Fill="#9B59B6" Opacity="0.35" Canvas.Left="120" Canvas.Top="100">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle2Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <Ellipse Width="5" Height="5" Fill="#FF69B4" Opacity="0.3" Canvas.Left="250" Canvas.Top="40">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle3Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <Ellipse Width="3" Height="3" Fill="#DDA0DD" Opacity="0.35" Canvas.Left="380" Canvas.Top="80">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle4Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <Ellipse Width="4" Height="4" Fill="#9B59B6" Opacity="0.3" Canvas.Left="500" Canvas.Top="50">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle5Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                    <Ellipse Width="3" Height="3" Fill="#FF69B4" Opacity="0.4" Canvas.Left="180" Canvas.Top="120">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="Particle6Transform"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                </Canvas>
+
+                                <!-- Content -->
+                                <Border Padding="10">
+                                    <ContentPresenter/>
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsVisible" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard x:Name="WideAnimationStoryboard">
+                                        <Storyboard RepeatBehavior="Forever">
+                                            <!-- Particle animations -->
+                                            <DoubleAnimation Storyboard.TargetName="Particle1Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-40" Duration="0:0:8" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle1Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="15" Duration="0:0:6" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle2Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-35" Duration="0:0:10" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle2Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="-10" Duration="0:0:7" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle3Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-50" Duration="0:0:12" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle3Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="20" Duration="0:0:9" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle4Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-45" Duration="0:0:9" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle4Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="-15" Duration="0:0:11" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle5Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-55" Duration="0:0:11" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle5Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="12" Duration="0:0:8" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle6Transform" Storyboard.TargetProperty="Y"
+                                                             From="0" To="-30" Duration="0:0:7" AutoReverse="True"/>
+                                            <DoubleAnimation Storyboard.TargetName="Particle6Transform" Storyboard.TargetProperty="X"
+                                                             From="0" To="-8" Duration="0:0:10" AutoReverse="True"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <StopStoryboard BeginStoryboardName="WideAnimationStoryboard"/>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Full-Tab Animated Background (no padding, covers entire tab area) -->
+        <ControlTemplate x:Key="AnimatedTabBackground" TargetType="ContentControl">
+            <Border CornerRadius="12" ClipToBounds="True">
+                <Grid>
+                    <!-- Animated Gradient Background -->
+                    <Rectangle RadiusX="12" RadiusY="12">
+                        <Rectangle.Fill>
+                            <LinearGradientBrush x:Name="GradientFill" StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop x:Name="Stop1" Color="#1E1E3A" Offset="0"/>
+                                <GradientStop x:Name="Stop2" Color="#2A1A35" Offset="0.5"/>
+                                <GradientStop x:Name="Stop3" Color="#1A1A2E" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+
+                    <!-- Multiple Radial Glow Effects spread across tab -->
+                    <Ellipse x:Name="GlowPink1" Width="400" Height="300" Opacity="0.1"
+                             HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-100,-80,0,0">
+                        <Ellipse.Fill>
+                            <RadialGradientBrush>
+                                <GradientStop Color="#FF69B4" Offset="0"/>
+                                <GradientStop Color="Transparent" Offset="1"/>
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <Ellipse x:Name="GlowPurple1" Width="350" Height="250" Opacity="0.08"
+                             HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-80,-60">
+                        <Ellipse.Fill>
+                            <RadialGradientBrush>
+                                <GradientStop Color="#9B59B6" Offset="0"/>
+                                <GradientStop Color="Transparent" Offset="1"/>
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <Ellipse x:Name="GlowPink2" Width="300" Height="200" Opacity="0.06"
+                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-50,-50,0">
+                        <Ellipse.Fill>
+                            <RadialGradientBrush>
+                                <GradientStop Color="#FF69B4" Offset="0"/>
+                                <GradientStop Color="Transparent" Offset="1"/>
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <Ellipse x:Name="GlowPurple2" Width="280" Height="180" Opacity="0.07"
+                             HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="-60,0,0,-40">
+                        <Ellipse.Fill>
+                            <RadialGradientBrush>
+                                <GradientStop Color="#9B59B6" Offset="0"/>
+                                <GradientStop Color="Transparent" Offset="1"/>
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                    </Ellipse>
+
+                    <!-- Floating Particles spread across entire tab -->
+                    <Canvas IsHitTestVisible="False">
+                        <!-- Row 1 - Top -->
+                        <Ellipse Width="4" Height="4" Fill="#FF69B4" Opacity="0.4" Canvas.Left="50" Canvas.Top="40">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P1"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse Width="3" Height="3" Fill="#9B59B6" Opacity="0.35" Canvas.Left="200" Canvas.Top="60">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P2"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse Width="5" Height="5" Fill="#DDA0DD" Opacity="0.3" Canvas.Left="400" Canvas.Top="30">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P3"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse Width="3" Height="3" Fill="#FF69B4" Opacity="0.35" Canvas.Left="600" Canvas.Top="50">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P4"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse Width="4" Height="4" Fill="#9B59B6" Opacity="0.3" Canvas.Left="800" Canvas.Top="40">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P5"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                        <!-- Row 2 - Middle -->
+                        <Ellipse Width="3" Height="3" Fill="#FF69B4" Opacity="0.4" Canvas.Left="100" Canvas.Top="150">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P6"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse Width="4" Height="4" Fill="#DDA0DD" Opacity="0.35" Canvas.Left="300" Canvas.Top="180">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P7"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse Width="3" Height="3" Fill="#9B59B6" Opacity="0.3" Canvas.Left="500" Canvas.Top="160">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P8"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse Width="5" Height="5" Fill="#FF69B4" Opacity="0.35" Canvas.Left="700" Canvas.Top="140">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P9"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                        <!-- Row 3 - Lower -->
+                        <Ellipse Width="4" Height="4" Fill="#9B59B6" Opacity="0.4" Canvas.Left="150" Canvas.Top="280">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P10"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse Width="3" Height="3" Fill="#FF69B4" Opacity="0.3" Canvas.Left="350" Canvas.Top="300">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P11"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                        <Ellipse Width="4" Height="4" Fill="#DDA0DD" Opacity="0.35" Canvas.Left="550" Canvas.Top="260">
+                            <Ellipse.RenderTransform><TranslateTransform x:Name="P12"/></Ellipse.RenderTransform>
+                        </Ellipse>
+                    </Canvas>
+
+                    <!-- Content -->
+                    <ContentPresenter/>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <!-- Start animation when visible, stop when hidden (saves resources) -->
+                <Trigger Property="IsVisible" Value="True">
+                    <Trigger.EnterActions>
+                        <BeginStoryboard x:Name="TabAnimationStoryboard">
+                            <Storyboard RepeatBehavior="Forever">
+                                <!-- Glow pulses -->
+                                <DoubleAnimation Storyboard.TargetName="GlowPink1" Storyboard.TargetProperty="Opacity"
+                                                 From="0.1" To="0.18" Duration="0:0:4" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="GlowPurple1" Storyboard.TargetProperty="Opacity"
+                                                 From="0.08" To="0.15" Duration="0:0:5" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="GlowPink2" Storyboard.TargetProperty="Opacity"
+                                                 From="0.06" To="0.12" Duration="0:0:6" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="GlowPurple2" Storyboard.TargetProperty="Opacity"
+                                                 From="0.07" To="0.14" Duration="0:0:4.5" AutoReverse="True"/>
+                                <!-- Particle animations - varied speeds and directions -->
+                                <DoubleAnimation Storyboard.TargetName="P1" Storyboard.TargetProperty="Y" From="0" To="-50" Duration="0:0:9" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P1" Storyboard.TargetProperty="X" From="0" To="20" Duration="0:0:7" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P2" Storyboard.TargetProperty="Y" From="0" To="-40" Duration="0:0:11" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P2" Storyboard.TargetProperty="X" From="0" To="-15" Duration="0:0:8" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P3" Storyboard.TargetProperty="Y" From="0" To="-60" Duration="0:0:13" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P3" Storyboard.TargetProperty="X" From="0" To="25" Duration="0:0:10" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P4" Storyboard.TargetProperty="Y" From="0" To="-45" Duration="0:0:10" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P4" Storyboard.TargetProperty="X" From="0" To="-18" Duration="0:0:12" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P5" Storyboard.TargetProperty="Y" From="0" To="-55" Duration="0:0:12" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P5" Storyboard.TargetProperty="X" From="0" To="15" Duration="0:0:9" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P6" Storyboard.TargetProperty="Y" From="0" To="-35" Duration="0:0:8" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P6" Storyboard.TargetProperty="X" From="0" To="-12" Duration="0:0:11" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P7" Storyboard.TargetProperty="Y" From="0" To="-50" Duration="0:0:14" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P7" Storyboard.TargetProperty="X" From="0" To="22" Duration="0:0:10" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P8" Storyboard.TargetProperty="Y" From="0" To="-40" Duration="0:0:10" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P8" Storyboard.TargetProperty="X" From="0" To="-20" Duration="0:0:13" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P9" Storyboard.TargetProperty="Y" From="0" To="-55" Duration="0:0:11" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P9" Storyboard.TargetProperty="X" From="0" To="18" Duration="0:0:8" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P10" Storyboard.TargetProperty="Y" From="0" To="-45" Duration="0:0:9" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P10" Storyboard.TargetProperty="X" From="0" To="-16" Duration="0:0:12" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P11" Storyboard.TargetProperty="Y" From="0" To="-35" Duration="0:0:12" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P11" Storyboard.TargetProperty="X" From="0" To="14" Duration="0:0:9" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P12" Storyboard.TargetProperty="Y" From="0" To="-50" Duration="0:0:10" AutoReverse="True"/>
+                                <DoubleAnimation Storyboard.TargetName="P12" Storyboard.TargetProperty="X" From="0" To="-22" Duration="0:0:14" AutoReverse="True"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.EnterActions>
+                    <Trigger.ExitActions>
+                        <StopStoryboard BeginStoryboardName="TabAnimationStoryboard"/>
+                    </Trigger.ExitActions>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
     </Window.Resources>
 
     <!-- Viewbox scales all content proportionally with window size -->
@@ -992,8 +1394,8 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Grid.Column="3" x:Name="BtnDiscordTab" Tag="Discord" Click="BtnDiscordTab_Click"
-                            ToolTip="Discord Community Features" Cursor="Hand" Height="28" Margin="2,0">
+                    <Button Grid.Column="3" x:Name="BtnDiscordTab" Tag="Profile" Click="BtnDiscordTab_Click"
+                            ToolTip="Profile" Cursor="Hand" Height="28" Margin="2,0">
                         <Button.Style>
                             <Style TargetType="Button">
                                 <Setter Property="Background" Value="#5865F2"/>
@@ -1020,8 +1422,8 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="💬" FontSize="11" Margin="0,0,4,0"/>
-                            <TextBlock Text="Discord" FontSize="10"/>
+                            <TextBlock Text="👤" FontSize="11" Margin="0,0,4,0"/>
+                            <TextBlock Text="Profile" FontSize="10"/>
                         </StackPanel>
                     </Button>
                     <Button Grid.Column="4" x:Name="BtnPatreonExclusives" Tag="Patreon" Click="BtnPatreonExclusives_Click"
@@ -1105,7 +1507,8 @@
         </Grid>
 
         <!-- Main Content - Settings Tab -->
-        <Grid x:Name="SettingsTab" Grid.Row="4" Margin="10,5,10,2">
+        <ContentControl x:Name="SettingsTab" Grid.Row="4" Margin="10,5,10,2" Template="{StaticResource AnimatedTabBackground}">
+            <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="330"/>
                 <ColumnDefinition Width="360"/>
@@ -1920,10 +2323,11 @@
                     </TextBlock>
                 </Canvas>
             </Border>
-        </Grid>
+            </Grid>
+        </ContentControl>
 
         <!-- Presets Tab (Hidden by default) -->
-        <Grid x:Name="PresetsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
+        <ContentControl x:Name="PresetsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
             <!-- Main Content -->
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -2521,10 +2925,11 @@
                 </Grid>
             </Border>
             </Grid>
-        </Grid>
+        </ContentControl>
 
         <!-- Progression Tab (Hidden by default) -->
-        <Grid x:Name="ProgressionTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
+        <ContentControl x:Name="ProgressionTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+            <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="2*"/>
                 <ColumnDefinition Width="280"/>
@@ -3397,10 +3802,11 @@
                     </Grid>
                 </Border>
             </StackPanel>
-        </Grid>
+            </Grid>
+        </ContentControl>
 
         <!-- Quests Tab -->
-        <Grid x:Name="QuestsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
+        <ContentControl x:Name="QuestsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
             <Border Style="{StaticResource SectionPanel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
@@ -3436,8 +3842,8 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- DAILY QUEST CARD -->
-                            <Border Grid.Column="0" Background="#1E1E3A" CornerRadius="15"
-                                    Padding="20" BorderThickness="2" BorderBrush="#FFD700">
+                            <ContentControl Grid.Column="0" Style="{StaticResource AnimatedGradientPanel}"
+                                    BorderThickness="2" BorderBrush="#FFD700">
                                 <StackPanel>
                                     <!-- Card Header -->
                                     <Grid Margin="0,0,0,15">
@@ -3521,11 +3927,11 @@
                                             Margin="0,15,0,0" Click="BtnRerollDaily_Click"
                                             ToolTip="Reroll for a different quest (once per day)"/>
                                 </StackPanel>
-                            </Border>
+                            </ContentControl>
 
                             <!-- WEEKLY QUEST CARD -->
-                            <Border Grid.Column="2" Background="#1E1E3A" CornerRadius="15"
-                                    Padding="20" BorderThickness="2" BorderBrush="#9370DB">
+                            <ContentControl Grid.Column="2" Style="{StaticResource AnimatedGradientPanel}"
+                                    BorderThickness="2" BorderBrush="#9370DB">
                                 <StackPanel>
                                     <!-- Card Header -->
                                     <Grid Margin="0,0,0,15">
@@ -3609,7 +4015,7 @@
                                             Margin="0,15,0,0" Click="BtnRerollWeekly_Click"
                                             ToolTip="Reroll for a different quest (once per week)"/>
                                 </StackPanel>
-                            </Border>
+                            </ContentControl>
                         </Grid>
 
                             <!-- Quest Complete Banner (shown briefly when quest completes) -->
@@ -3715,12 +4121,12 @@
                             </Border>
 
                             <!-- Horizontal Scrolling Roadmap -->
-                            <Border x:Name="RoadmapScrollContainer" Background="#1E1E3A" CornerRadius="10"
-                                    Padding="10" MinHeight="220">
+                            <ContentControl x:Name="RoadmapScrollContainer" Style="{StaticResource AnimatedGradientPanelWide}"
+                                    MinHeight="220">
                                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                                     <StackPanel x:Name="RoadmapNodesPanel" Orientation="Horizontal" Margin="10,15"/>
                                 </ScrollViewer>
-                            </Border>
+                            </ContentControl>
 
                             <!-- Roadmap Statistics -->
                             <Border Background="#1E1E3A" CornerRadius="10" Padding="15" Margin="0,15,0,0">
@@ -3765,11 +4171,12 @@
                     </StackPanel>
                 </ScrollViewer>
             </Border>
-        </Grid>
+        </ContentControl>
 
         <!-- Achievements Tab -->
-        <Border x:Name="AchievementsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed"
-                Style="{StaticResource SectionPanel}">
+        <ContentControl x:Name="AchievementsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed"
+                Template="{StaticResource AnimatedTabBackground}">
+            <Border Style="{StaticResource SectionPanel}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <Grid Margin="0,0,0,10">
@@ -3796,10 +4203,11 @@
                                HorizontalAlignment="Center" Margin="0,15,0,0"/>
                 </StackPanel>
             </ScrollViewer>
-        </Border>
+            </Border>
+        </ContentControl>
 
         <!-- Companion Tab (v5.3 - Larger, More Visible Layout) -->
-        <Grid x:Name="CompanionTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
+        <ContentControl x:Name="CompanionTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
             <Border Style="{StaticResource SectionPanel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
@@ -3825,8 +4233,8 @@
                                         <Button x:Name="HelpBtnCompanions" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Companions"/>
                                     </Grid>
 
-                                    <!-- Companion Cards 2x2 - Unlock at levels 50, 100, 125, 150 -->
-                                    <UniformGrid Rows="2" Columns="2" Margin="0,0,0,12">
+                                    <!-- Companion Cards 3x2 - Unlock at levels 50, 75, 100, 125, 150 -->
+                                    <UniformGrid Rows="3" Columns="2" Margin="0,0,0,12">
                                         <Border x:Name="CompanionCard0" Background="#1A1A32" CornerRadius="8" Margin="0,0,5,5"
                                                 Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="0"
                                                 BorderThickness="2" BorderBrush="Transparent">
@@ -3918,6 +4326,30 @@
                                                             Background="#1A1A2E" Foreground="#888" BorderThickness="0" Cursor="Hand"
                                                             Click="BtnCompanionPersonality_Click" Tag="3" ToolTip="Assign AI personality"/>
                                                     <TextBlock x:Name="TxtCompanion3Prompt" Text="" Foreground="#555" FontSize="9"
+                                                               VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
+                                                               MaxWidth="80"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border x:Name="CompanionCard4" Background="#1A1A32" CornerRadius="8" Margin="0,5,5,0"
+                                                Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="4"
+                                                BorderThickness="2" BorderBrush="Transparent">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="Bambi Cow" Foreground="#F5DEB3" FontSize="12" FontWeight="SemiBold"/>
+                                                        <TextBlock x:Name="TxtCompanion4Lock" Text=" [75]" Foreground="#FFD700" FontSize="9"
+                                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
+                                                    </StackPanel>
+                                                    <TextBlock x:Name="TxtCompanion4Level" Text="Lv.1" Foreground="#AAAAAA" FontSize="12"
+                                                               HorizontalAlignment="Right"/>
+                                                </Grid>
+                                                <TextBlock Text="Session completion bonus" Foreground="#606060" FontSize="10" Margin="0,4,0,0"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                    <Button x:Name="BtnCompanion4Personality" Content="🎭" FontSize="10" Padding="4,1"
+                                                            Background="#1A1A2E" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                            Click="BtnCompanionPersonality_Click" Tag="4" ToolTip="Assign AI personality"/>
+                                                    <TextBlock x:Name="TxtCompanion4Prompt" Text="" Foreground="#555" FontSize="9"
                                                                VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
                                                                MaxWidth="80"/>
                                                 </StackPanel>
@@ -4169,10 +4601,10 @@
                     </StackPanel>
                 </ScrollViewer>
             </Border>
-        </Grid>
+        </ContentControl>
 
         <!-- Patreon Exclusives Tab -->
-        <Grid x:Name="PatreonTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
+        <ContentControl x:Name="PatreonTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
             <Border Style="{StaticResource SectionPanel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
@@ -5061,9 +5493,14 @@
                     </StackPanel>
                 </ScrollViewer>
             </Border>
-        </Grid>
+        </ContentControl>
 
-<!-- Discord Tab -->        <Grid x:Name="DiscordTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="10"/><RowDefinition Height="*"/></Grid.RowDefinitions>            <Border Grid.Column="0" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1">
+        <!-- Profile Tab -->
+        <ContentControl x:Name="DiscordTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+            <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="10"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Border Grid.Column="0" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
                         <Grid Margin="0,0,0,15">
@@ -5321,17 +5758,11 @@
                         </Border>
                     </StackPanel>
                 </ScrollViewer>
-            </Border>            <Border Grid.Column="2" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="10"><TextBlock Text="Community Settings" Foreground="#5865F2" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/><Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,12" BorderBrush="#5865F2" BorderThickness="1"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock x:Name="TxtDiscordTabStatus" Text="Not Connected" Foreground="White" FontSize="14" FontWeight="Bold"/><TextBlock x:Name="TxtDiscordTabInfo" Text="Link Discord for community features" Foreground="#808080" FontSize="11" Margin="0,2,0,0"/></StackPanel><Button x:Name="BtnDiscordTabLogin" Grid.Column="1" Content="Login with Discord" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,8" FontWeight="Bold" FontSize="11" Cursor="Hand" Click="BtnDiscordTabLogin_Click"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Discord Rich Presence" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Show your activity status" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabRichPresence" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Show Level in Status" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Display your level" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShowLevel" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkShowLevelInPresence_Changed" Unchecked="ChkShowLevelInPresence_Changed"/></Grid></Border><TextBlock Text="Community Sharing" Foreground="#5865F2" FontSize="13" FontWeight="Bold" Margin="0,12,0,10"/><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Achievements" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post achievements to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareAchievements" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareAchievements_Changed" Unchecked="ChkShareAchievements_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Level Milestones" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post level ups to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareLevelUps" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareLevelUps_Changed" Unchecked="ChkShareLevelUps_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Allow DMs from Leaderboard" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Let others message you" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabAllowDm" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkAllowDiscordDm_Changed" Unchecked="ChkAllowDiscordDm_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Profile Picture" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Show your avatar to others" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabSharePfp" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareProfilePicture_Changed" Unchecked="ChkShareProfilePicture_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Show Online Status" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Appear offline when disabled" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShowOnline" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkShowOnlineStatus_Changed" Unchecked="ChkShowOnlineStatus_Changed"/></Grid></Border><TextBlock Text="All sharing is opt-in." Foreground="#5865F2" FontSize="10" FontStyle="Italic" Margin="0,10,0,0"/><Button Content="Join Discord Server" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,12" Margin="0,15,0,0" FontWeight="Bold" FontSize="12" Cursor="Hand" Click="BtnDiscord_Click"/></StackPanel></ScrollViewer></Border>        </Grid>
+            </Border>            <Border Grid.Column="2" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="10"><TextBlock Text="Community Settings" Foreground="#5865F2" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/><Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,12" BorderBrush="#5865F2" BorderThickness="1"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock x:Name="TxtDiscordTabStatus" Text="Not Connected" Foreground="White" FontSize="14" FontWeight="Bold"/><TextBlock x:Name="TxtDiscordTabInfo" Text="Link Discord for community features" Foreground="#808080" FontSize="11" Margin="0,2,0,0"/></StackPanel><Button x:Name="BtnDiscordTabLogin" Grid.Column="1" Content="Login with Discord" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,8" FontWeight="Bold" FontSize="11" Cursor="Hand" Click="BtnDiscordTabLogin_Click"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Discord Rich Presence" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Show your activity status" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabRichPresence" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Show Level in Status" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Display your level" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShowLevel" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkShowLevelInPresence_Changed" Unchecked="ChkShowLevelInPresence_Changed"/></Grid></Border><TextBlock Text="Community Sharing" Foreground="#5865F2" FontSize="13" FontWeight="Bold" Margin="0,12,0,10"/><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Achievements" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post achievements to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareAchievements" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareAchievements_Changed" Unchecked="ChkShareAchievements_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Level Milestones" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post level ups to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareLevelUps" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareLevelUps_Changed" Unchecked="ChkShareLevelUps_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Allow DMs from Leaderboard" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Let others message you" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabAllowDm" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkAllowDiscordDm_Changed" Unchecked="ChkAllowDiscordDm_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Profile Picture" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Show your avatar to others" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabSharePfp" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareProfilePicture_Changed" Unchecked="ChkShareProfilePicture_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Show Online Status" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Appear offline when disabled" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShowOnline" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkShowOnlineStatus_Changed" Unchecked="ChkShowOnlineStatus_Changed"/></Grid></Border><TextBlock Text="All sharing is opt-in." Foreground="#5865F2" FontSize="10" FontStyle="Italic" Margin="0,10,0,0"/><Button Content="Join Discord Server" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,12" Margin="0,15,0,0" FontWeight="Bold" FontSize="12" Cursor="Hand" Click="BtnDiscord_Click"/></StackPanel></ScrollViewer></Border>
+            </Grid>
+        </ContentControl>
         <!-- Leaderboard Tab -->
-        <Grid x:Name="LeaderboardTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
-            <Border CornerRadius="12">
-                <Border.Background>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                        <GradientStop Color="#1A1A2E" Offset="0"/>
-                        <GradientStop Color="#252542" Offset="0.5"/>
-                        <GradientStop Color="#1A1A2E" Offset="1"/>
-                    </LinearGradientBrush>
-                </Border.Background>
+        <ContentControl x:Name="LeaderboardTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -5555,11 +5986,11 @@
                         </ListView.ItemContainerStyle>
                     </ListView>
                 </Grid>
-            </Border>
-        </Grid>
+        </ContentControl>
 
         <!-- Assets & Packs Tab -->
-        <Grid x:Name="AssetsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
+        <ContentControl x:Name="AssetsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+            <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto" MaxHeight="290"/>
@@ -6063,7 +6494,8 @@
                     </Grid>
                 </Grid>
             </Border>
-        </Grid>
+            </Grid>
+        </ContentControl>
 
         <!-- Global Bottom Bar: Start / Save / Exit (Always visible) -->
         <Border Grid.Row="5" Background="{StaticResource PanelBgBrush}" Margin="10,5,10,10" CornerRadius="10" Padding="15,12">

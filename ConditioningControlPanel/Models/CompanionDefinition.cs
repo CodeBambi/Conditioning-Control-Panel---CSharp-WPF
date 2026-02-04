@@ -11,7 +11,8 @@ namespace ConditioningControlPanel.Models
         OGBambiSprite = 0,   // Level 50 - Synthetic Blowdoll - Pink filter bonus (Avatar Set 3)
         CultBunny = 1,       // Level 100 - Perfect Fuckpuppet - Autonomy bonus (Avatar Set 4)
         BrainParasite = 2,   // Level 125 - Brainwashed Slavedoll - XP drain (Avatar Set 5)
-        BambiTrainer = 3     // Level 150 - Platinum Puppet - Strict mode bonuses (Avatar Set 6)
+        BambiTrainer = 3,    // Level 150 - Platinum Puppet - Strict mode bonuses (Avatar Set 6)
+        BimboCow = 4         // Level 75 - Bambi Cow - Session completion bonus (Avatar Set 7)
     }
 
     /// <summary>
@@ -29,7 +30,10 @@ namespace ConditioningControlPanel.Models
         XPDrain,
 
         /// <summary>Trainer: -50% without strict, +100% with No Escape, -25 XP on attention fail</summary>
-        StrictModeBonus
+        StrictModeBonus,
+
+        /// <summary>Cow: +25% XP from session completion rewards</summary>
+        SessionCompletionBonus
     }
 
     /// <summary>
@@ -40,8 +44,11 @@ namespace ConditioningControlPanel.Models
         /// <summary>Unique identifier for this companion.</summary>
         public CompanionId Id { get; set; }
 
-        /// <summary>Display name shown in UI.</summary>
+        /// <summary>Display name shown in UI (normal mode).</summary>
         public string Name { get; set; } = "";
+
+        /// <summary>Display name shown in slut mode. If empty, uses Name.</summary>
+        public string SlutModeName { get; set; } = "";
 
         /// <summary>Short description of the companion's personality and mechanics.</summary>
         public string Description { get; set; } = "";
@@ -117,8 +124,30 @@ namespace ConditioningControlPanel.Models
                 BonusType = CompanionBonusType.StrictModeBonus,
                 IconResourcePath = "pack://application:,,,/Resources/avatar6_pose1.png",
                 AvatarSet = 6
+            },
+            new CompanionDefinition
+            {
+                Id = CompanionId.BimboCow,
+                Name = "Bimbo Cow",
+                SlutModeName = "Bambi Cow",
+                Description = "A ditzy, docile cow who rewards you for completing your training sessions.",
+                XPMechanicDescription = "+25% bonus XP from session completion rewards. Finish what you start!",
+                RequiredLevel = 75,
+                BonusType = CompanionBonusType.SessionCompletionBonus,
+                IconResourcePath = "pack://application:,,,/Resources/avatar7_pose1.png",
+                AvatarSet = 7
             }
         };
+
+        /// <summary>
+        /// Gets the display name based on current mode (slut mode or normal).
+        /// </summary>
+        public string GetDisplayName(bool isSlutMode)
+        {
+            if (isSlutMode && !string.IsNullOrEmpty(SlutModeName))
+                return SlutModeName;
+            return Name;
+        }
 
         /// <summary>
         /// Gets a companion definition by ID.

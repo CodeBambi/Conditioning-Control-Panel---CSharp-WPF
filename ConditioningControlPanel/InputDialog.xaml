@@ -1,13 +1,14 @@
 <Window x:Class="ConditioningControlPanel.InputDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Input" 
+        Title="Input"
         Height="180" Width="400"
         WindowStartupLocation="CenterOwner"
         Background="#1A1A2E"
         ResizeMode="NoResize"
         WindowStyle="None"
-        AllowsTransparency="False">
+        AllowsTransparency="False"
+        Topmost="True">
 
     <Window.Resources>
     </Window.Resources>

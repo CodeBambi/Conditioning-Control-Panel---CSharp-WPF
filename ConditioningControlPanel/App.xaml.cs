@@ -219,10 +219,24 @@ namespace ConditioningControlPanel
         public static string? UnifiedUserId { get; set; }
 
         /// <summary>
-        /// Get the user's display name (from Patreon or Discord)
+        /// Get the user's display name. In offline mode, returns the offline username.
+        /// Otherwise returns Patreon or Discord display name.
         /// </summary>
-        public static string? UserDisplayName =>
-            Patreon?.DisplayName ?? Discord?.CustomDisplayName ?? Discord?.DisplayName;
+        public static string? UserDisplayName
+        {
+            get
+            {
+                // In offline mode with a username set, use that
+                if (Settings?.Current?.OfflineMode == true &&
+                    !string.IsNullOrWhiteSpace(Settings?.Current?.OfflineUsername))
+                {
+                    return Settings.Current.OfflineUsername;
+                }
+
+                // Otherwise use online service names
+                return Patreon?.DisplayName ?? Discord?.CustomDisplayName ?? Discord?.DisplayName;
+            }
+        }
 
         /// <summary>
         /// Reference to the avatar companion window (set by MainWindow)

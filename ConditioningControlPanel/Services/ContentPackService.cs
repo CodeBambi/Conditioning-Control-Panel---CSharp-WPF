@@ -229,6 +229,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task<List<ContentPack>> GetAvailablePacksAsync()
         {
+            // Skip network request if offline mode is enabled
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                App.Logger?.Debug("Offline mode enabled, using built-in packs only");
+                return GetBuiltInPacks();
+            }
+
             try
             {
                 // Try to fetch remote manifest
@@ -281,6 +288,14 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task InstallPackAsync(ContentPack pack, IProgress<int>? progress = null)
         {
+            // Block downloads in offline mode
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                App.Logger?.Information("Offline mode enabled, pack download blocked");
+                PackInstallFailed?.Invoke(this, pack);
+                throw new InvalidOperationException("Cannot download packs in offline mode");
+            }
+
             if (string.IsNullOrEmpty(pack.Id))
             {
                 throw new InvalidOperationException("Pack has no ID");

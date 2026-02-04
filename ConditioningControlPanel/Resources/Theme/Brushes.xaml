@@ -5,6 +5,7 @@
     <SolidColorBrush x:Key="PinkBrush"   Color="{StaticResource PinkColor}"/>
     <SolidColorBrush x:Key="DarkPinkBrush" Color="{StaticResource DarkPink}"/>
     <SolidColorBrush x:Key="PanelBgBrush" Color="{StaticResource PanelBg}"/>
+    <SolidColorBrush x:Key="PanelBgTransparentBrush" Color="{StaticResource PanelBgTransparent}"/>
     <SolidColorBrush x:Key="DarkerBgBrush" Color="{StaticResource DarkerBg}"/>
     <SolidColorBrush x:Key="TextLightBrush" Color="{StaticResource TextLight}"/>
     <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMuted}"/>

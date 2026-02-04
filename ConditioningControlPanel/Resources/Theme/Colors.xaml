@@ -5,6 +5,7 @@
     <Color x:Key="PinkColor">#FFFF69B4</Color>
     <Color x:Key="DarkPink">#FFFF1493</Color>
     <Color x:Key="PanelBg">#FF252542</Color>
+    <Color x:Key="PanelBgTransparent">#B0252542</Color>
     <Color x:Key="DarkerBg">#FF1A1A2E</Color>
     <Color x:Key="TextLight">#FFE0E0E0</Color>
     <Color x:Key="TextMuted">#FF808080</Color>

@@ -2458,12 +2458,12 @@ namespace ConditioningControlPanel
             var playerLevel = App.Settings.Current.PlayerLevel;
 
             // Update each companion card
-            var cards = new[] { CompanionCard0, CompanionCard1, CompanionCard2, CompanionCard3 };
-            var levelTexts = new[] { TxtCompanion0Level, TxtCompanion1Level, TxtCompanion2Level, TxtCompanion3Level };
-            var lockTexts = new[] { TxtCompanion0Lock, TxtCompanion1Lock, TxtCompanion2Lock, TxtCompanion3Lock };
-            var colors = new[] { "#FF69B4", "#9370DB", "#50C878", "#FF6B6B" };
+            var cards = new[] { CompanionCard0, CompanionCard1, CompanionCard2, CompanionCard3, CompanionCard4 };
+            var levelTexts = new[] { TxtCompanion0Level, TxtCompanion1Level, TxtCompanion2Level, TxtCompanion3Level, TxtCompanion4Level };
+            var lockTexts = new[] { TxtCompanion0Lock, TxtCompanion1Lock, TxtCompanion2Lock, TxtCompanion3Lock, TxtCompanion4Lock };
+            var colors = new[] { "#FF69B4", "#9370DB", "#50C878", "#FF6B6B", "#F5DEB3" };
 
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 5; i++)
             {
                 var companionId = (Models.CompanionId)i;
                 var def = Models.CompanionDefinition.GetById(companionId);
@@ -2788,7 +2788,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void UpdateCompanionPromptLabels()
         {
-            var promptTexts = new[] { TxtCompanion0Prompt, TxtCompanion1Prompt, TxtCompanion2Prompt, TxtCompanion3Prompt };
+            var promptTexts = new[] { TxtCompanion0Prompt, TxtCompanion1Prompt, TxtCompanion2Prompt, TxtCompanion3Prompt, TxtCompanion4Prompt };
 
             for (int i = 0; i < promptTexts.Length; i++)
             {
@@ -4089,6 +4089,14 @@ namespace ConditioningControlPanel
 
         private void UpdateBannerWelcomeMessage()
         {
+            // Check offline mode first
+            if (App.Settings?.Current?.OfflineMode == true &&
+                !string.IsNullOrWhiteSpace(App.Settings?.Current?.OfflineUsername))
+            {
+                TxtBannerSecondary.Text = $"Welcome back, {App.Settings.Current.OfflineUsername}! (Offline Mode)";
+                return;
+            }
+
             // Check both Patreon and Discord for display name
             var displayName = App.Patreon?.DisplayName ?? App.Discord?.DisplayName;
             if (!string.IsNullOrEmpty(displayName))
@@ -6625,6 +6633,9 @@ namespace ConditioningControlPanel
         {
             if (_browser == null || !_browserInitialized) return;
 
+            // Block navigation in offline mode
+            if (App.Settings?.Current?.OfflineMode == true) return;
+
             // Skip navigation if we're already navigating to a specific URL (from speech bubble link)
             if (_skipSiteToggleNavigation)
             {
@@ -6654,6 +6665,13 @@ namespace ConditioningControlPanel
         /// <returns>True if navigation was initiated, false if browser unavailable</returns>
         public bool NavigateToUrlInBrowser(string url, bool autoPlayFullscreen = false)
         {
+            // Block navigation in offline mode
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                App.Logger?.Debug("Browser navigation blocked in offline mode: {Url}", url);
+                return false;
+            }
+
             if (_browser == null || !_browserInitialized)
             {
                 App.Logger?.Warning("Browser not available for navigation: {Url}", url);
@@ -7733,6 +7751,9 @@ namespace ConditioningControlPanel
 
         private void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
         {
+            // Block in offline mode
+            if (App.Settings?.Current?.OfflineMode == true) return;
+
             if (_browser?.WebView == null) return;
 
             // If already popped out, bring the window to front
@@ -8672,6 +8693,12 @@ namespace ConditioningControlPanel
             ChkStartHidden.IsChecked = s.StartMinimized;
             ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
             ChkOfflineMode.IsChecked = s.OfflineMode;
+
+            // Update UI for offline mode state (disable login buttons, browser, etc.)
+            if (s.OfflineMode)
+            {
+                UpdateOfflineModeUI(true);
+            }
 
             // Startup video display
             if (!string.IsNullOrEmpty(s.StartupVideoPath) && System.IO.File.Exists(s.StartupVideoPath))
@@ -13060,8 +13087,226 @@ namespace ConditioningControlPanel
             if (_isLoading) return;
 
             var isEnabled = ChkOfflineMode.IsChecked ?? false;
-            App.Settings.Current.OfflineMode = isEnabled;
-            App.Logger?.Information("Offline mode {Status}", isEnabled ? "enabled" : "disabled");
+
+            if (isEnabled)
+            {
+                // Enabling offline mode - prompt for username if not set
+                if (string.IsNullOrWhiteSpace(App.Settings.Current.OfflineUsername))
+                {
+                    var dialog = new OfflineUsernameDialog();
+                    dialog.Owner = this;
+
+                    if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.Username))
+                    {
+                        App.Settings.Current.OfflineUsername = dialog.Username;
+                    }
+                    else
+                    {
+                        // User cancelled - revert checkbox
+                        ChkOfflineMode.IsChecked = false;
+                        return;
+                    }
+                }
+
+                // Set offline mode
+                App.Settings.Current.OfflineMode = true;
+
+                // Disconnect all network services
+                DisconnectNetworkServices();
+
+                App.Logger?.Information("Offline mode enabled with username '{Username}'",
+                    App.Settings.Current.OfflineUsername);
+            }
+            else
+            {
+                // Disabling offline mode
+                App.Settings.Current.OfflineMode = false;
+                App.Logger?.Information("Offline mode disabled");
+            }
+
+            // Update UI to reflect offline mode state
+            UpdateOfflineModeUI(isEnabled);
+
+            App.Settings.Save();
+        }
+
+        /// <summary>
+        /// Updates UI elements based on offline mode state.
+        /// Disables/enables login buttons, browser, and updates banner.
+        /// </summary>
+        private void UpdateOfflineModeUI(bool isOffline)
+        {
+            try
+            {
+                // === LOGIN BUTTONS (disable all of them) ===
+
+                // Patreon login button (in Patreon Exclusives tab)
+                if (BtnPatreonLogin != null)
+                {
+                    BtnPatreonLogin.IsEnabled = !isOffline;
+                    BtnPatreonLogin.Opacity = isOffline ? 0.5 : 1.0;
+                    if (isOffline)
+                        BtnPatreonLogin.ToolTip = "Disabled in offline mode";
+                    else
+                        BtnPatreonLogin.ToolTip = null;
+                }
+
+                // Discord login button (in Patreon Exclusives tab)
+                if (BtnDiscordLogin != null)
+                {
+                    BtnDiscordLogin.IsEnabled = !isOffline;
+                    BtnDiscordLogin.Opacity = isOffline ? 0.5 : 1.0;
+                    if (isOffline)
+                        BtnDiscordLogin.ToolTip = "Disabled in offline mode";
+                    else
+                        BtnDiscordLogin.ToolTip = null;
+                }
+
+                // Quick Patreon login button (in main area)
+                if (BtnQuickPatreonLogin != null)
+                {
+                    BtnQuickPatreonLogin.IsEnabled = !isOffline;
+                    BtnQuickPatreonLogin.Opacity = isOffline ? 0.5 : 1.0;
+                    if (isOffline)
+                        BtnQuickPatreonLogin.ToolTip = "Disabled in offline mode";
+                }
+
+                // Quick Discord login button (in main area)
+                if (BtnQuickDiscordLogin != null)
+                {
+                    BtnQuickDiscordLogin.IsEnabled = !isOffline;
+                    BtnQuickDiscordLogin.Opacity = isOffline ? 0.5 : 1.0;
+                    if (isOffline)
+                        BtnQuickDiscordLogin.ToolTip = "Disabled in offline mode";
+                }
+
+                // Discord tab login button (in Profile/Discord tab)
+                if (BtnDiscordTabLogin != null)
+                {
+                    BtnDiscordTabLogin.IsEnabled = !isOffline;
+                    BtnDiscordTabLogin.Opacity = isOffline ? 0.5 : 1.0;
+                    if (isOffline)
+                        BtnDiscordTabLogin.ToolTip = "Disabled in offline mode";
+                }
+
+                // === BROWSER SECTION ===
+
+                // Disable browser controls
+                if (RbBambiCloud != null)
+                {
+                    RbBambiCloud.IsEnabled = !isOffline;
+                    RbBambiCloud.Opacity = isOffline ? 0.5 : 1.0;
+                }
+                if (RbHypnoTube != null)
+                {
+                    RbHypnoTube.IsEnabled = !isOffline;
+                    RbHypnoTube.Opacity = isOffline ? 0.5 : 1.0;
+                }
+                if (BtnPopOutBrowser != null)
+                {
+                    BtnPopOutBrowser.IsEnabled = !isOffline;
+                    BtnPopOutBrowser.Opacity = isOffline ? 0.5 : 1.0;
+                }
+                if (TxtBrowserStatus != null)
+                {
+                    TxtBrowserStatus.Text = isOffline ? "● Offline" : "● Ready";
+                    TxtBrowserStatus.Foreground = isOffline
+                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(128, 128, 128))
+                        : (System.Windows.Media.Brush)FindResource("PinkBrush");
+                }
+
+                // Navigate browser to blank page and show offline message
+                if (isOffline)
+                {
+                    // Navigate to blank page to stop any loading content
+                    if (_browser?.WebView?.CoreWebView2 != null)
+                    {
+                        try
+                        {
+                            _browser.WebView.CoreWebView2.Navigate("about:blank");
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("Could not navigate browser to blank: {Error}", ex.Message);
+                        }
+                    }
+
+                    // Show offline message over browser
+                    if (BrowserLoadingText != null)
+                    {
+                        BrowserLoadingText.Visibility = Visibility.Visible;
+                        BrowserLoadingText.Text = "🔌 Browser disabled in Offline Mode";
+                    }
+                    if (BrowserContainer != null)
+                    {
+                        BrowserContainer.Opacity = 0.3;
+                    }
+                }
+                else
+                {
+                    // Hide offline message and restore browser
+                    if (BrowserLoadingText != null)
+                    {
+                        BrowserLoadingText.Visibility = Visibility.Collapsed;
+                    }
+                    if (BrowserContainer != null)
+                    {
+                        BrowserContainer.Opacity = 1.0;
+                    }
+
+                    // Reload the browser with the currently selected site
+                    if (_browser?.WebView?.CoreWebView2 != null)
+                    {
+                        try
+                        {
+                            var isBambiCloud = RbBambiCloud?.IsChecked == true;
+                            var url = isBambiCloud
+                                ? "https://bambicloud.com/"
+                                : "https://hypnotube.com/";
+                            _browser.Navigate(url);
+                            App.Logger?.Information("Browser reloaded after exiting offline mode: {Url}", url);
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("Could not reload browser: {Error}", ex.Message);
+                        }
+                    }
+                }
+
+                // Update welcome banner
+                UpdateBannerWelcomeMessage();
+
+                App.Logger?.Debug("Offline mode UI updated: {State}", isOffline ? "disabled" : "enabled");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Error updating offline mode UI");
+            }
+        }
+
+        /// <summary>
+        /// Disconnects all network services when entering offline mode.
+        /// This ensures no external connections are maintained.
+        /// </summary>
+        private void DisconnectNetworkServices()
+        {
+            try
+            {
+                // Stop profile sync heartbeat (server pings)
+                App.ProfileSync?.StopHeartbeat();
+
+                // Disconnect Discord Rich Presence (IPC connection)
+                if (App.DiscordRpc?.IsEnabled == true)
+                {
+                    App.DiscordRpc.IsEnabled = false;
+                }
+
+                App.Logger?.Debug("Network services disconnected for offline mode");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Error disconnecting network services");
+            }
         }
 
         private void ChkDualMon_Changed(object sender, RoutedEventArgs e)

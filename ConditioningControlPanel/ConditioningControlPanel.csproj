@@ -169,6 +169,12 @@
     <Resource Include="Resources\avatar6_pose3.png" />
     <Resource Include="Resources\avatar6_pose4.png" />
 
+    <!-- Avatar Set 7: Level 75+ (Bambi Cow) -->
+    <Resource Include="Resources\avatar7_pose1.png" />
+    <Resource Include="Resources\avatar7_pose2.png" />
+    <Resource Include="Resources\avatar7_pose3.png" />
+    <Resource Include="Resources\avatar7_pose4.png" />
+
     <!-- Animated Avatars - uncomment when GIF files are added to Resources
     <Resource Include="Resources\animated1_1.gif" />
     <Resource Include="Resources\animated2_1.gif" />
