@@ -22,13 +22,13 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.11";
+        public const string AppVersion = "5.4.12";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.11 - Sissy Hypno Mode Polish & Video Haptic Sync
+        public const string CurrentPatchNotes = @"v5.4.12 - Sissy Hypno Mode Polish & Video Haptic Sync
 
 🎀 SISSY HYPNO MODE - FULLY MODE-AWARE
 • Companion now uses mode-appropriate terms ('babe' instead of 'Bambi')
