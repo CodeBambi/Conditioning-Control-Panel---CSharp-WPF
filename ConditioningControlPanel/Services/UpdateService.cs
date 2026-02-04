@@ -1418,12 +1418,28 @@ namespace ConditioningControlPanel.Services
 
                 // Parse file size from assets array (look for .exe installer)
                 long fileSizeBytes = 0;
-                var sizeMatch = System.Text.RegularExpressions.Regex.Match(response,
-                    @"""name""\s*:\s*""[^""]*Setup\.exe""[^}]*""size""\s*:\s*(\d+)");
-                if (sizeMatch.Success && long.TryParse(sizeMatch.Groups[1].Value, out var size))
+                try
                 {
-                    fileSizeBytes = size;
-                    App.Logger?.Debug("Parsed installer size from GitHub: {Size} bytes", fileSizeBytes);
+                    var json = Newtonsoft.Json.Linq.JObject.Parse(response);
+                    var assets = json["assets"] as Newtonsoft.Json.Linq.JArray;
+                    if (assets != null)
+                    {
+                        foreach (var asset in assets)
+                        {
+                            var name = asset["name"]?.ToString() ?? "";
+                            if (name.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase))
+                            {
+                                fileSizeBytes = (long)(asset["size"] ?? 0);
+                                App.Logger?.Debug("Parsed installer size from GitHub: {Size} bytes ({SizeMB:F1} MB)",
+                                    fileSizeBytes, fileSizeBytes / (1024.0 * 1024.0));
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (Exception parseEx)
+                {
+                    App.Logger?.Debug("Could not parse assets from GitHub response: {Error}", parseEx.Message);
                 }
 
                 return new AppUpdateInfo
