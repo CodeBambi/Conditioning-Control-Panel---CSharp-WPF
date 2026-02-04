@@ -729,6 +729,29 @@ namespace ConditioningControlPanel.Services
                              "normal app functions and can be enabled/disabled without affecting other features."
             },
 
+            ["VideoHapticSync"] = new HelpContent
+            {
+                SectionId = "VideoHapticSync",
+                Icon = "\uD83C\uDFB5",
+                Title = "Video Haptic Sync",
+                WhatItDoes = "Analyzes audio from web videos in real-time and synchronizes haptic feedback " +
+                             "to match the content. Bass drops, volume changes, and audio transients are " +
+                             "converted into vibration patterns that pulse along with the video.",
+                Tips = new List<string>
+                {
+                    "Use the Delay slider to fine-tune timing if haptics feel out of sync",
+                    "Lower Power setting if vibrations feel too intense during loud sections",
+                    "Works best with videos that have clear audio with bass and rhythm",
+                    "Positive delay values make haptics react earlier, negative values delay them",
+                    "The feature only activates when playing videos in the embedded browser"
+                },
+                HowItWorks = "The audio stream is captured and analyzed using FFT (Fast Fourier Transform) " +
+                             "to extract bass frequencies (20-250Hz), overall RMS volume, and onset detection " +
+                             "for transients. These signals are weighted and combined to generate an intensity " +
+                             "value (0-100%) that is sent to your connected haptic device. Processing happens " +
+                             "in real-time with configurable latency compensation."
+            },
+
             ["DiscordProfile"] = new HelpContent
             {
                 SectionId = "DiscordProfile",

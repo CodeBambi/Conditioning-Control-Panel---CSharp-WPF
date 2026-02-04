@@ -5238,22 +5238,175 @@
                                             </ComboBox>
                                         </Grid>
 
-                                        <!-- Audio Sync - Web Video -->
-                                        <Border BorderBrush="#9B59B6" BorderThickness="0,1,0,0" Margin="0,8,0,0" Padding="0,8,0,0">
+                                        <!-- Video Haptic Sync - Enhanced Featured Card -->
+                                        <Border x:Name="VideoHapticSyncCard" BorderBrush="#9B59B6" BorderThickness="1,2,1,1"
+                                                CornerRadius="8" Margin="0,12,0,0" Background="#1E1E3A">
                                             <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="44"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <CheckBox x:Name="ChkHapticAudioSync" Style="{StaticResource ToggleStyle}" IsChecked="False"
-                                                          VerticalAlignment="Center" Checked="ChkHapticAudioSync_Changed" Unchecked="ChkHapticAudioSync_Changed"/>
-                                                <StackPanel Grid.Column="1" Margin="30,0,0,0">
-                                                    <TextBlock Text="Sync to Video Audio" Foreground="White" FontSize="10"/>
-                                                    <TextBlock Text="Analyzes audio to sync haptics to web videos" Foreground="#606080" FontSize="9"/>
-                                                </StackPanel>
-                                                <TextBlock x:Name="TxtAudioSyncStatus" Grid.Column="2" Text="" Foreground="#808080" FontSize="9"
-                                                           VerticalAlignment="Center" Margin="5,0,0,0"/>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+                                                <!-- Row 0: Header Section -->
+                                                <Border Grid.Row="0" Background="#252542" CornerRadius="8,8,0,0" Padding="12,10">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <!-- Title and Description -->
+                                                        <StackPanel Grid.Column="0">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="🎵" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                                <TextBlock Text="Video Haptic Sync" Foreground="#9B59B6"
+                                                                           FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                            <TextBlock Text="Syncs haptics to video audio in real-time"
+                                                                       Foreground="#808080" FontSize="10" Margin="0,2,0,0"/>
+                                                        </StackPanel>
+
+                                                        <!-- Help Button -->
+                                                        <Button x:Name="HelpBtnVideoHapticSync" Grid.Column="1"
+                                                                Style="{StaticResource HelpButtonStyle}" Tag="VideoHapticSync"
+                                                                Margin="0,0,10,0"/>
+
+                                                        <!-- Master Enable Toggle -->
+                                                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                                            <TextBlock Text="Enable" Foreground="#AAAAAA" FontSize="10"
+                                                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                            <CheckBox x:Name="ChkHapticAudioSync" Style="{StaticResource ToggleStyle}"
+                                                                      IsChecked="False"
+                                                                      Checked="ChkHapticAudioSync_Changed"
+                                                                      Unchecked="ChkHapticAudioSync_Changed"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+
+                                                <!-- Row 1: Algorithm Cards (left) + Image (right) -->
+                                                <Grid Grid.Row="1" Margin="12,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="10"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <!-- Left: Algorithm Selection Cards (stacked vertically) -->
+                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                        <TextBlock Text="Sync Algorithm" Foreground="#AAAAAA" FontSize="10" Margin="0,0,0,5"/>
+
+                                                        <!-- Algorithm 1: Audio Reactive (Enabled) -->
+                                                        <Border x:Name="AlgorithmCardAudioReactive"
+                                                                Background="#252542" CornerRadius="4" Padding="8,5" Cursor="Hand"
+                                                                BorderThickness="2" BorderBrush="#9B59B6" Margin="0,0,0,3"
+                                                                MouseLeftButtonDown="AlgorithmCard_Click" Tag="AudioReactive">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Style.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter Property="Background" Value="#2A2A4E"/>
+                                                                        </Trigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Text="Audio Reactive" Foreground="White"
+                                                                           FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                                <Ellipse x:Name="AlgorithmIndicatorAudioReactive" Grid.Column="1"
+                                                                         Width="6" Height="6" Fill="#9B59B6"
+                                                                         VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                                            </Grid>
+                                                        </Border>
+
+                                                        <!-- Algorithm 2: Beat Detection (Coming Soon) -->
+                                                        <Grid Margin="0,0,0,3">
+                                                            <Border Background="#1A1A2E" CornerRadius="4" Padding="8,5">
+                                                                <Border.Effect>
+                                                                    <BlurEffect Radius="2"/>
+                                                                </Border.Effect>
+                                                                <TextBlock Text="Beat Detection" Foreground="#666666"
+                                                                           FontSize="10" FontWeight="SemiBold"/>
+                                                            </Border>
+                                                            <Border Background="#CC1A1A2E" CornerRadius="4">
+                                                                <TextBlock Text="Coming Soon" Foreground="#9B59B6" FontSize="8"
+                                                                           FontWeight="Bold" HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </Grid>
+
+                                                        <!-- Algorithm 3: AI Enhanced (Coming Soon) -->
+                                                        <Grid>
+                                                            <Border Background="#1A1A2E" CornerRadius="4" Padding="8,5">
+                                                                <Border.Effect>
+                                                                    <BlurEffect Radius="2"/>
+                                                                </Border.Effect>
+                                                                <TextBlock Text="AI Enhanced" Foreground="#666666"
+                                                                           FontSize="10" FontWeight="SemiBold"/>
+                                                            </Border>
+                                                            <Border Background="#CC1A1A2E" CornerRadius="4">
+                                                                <TextBlock Text="Coming Soon" Foreground="#9B59B6" FontSize="8"
+                                                                           FontWeight="Bold" HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </Grid>
+                                                    </StackPanel>
+
+                                                    <!-- Right: Square Image -->
+                                                    <Border Grid.Column="2" CornerRadius="6" ClipToBounds="True"
+                                                            BorderBrush="#9B59B6" BorderThickness="1"
+                                                            Width="130" Height="130">
+                                                        <Image x:Name="ImgVideoHapticSync"
+                                                               Source="pack://application:,,,/Resources/features/vibe.png"
+                                                               Stretch="UniformToFill"/>
+                                                    </Border>
+                                                </Grid>
+
+                                                <!-- Row 3: Delay and Power Sliders -->
+                                                <Border x:Name="VideoHapticSyncSliders" Grid.Row="3" Padding="12,8,12,12"
+                                                        Visibility="Collapsed">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="12"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <!-- Delay Slider -->
+                                                        <StackPanel Grid.Column="0">
+                                                            <Grid>
+                                                                <TextBlock Text="Delay" Foreground="#AAAAAA" FontSize="10"/>
+                                                                <TextBlock x:Name="TxtVideoHapticDelay" Text="0ms"
+                                                                           Foreground="#9B59B6" FontSize="10"
+                                                                           HorizontalAlignment="Right"/>
+                                                            </Grid>
+                                                            <Slider x:Name="SliderVideoHapticDelay" Minimum="-600" Maximum="600"
+                                                                    Value="0" Margin="0,4,0,0"
+                                                                    ValueChanged="SliderVideoHapticDelay_Changed"
+                                                                    ToolTip="Adjust haptic timing: positive = earlier, negative = later"/>
+                                                        </StackPanel>
+
+                                                        <!-- Power Slider -->
+                                                        <StackPanel Grid.Column="2">
+                                                            <Grid>
+                                                                <TextBlock Text="Power" Foreground="#AAAAAA" FontSize="10"/>
+                                                                <TextBlock x:Name="TxtVideoHapticPower" Text="100%"
+                                                                           Foreground="#9B59B6" FontSize="10"
+                                                                           HorizontalAlignment="Right"/>
+                                                            </Grid>
+                                                            <Slider x:Name="SliderVideoHapticPower" Minimum="0" Maximum="100"
+                                                                    Value="100" Margin="0,4,0,0"
+                                                                    ValueChanged="SliderVideoHapticPower_Changed"
+                                                                    ToolTip="Live intensity control - reduce if vibration is too strong"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
                                             </Grid>
                                         </Border>
                                     </StackPanel>

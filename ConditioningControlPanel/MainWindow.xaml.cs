@@ -938,6 +938,28 @@ namespace ConditioningControlPanel
                     ? Visibility.Visible : Visibility.Collapsed;
             }
 
+            // Initialize Video Haptic Sync enhanced UI sliders
+            if (SliderVideoHapticDelay != null)
+            {
+                SliderVideoHapticDelay.Value = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
+                var latencyMs = App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs;
+                var sign = latencyMs >= 0 ? "+" : "";
+                if (TxtVideoHapticDelay != null)
+                    TxtVideoHapticDelay.Text = $"{sign}{latencyMs}ms";
+            }
+            if (SliderVideoHapticPower != null)
+            {
+                var intensityPercent = (int)(App.Settings.Current.Haptics.AudioSync.LiveIntensity * 100);
+                SliderVideoHapticPower.Value = intensityPercent;
+                if (TxtVideoHapticPower != null)
+                    TxtVideoHapticPower.Text = $"{intensityPercent}%";
+            }
+            if (VideoHapticSyncSliders != null)
+            {
+                VideoHapticSyncSliders.Visibility = App.Settings.Current.Haptics.AudioSync.Enabled
+                    ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             // Initialize Quick Links login buttons
             UpdateQuickPatreonUI();
             UpdateQuickDiscordUI();
@@ -3636,14 +3658,13 @@ namespace ConditioningControlPanel
             App.Settings.Current.Haptics.AudioSync.Enabled = isEnabled;
             App.Settings.Save();
 
-            // Update status text
-            TxtAudioSyncStatus.Text = isEnabled ? "Enabled" : "";
+            // Show/hide the sliders panel (new enhanced UI)
+            if (VideoHapticSyncSliders != null)
+                VideoHapticSyncSliders.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
 
-            // Show/hide the latency slider panel
+            // Show/hide the latency slider panel (legacy, above browser)
             if (AudioSyncLatencyPanel != null)
-            {
                 AudioSyncLatencyPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
-            }
         }
 
         private void SliderAudioSyncLatency_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -3674,6 +3695,57 @@ namespace ConditioningControlPanel
             if (TxtAudioSyncIntensity != null)
             {
                 TxtAudioSyncIntensity.Text = $"{intensityPercent}%";
+            }
+        }
+
+        private void SliderVideoHapticDelay_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+
+            var latencyMs = (int)SliderVideoHapticDelay.Value;
+            App.Settings.Current.Haptics.AudioSync.ManualLatencyOffsetMs = latencyMs;
+            App.Settings.Save();
+
+            // Update display text
+            if (TxtVideoHapticDelay != null)
+            {
+                var sign = latencyMs >= 0 ? "+" : "";
+                TxtVideoHapticDelay.Text = $"{sign}{latencyMs}ms";
+            }
+
+            // Sync with legacy slider if it exists
+            if (SliderAudioSyncLatency != null)
+                SliderAudioSyncLatency.Value = latencyMs;
+        }
+
+        private void SliderVideoHapticPower_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+
+            var intensityPercent = (int)SliderVideoHapticPower.Value;
+            App.Settings.Current.Haptics.AudioSync.LiveIntensity = intensityPercent / 100.0;
+
+            // Update display text (live feedback)
+            if (TxtVideoHapticPower != null)
+            {
+                TxtVideoHapticPower.Text = $"{intensityPercent}%";
+            }
+
+            // Sync with legacy slider if it exists
+            if (SliderAudioSyncIntensity != null)
+                SliderAudioSyncIntensity.Value = intensityPercent;
+        }
+
+        private void AlgorithmCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // For now, only AudioReactive is enabled - future algorithms will be added here
+            if (sender is Border card && card.Tag is string algorithmName)
+            {
+                if (algorithmName == "AudioReactive")
+                {
+                    // Already selected, nothing to do
+                    // Future: App.Settings.Current.Haptics.AudioSync.Algorithm = algorithmName;
+                }
             }
         }
 
@@ -4478,6 +4550,7 @@ namespace ConditioningControlPanel
             SetHelpContent(HelpBtnAiChat, "AiChat");
             SetHelpContent(HelpBtnAwareness, "WindowAwareness");
             SetHelpContent(HelpBtnHaptics, "Haptics");
+            SetHelpContent(HelpBtnVideoHapticSync, "VideoHapticSync");
             SetHelpContent(HelpBtnDiscordProfile, "DiscordProfile");
             SetHelpContent(HelpBtnLeaderboard, "Leaderboard");
         }
