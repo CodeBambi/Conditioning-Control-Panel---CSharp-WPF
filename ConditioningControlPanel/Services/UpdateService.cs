@@ -28,14 +28,22 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.12 - Sissy Hypno Mode Polish & Video Haptic Sync
+        public const string CurrentPatchNotes = @"v5.4.12 - Cumulative Update (All Changes Since v5.4.8)
 
-🎀 SISSY HYPNO MODE - FULLY MODE-AWARE
-• Companion now uses mode-appropriate terms ('babe' instead of 'Bambi')
-• All personality presets adapt their language to current mode
-• Video suggestions filtered by mode - no Bambi videos in SH mode
-• Empty SH video pool now gives generic 'browse HypnoTube' suggestions
-• Menu items, tray icon, and UI elements all respect content mode
+🔧 v5.4.12 - BUG FIX
+• Fixed 'Download size: 0 bytes' in update dialog
+• Proper JSON parsing for GitHub release assets
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎀 v5.4.11 - SISSY HYPNO MODE POLISH
+
+💜 SISSY HYPNO MODE - FULLY MODE-AWARE
+• Companion uses mode-appropriate terms ('babe' instead of 'Bambi')
+• All personality presets adapt language to current mode
+• Video suggestions filtered - no Bambi videos in SH mode
+• Empty SH pool gives generic 'browse HypnoTube' suggestions
+• Menu items, tray icon, UI elements respect content mode
 • Fixed 'Talk to Bambi' menu not updating when switching modes
 
 🎵 VIDEO HAPTIC SYNC - ENHANCED UI
@@ -50,11 +58,77 @@ namespace ConditioningControlPanel.Services
 • HypnoTube links feature for custom video pools
 • Mode-aware quest images
 
-🐄 BAMBI COW FIXES
-• Bimbo Cow personality now fully mode-aware
+🐄 COMPANION AI FIXES
+• Bimbo Cow personality fully mode-aware
 • AI prompts dynamically adapt to content mode
 • Video suggestions respect mode settings
-• Fixed personality name display in menus";
+• Fixed personality name display in menus
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❓ v5.4.10 - HELP SYSTEM & ASSET PREVIEWS
+
+📚 COMPREHENSIVE HELP SYSTEM
+• 35 help buttons added across ALL tabs
+• Rich tooltips: what it does, tips, how it works
+• Covers: Flashes, Videos, Overlays, Subliminals, Audio, Haptics, Sessions, Quests, Profile
+
+🖼️ MINI ASSET PREVIEW PLAYER
+• Right-click thumbnails to preview instantly
+• Video playback with full controls
+• GIF animation support
+• Image viewing with zoom
+
+⚡ QUEST XP SCALING
+• Higher levels earn more XP from quests
+• Level 1-10: Base XP | Level 11-25: 1.5x | Level 26-50: 2x | Level 51+: 2.5x
+
+🎬 VIDEO SHUFFLE FIX
+• Fisher-Yates algorithm for proper randomization
+• No repeats until playlist exhausted
+
+🔧 ADDITIONAL FIXES
+• Preview window positioning on multi-monitor
+• Spiral/overlay quest tracking fixed
+• Avatar context menu restyled
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 v5.4.9 - QUEST SYSTEM & AUDIO HAPTICS
+
+📋 QUEST SYSTEM
+• Daily quests: sessions, flashes, videos, bubbles, streaks
+• Weekly quests: extended goals, cumulative targets
+• XP rewards, progress tracking, completion notifications
+
+🎵 AUDIO-SYNCED HAPTICS FOR HYPNOTUBE
+• Real-time FFT analysis extracts bass frequencies
+• Adaptive baseline calibrates to video audio
+• Transient detection for bass hits and rhythm
+• Configurable intensity, delay, sensitivity
+
+💜 SISSY HYPNO CONTENT MODE
+• First-run selection dialog
+• Purple theme when in SH mode
+• Separate asset pools for each mode
+• Changeable anytime in Settings
+
+🔌 HAPTICS AUTO-CONNECT
+• Devices connect automatically on app start
+• Toggle in Settings > Haptics tab
+
+💬 DISCORD RICH PRESENCE
+• Detailed tooltips explaining what's shared
+• Privacy clarity - only friends can see
+
+🔧 BUG FIXES
+• Pack detection after moving assets folder
+• Bandwidth protection for failed downloads
+• Speech bubble Z-order fixed
+• AI response timing improved
+• Haptics calibration enhanced
+• Tab buttons fit smaller screens
+• Transformation Roadmap feature added";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
