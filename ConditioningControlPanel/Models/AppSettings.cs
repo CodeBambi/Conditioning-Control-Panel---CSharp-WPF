@@ -474,6 +474,8 @@ namespace ConditioningControlPanel.Models
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsBambiMode));
                     OnPropertyChanged(nameof(IsSissyMode));
+                    OnPropertyChanged(nameof(ActiveHypnotubeLinks));
+                    OnPropertyChanged(nameof(ContentModeDisplay));
                 }
             }
         }
@@ -1601,6 +1603,51 @@ namespace ConditioningControlPanel.Models
         {
             get => _globalKnowledgeBaseLinks;
             set { _globalKnowledgeBaseLinks = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private string _hypnotubeLinksBambiSleep = "";
+        /// <summary>
+        /// Comma-separated hypnotube links for Bambi Sleep content mode.
+        /// </summary>
+        [JsonProperty("hypnotube_links_bambi_sleep")]
+        public string HypnotubeLinksBambiSleep
+        {
+            get => _hypnotubeLinksBambiSleep;
+            set { _hypnotubeLinksBambiSleep = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _hypnotubeLinksSissyHypno = "";
+        /// <summary>
+        /// Comma-separated hypnotube links for Sissy Hypno content mode.
+        /// </summary>
+        [JsonProperty("hypnotube_links_sissy_hypno")]
+        public string HypnotubeLinksSissyHypno
+        {
+            get => _hypnotubeLinksSissyHypno;
+            set { _hypnotubeLinksSissyHypno = value ?? ""; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Display name for current content mode.
+        /// </summary>
+        [JsonIgnore]
+        public string ContentModeDisplay => IsBambiMode ? "Bambi Sleep" : "Sissy Hypno";
+
+        /// <summary>
+        /// Gets/sets the hypnotube links for the currently active content mode.
+        /// </summary>
+        [JsonIgnore]
+        public string ActiveHypnotubeLinks
+        {
+            get => IsBambiMode ? HypnotubeLinksBambiSleep : HypnotubeLinksSissyHypno;
+            set
+            {
+                if (IsBambiMode)
+                    HypnotubeLinksBambiSleep = value;
+                else
+                    HypnotubeLinksSissyHypno = value;
+                OnPropertyChanged();
+            }
         }
 
         #endregion

@@ -724,7 +724,50 @@ namespace ConditioningControlPanel
             LoadTakeoverImage();
             RefreshThemeAwareElements();
 
+            // Update hypnotube links UI for new mode
+            RefreshHypnotubeLinksUI();
+
             App.Logger?.Information("Content mode changed to {Mode}", newMode);
+        }
+
+        private void RefreshHypnotubeLinksUI()
+        {
+            if (TxtHypnotubeModeLabel != null)
+                TxtHypnotubeModeLabel.Text = App.Settings?.Current?.ContentModeDisplay ?? "Bambi Sleep";
+
+            if (TxtHypnotubeLinks != null)
+                TxtHypnotubeLinks.Text = App.Settings?.Current?.ActiveHypnotubeLinks ?? "";
+        }
+
+        private void TxtHypnotubeLinks_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (App.Settings?.Current != null && TxtHypnotubeLinks != null)
+            {
+                App.Settings.Current.ActiveHypnotubeLinks = TxtHypnotubeLinks.Text;
+            }
+        }
+
+        /// <summary>
+        /// Returns a mode-appropriate image path for quests.
+        /// Swaps Bambi Sleep specific images when in Sissy Hypno mode.
+        /// </summary>
+        private string GetModeAwareQuestImagePath(string originalPath)
+        {
+            if (string.IsNullOrEmpty(originalPath))
+                return originalPath;
+
+            // Only swap if in Sissy Hypno mode
+            if (App.Settings?.Current?.IsSissyMode != true)
+                return originalPath;
+
+            // Swap Bambi-specific images to generic alternatives
+            if (originalPath.Contains("logo.png"))
+                return "pack://application:,,,/Resources/logo2.png";
+
+            if (originalPath.Contains("bambi takeover.png"))
+                return "pack://application:,,,/Resources/features/mandatory_videos.png";
+
+            return originalPath;
         }
 
         private void CenterOnPrimaryScreen()
@@ -836,6 +879,9 @@ namespace ConditioningControlPanel
 
             // Update panic key button
             UpdatePanicKeyButton();
+
+            // Initialize hypnotube links UI
+            RefreshHypnotubeLinksUI();
 
             // Handle start minimized (to tray) - delay briefly to let window render properly first
             if (App.Settings.Current.StartMinimized)
@@ -1721,12 +1767,13 @@ namespace ConditioningControlPanel
                 var scaledDailyXP = (int)Math.Round(dailyDef.XPReward * (1 + playerLevel * 0.02));
                 TxtDailyXP.Text = $"🎁 {scaledDailyXP} XP";
 
-                // Load quest image
+                // Load quest image (mode-aware)
                 try
                 {
-                    if (!string.IsNullOrEmpty(dailyDef.ImagePath))
+                    var dailyImagePath = GetModeAwareQuestImagePath(dailyDef.ImagePath);
+                    if (!string.IsNullOrEmpty(dailyImagePath))
                     {
-                        ImgDailyQuest.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(dailyDef.ImagePath));
+                        ImgDailyQuest.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(dailyImagePath));
                     }
                 }
                 catch { /* Image load failed, leave blank */ }
@@ -1768,12 +1815,13 @@ namespace ConditioningControlPanel
                 var scaledWeeklyXP = (int)Math.Round(weeklyDef.XPReward * (1 + (App.Settings?.Current?.PlayerLevel ?? 1) * 0.02));
                 TxtWeeklyXP.Text = $"🎁 {scaledWeeklyXP} XP";
 
-                // Load quest image
+                // Load quest image (mode-aware)
                 try
                 {
-                    if (!string.IsNullOrEmpty(weeklyDef.ImagePath))
+                    var weeklyImagePath = GetModeAwareQuestImagePath(weeklyDef.ImagePath);
+                    if (!string.IsNullOrEmpty(weeklyImagePath))
                     {
-                        ImgWeeklyQuest.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(weeklyDef.ImagePath));
+                        ImgWeeklyQuest.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(weeklyImagePath));
                     }
                 }
                 catch { /* Image load failed, leave blank */ }

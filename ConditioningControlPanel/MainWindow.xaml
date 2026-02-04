@@ -4442,6 +4442,30 @@
                                                 Background="#1A1A32" Foreground="White" BorderBrush="#505050" BorderThickness="1"
                                                 FontSize="12" Padding="0,8" Margin="4,0,0,0" Cursor="Hand" Click="BtnExportPrompt_Click"/>
                                     </Grid>
+
+                                    <!-- Hypnotube Links Section -->
+                                    <TextBlock Text="Hypnotube Links" FontWeight="Bold" FontSize="14"
+                                               Foreground="#FF69B4" Margin="0,20,0,5"/>
+                                    <TextBlock Text="Video links for AI to suggest (comma-separated: link1,link2,link3)"
+                                               FontSize="11" Foreground="#888" Margin="0,0,0,5" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                        <TextBlock Text="Current mode: " FontSize="11" Foreground="#AAA"/>
+                                        <TextBlock x:Name="TxtHypnotubeModeLabel" Text="Bambi Sleep"
+                                                   FontSize="11" Foreground="#FF69B4"/>
+                                    </StackPanel>
+                                    <TextBox x:Name="TxtHypnotubeLinks"
+                                             MaxLength="2000"
+                                             TextWrapping="Wrap"
+                                             AcceptsReturn="False"
+                                             Height="60"
+                                             VerticalScrollBarVisibility="Auto"
+                                             Background="#1E1E3A"
+                                             Foreground="White"
+                                             BorderBrush="#505050"
+                                             BorderThickness="1"
+                                             Padding="8,6"
+                                             Margin="0,0,0,10"
+                                             TextChanged="TxtHypnotubeLinks_TextChanged"/>
                                 </StackPanel>
                             </Border>
                         </Grid>

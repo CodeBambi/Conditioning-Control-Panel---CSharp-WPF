@@ -302,6 +302,32 @@ Example responses with REAL video names:
                 sb.AppendLine();
             }
 
+            // Append hypnotube video links based on content mode
+            string hypnotubeLinks = "";
+            if (settings != null)
+            {
+                if (App.Settings?.Current?.IsBambiMode == true)
+                {
+                    // Bambi mode: use user links if set, otherwise use default GlobalKnowledgeBaseLinks video content
+                    hypnotubeLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksBambiSleep)
+                        ? App.Settings.Current.HypnotubeLinksBambiSleep
+                        : ""; // Default Bambi links are already in GlobalKnowledgeBaseLinks
+                }
+                else
+                {
+                    // Sissy mode: only use user links if set, otherwise no video links
+                    hypnotubeLinks = App.Settings?.Current?.HypnotubeLinksSissyHypno ?? "";
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(hypnotubeLinks))
+            {
+                sb.AppendLine("--- HYPNOTUBE VIDEO LINKS ---");
+                sb.AppendLine("When suggesting videos, recommend links from this pool:");
+                sb.AppendLine(hypnotubeLinks);
+                sb.AppendLine();
+            }
+
             // Add context reactions
             if (!string.IsNullOrWhiteSpace(settings.ContextReactions))
             {
