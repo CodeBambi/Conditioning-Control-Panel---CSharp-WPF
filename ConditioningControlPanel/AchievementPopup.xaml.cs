@@ -16,16 +16,20 @@ public partial class AchievementPopup : Window
 {
     private readonly DispatcherTimer _autoCloseTimer;
     
-    public AchievementPopup(Achievement achievement)
+    public AchievementPopup(Achievement achievement, string? headerIcon = null, string? headerText = null)
     {
         InitializeComponent();
-        
+
         App.Logger?.Debug("Creating AchievementPopup for: {Name}", achievement.Name);
-        
+
         // Set content
         TxtName.Text = achievement.Name;
         TxtFlavor.Text = achievement.FlavorText;
-        
+
+        // Custom header text/icon if provided
+        if (headerIcon != null) TxtHeaderIcon.Text = headerIcon;
+        if (headerText != null) TxtHeaderText.Text = headerText;
+
         // Load achievement image
         LoadAchievementImage(achievement.ImageName);
         

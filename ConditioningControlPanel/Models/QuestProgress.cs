@@ -28,7 +28,7 @@ public class QuestProgress
     public int TotalXPFromQuests { get; set; }
 
     /// <summary>
-    /// Get remaining daily rerolls (1 base + 2 for Patreon = 3 max)
+    /// Get remaining daily rerolls (1 base + 2 for Patreon + skill tree bonuses)
     /// </summary>
     public int GetRemainingDailyRerolls(bool hasPatreon)
     {
@@ -40,11 +40,12 @@ public class QuestProgress
         }
 
         int maxRerolls = hasPatreon ? 3 : 1;
+        maxRerolls += App.SkillTree?.GetDailyFreeRerolls() ?? 0;
         return Math.Max(0, maxRerolls - DailyRerollsUsed);
     }
 
     /// <summary>
-    /// Get remaining weekly rerolls (1 base + 2 for Patreon = 3 max)
+    /// Get remaining weekly rerolls (1 base + 2 for Patreon + skill tree bonuses)
     /// </summary>
     public int GetRemainingWeeklyRerolls(bool hasPatreon)
     {
@@ -58,6 +59,7 @@ public class QuestProgress
         }
 
         int maxRerolls = hasPatreon ? 3 : 1;
+        maxRerolls += App.SkillTree?.GetDailyFreeRerolls() ?? 0;
         return Math.Max(0, maxRerolls - WeeklyRerollsUsed);
     }
 

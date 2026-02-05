@@ -43,6 +43,8 @@ public class AchievementService : IDisposable
 
         // Check daily streak on startup
         _progress.UpdateDailyStreak();
+        // Sync CurrentStreak even if UpdateDailyStreak returned early (already launched today)
+        _progress.SyncCurrentStreak();
         _isDirty = true;
         
         // Auto-save every 30 seconds if dirty
@@ -113,12 +115,22 @@ public class AchievementService : IDisposable
     {
         var settings = App.Settings.Current;
         var now = DateTime.Now;
-        
-        // Track Pink Filter time
-        if (settings.PinkFilterEnabled)
+
+        // Track total conditioning time for skill tree (when overlay is running = session active)
+        if (App.Overlay?.IsRunning == true)
+        {
+            // Add 1 second worth of time (1/60 of a minute) every tick
+            App.SkillTree?.AddConditioningTime(1.0 / 60.0);
+        }
+
+        // Track Pink Filter time - only when overlay is actually running and pink_hours skill unlocked
+        var isPinkFilterActive = settings.PinkFilterEnabled &&
+                                 App.SkillTree?.HasSkill("pink_hours") == true &&
+                                 App.Overlay?.IsRunning == true;
+        if (isPinkFilterActive)
         {
             var elapsed = (now - _lastPinkFilterCheck).TotalMinutes;
-            if (elapsed > 0 && elapsed < 1) // Sanity check
+            if (elapsed > 0 && elapsed < 0.1) // Sanity check - max 6 seconds between ticks
             {
                 _progress.TotalPinkFilterMinutes += elapsed;
                 _isDirty = true;
@@ -132,14 +144,22 @@ public class AchievementService : IDisposable
                 // Track for quests (accumulate until we have a full minute)
                 App.Quests?.TrackPinkFilterMinutes(elapsed);
             }
+            _lastPinkFilterCheck = now;
         }
-        _lastPinkFilterCheck = now;
+        else
+        {
+            // Reset timer when inactive to prevent time accumulation bugs
+            _lastPinkFilterCheck = now;
+        }
 
-        // Track Spiral time
-        if (settings.SpiralEnabled)
+        // Track Spiral time - only when overlay is actually running and pink_hours skill unlocked
+        var isSpiralActive = settings.SpiralEnabled &&
+                             App.SkillTree?.HasSkill("pink_hours") == true &&
+                             App.Overlay?.IsRunning == true;
+        if (isSpiralActive)
         {
             var elapsed = (now - _lastSpiralCheck).TotalMinutes;
-            if (elapsed > 0 && elapsed < 1)
+            if (elapsed > 0 && elapsed < 0.1) // Sanity check - max 6 seconds between ticks
             {
                 _progress.TotalSpiralMinutes += elapsed;
                 _progress.ContinuousSpiralMinutes += elapsed;
@@ -154,13 +174,15 @@ public class AchievementService : IDisposable
                 // Track for quests
                 App.Quests?.TrackSpiralMinutes(elapsed);
             }
+            _lastSpiralCheck = now;
         }
         else
         {
             // Reset continuous spiral time when disabled
             _progress.ContinuousSpiralMinutes = 0;
+            // Reset timer when inactive to prevent time accumulation bugs
+            _lastSpiralCheck = now;
         }
-        _lastSpiralCheck = now;
         
         // Check System Overload (Bubbles + Bouncing Text + Spiral all active)
         if (settings.BubblesEnabled && settings.BouncingTextEnabled && settings.SpiralEnabled)
@@ -257,7 +279,7 @@ public class AchievementService : IDisposable
             {
                 _progress.BubbleCountBestStreak = _progress.BubbleCountCorrectStreak;
             }
-            
+
             if (_progress.BubbleCountCorrectStreak >= 5)
             {
                 TryUnlock("mathematicians_nightmare");
@@ -267,6 +289,10 @@ public class AchievementService : IDisposable
         {
             _progress.BubbleCountCorrectStreak = 0;
         }
+
+        // Track total correct/failed games
+        TrackBubbleCountGameResult(correct);
+
         _isDirty = true;
     }
     
@@ -409,7 +435,10 @@ public class AchievementService : IDisposable
     public void TrackSessionStart()
     {
         _progress.ResetSessionTracking();
-        
+
+        // Track session started stat
+        TrackSessionStarted();
+
         // Check Relapse (started within 10 seconds of panic)
         if (_progress.LastPanicPressTime.HasValue)
         {
@@ -419,7 +448,7 @@ public class AchievementService : IDisposable
                 TryUnlock("relapse");
             }
         }
-        
+
         _isDirty = true;
     }
     
@@ -541,7 +570,92 @@ public class AchievementService : IDisposable
         
         return true;
     }
-    
+
+    // ========== NEW STAT TRACKING METHODS ==========
+
+    /// <summary>
+    /// Track attention check passed (any type)
+    /// </summary>
+    public void TrackAttentionCheckPassed(bool isVideo = false)
+    {
+        _progress.TotalAttentionChecksPassed++;
+        if (isVideo)
+        {
+            _progress.VideoAttentionChecksPassed++;
+        }
+        _isDirty = true;
+    }
+
+    /// <summary>
+    /// Track video attention check failure
+    /// </summary>
+    public void TrackVideoAttentionCheckFailed()
+    {
+        _progress.VideoAttentionChecksFailed++;
+        _isDirty = true;
+    }
+
+    /// <summary>
+    /// Track bubble count game started
+    /// </summary>
+    public void TrackBubbleCountGameStarted()
+    {
+        _progress.TotalBubbleCountGames++;
+        _isDirty = true;
+    }
+
+    /// <summary>
+    /// Track bubble count game result (success/failure)
+    /// </summary>
+    public void TrackBubbleCountGameResult(bool success)
+    {
+        if (success)
+        {
+            _progress.TotalBubbleCountCorrect++;
+        }
+        else
+        {
+            _progress.TotalBubbleCountFailed++;
+        }
+        _isDirty = true;
+    }
+
+    /// <summary>
+    /// Track session started
+    /// </summary>
+    public void TrackSessionStarted()
+    {
+        _progress.TotalSessionsStarted++;
+        _isDirty = true;
+    }
+
+    /// <summary>
+    /// Track session abandoned (started but not completed)
+    /// </summary>
+    public void TrackSessionAbandoned()
+    {
+        _progress.TotalSessionsAbandoned++;
+        _isDirty = true;
+    }
+
+    /// <summary>
+    /// Track XP earned
+    /// </summary>
+    public void TrackXPEarned(double amount)
+    {
+        _progress.TotalXPEarned += amount;
+        _isDirty = true;
+    }
+
+    /// <summary>
+    /// Track skill points earned
+    /// </summary>
+    public void TrackSkillPointsEarned(int amount)
+    {
+        _progress.TotalSkillPointsEarned += amount;
+        _isDirty = true;
+    }
+
     /// <summary>
     /// Get unlock count
     /// </summary>

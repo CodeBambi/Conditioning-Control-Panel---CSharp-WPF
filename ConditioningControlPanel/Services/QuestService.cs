@@ -167,7 +167,9 @@ public class QuestService : IDisposable
 
     private void GenerateNewDailyQuest(string? excludeId = null)
     {
-        var availableQuests = QuestDefinition.DailyQuests
+        // Use remote quests from QuestDefinitionService if available, fall back to embedded
+        var questPool = App.QuestDefinitions?.GetDailyQuests() ?? QuestDefinition.DailyQuests.ToList();
+        var availableQuests = questPool
             .Where(q => q.Id != excludeId)
             .ToList();
 
@@ -178,12 +180,15 @@ public class QuestService : IDisposable
         Progress.DailyQuest = new ActiveQuest(selectedQuest.Id);
         Progress.DailyQuestGeneratedAt = DateTime.Now;
 
-        App.Logger?.Information("Generated new daily quest: {QuestId}", selectedQuest.Id);
+        App.Logger?.Information("Generated new daily quest: {QuestId} (from {Source})",
+            selectedQuest.Id, App.QuestDefinitions != null ? "server" : "embedded");
     }
 
     private void GenerateNewWeeklyQuest(string? excludeId = null)
     {
-        var availableQuests = QuestDefinition.WeeklyQuests
+        // Use remote quests from QuestDefinitionService if available, fall back to embedded
+        var questPool = App.QuestDefinitions?.GetWeeklyQuests() ?? QuestDefinition.WeeklyQuests.ToList();
+        var availableQuests = questPool
             .Where(q => q.Id != excludeId)
             .ToList();
 
@@ -194,7 +199,8 @@ public class QuestService : IDisposable
         Progress.WeeklyQuest = new ActiveQuest(selectedQuest.Id);
         Progress.WeeklyQuestGeneratedAt = DateTime.Now;
 
-        App.Logger?.Information("Generated new weekly quest: {QuestId}", selectedQuest.Id);
+        App.Logger?.Information("Generated new weekly quest: {QuestId} (from {Source})",
+            selectedQuest.Id, App.QuestDefinitions != null ? "server" : "embedded");
     }
 
     private static DateTime GetStartOfWeek(DateTime date)
@@ -213,6 +219,15 @@ public class QuestService : IDisposable
     public QuestDefinition? GetCurrentDailyDefinition()
     {
         if (Progress.DailyQuest == null) return null;
+
+        // Try remote quests first, fall back to embedded
+        var remoteQuests = App.QuestDefinitions?.GetDailyQuests();
+        if (remoteQuests != null)
+        {
+            var remoteQuest = remoteQuests.FirstOrDefault(q => q.Id == Progress.DailyQuest.DefinitionId);
+            if (remoteQuest != null) return remoteQuest;
+        }
+
         return QuestDefinition.DailyQuests.FirstOrDefault(q => q.Id == Progress.DailyQuest.DefinitionId);
     }
 
@@ -222,6 +237,15 @@ public class QuestService : IDisposable
     public QuestDefinition? GetCurrentWeeklyDefinition()
     {
         if (Progress.WeeklyQuest == null) return null;
+
+        // Try remote quests first, fall back to embedded
+        var remoteQuests = App.QuestDefinitions?.GetWeeklyQuests();
+        if (remoteQuests != null)
+        {
+            var remoteQuest = remoteQuests.FirstOrDefault(q => q.Id == Progress.WeeklyQuest.DefinitionId);
+            if (remoteQuest != null) return remoteQuest;
+        }
+
         return QuestDefinition.WeeklyQuests.FirstOrDefault(q => q.Id == Progress.WeeklyQuest.DefinitionId);
     }
 
@@ -528,7 +552,8 @@ public class QuestService : IDisposable
 
         // Scale XP reward based on player level (+2% per level)
         var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
-        var scaledXP = (int)Math.Round(def.XPReward * (1 + playerLevel * 0.02));
+        var betterQuestsMultiplier = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
+        var scaledXP = (int)Math.Round(def.XPReward * (1 + playerLevel * 0.02) * betterQuestsMultiplier);
 
         Progress.TotalXPFromQuests += scaledXP;
 
@@ -537,6 +562,16 @@ public class QuestService : IDisposable
 
         // Award XP (use a different source to avoid recursion with TrackXPEarned)
         App.Progression?.AddXP(scaledXP, XPSource.Other);
+
+        // Check for Perfect Bimbo Week bonus (7, 14, 30 day daily quest streaks)
+        if (type == QuestType.Daily)
+        {
+            var bonusXP = App.SkillTree?.CheckPerfectWeekBonus() ?? 0;
+            if (bonusXP > 0)
+            {
+                App.Progression?.AddXP(bonusXP, XPSource.Other);
+            }
+        }
 
         // Play celebration effects
         PlayCompletionEffects();

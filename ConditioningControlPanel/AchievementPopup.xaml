@@ -32,8 +32,8 @@
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                 <!-- Trophy Icon + "Achievement Unlocked" -->
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                    <TextBlock Text="🏆" FontSize="20" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBlock Text="ACHIEVEMENT UNLOCKED!" Foreground="#FFD700" 
+                    <TextBlock x:Name="TxtHeaderIcon" Text="🏆" FontSize="20" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="TxtHeaderText" Text="ACHIEVEMENT UNLOCKED!" Foreground="#FFD700"
                                FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
                 </StackPanel>
                 

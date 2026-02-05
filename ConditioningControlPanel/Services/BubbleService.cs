@@ -44,7 +44,7 @@ public class BubbleService : IDisposable
         var settings = App.Settings.Current;
 
         // Check level requirement unless bypassed (e.g., during sessions)
-        if (!bypassLevelCheck && settings.PlayerLevel < 20)
+        if (!bypassLevelCheck && !settings.IsLevelUnlocked(20))
         {
             App.Logger?.Information("BubbleService: Level {Level} is below 20, bubbles not available", settings.PlayerLevel);
             return;
@@ -212,10 +212,17 @@ public class BubbleService : IDisposable
 
     private void OnPop(Bubble bubble)
     {
-        PlayPopSound();
+        // Roll for lucky bubble (5% chance for 10x XP if skill unlocked)
+        var multiplier = App.SkillTree?.RollLuckyBubble() ?? 1;
+        var isLucky = multiplier > 1;
+
+        // Play appropriate sound
+        PlayPopSound(isLucky);
+
         // Don't remove here - let the pop animation play, removal happens in OnDestroy
         OnBubblePopped?.Invoke();
-        App.Progression?.AddXP(2, XPSource.Bubble);
+
+        App.Progression?.AddXP(2 * multiplier, XPSource.Bubble);
 
         // Track for achievement
         App.Achievements?.TrackBubblePopped();
@@ -237,11 +244,28 @@ public class BubbleService : IDisposable
         _bubbles.Remove(bubble);
     }
 
-    private void PlayPopSound()
+    private void PlayPopSound(bool isLucky = false)
     {
         try
         {
             var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
+
+            // If lucky bubble, play special Burst easter egg sound
+            if (isLucky)
+            {
+                var burstPath = Path.Combine(soundsPath, "Burst.mp3");
+                if (File.Exists(burstPath))
+                {
+                    var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                    var bubblesVolume = App.Settings.Current.BubblesVolume / 100f;
+                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
+                    PlaySoundAsync(burstPath, volume);
+                    App.Logger?.Information("🎉 Lucky Bubble! 10x XP!");
+                    return;
+                }
+            }
+
+            // Normal pop sound
             var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
             var chosenPop = popFiles[_random.Next(popFiles.Length)];
             var popPath = Path.Combine(soundsPath, chosenPop);
@@ -253,31 +277,6 @@ public class BubbleService : IDisposable
                 var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
 
                 PlaySoundAsync(popPath, volume);
-            }
-
-            // Random bonus sounds
-            var chance = _random.NextDouble();
-            if (chance < 0.03) // 3% chance
-            {
-                var burstPath = Path.Combine(soundsPath, "burst.mp3");
-                if (File.Exists(burstPath))
-                {
-                    var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                    var bubblesVolume = App.Settings.Current.BubblesVolume / 100f;
-                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
-                    PlaySoundAsync(burstPath, volume);
-                }
-            }
-            else if (chance < 0.08) // 5% chance (8% - 3%)
-            {
-                var ggPath = Path.Combine(soundsPath, "GG.mp3");
-                if (File.Exists(ggPath))
-                {
-                    var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                    var bubblesVolume = App.Settings.Current.BubblesVolume / 100f;
-                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
-                    PlaySoundAsync(ggPath, volume);
-                }
             }
         }
         catch (Exception ex)
