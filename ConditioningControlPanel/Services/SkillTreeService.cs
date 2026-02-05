@@ -49,7 +49,7 @@ public class SkillTreeService : IDisposable
         _pinkRushTimer.Tick += PinkRushTimer_Tick;
 
         // Timer for randomly triggering Pink Rush (if skill is unlocked)
-        _pinkRushCheckTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
+        _pinkRushCheckTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
         _pinkRushCheckTimer.Tick += PinkRushCheckTimer_Tick;
 
         App.Logger?.Information("SkillTreeService initialized");
@@ -272,14 +272,14 @@ public class SkillTreeService : IDisposable
     #region Lucky Procs
 
     /// <summary>
-    /// Roll for lucky flash (5% chance for 5x XP)
+    /// Roll for lucky flash (1% chance for 5x XP)
     /// Returns the multiplier (1 for normal, 5 for lucky)
     /// </summary>
     public int RollLuckyFlash()
     {
         if (!HasSkill("lucky_bimbo")) return 1;
 
-        if (_random.NextDouble() < 0.05)
+        if (_random.NextDouble() < 0.01)
         {
             LuckyProc?.Invoke(this, new LuckyProcEventArgs("Lucky Flash", 5));
             return 5;
@@ -315,8 +315,8 @@ public class SkillTreeService : IDisposable
         // Don't trigger if already active
         if (settings.PinkRushActive) return;
 
-        // Random chance every 5 minutes (roughly 1-2 per hour)
-        if (_random.NextDouble() < 0.15)
+        // 50% chance every 5 minutes (~once per 10 min)
+        if (_random.NextDouble() < 0.50)
         {
             StartPinkRush();
         }

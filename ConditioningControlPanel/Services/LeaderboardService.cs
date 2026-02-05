@@ -76,7 +76,9 @@ public class LeaderboardService : IDisposable
         {
             App.Logger?.Debug("Fetching leaderboard with sort_by={SortBy}", sortBy);
 
-            var response = await _httpClient.GetAsync($"{ProxyBaseUrl}/leaderboard?sort_by={sortBy}&limit=1000");
+            // Use V2 leaderboard (monthly seasons system)
+            var season = DateTime.UtcNow.ToString("yyyy-MM");
+            var response = await _httpClient.GetAsync($"{ProxyBaseUrl}/v2/leaderboard?season={season}&limit=1000");
 
             if (!response.IsSuccessStatusCode)
             {
@@ -155,6 +157,68 @@ public class LeaderboardService : IDisposable
         {
             App.Logger?.Warning(ex, "User lookup failed for {Name}", displayName);
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Get the current player's rank percentile.
+    /// Returns 0 if not found or not enough data.
+    /// </summary>
+    public int GetPlayerPercentile()
+    {
+        try
+        {
+            if (Entries.Count == 0 || TotalUsers == 0)
+            {
+                App.Logger?.Debug("GetPlayerPercentile: No entries ({Count}) or users ({Total})", Entries.Count, TotalUsers);
+                return 0;
+            }
+
+            // Try to find the player by Discord ID first, then fall back to display name
+            var discordId = App.Discord?.UserId;
+            var displayName = App.UserDisplayName;
+
+            // Find player in leaderboard
+            int position = -1;
+            for (int i = 0; i < Entries.Count; i++)
+            {
+                var entry = Entries[i];
+                // Match by Discord ID (primary)
+                if (!string.IsNullOrEmpty(discordId) && entry.DiscordId == discordId)
+                {
+                    position = i + 1;
+                    App.Logger?.Debug("GetPlayerPercentile: Found player by Discord ID at position {Position} out of {Total}", position, TotalUsers);
+                    break;
+                }
+                // Fallback: match by display name
+                if (!string.IsNullOrEmpty(displayName) && string.Equals(entry.DisplayName, displayName, StringComparison.OrdinalIgnoreCase))
+                {
+                    position = i + 1;
+                    App.Logger?.Debug("GetPlayerPercentile: Found player by display name at position {Position} out of {Total}", position, TotalUsers);
+                    break;
+                }
+            }
+
+            if (position <= 0)
+            {
+                App.Logger?.Debug("GetPlayerPercentile: Player not found in leaderboard (DiscordId={DiscordId}, DisplayName={DisplayName})", discordId, displayName);
+                return 0;
+            }
+
+            // Calculate percentile (higher is better, so invert)
+            // Top 10% means better than 90% of players
+            var percentile = (int)Math.Ceiling((double)position / TotalUsers * 100);
+            var clampedPercentile = Math.Min(99, Math.Max(1, percentile));
+
+            App.Logger?.Debug("GetPlayerPercentile: Player rank {Position}/{Total} = Top {Percentile}%",
+                position, TotalUsers, clampedPercentile);
+
+            return clampedPercentile;
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning(ex, "Failed to calculate player percentile");
+            return 0;
         }
     }
 
@@ -256,6 +320,17 @@ public class LeaderboardEntry
     [JsonProperty("achievements_count")]
     public int AchievementsCount { get; set; }
 
+    [JsonProperty("longest_session_minutes")]
+    public double LongestSessionMinutes { get; set; }
+
+    /// <summary>
+    /// Formatted longest session display (e.g., "123.5 min")
+    /// </summary>
+    public string LongestSessionDisplay => $"{LongestSessionMinutes:F1}";
+
+    [JsonProperty("highest_streak")]
+    public int HighestStreak { get; set; }
+
     [JsonProperty("is_online", NullValueHandling = NullValueHandling.Ignore)]
     public bool IsOnline { get; set; }
 
@@ -272,6 +347,14 @@ public class LeaderboardEntry
     /// Whether this user has a Discord ID available for DM
     /// </summary>
     public bool HasDiscord => !string.IsNullOrEmpty(DiscordId);
+
+    [JsonProperty("is_season0_og")]
+    public bool IsSeason0Og { get; set; }
+
+    /// <summary>
+    /// Display name with OG star prefix if applicable
+    /// </summary>
+    public string DisplayNameWithFlair => DisplayName;
 
     /// <summary>
     /// Display string for achievements (X / Y format)
@@ -329,4 +412,12 @@ public class UserLookupResult
 
     [JsonProperty("last_seen")]
     public string? LastSeen { get; set; }
+
+    [JsonProperty("is_season0_og")]
+    public bool IsSeason0Og { get; set; }
+
+    /// <summary>
+    /// Display name with OG star prefix if applicable
+    /// </summary>
+    public string DisplayNameWithFlair => DisplayName ?? "";
 }

@@ -87,6 +87,9 @@ namespace ConditioningControlPanel
 
         // Achievement tracking
         private Dictionary<string, Image> _achievementImages = new();
+
+        // Pink Rush popup
+        private PinkRushPopup? _pinkRushPopup;
         
         // Ramp tracking
         private DispatcherTimer? _rampTimer;
@@ -2011,7 +2014,13 @@ namespace ConditioningControlPanel
             var today = DateTime.Today;
             var days = Enumerable.Range(0, 30).Select(i => today.AddDays(-29 + i)).ToList();
 
+            // Canvas doesn't auto-stretch, so use parent's actual width minus padding
             double canvasWidth = StreakCalendarCanvas.ActualWidth;
+            if (canvasWidth <= 0)
+            {
+                var parent = StreakCalendarCanvas.Parent as FrameworkElement;
+                canvasWidth = parent?.ActualWidth ?? 0;
+            }
             if (canvasWidth <= 0) canvasWidth = 600;
 
             double spacing = canvasWidth / 30.0;
@@ -2092,6 +2101,11 @@ namespace ConditioningControlPanel
             // Update streak text
             var streak = App.Settings?.Current?.DailyQuestStreak ?? 0;
             TxtQuestStreakCount.Text = streak > 0 ? "\U0001f525 " + streak + " day streak" : "";
+        }
+
+        private void StreakCalendarCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            RefreshStreakCalendar();
         }
 
         private void BtnAchievements_Click(object sender, RoutedEventArgs e)
@@ -2642,10 +2656,6 @@ namespace ConditioningControlPanel
                     "Rank" => "level",
                     "Level" => "level",
                     "XP" => "xp",
-                    "Bubbles" => "total_bubbles_popped",
-                    "GIFs" => "total_flashes",
-                    "Video Min" => "total_video_minutes",
-                    "Lock Cards" => "total_lock_cards_completed",
                     "Patreon" => "is_patreon",
                     "Name" => null, // Client-side sort
                     "Online" => null, // Client-side sort
@@ -5183,8 +5193,8 @@ namespace ConditioningControlPanel
 
             var startX = 570.0;  // Start after the header section (20 + 500 + 50 margin)
             var startY = 0.0;    // Align with header top
-            var colSpacing = 230.0; // Horizontal spacing between nodes
-            var rowSpacing = 130.0; // Reduced vertical spacing between the 3 paths
+            var colSpacing = 270.0; // Horizontal spacing between nodes
+            var rowSpacing = 160.0; // Vertical spacing between the 3 paths
 
             // COLUMN 0: Root node (centered, branches to 3 paths)
             var rootY = startY + rowSpacing; // Center vertically
@@ -6306,12 +6316,16 @@ namespace ConditioningControlPanel
             {
                 TxtPinkRushIndicator.Visibility = Visibility.Visible;
 
-                // Show notification if not on enhancements tab
-                if (EnhancementsTab.Visibility != Visibility.Visible)
+                // Show toast notification popup
+                try
                 {
-                    // Could show a toast notification here
-                    App.Logger?.Information("Pink Rush activated!");
+                    _pinkRushPopup?.Close();
                 }
+                catch { }
+
+                _pinkRushPopup = new PinkRushPopup();
+                _pinkRushPopup.Show();
+                App.Logger?.Information("Pink Rush activated! Showing popup.");
             });
         }
 
@@ -6320,6 +6334,13 @@ namespace ConditioningControlPanel
             Dispatcher.Invoke(() =>
             {
                 TxtPinkRushIndicator.Visibility = Visibility.Collapsed;
+
+                try
+                {
+                    _pinkRushPopup?.Close();
+                }
+                catch { }
+                _pinkRushPopup = null;
             });
         }
 

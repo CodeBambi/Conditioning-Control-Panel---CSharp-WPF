@@ -153,6 +153,26 @@ public class QuestService : IDisposable
             changed = true;
         }
 
+        // Reconcile: if daily quest is completed today but counter doesn't reflect it
+        if (Progress.DailyQuest?.IsCompleted == true
+            && Progress.DailyQuest.CompletedAt?.Date == DateTime.Today
+            && Progress.GetDailyQuestsCompletedToday() == 0)
+        {
+            Progress.DailyQuestsCompletedToday = 1;
+            changed = true;
+        }
+
+        // If daily quest is already completed and we still have slots, generate next one
+        if (Progress.DailyQuest?.IsCompleted == true
+            && Progress.GetDailyQuestsCompletedToday() < MaxDailyQuestsPerDay)
+        {
+            var completedId = Progress.DailyQuest.DefinitionId;
+            GenerateNewDailyQuest(excludeId: completedId);
+            changed = true;
+            App.Logger?.Information("Startup: generated next daily quest ({Completed}/{Max})",
+                Progress.GetDailyQuestsCompletedToday(), MaxDailyQuestsPerDay);
+        }
+
         // Check weekly quest
         if (Progress.IsWeeklyExpired() || Progress.WeeklyQuest == null)
         {

@@ -516,7 +516,7 @@
             <Setter Property="Background" Value="{StaticResource PanelBgTransparentBrush}"/>
             <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="Padding" Value="9"/>
-            <Setter Property="Margin" Value="0,0,0,9"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
         </Style>
 
         <!-- Section Header Style -->
@@ -1785,7 +1785,7 @@
                 <StackPanel>
                     
                     <!-- Mandatory Video Section -->
-                    <Border x:Name="VideoSection" Style="{StaticResource SectionPanel}" Padding="10,10">
+                    <Border x:Name="VideoSection" Style="{StaticResource SectionPanel}" Padding="10,7">
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="🎬 Mandatory Video"/>
@@ -1798,7 +1798,7 @@
                             </Grid>
 
                             <!-- Enable + Strict + Per Hour -->
-                            <Grid Margin="0,8,0,0">
+                            <Grid Margin="0,5,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
@@ -1820,7 +1820,7 @@
                             </Grid>
 
                             <!-- Mini-Game Sub-Section -->
-                            <Border Background="#1E1E3A" CornerRadius="6" Padding="10,10" Margin="0,10,0,0">
+                            <Border Background="#1E1E3A" CornerRadius="6" Padding="10,7" Margin="0,7,0,0">
                                 <StackPanel>
                                     <Grid>
                                         <StackPanel Orientation="Horizontal">
@@ -1833,7 +1833,7 @@
                                     </Grid>
 
                                     <!-- Targets / Duration / Size -->
-                                    <Grid Margin="0,8,0,0">
+                                    <Grid Margin="0,5,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="*"/>
@@ -1863,7 +1863,7 @@
                                         </StackPanel>
                                     </Grid>
 
-                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
                                         <Button Content="📝 Phrases" Style="{StaticResource PinkButton}" Padding="8,5" Click="BtnManageAttention_Click"
                                                 ToolTip="Edit attention check phrases"/>
                                         <Button Content="🎨 Style" Style="{StaticResource OutlineButton}" Margin="8,0,0,0" Padding="8,5" Click="BtnAttentionStyle_Click"
@@ -1875,7 +1875,7 @@
                     </Border>
 
                     <!-- Subliminals Section -->
-                    <Border x:Name="SubliminalSection" Style="{StaticResource SectionPanel}" Padding="10,10">
+                    <Border x:Name="SubliminalSection" Style="{StaticResource SectionPanel}" Padding="10,7">
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="💭 Subliminals"/>
@@ -1892,7 +1892,7 @@
                             </Grid>
 
                             <!-- Per Min / Frames / Opacity in 3 columns -->
-                            <Grid Margin="0,10,0,0">
+                            <Grid Margin="0,6,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
@@ -1913,7 +1913,7 @@
                             </Grid>
 
                             <!-- Audio Whispers -->
-                            <Grid Margin="0,10,0,0" ToolTip="Play whispered audio when subliminal messages appear.">
+                            <Grid Margin="0,6,0,0" ToolTip="Play whispered audio when subliminal messages appear.">
                                 <StackPanel Orientation="Horizontal">
                                     <CheckBox x:Name="ChkAudioWhispers" Style="{StaticResource ToggleStyle}"
                                               Checked="ChkAudioWhispers_Changed" Unchecked="ChkAudioWhispers_Changed"/>
@@ -1928,7 +1928,7 @@
                     </Border>
 
                     <!-- System Section -->
-                    <Border x:Name="SystemSection" Style="{StaticResource SectionPanel}" Padding="10,10">
+                    <Border x:Name="SystemSection" Style="{StaticResource SectionPanel}" Padding="10,7">
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="⚙ System"/>
@@ -1998,7 +1998,7 @@
                             </Grid>
 
                             <!-- Startup Video Selection -->
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                            <StackPanel Orientation="Horizontal" Margin="0,5,0,0"
                                         ToolTip="Select a specific video to play on startup (when Vid Launch is enabled)">
                                 <TextBlock Text="Startup Video:" Foreground="#B0B0B0" FontSize="10" VerticalAlignment="Center" Width="75"/>
                                 <TextBlock x:Name="TxtStartupVideo" Text="(Random)" Foreground="#E0E0E0" FontSize="10"
@@ -2012,7 +2012,7 @@
                             </StackPanel>
 
                             <!-- Gaming Tip -->
-                            <Grid Margin="0,8,0,0">
+                            <Grid Margin="0,5,0,0">
                                 <TextBlock Text="💡 Use Borderless Windowed for overlays" Foreground="#808090" FontSize="10" VerticalAlignment="Center"
                                            ToolTip="Exclusive fullscreen games block overlays.&#x0a;Use Borderless Windowed mode instead."/>
                                 <Button x:Name="BtnPanicKey" Content="🔑 Escape" Style="{StaticResource OutlineButton}"
@@ -2350,54 +2350,61 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Discord row: Rich Presence + Server Link -->
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                <!-- Rich Presence Toggle -->
-                                <StackPanel Orientation="Vertical" VerticalAlignment="Center" Margin="0,0,6,0">
-                                    <StackPanel.ToolTip>
-                                        <ToolTip Background="#1E1E3A" BorderBrush="#FF69B4" BorderThickness="1" Padding="10">
-                                            <StackPanel MaxWidth="280">
-                                                <TextBlock Text="Discord Rich Presence" Foreground="#FF69B4" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
-                                                <TextBlock Foreground="#CCCCCC" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
-                                                    Shows "Playing Conditioning Control Panel" in your Discord status, along with your current level and session time.
-                                                </TextBlock>
-                                                <TextBlock Text="Who can see this?" Foreground="#9B59B6" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                                                <TextBlock Foreground="#AAAAAA" FontSize="10" TextWrapping="Wrap">
-                                                    Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your "Currently Playing" status like any other game.
-                                                </TextBlock>
-                                            </StackPanel>
-                                        </ToolTip>
-                                    </StackPanel.ToolTip>
-                                    <CheckBox x:Name="ChkQuickDiscordRichPresence" Style="{StaticResource ToggleStyle}"
-                                              Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"/>
-                                    <TextBlock Text="RP" Foreground="#808090" FontSize="8" HorizontalAlignment="Center" Margin="0,1,0,0"/>
-                                </StackPanel>
+                            <!-- Discord Join Button -->
+                            <Button Click="BtnDiscord_Click" Margin="0,4,0,2"
+                                    ToolTip="Join the Discord community" Cursor="Hand"
+                                    HorizontalAlignment="Stretch">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="border" Background="#5865F2" CornerRadius="5"
+                                                            Padding="0,4" HorizontalAlignment="Stretch">
+                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                            <TextBlock Text="💬" FontSize="11" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="Join Discord" Foreground="White" FontSize="10" FontWeight="Bold"
+                                                                       VerticalAlignment="Center" Margin="5,0,0,0"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="border" Property="Background" Value="#6C75F2"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
 
-                                <!-- Discord Server Link -->
-                                <Button Click="BtnDiscord_Click" Margin="4,0,0,0"
-                                        ToolTip="Join the Discord community" Cursor="Hand">
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Background" Value="Transparent"/>
-                                            <Setter Property="BorderThickness" Value="0"/>
-                                            <Setter Property="Template">
-                                                <Setter.Value>
-                                                    <ControlTemplate TargetType="Button">
-                                                        <Border x:Name="border" Background="#3A3A5A" CornerRadius="6"
-                                                                Padding="8,6" BorderThickness="1" BorderBrush="#5865F2">
-                                                            <TextBlock Text="💬" FontSize="14" VerticalAlignment="Center"/>
-                                                        </Border>
-                                                        <ControlTemplate.Triggers>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter TargetName="border" Property="Background" Value="#5865F2"/>
-                                                            </Trigger>
-                                                        </ControlTemplate.Triggers>
-                                                    </ControlTemplate>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
+                            <!-- Discord Rich Presence row -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,3,0,0">
+                                <StackPanel.ToolTip>
+                                    <ToolTip Background="#1E1E3A" BorderBrush="#FF69B4" BorderThickness="1" Padding="10">
+                                        <StackPanel MaxWidth="280">
+                                            <TextBlock Text="Discord Rich Presence" Foreground="#FF69B4" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
+                                            <TextBlock Foreground="#CCCCCC" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
+                                                Shows "Playing Conditioning Control Panel" in your Discord status, along with your current level and session time.
+                                            </TextBlock>
+                                            <TextBlock Text="Who can see this?" Foreground="#9B59B6" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
+                                            <TextBlock Foreground="#AAAAAA" FontSize="10" TextWrapping="Wrap">
+                                                Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your "Currently Playing" status like any other game.
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </StackPanel.ToolTip>
+                                <CheckBox x:Name="ChkQuickDiscordRichPresence" Style="{StaticResource ToggleStyle}"
+                                          Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed">
+                                    <CheckBox.LayoutTransform>
+                                        <ScaleTransform ScaleX="0.85" ScaleY="0.85"/>
+                                    </CheckBox.LayoutTransform>
+                                </CheckBox>
+                                <TextBlock Text="Rich Presence" Foreground="#808090" FontSize="9"
+                                           VerticalAlignment="Center" Margin="4,0,0,0"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -3640,7 +3647,8 @@
             </Border>
 
             <!-- Right Column: Scheduler + Ramp + Community stacked -->
-            <StackPanel Grid.Column="1">
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
                 <!-- Scheduler Box -->
                 <Border x:Name="SchedulerPanel" Style="{StaticResource SectionPanel}" Margin="5">
                     <StackPanel>
@@ -3760,61 +3768,45 @@
                 </Border>
                 
                 <!-- Community Discord -->
-                <Border Style="{StaticResource SectionPanel}" Margin="5" MinHeight="100">
+                <Border Style="{StaticResource SectionPanel}" Margin="5" Padding="10,8">
                     <Grid>
-                        <Button x:Name="HelpBtnCommunity" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0" Tag="Community"/>
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid Grid.Row="0" Margin="0,0,0,8">
                             <TextBlock Text="💬 Community" Foreground="{StaticResource PinkBrush}"
-                                       FontSize="13" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,5,0,5"/>
-                        <Button x:Name="BtnDiscord" Click="BtnDiscord_Click" Cursor="Hand"
+                                       FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <Button x:Name="HelpBtnCommunity" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Tag="Community"/>
+                        </Grid>
+
+                        <!-- Discord Join Button - rectangular -->
+                        <Button x:Name="BtnDiscord" Grid.Row="1" Click="BtnDiscord_Click" Cursor="Hand"
                                 ToolTip="Click to join our Discord server!">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
-                                    <Border Background="Transparent">
-                                        <Border CornerRadius="8" ClipToBounds="True">
-                                            <Image x:Name="DiscordImage"
-                                                   Source="pack://application:,,,/Resources/discord.png"
-                                                   Width="120" Stretch="Uniform" RenderTransformOrigin="0.5,0.5">
-                                                <Image.RenderTransform>
-                                                    <ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/>
-                                                </Image.RenderTransform>
-                                            </Image>
-                                        </Border>
+                                    <Border x:Name="discordBorder" Background="#5865F2" CornerRadius="8" Padding="12,8">
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <Image Source="pack://application:,,,/Resources/discord.png"
+                                                   Width="28" Height="28" Stretch="Uniform" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Join Discord" Foreground="White" FontSize="13" FontWeight="Bold"
+                                                       VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                        </StackPanel>
                                     </Border>
                                     <ControlTemplate.Triggers>
-                                        <EventTrigger RoutedEvent="MouseEnter">
-                                            <BeginStoryboard>
-                                                <Storyboard>
-                                                    <DoubleAnimation Storyboard.TargetName="ImageScale"
-                                                                     Storyboard.TargetProperty="ScaleX"
-                                                                     To="1.05" Duration="0:0:0.15"/>
-                                                    <DoubleAnimation Storyboard.TargetName="ImageScale"
-                                                                     Storyboard.TargetProperty="ScaleY"
-                                                                     To="1.05" Duration="0:0:0.15"/>
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </EventTrigger>
-                                        <EventTrigger RoutedEvent="MouseLeave">
-                                            <BeginStoryboard>
-                                                <Storyboard>
-                                                    <DoubleAnimation Storyboard.TargetName="ImageScale"
-                                                                     Storyboard.TargetProperty="ScaleX"
-                                                                     To="1" Duration="0:0:0.15"/>
-                                                    <DoubleAnimation Storyboard.TargetName="ImageScale"
-                                                                     Storyboard.TargetProperty="ScaleY"
-                                                                     To="1" Duration="0:0:0.15"/>
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </EventTrigger>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="discordBorder" Property="Background" Value="#6C75F2"/>
+                                        </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Button.Template>
                         </Button>
 
-                        <!-- Discord Rich Presence Toggle - Pink themed -->
-                        <CheckBox x:Name="ChkDiscordRichPresence"
+                        <!-- Discord Rich Presence Toggle -->
+                        <CheckBox x:Name="ChkDiscordRichPresence" Grid.Row="2"
                                   HorizontalAlignment="Center"
-                                  Margin="0,8,0,5"
+                                  Margin="0,8,0,2"
                                   Checked="ChkDiscordRichPresence_Changed"
                                   Unchecked="ChkDiscordRichPresence_Changed">
                             <CheckBox.ToolTip>
@@ -3857,7 +3849,6 @@
                                 </ControlTemplate>
                             </CheckBox.Template>
                         </CheckBox>
-                        </StackPanel>
                     </Grid>
                 </Border>
 
@@ -3905,6 +3896,7 @@
                     </Grid>
                 </Border>
             </StackPanel>
+            </ScrollViewer>
             </Grid>
         </ContentControl>
 
@@ -4160,7 +4152,8 @@
                                         <TextBlock x:Name="TxtQuestStreakCount" Text="" Foreground="#FFD700"
                                                    FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"/>
                                     </Grid>
-                                    <Canvas x:Name="StreakCalendarCanvas" Height="50" ClipToBounds="True"/>
+                                    <Canvas x:Name="StreakCalendarCanvas" Height="50" ClipToBounds="True"
+                                           SizeChanged="StreakCalendarCanvas_SizeChanged"/>
                                 </StackPanel>
                             </Border>
 
@@ -4768,13 +4761,29 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
                         <Grid Margin="0,0,0,15">
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="Patreon Exclusives" FontSize="18" Margin="0"/>
+                            <StackPanel>
+                                <TextBlock Text="Patreon Exclusives" Foreground="White" FontSize="22" FontWeight="Bold">
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                                    </TextBlock.Effect>
+                                </TextBlock>
+                                <TextBlock Text="Premium features for supporters" Foreground="#666680" FontSize="11" Margin="0,2,0,0"/>
+                            </StackPanel>
                             <Button x:Name="HelpBtnPatreon" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="PatreonExclusives"/>
                         </Grid>
 
                         <!-- Patreon Login Status -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,15"
+                        <Border CornerRadius="10" Padding="15" Margin="0,0,0,15"
                                 BorderBrush="#FF424D" BorderThickness="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A1A2E" Offset="0"/>
+                                    <GradientStop Color="#1E1E3A" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FF424D" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                            </Border.Effect>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -4797,8 +4806,17 @@
                         </Border>
 
                         <!-- Discord Login Status -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,15"
+                        <Border CornerRadius="10" Padding="15" Margin="0,0,0,15"
                                 BorderBrush="#5865F2" BorderThickness="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A1A2E" Offset="0"/>
+                                    <GradientStop Color="#1E1E3A" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#5865F2" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                            </Border.Effect>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -4847,6 +4865,17 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Divider -->
+                        <Border Height="1" Margin="20,15" CornerRadius="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="Transparent" Offset="0"/>
+                                    <GradientStop Color="#FF69B4" Offset="0.5"/>
+                                    <GradientStop Color="Transparent" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+
                         <!-- Feature Boxes Side by Side -->
                         <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
@@ -4856,7 +4885,22 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- LEVEL 1: AI Chatbot Feature Box -->
-                            <Border Grid.Column="0" Background="#1E1E3A" CornerRadius="8" Padding="15">
+                            <Border Grid.Column="0" CornerRadius="10" Padding="15" BorderThickness="1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#1E1E3A" Offset="0"/>
+                                        <GradientStop Color="#252548" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#FF69B4" Offset="0"/>
+                                        <GradientStop Color="#9B59B6" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                                </Border.Effect>
                                 <Grid>
                                     <Button x:Name="HelpBtnAiChat" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Tag="AiChat" Panel.ZIndex="1"/>
                                 <StackPanel Margin="0,0,25,0">
@@ -4894,7 +4938,22 @@
                             </Border>
 
                             <!-- Window Awareness Feature Box (Patreon) -->
-                            <Border Grid.Column="2" Background="#1E1E3A" CornerRadius="8" Padding="15">
+                            <Border Grid.Column="2" CornerRadius="10" Padding="15" BorderThickness="1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#1E1E3A" Offset="0"/>
+                                        <GradientStop Color="#252548" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#FF69B4" Offset="0"/>
+                                        <GradientStop Color="#9B59B6" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                                </Border.Effect>
                                 <Grid>
                                     <Button x:Name="HelpBtnAwareness" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Tag="WindowAwareness" Panel.ZIndex="1"/>
                                 <StackPanel Margin="0,0,25,0">
@@ -4974,6 +5033,17 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Divider -->
+                        <Border Height="1" Margin="20,15" CornerRadius="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="Transparent" Offset="0"/>
+                                    <GradientStop Color="#9B59B6" Offset="0.5"/>
+                                    <GradientStop Color="Transparent" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+
                         <!-- Haptics Control - Two Side-by-Side Boxes -->
                         <Grid Margin="0,10,0,0">
                             <!-- Haptics Content (enabled for whitelisted testers) -->
@@ -4986,8 +5056,23 @@
 
                             <!-- Left Box: Connection Settings -->
                             <Grid Grid.Column="0">
-                                <Border x:Name="HapticsConnectionBox" Background="#1E1E3A" CornerRadius="8" Padding="15"
-                                        BorderBrush="#9B59B6" BorderThickness="1">
+                                <Border x:Name="HapticsConnectionBox" CornerRadius="10" Padding="15"
+                                        BorderThickness="1">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#1E1E3A" Offset="0"/>
+                                            <GradientStop Color="#252548" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.BorderBrush>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#9B59B6" Offset="0"/>
+                                            <GradientStop Color="#FF69B4" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.BorderBrush>
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#9B59B6" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                                    </Border.Effect>
                                     <StackPanel>
                                     <Grid>
                                         <StackPanel Orientation="Horizontal">
@@ -5138,8 +5223,23 @@
 
                             <!-- Right Box: Feature Sliders -->
                             <Grid Grid.Column="2">
-                                <Border x:Name="HapticsFeatureBox" Background="#1E1E3A" CornerRadius="8" Padding="15"
-                                        BorderBrush="#9B59B6" BorderThickness="1">
+                                <Border x:Name="HapticsFeatureBox" CornerRadius="10" Padding="15"
+                                        BorderThickness="1">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#1E1E3A" Offset="0"/>
+                                            <GradientStop Color="#252548" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.BorderBrush>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#9B59B6" Offset="0"/>
+                                            <GradientStop Color="#FF69B4" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.BorderBrush>
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#9B59B6" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                                    </Border.Effect>
                                     <StackPanel>
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
@@ -5599,6 +5699,17 @@
                             </Border>
                         </Grid>
 
+                        <!-- Divider -->
+                        <Border Height="1" Margin="20,15" CornerRadius="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="Transparent" Offset="0"/>
+                                    <GradientStop Color="#FF69B4" Offset="0.5"/>
+                                    <GradientStop Color="Transparent" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+
                         <!-- Bambi Takeover - Two Side-by-Side Boxes (like Haptics) -->
                         <Grid Margin="0,15,0,0">
                             <Grid.ColumnDefinitions>
@@ -5609,7 +5720,22 @@
 
                             <!-- Left Box: Controls -->
                             <Grid Grid.Column="0">
-                                <Border Background="#1E1E3A" CornerRadius="8" Padding="12" BorderBrush="#FF69B4" BorderThickness="1">
+                                <Border CornerRadius="10" Padding="12" BorderThickness="1">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#1E1E3A" Offset="0"/>
+                                            <GradientStop Color="#252548" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.BorderBrush>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#FF69B4" Offset="0"/>
+                                            <GradientStop Color="#9B59B6" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.BorderBrush>
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                                    </Border.Effect>
                                     <Grid>
                                         <!-- Locked State -->
                                         <StackPanel x:Name="AutonomyLocked" Visibility="Visible">
@@ -5726,7 +5852,22 @@
 
                             <!-- Right Box: Feature Image -->
                             <Grid Grid.Column="2">
-                                <Border Background="#1E1E3A" CornerRadius="8" Padding="12" BorderBrush="#FF69B4" BorderThickness="1">
+                                <Border CornerRadius="10" Padding="12" BorderThickness="1">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#1E1E3A" Offset="0"/>
+                                            <GradientStop Color="#252548" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.BorderBrush>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#FF69B4" Offset="0"/>
+                                            <GradientStop Color="#9B59B6" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.BorderBrush>
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                                    </Border.Effect>
                                     <StackPanel>
                                         <TextBlock Text="Let Her Take Control" Foreground="{StaticResource PinkBrush}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
                                         <TextBlock Text="She will autonomously trigger effects based on your settings"
@@ -5741,9 +5882,35 @@
                             </Grid>
                         </Grid>
 
+                        <!-- Divider -->
+                        <Border Height="1" Margin="20,15" CornerRadius="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="Transparent" Offset="0"/>
+                                    <GradientStop Color="#9B59B6" Offset="0.5"/>
+                                    <GradientStop Color="Transparent" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+
                         <!-- Patreon Info Box -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0"
-                                BorderBrush="#9B59B6" BorderThickness="1">
+                        <Border CornerRadius="10" Padding="15" Margin="0,10,0,0"
+                                BorderThickness="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A1A2E" Offset="0"/>
+                                    <GradientStop Color="#1E1E3A" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#9B59B6" Offset="0"/>
+                                    <GradientStop Color="#FF69B4" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#9B59B6" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                            </Border.Effect>
                             <StackPanel>
                                 <TextBlock Text="Support Development" Foreground="#9B59B6" FontSize="14" FontWeight="Bold"/>
                                 <TextBlock TextWrapping="Wrap" Foreground="#808080" FontSize="12" Margin="0,8,0,0">
@@ -5759,8 +5926,23 @@
                         </Border>
 
                         <!-- Discord Sharing Settings -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0"
-                                BorderBrush="#5865F2" BorderThickness="1">
+                        <Border CornerRadius="10" Padding="15" Margin="0,10,0,0"
+                                BorderThickness="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A1A2E" Offset="0"/>
+                                    <GradientStop Color="#1E1E3A" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#5865F2" Offset="0"/>
+                                    <GradientStop Color="#9B59B6" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#5865F2" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                            </Border.Effect>
                             <StackPanel>
                                 <TextBlock Text="Discord Community Sharing" Foreground="#5865F2" FontSize="14" FontWeight="Bold"/>
                                 <TextBlock Text="Share achievements and level milestones to the community Discord" Foreground="#808080" FontSize="11" Margin="0,4,0,10"/>
@@ -5823,7 +6005,16 @@
                         </Border>
 
                         <!-- Patreon Status -->
-                        <Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,10,0,0">
+                        <Border CornerRadius="10" Padding="15" Margin="0,10,0,0">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A1A2E" Offset="0"/>
+                                    <GradientStop Color="#1E1E3A" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.2"/>
+                            </Border.Effect>
                             <StackPanel>
                                 <TextBlock Text="Connection Status" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
                                 <TextBlock x:Name="TxtAiStatus" Text="Not connected" Foreground="#808080" FontSize="12" Margin="0,5,0,0"/>
@@ -6347,19 +6538,6 @@
                                 </GridViewColumn>
                                 <GridViewColumn Header="Level" Width="100" DisplayMemberBinding="{Binding Level}"/>
                                 <GridViewColumn Header="XP" Width="100" DisplayMemberBinding="{Binding XpDisplay}"/>
-                                <GridViewColumn Header="Bubbles" Width="100" DisplayMemberBinding="{Binding BubblesPoppedDisplay}"/>
-                                <GridViewColumn Header="GIFs" Width="90" DisplayMemberBinding="{Binding GifsSpawnedDisplay}"/>
-                                <GridViewColumn Header="Video Min" Width="120">
-                                    <GridViewColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding VideoMinutes, StringFormat={}{0:F1}}" HorizontalAlignment="Center"/>
-                                                <TextBlock Text="min" FontSize="11" Foreground="#B0B0B0" HorizontalAlignment="Center" Margin="0,-3,0,0"/>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </GridViewColumn.CellTemplate>
-                                </GridViewColumn>
-                                <GridViewColumn Header="Lock Cards" Width="90" DisplayMemberBinding="{Binding LockCardsCompleted}"/>
                                 <GridViewColumn Header="Achievements" Width="130" DisplayMemberBinding="{Binding AchievementsDisplay}"/>
                                 <!-- Trophy Case Columns (shown only when skill unlocked) -->
                                 <GridViewColumn x:Name="ColLongestSession" Header="Best Session" Width="110">
@@ -6962,13 +7140,13 @@
                     <Border x:Name="ActiveBonusesPanel"/>
                 </StackPanel>
 
-                <Border Background="#151528" CornerRadius="12" Padding="5" Margin="20">
+                <Border Background="#151528" CornerRadius="12" Padding="5" Margin="20,5,20,20">
                     <ScrollViewer x:Name="SkillTreeScroller"
                              Style="{StaticResource SkillTreeScrollViewerStyle}"
                              HorizontalScrollBarVisibility="Visible"
                              VerticalScrollBarVisibility="Disabled"
                              PreviewMouseWheel="SkillTreeScroller_PreviewMouseWheel">
-                        <Canvas x:Name="SkillTreeCanvas" Width="2400" Height="380" HorizontalAlignment="Left">
+                        <Canvas x:Name="SkillTreeCanvas" Width="2400" Height="460" HorizontalAlignment="Left">
                             <!-- Header and skill nodes will be drawn programmatically -->
                         </Canvas>
                     </ScrollViewer>
