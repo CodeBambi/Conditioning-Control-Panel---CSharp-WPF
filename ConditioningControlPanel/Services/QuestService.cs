@@ -144,9 +144,11 @@ public class QuestService : IDisposable
     {
         bool changed = false;
 
-        // Check daily quest
+        // Check daily quest - reset counter on new day
         if (Progress.IsDailyExpired() || Progress.DailyQuest == null)
         {
+            // New day resets the daily completion counter
+            Progress.GetDailyQuestsCompletedToday(); // triggers reset if new day
             GenerateNewDailyQuest();
             changed = true;
         }
@@ -530,6 +532,18 @@ public class QuestService : IDisposable
         }
     }
 
+    public const int MaxDailyQuestsPerDay = 3;
+
+    /// <summary>
+    /// Get how many daily quests have been completed today
+    /// </summary>
+    public int GetDailyQuestsCompletedToday() => Progress.GetDailyQuestsCompletedToday();
+
+    /// <summary>
+    /// Check if all daily quests for today are done (3/3)
+    /// </summary>
+    public bool AreAllDailyQuestsCompleted() => Progress.AreAllDailyQuestsCompleted();
+
     /// <summary>
     /// Complete a quest and award rewards
     /// </summary>
@@ -544,6 +558,34 @@ public class QuestService : IDisposable
         if (type == QuestType.Daily)
         {
             Progress.TotalDailyQuestsCompleted++;
+            Progress.GetDailyQuestsCompletedToday(); // ensure reset if new day
+            Progress.DailyQuestsCompletedToday++;
+
+            // Record completion date for streak calendar (only once per day)
+            var today = DateTime.Today;
+            if (!Progress.DailyQuestCompletionDates.Contains(today))
+            {
+                Progress.DailyQuestCompletionDates.Add(today);
+            }
+
+            // Trim entries older than 30 days
+            var cutoff = today.AddDays(-30);
+            Progress.DailyQuestCompletionDates.RemoveAll(d => d.Date < cutoff);
+
+            // Update streak in settings
+            var settings = App.Settings?.Current;
+            if (settings != null)
+            {
+                if (settings.LastDailyQuestDate?.Date == today.AddDays(-1))
+                {
+                    settings.DailyQuestStreak++;
+                }
+                else if (settings.LastDailyQuestDate?.Date != today)
+                {
+                    settings.DailyQuestStreak = 1;
+                }
+                settings.LastDailyQuestDate = today;
+            }
         }
         else
         {
@@ -581,6 +623,17 @@ public class QuestService : IDisposable
 
         // Fire event
         QuestCompleted?.Invoke(this, new QuestCompletedEventArgs(def, scaledXP, type));
+
+        // Auto-generate next daily quest if under the daily limit (3 per day)
+        if (type == QuestType.Daily && Progress.DailyQuestsCompletedToday < MaxDailyQuestsPerDay)
+        {
+            GenerateNewDailyQuest(excludeId: def.Id);
+            _isDirty = true;
+            Save();
+
+            App.Logger?.Information("Auto-generated next daily quest ({Completed}/{Max})",
+                Progress.DailyQuestsCompletedToday, MaxDailyQuestsPerDay);
+        }
     }
 
     /// <summary>

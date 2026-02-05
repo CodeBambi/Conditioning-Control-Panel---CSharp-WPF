@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ConditioningControlPanel.Models;
 
@@ -22,10 +23,17 @@ public class QuestProgress
     public DateTime? DailyQuestGeneratedAt { get; set; }
     public DateTime? WeeklyQuestGeneratedAt { get; set; }
 
+    // Daily quest refresh tracking (up to 3 daily quests per day)
+    public int DailyQuestsCompletedToday { get; set; }
+    public DateTime? DailyCompletionResetDate { get; set; }
+
     // Statistics
     public int TotalDailyQuestsCompleted { get; set; }
     public int TotalWeeklyQuestsCompleted { get; set; }
     public int TotalXPFromQuests { get; set; }
+
+    // Streak calendar - dates when daily quests were completed (last 30 days)
+    public List<DateTime> DailyQuestCompletionDates { get; set; } = new();
 
     /// <summary>
     /// Get remaining daily rerolls (1 base + 2 for Patreon + skill tree bonuses)
@@ -77,6 +85,27 @@ public class QuestProgress
     public bool CanRerollWeekly(bool hasPatreon)
     {
         return GetRemainingWeeklyRerolls(hasPatreon) > 0;
+    }
+
+    /// <summary>
+    /// Get how many daily quests have been completed today (resets on new day)
+    /// </summary>
+    public int GetDailyQuestsCompletedToday()
+    {
+        if (DailyCompletionResetDate?.Date != DateTime.Today)
+        {
+            DailyQuestsCompletedToday = 0;
+            DailyCompletionResetDate = DateTime.Today;
+        }
+        return DailyQuestsCompletedToday;
+    }
+
+    /// <summary>
+    /// Check if all daily quests for today are completed (3/3)
+    /// </summary>
+    public bool AreAllDailyQuestsCompleted()
+    {
+        return GetDailyQuestsCompletedToday() >= 3;
     }
 
     /// <summary>

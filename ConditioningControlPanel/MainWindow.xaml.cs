@@ -117,6 +117,16 @@ namespace ConditioningControlPanel
         private ObservableCollection<ContentPack> _availablePacks = new();
         private DispatcherTimer? _packPreviewTimer;
 
+        // Stat pills
+        private DispatcherTimer? _statPillUpdateTimer;
+
+        // Conditioning time tracker
+        private DispatcherTimer? _conditioningTimeTimer;
+        private DateTime _conditioningStartTime;
+        private double _conditioningBaselineMinutes; // TotalConditioningMinutes at session start (avoids double-counting)
+        private DispatcherTimer? _conditioningTimeSyncTimer; // Server sync every 15 minutes
+        private int _conditioningTimeSecondCounter; // Count seconds for minute-based saves
+
         public MainWindow()
         {
             InitializeComponent();
@@ -212,6 +222,13 @@ namespace ConditioningControlPanel
             {
                 App.Quests.QuestCompleted += OnQuestCompleted;
                 App.Quests.QuestProgressChanged += OnQuestProgressChanged;
+            }
+
+            // Subscribe to skill tree events
+            if (App.SkillTree != null)
+            {
+                App.SkillTree.PinkRushStarted += OnPinkRushStarted;
+                App.SkillTree.PinkRushEnded += OnPinkRushEnded;
             }
 
             // Subscribe to roadmap events
@@ -752,25 +769,67 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Returns a mode-appropriate image path for quests.
+        /// Supports both local cached images and embedded resources.
         /// Swaps Bambi Sleep specific images when in Sissy Hypno mode.
         /// </summary>
-        private string GetModeAwareQuestImagePath(string originalPath)
+        private string GetModeAwareQuestImagePath(Models.QuestDefinition quest)
         {
-            if (string.IsNullOrEmpty(originalPath))
-                return originalPath;
+            // Use EffectiveImagePath which prefers cached remote images over embedded
+            var imagePath = quest.EffectiveImagePath;
 
-            // Only swap if in Sissy Hypno mode
-            if (App.Settings?.Current?.IsSissyMode != true)
-                return originalPath;
+            if (string.IsNullOrEmpty(imagePath))
+                return imagePath;
 
-            // Swap Bambi-specific images to generic alternatives
-            if (originalPath.Contains("logo.png"))
-                return "pack://application:,,,/Resources/logo2.png";
+            // Only swap if in Sissy Hypno mode (only applies to embedded resources)
+            if (App.Settings?.Current?.IsSissyMode == true && imagePath.StartsWith("pack://"))
+            {
+                // Swap Bambi-specific images to generic alternatives
+                if (imagePath.Contains("logo.png"))
+                    return "pack://application:,,,/Resources/logo2.png";
 
-            if (originalPath.Contains("bambi takeover.png"))
-                return "pack://application:,,,/Resources/features/mandatory_videos.png";
+                if (imagePath.Contains("bambi takeover.png"))
+                    return "pack://application:,,,/Resources/features/mandatory_videos.png";
+            }
 
-            return originalPath;
+            return imagePath;
+        }
+
+        /// <summary>
+        /// Load an image from either a local file path or pack:// URI
+        /// </summary>
+        private System.Windows.Media.Imaging.BitmapImage? LoadQuestImage(string imagePath)
+        {
+            if (string.IsNullOrEmpty(imagePath))
+                return null;
+
+            try
+            {
+                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                bitmap.BeginInit();
+
+                if (imagePath.StartsWith("pack://"))
+                {
+                    // Embedded resource
+                    bitmap.UriSource = new Uri(imagePath);
+                }
+                else if (System.IO.File.Exists(imagePath))
+                {
+                    // Local file (cached remote image)
+                    bitmap.UriSource = new Uri(imagePath, UriKind.Absolute);
+                    bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                }
+                else
+                {
+                    return null;
+                }
+
+                bitmap.EndInit();
+                return bitmap;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private void CenterOnPrimaryScreen()
@@ -886,6 +945,9 @@ namespace ConditioningControlPanel
             // Initialize hypnotube links UI
             RefreshHypnotubeLinksUI();
 
+            // Initialize quick login UI
+            UpdateQuickLoginUI();
+
             // Handle start minimized (to tray) - delay briefly to let window render properly first
             if (App.Settings.Current.StartMinimized)
             {
@@ -906,6 +968,22 @@ namespace ConditioningControlPanel
                 await Task.Delay(1500); // Let engine and services initialize
                 TriggerStartupVideo();
             }
+
+            // Fetch initial leaderboard data for stat pills
+            if (App.Leaderboard != null && App.IsLoggedIn)
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(2000); // Let other services finish initializing
+                    await App.Leaderboard.RefreshAsync();
+
+                    // Update UI after leaderboard loads
+                    Dispatcher.Invoke(() => UpdateStatPills());
+                });
+            }
+
+            // Start periodic stat pill update timer
+            StartStatPillUpdateTimer();
 
             // Auto-initialize browser on startup
             await InitializeBrowserAsync();
@@ -985,6 +1063,14 @@ namespace ConditioningControlPanel
             {
                 // Wait a bit for background authentication to complete
                 await Task.Delay(2000);
+
+                // If user already has a UnifiedId (registered in V2 system), skip this check
+                // The old /patreon/validate endpoint doesn't know about V2 users
+                if (!string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId))
+                {
+                    App.Logger?.Debug("User already has UnifiedId, skipping pending registration check");
+                    return;
+                }
 
                 // Check if user is authenticated but needs registration
                 bool patreonNeedsReg = App.Patreon?.IsAuthenticated == true && App.Patreon.NeedsRegistration;
@@ -1268,6 +1354,11 @@ namespace ConditioningControlPanel
         private void BtnQuests_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("quests");
+        }
+
+        private void BtnEnhancements_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("enhancements");
         }
 
         private void BtnRerollDaily_Click(object sender, RoutedEventArgs e)
@@ -1778,11 +1869,27 @@ namespace ConditioningControlPanel
             var questService = App.Quests;
             if (questService == null) return;
 
+            // Update daily quest counter badge
+            int dailyCompleted = questService.GetDailyQuestsCompletedToday();
+            TxtDailyQuestCounter.Text = $"{dailyCompleted}/{QuestService.MaxDailyQuestsPerDay}";
+            bool allDailyDone = questService.AreAllDailyQuestsCompleted();
+
             // Refresh daily quest display
             var dailyDef = questService.GetCurrentDailyDefinition();
             var dailyProgress = questService.Progress.DailyQuest;
-            if (dailyDef != null && dailyProgress != null)
+            if (allDailyDone)
             {
+                // All 3 daily quests completed - show the "all done" message
+                DailyQuestCard.Visibility = Visibility.Collapsed;
+                DailyAllCompletedMessage.Visibility = Visibility.Visible;
+                BtnRerollDaily.Visibility = Visibility.Collapsed;
+            }
+            else if (dailyDef != null && dailyProgress != null)
+            {
+                DailyQuestCard.Visibility = Visibility.Visible;
+                DailyAllCompletedMessage.Visibility = Visibility.Collapsed;
+                BtnRerollDaily.Visibility = Visibility.Visible;
+
                 TxtDailyQuestIcon.Text = dailyDef.Icon;
                 TxtDailyQuestName.Text = dailyDef.Name;
                 TxtDailyQuestDesc.Text = dailyDef.Description;
@@ -1792,13 +1899,14 @@ namespace ConditioningControlPanel
                 var scaledDailyXP = (int)Math.Round(dailyDef.XPReward * (1 + playerLevel * 0.02));
                 TxtDailyXP.Text = $"🎁 {scaledDailyXP} XP";
 
-                // Load quest image (mode-aware)
+                // Load quest image (supports remote cached images)
                 try
                 {
-                    var dailyImagePath = GetModeAwareQuestImagePath(dailyDef.ImagePath);
-                    if (!string.IsNullOrEmpty(dailyImagePath))
+                    var dailyImagePath = GetModeAwareQuestImagePath(dailyDef);
+                    var dailyImage = LoadQuestImage(dailyImagePath);
+                    if (dailyImage != null)
                     {
-                        ImgDailyQuest.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(dailyImagePath));
+                        ImgDailyQuest.Source = dailyImage;
                     }
                 }
                 catch { /* Image load failed, leave blank */ }
@@ -1811,7 +1919,7 @@ namespace ConditioningControlPanel
                     ? (DailyQuestCard.ActualWidth - 130) * progressPercent
                     : 0;
 
-                // Show completed overlay if done
+                // Show completed overlay if done (briefly visible before next quest loads)
                 if (dailyProgress.IsCompleted)
                 {
                     DailyCompletedOverlay.Visibility = Visibility.Visible;
@@ -1840,13 +1948,14 @@ namespace ConditioningControlPanel
                 var scaledWeeklyXP = (int)Math.Round(weeklyDef.XPReward * (1 + (App.Settings?.Current?.PlayerLevel ?? 1) * 0.02));
                 TxtWeeklyXP.Text = $"🎁 {scaledWeeklyXP} XP";
 
-                // Load quest image (mode-aware)
+                // Load quest image (supports remote cached images)
                 try
                 {
-                    var weeklyImagePath = GetModeAwareQuestImagePath(weeklyDef.ImagePath);
-                    if (!string.IsNullOrEmpty(weeklyImagePath))
+                    var weeklyImagePath = GetModeAwareQuestImagePath(weeklyDef);
+                    var weeklyImage = LoadQuestImage(weeklyImagePath);
+                    if (weeklyImage != null)
                     {
-                        ImgWeeklyQuest.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(weeklyImagePath));
+                        ImgWeeklyQuest.Source = weeklyImage;
                     }
                 }
                 catch { /* Image load failed, leave blank */ }
@@ -1881,9 +1990,108 @@ namespace ConditioningControlPanel
             TxtTotalQuestXP.Text = questService.Progress.TotalXPFromQuests.ToString();
 
             // Update header stats
-            int completedThisWeek = (dailyProgress?.IsCompleted == true ? 1 : 0) +
-                                    (weeklyProgress?.IsCompleted == true ? 1 : 0);
-            TxtQuestStats.Text = $"{completedThisWeek} completed this week";
+            int completedToday = dailyCompleted + (weeklyProgress?.IsCompleted == true ? 1 : 0);
+            TxtQuestStats.Text = $"{completedToday} completed today";
+
+            // Refresh streak calendar
+            RefreshStreakCalendar();
+        }
+
+        private void RefreshStreakCalendar()
+        {
+            if (StreakCalendarCanvas == null) return;
+
+            StreakCalendarCanvas.Children.Clear();
+
+            var questService = App.Quests;
+            var completedDates = new HashSet<DateTime>(
+                questService?.Progress?.DailyQuestCompletionDates?.Select(d => d.Date)
+                ?? Enumerable.Empty<DateTime>());
+
+            var today = DateTime.Today;
+            var days = Enumerable.Range(0, 30).Select(i => today.AddDays(-29 + i)).ToList();
+
+            double canvasWidth = StreakCalendarCanvas.ActualWidth;
+            if (canvasWidth <= 0) canvasWidth = 600;
+
+            double spacing = canvasWidth / 30.0;
+            double centerY = 25;
+
+            double prevCenterX = 0;
+            bool prevCompleted = false;
+
+            for (int i = 0; i < days.Count; i++)
+            {
+                var day = days[i];
+                bool isSunday = day.DayOfWeek == DayOfWeek.Sunday;
+                bool isToday = day.Date == today;
+                bool isCompleted = completedDates.Contains(day.Date);
+
+                double nodeSize = isSunday ? 24 : 18;
+                double centerX = spacing * i + spacing / 2.0;
+
+                // Draw connecting line from previous node
+                if (i > 0)
+                {
+                    var line = new System.Windows.Shapes.Line
+                    {
+                        X1 = prevCenterX,
+                        Y1 = centerY,
+                        X2 = centerX,
+                        Y2 = centerY,
+                        StrokeThickness = 2,
+                        Stroke = (isCompleted && prevCompleted)
+                            ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"))
+                            : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3D3D60"))
+                    };
+                    Canvas.SetZIndex(line, 0);
+                    StreakCalendarCanvas.Children.Add(line);
+                }
+
+                // Draw node ellipse
+                var ellipse = new System.Windows.Shapes.Ellipse
+                {
+                    Width = nodeSize,
+                    Height = nodeSize,
+                    Fill = isCompleted
+                        ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"))
+                        : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252542")),
+                    Stroke = isToday
+                        ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFD700"))
+                        : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3D3D60")),
+                    StrokeThickness = isToday ? 2 : 1
+                };
+
+                Canvas.SetLeft(ellipse, centerX - nodeSize / 2.0);
+                Canvas.SetTop(ellipse, centerY - nodeSize / 2.0);
+                Canvas.SetZIndex(ellipse, 1);
+                StreakCalendarCanvas.Children.Add(ellipse);
+
+                // Day letter
+                string[] dayLetters = { "S", "M", "T", "W", "T", "F", "S" };
+                var label = new TextBlock
+                {
+                    Text = dayLetters[(int)day.DayOfWeek],
+                    Foreground = isCompleted
+                        ? Brushes.White
+                        : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#666666")),
+                    FontSize = isSunday ? 11 : 10,
+                    FontWeight = FontWeights.Bold,
+                    TextAlignment = TextAlignment.Center
+                };
+                label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                Canvas.SetLeft(label, centerX - label.DesiredSize.Width / 2.0);
+                Canvas.SetTop(label, centerY - label.DesiredSize.Height / 2.0);
+                Canvas.SetZIndex(label, 2);
+                StreakCalendarCanvas.Children.Add(label);
+
+                prevCenterX = centerX;
+                prevCompleted = isCompleted;
+            }
+
+            // Update streak text
+            var streak = App.Settings?.Current?.DailyQuestStreak ?? 0;
+            TxtQuestStreakCount.Text = streak > 0 ? "\U0001f525 " + streak + " day streak" : "";
         }
 
         private void BtnAchievements_Click(object sender, RoutedEventArgs e)
@@ -1905,6 +2113,113 @@ namespace ConditioningControlPanel
         {
             ShowTab("patreon");
         }
+
+        #region Unified Login
+
+        /// <summary>
+        /// Opens the unified login dialog
+        /// </summary>
+        private void BtnUnifiedLogin_Click(object sender, RoutedEventArgs e)
+        {
+            OpenUnifiedLoginDialog();
+        }
+
+        /// <summary>
+        /// Opens the unified login dialog and handles the result
+        /// </summary>
+        private void OpenUnifiedLoginDialog()
+        {
+            var loginDialog = new LoginDialog
+            {
+                Owner = this,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+
+            if (loginDialog.ShowDialog() == true && loginDialog.Result != null)
+            {
+                var result = loginDialog.Result;
+
+                // Update all UI
+                UpdateQuickLoginUI();
+                UpdateQuickPatreonUI();
+                UpdateQuickDiscordUI();
+                UpdatePatreonUI();
+                UpdateDiscordUI();
+                UpdateDiscordTabUI();
+                UpdateBannerWelcomeMessage();
+                UpdateAccountLinkingUI();
+
+                // Start profile sync
+                App.ProfileSync?.StartHeartbeat();
+
+                // Show OG welcome if applicable
+                if (result.ShouldShowOgWelcome)
+                {
+                    ShowOgWelcomePopup();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Logs out from all providers
+        /// </summary>
+        private void BtnQuickLogout_Click(object sender, RoutedEventArgs e)
+        {
+            // Stop heartbeat
+            App.ProfileSync?.StopHeartbeat();
+
+            // Logout from both providers
+            App.Patreon?.Logout();
+            App.Discord?.Logout();
+
+            // Clear unified ID
+            App.UnifiedUserId = null;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.UnifiedId = null;
+                App.Settings.Current.UserDisplayName = null;
+                App.Settings.Current.HasLinkedDiscord = false;
+                App.Settings.Current.HasLinkedPatreon = false;
+                App.Settings.Save();
+            }
+
+            // Update all UI
+            UpdateQuickLoginUI();
+            UpdateQuickPatreonUI();
+            UpdateQuickDiscordUI();
+            UpdatePatreonUI();
+            UpdateDiscordUI();
+            UpdateBannerWelcomeMessage();
+            UpdateAccountLinkingUI();
+        }
+
+        /// <summary>
+        /// Updates the quick login panel UI based on login state
+        /// </summary>
+        private void UpdateQuickLoginUI()
+        {
+            var isLoggedIn = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
+            var displayName = App.Settings?.Current?.UserDisplayName
+                           ?? App.Patreon?.DisplayName
+                           ?? App.Discord?.DisplayName
+                           ?? "User";
+
+            BtnUnifiedLogin.Visibility = isLoggedIn ? Visibility.Collapsed : Visibility.Visible;
+            LoggedInStatusPanel.Visibility = isLoggedIn ? Visibility.Visible : Visibility.Collapsed;
+
+            if (isLoggedIn)
+            {
+                TxtLoggedInName.Text = displayName;
+
+                // Show OG flair
+                if (App.Settings?.Current?.IsSeason0Og == true)
+                {
+                    TxtLoggedInName.Text = $"⭐ {displayName}";
+                }
+            }
+        }
+
+        #endregion
 
         private async void BtnQuickPatreonLogin_Click(object sender, RoutedEventArgs e)
         {
@@ -1928,22 +2243,26 @@ namespace ConditioningControlPanel
             }
             else
             {
-                // Start OAuth flow
-                BtnQuickPatreonLogin.IsEnabled = false;
-                BtnQuickPatreonLogin.Content = "⭐ Connecting...";
-
+                // Start OAuth flow (legacy - now use LoginDialog instead)
                 try
                 {
                     await App.Patreon.StartOAuthFlowAsync();
 
-                    // Use unified account flow - handles lookup, registration, and linking
-                    var success = await AccountService.HandlePostAuthAsync(this, "patreon");
+                    // Use V2 unified account flow (v5.5+ with seasons system)
+                    var result = await AccountService.HandlePostAuthV2Async(this, "patreon");
 
-                    if (success)
+                    if (result.Success)
                     {
                         UpdateQuickPatreonUI();
                         UpdatePatreonUI();
                         UpdateBannerWelcomeMessage();
+                        UpdateAccountLinkingUI();
+
+                        // Show OG welcome popup if applicable
+                        if (result.ShouldShowOgWelcome)
+                        {
+                            ShowOgWelcomePopup();
+                        }
                     }
                 }
                 catch (OperationCanceledException)
@@ -1961,7 +2280,6 @@ namespace ConditioningControlPanel
                 }
                 finally
                 {
-                    BtnQuickPatreonLogin.IsEnabled = true;
                     UpdateQuickPatreonUI();
                 }
             }
@@ -1969,17 +2287,8 @@ namespace ConditioningControlPanel
 
         private void UpdateQuickPatreonUI()
         {
-            if (App.Patreon?.IsAuthenticated == true)
-            {
-                var name = App.Patreon.DisplayName ?? App.Patreon.PatronName ?? "Connected";
-                BtnQuickPatreonLogin.Content = $"✓ {name}";
-                BtnQuickPatreonLogin.ToolTip = "Click to disconnect Patreon";
-            }
-            else
-            {
-                BtnQuickPatreonLogin.Content = "⭐ Login with Patreon";
-                BtnQuickPatreonLogin.ToolTip = "Login with Patreon for premium features";
-            }
+            // Now managed by unified login panel
+            UpdateQuickLoginUI();
         }
 
         private async void BtnQuickDiscordLogin_Click(object sender, RoutedEventArgs e)
@@ -2010,16 +2319,23 @@ namespace ConditioningControlPanel
                 {
                     await App.Discord.StartOAuthFlowAsync();
 
-                    // Use unified account flow - handles lookup, registration, and linking
-                    var success = await AccountService.HandlePostAuthAsync(this, "discord");
+                    // Use V2 unified account flow (v5.5+ with seasons system)
+                    var result = await AccountService.HandlePostAuthV2Async(this, "discord");
 
-                    if (success)
+                    if (result.Success)
                     {
                         UpdateQuickDiscordUI();
                         UpdateBannerWelcomeMessage();
+                        UpdateAccountLinkingUI();
 
                         // Update bandwidth display (Discord users can inherit Patreon benefits via linked display name)
                         _ = UpdateBandwidthDisplayAsync();
+
+                        // Show OG welcome popup if applicable
+                        if (result.ShouldShowOgWelcome)
+                        {
+                            ShowOgWelcomePopup();
+                        }
                     }
                 }
                 catch (OperationCanceledException)
@@ -2045,26 +2361,18 @@ namespace ConditioningControlPanel
 
         private void SetDiscordButtonsEnabled(bool enabled)
         {
-            BtnQuickDiscordLogin.IsEnabled = enabled;
+            // Old quick button removed - now using unified login
         }
 
         private void SetDiscordButtonsContent(string text)
         {
-            BtnQuickDiscordLogin.Content = $"🎮 {text}";
+            // Old quick button removed - now using unified login
         }
 
         private void UpdateQuickDiscordUI()
         {
-            if (App.Discord?.IsAuthenticated == true)
-            {
-                BtnQuickDiscordLogin.Content = $"✓ {App.Discord.DisplayName ?? "Connected"}";
-                BtnQuickDiscordLogin.ToolTip = "Click to logout";
-            }
-            else
-            {
-                BtnQuickDiscordLogin.Content = "🎮 Login with Discord";
-                BtnQuickDiscordLogin.ToolTip = "Login with Discord for community features";
-            }
+            // Now managed by unified login panel
+            UpdateQuickLoginUI();
 
             // Also update the Patreon tab Discord UI
             UpdateDiscordUI();
@@ -2223,6 +2531,7 @@ namespace ConditioningControlPanel
             LeaderboardTab.Visibility = Visibility.Collapsed;
             AssetsTab.Visibility = Visibility.Collapsed;
             DiscordTab.Visibility = Visibility.Collapsed;
+            EnhancementsTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive
             var inactiveStyle = FindResource("TabButton") as Style;
@@ -2231,6 +2540,7 @@ namespace ConditioningControlPanel
             BtnPresets.Style = inactiveStyle;
             BtnProgression.Style = inactiveStyle;
             BtnQuests.Style = inactiveStyle;
+            BtnEnhancements.Style = inactiveStyle;
             BtnAchievements.Style = inactiveStyle;
             BtnCompanion.Style = inactiveStyle;
             BtnLeaderboard.Style = inactiveStyle;
@@ -2268,6 +2578,12 @@ namespace ConditioningControlPanel
                     QuestsTab.Visibility = Visibility.Visible;
                     BtnQuests.Style = activeStyle;
                     RefreshQuestUI();
+                    break;
+
+                case "enhancements":
+                    EnhancementsTab.Visibility = Visibility.Visible;
+                    BtnEnhancements.Style = activeStyle;
+                    RefreshEnhancementsUI();
                     break;
 
                 case "achievements":
@@ -2452,6 +2768,9 @@ namespace ConditioningControlPanel
                 {
                     LstLeaderboard.ItemsSource = App.Leaderboard.Entries;
                     TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users";
+
+                    // Show/hide Trophy Case columns based on skill unlock
+                    UpdateTrophyCaseColumns();
                 }
                 else
                 {
@@ -2466,6 +2785,42 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnRefreshLeaderboard.IsEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// Show or hide Trophy Case columns based on whether the skill is unlocked
+        /// </summary>
+        private void UpdateTrophyCaseColumns()
+        {
+            try
+            {
+                var hasTrophyCase = App.SkillTree?.HasSkill("trophy_case") == true;
+                var gridView = LstLeaderboard.View as GridView;
+
+                if (gridView != null && gridView.Columns.Count > 0)
+                {
+                    // Find the trophy case columns by name
+                    var longestSessionCol = gridView.Columns.FirstOrDefault(c => c.Header?.ToString() == "Best Session");
+                    var highestStreakCol = gridView.Columns.FirstOrDefault(c => c.Header?.ToString() == "Best Streak");
+
+                    // Set width to 0 to hide, restore to original width to show
+                    if (longestSessionCol != null)
+                    {
+                        longestSessionCol.Width = hasTrophyCase ? 110 : 0;
+                    }
+
+                    if (highestStreakCol != null)
+                    {
+                        highestStreakCol.Width = hasTrophyCase ? 100 : 0;
+                    }
+
+                    App.Logger?.Debug("Trophy Case columns visibility updated: {Visible}", hasTrophyCase);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Error updating Trophy Case columns");
             }
         }
 
@@ -2541,7 +2896,7 @@ namespace ConditioningControlPanel
                 var companionId = (Models.CompanionId)i;
                 var def = Models.CompanionDefinition.GetById(companionId);
                 var progress = App.Companion.GetProgress(companionId);
-                var isUnlocked = playerLevel >= def.RequiredLevel;
+                var isUnlocked = App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false;
 
                 // Update level text - show required level if locked
                 if (isUnlocked)
@@ -2755,6 +3110,22 @@ namespace ConditioningControlPanel
         /// </summary>
         private void CompanionCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
+            // If the click came from the personality button, ignore it (let the button handle it)
+            if (e.OriginalSource is FrameworkElement source)
+            {
+                // Check if clicked element or any of its parents is a personality button
+                var parent = source;
+                while (parent != null)
+                {
+                    if (parent is Button btn && btn.Name != null && btn.Name.Contains("Personality"))
+                    {
+                        App.Logger?.Information("Click originated from personality button, ignoring card click");
+                        return; // Don't handle card click, let button handle it
+                    }
+                    parent = System.Windows.Media.VisualTreeHelper.GetParent(parent) as FrameworkElement;
+                }
+            }
+
             if (sender is not FrameworkElement element || element.Tag == null) return;
             if (!int.TryParse(element.Tag.ToString(), out int companionIndex)) return;
 
@@ -2762,8 +3133,8 @@ namespace ConditioningControlPanel
             var def = Models.CompanionDefinition.GetById(companionId);
             var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
 
-            // Check level requirement
-            if (playerLevel < def.RequiredLevel)
+            // Check level requirement using IsLevelUnlocked (respects OG unlock toggle)
+            if (!(App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false))
             {
                 System.Windows.MessageBox.Show(
                     $"{def.Name} unlocks at Level {def.RequiredLevel}.\n\nYou're currently Level {playerLevel}. Keep training to unlock!",
@@ -2789,19 +3160,32 @@ namespace ConditioningControlPanel
         /// Handles clicking the personality button on a companion card.
         /// Opens a dialog to assign a prompt JSON to this companion.
         /// </summary>
-        private void BtnCompanionPersonality_Click(object sender, RoutedEventArgs e)
+        private void BtnCompanionPersonality_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
+            App.Logger?.Information("Personality button clicked");
             e.Handled = true; // Prevent card click from also triggering
 
-            if (sender is not FrameworkElement element || element.Tag == null) return;
-            if (!int.TryParse(element.Tag.ToString(), out int companionIndex)) return;
+            if (sender is not FrameworkElement element || element.Tag == null)
+            {
+                App.Logger?.Warning("Personality button: sender or tag is null");
+                return;
+            }
+            if (!int.TryParse(element.Tag.ToString(), out int companionIndex))
+            {
+                App.Logger?.Warning("Personality button: failed to parse index");
+                return;
+            }
 
             var companionId = (Models.CompanionId)companionIndex;
             var def = Models.CompanionDefinition.GetById(companionId);
+            var isUnlocked = App.Companion?.IsCompanionUnlocked(companionId) ?? false;
+
+            App.Logger?.Information("Personality clicked: {Companion}, unlocked: {Unlocked}", def.Name, isUnlocked);
 
             // Check if companion is unlocked
-            if (!(App.Companion?.IsCompanionUnlocked(companionId) ?? false))
+            if (!isUnlocked)
             {
+                App.Logger?.Warning("{Companion} is locked", def.Name);
                 ShowStyledDialog("Locked", $"{def.Name} is not unlocked yet.\nUnlock it first to assign a personality.", "OK", "");
                 return;
             }
@@ -3033,15 +3417,18 @@ namespace ConditioningControlPanel
             {
                 var patronName = App.Patreon?.PatronName;
                 var patronEmail = App.Patreon?.PatronEmail;
-                var displayName = App.Patreon?.DisplayName;
                 var isWhitelisted = App.Patreon?.IsWhitelisted == true;
 
-                // Debug: Log what we're getting from Patreon
-                App.Logger?.Debug("Patreon UI Update: Name={Name}, Email={Email}, DisplayName={DisplayName}, Tier={Tier}, Whitelisted={Whitelisted}",
-                    patronName, patronEmail, displayName, tier, isWhitelisted);
+                // Use unified display name first (what user chose), then fall back to Patreon-specific
+                var unifiedDisplayName = App.Settings?.Current?.UserDisplayName;
+                var patreonDisplayName = App.Patreon?.DisplayName;
 
-                // Show DisplayName if user chose one, otherwise fall back to PatronName
-                var nameToShow = !string.IsNullOrEmpty(displayName) ? displayName : patronName;
+                // Debug: Log what we're getting
+                App.Logger?.Debug("Patreon UI Update: UnifiedName={UnifiedName}, PatreonName={PatreonName}, Email={Email}, Tier={Tier}, Whitelisted={Whitelisted}",
+                    unifiedDisplayName, patronName, patronEmail, tier, isWhitelisted);
+
+                // Show unified DisplayName if available, otherwise Patreon display name, otherwise patron name
+                var nameToShow = unifiedDisplayName ?? patreonDisplayName ?? patronName;
                 TxtPatreonStatus.Text = string.IsNullOrEmpty(nameToShow) ? "Connected to Patreon" : $"Welcome, {nameToShow}!";
                 TxtPatreonTier.Text = tier switch
                 {
@@ -3054,9 +3441,14 @@ namespace ConditioningControlPanel
             }
             else
             {
+                // Check if user is logged in with another provider (has unified_id)
+                var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
+
                 TxtPatreonStatus.Text = "Not Connected";
                 TxtPatreonTier.Text = "Login to unlock exclusive features";
-                BtnPatreonLogin.Content = "Login with Patreon";
+
+                // Show "Link Patreon" if logged in via Discord, otherwise "Login"
+                BtnPatreonLogin.Content = hasUnifiedId ? "Link Patreon" : "Login";
             }
 
             // Update feature lockboxes
@@ -3128,40 +3520,49 @@ namespace ConditioningControlPanel
             }
             else
             {
-                // Start OAuth flow
-                BtnPatreonLogin.IsEnabled = false;
-                BtnPatreonLogin.Content = "Connecting...";
+                // Check if user is already logged in with another provider
+                var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                try
+                if (hasUnifiedId)
                 {
-                    await App.Patreon.StartOAuthFlowAsync();
+                    // Link Patreon to existing account
+                    BtnPatreonLogin.IsEnabled = false;
+                    BtnPatreonLogin.Content = "Connecting...";
 
-                    // Use unified account flow - handles lookup, registration, and linking
-                    var success = await AccountService.HandlePostAuthAsync(this, "patreon");
-
-                    if (success)
+                    try
                     {
-                        // Update banner with welcome message
-                        UpdateBannerWelcomeMessage();
+                        await App.Patreon.StartOAuthFlowAsync();
+                        var success = await AccountService.LinkProviderV2Async(this, "patreon");
+
+                        if (success)
+                        {
+                            UpdateQuickPatreonUI();
+                            UpdatePatreonUI();
+                            UpdateDiscordUI();
+                            UpdateAccountLinkingUI();
+                            UpdateBannerWelcomeMessage();
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // User cancelled
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Error(ex, "Failed to link Patreon");
+                        MessageBox.Show($"Failed to link Patreon account.\n\n{ex.Message}",
+                            "Link Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                    finally
+                    {
+                        BtnPatreonLogin.IsEnabled = true;
+                        UpdatePatreonUI();
                     }
                 }
-                catch (OperationCanceledException)
+                else
                 {
-                    // User cancelled - ignore
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Error(ex, "Patreon login failed");
-                    MessageBox.Show(
-                        $"Failed to connect to Patreon.\n\n{ex.Message}",
-                        "Connection Failed",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
-                }
-                finally
-                {
-                    BtnPatreonLogin.IsEnabled = true;
-                    UpdatePatreonUI();
+                    // No account yet - open unified login dialog
+                    OpenUnifiedLoginDialog();
                 }
             }
         }
@@ -3181,43 +3582,49 @@ namespace ConditioningControlPanel
             }
             else
             {
-                // Start OAuth flow
-                BtnDiscordLogin.IsEnabled = false;
-                BtnDiscordLogin.Content = "Connecting...";
+                // Check if user is already logged in with another provider
+                var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                try
+                if (hasUnifiedId)
                 {
-                    await App.Discord.StartOAuthFlowAsync();
+                    // Link Discord to existing account
+                    BtnDiscordLogin.IsEnabled = false;
+                    BtnDiscordLogin.Content = "Connecting...";
 
-                    // Use unified account flow - handles lookup, registration, and linking
-                    var success = await AccountService.HandlePostAuthAsync(this, "discord");
-
-                    if (success)
+                    try
                     {
-                        UpdateDiscordUI();
-                        UpdateBannerWelcomeMessage();
+                        await App.Discord.StartOAuthFlowAsync();
+                        var success = await AccountService.LinkProviderV2Async(this, "discord");
 
-                        // Update bandwidth display (Discord users can inherit Patreon benefits via linked display name)
-                        _ = UpdateBandwidthDisplayAsync();
+                        if (success)
+                        {
+                            UpdateQuickDiscordUI();
+                            UpdateDiscordUI();
+                            UpdatePatreonUI();
+                            UpdateAccountLinkingUI();
+                            UpdateBannerWelcomeMessage();
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // User cancelled
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Error(ex, "Failed to link Discord");
+                        MessageBox.Show($"Failed to link Discord account.\n\n{ex.Message}",
+                            "Link Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                    finally
+                    {
+                        BtnDiscordLogin.IsEnabled = true;
+                        UpdateDiscordUI();
                     }
                 }
-                catch (OperationCanceledException)
+                else
                 {
-                    // User cancelled - ignore
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Error(ex, "Discord login failed");
-                    MessageBox.Show(
-                        $"Failed to connect to Discord.\n\n{ex.Message}",
-                        "Connection Failed",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
-                }
-                finally
-                {
-                    BtnDiscordLogin.IsEnabled = true;
-                    UpdateDiscordUI();
+                    // No account yet - open unified login dialog
+                    OpenUnifiedLoginDialog();
                 }
             }
         }
@@ -3226,19 +3633,129 @@ namespace ConditioningControlPanel
         {
             if (App.Discord?.IsAuthenticated == true)
             {
-                TxtDiscordStatus.Text = $"Connected as {App.Discord.DisplayName}";
+                // Use unified display name first, then fall back to Discord-specific
+                var discordDisplayName = App.Settings?.Current?.UserDisplayName ?? App.Discord.DisplayName;
+                TxtDiscordStatus.Text = $"Connected as {discordDisplayName}";
                 TxtDiscordInfo.Text = $"@{App.Discord.Username}";
                 BtnDiscordLogin.Content = "Logout";
             }
             else
             {
+                // Check if user is logged in with another provider (has unified_id)
+                var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
+
                 TxtDiscordStatus.Text = "Not Connected";
                 TxtDiscordInfo.Text = "Link Discord for community features";
-                BtnDiscordLogin.Content = "Login with Discord";
+
+                // Show "Link Discord" if logged in via Patreon, otherwise "Login"
+                BtnDiscordLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
             }
 
             // Update XP bar login state when Discord auth changes
             UpdateXPBarLoginState();
+        }
+
+        /// <summary>
+        /// Updates the visibility of account linking buttons based on current login state
+        /// </summary>
+        private void UpdateAccountLinkingUI()
+        {
+            // Only show linking section if user is logged in with a unified account
+            var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
+            var hasLinkedPatreon = App.Settings?.Current?.HasLinkedPatreon == true || App.Patreon?.IsAuthenticated == true;
+            var hasLinkedDiscord = App.Settings?.Current?.HasLinkedDiscord == true || App.Discord?.IsAuthenticated == true;
+
+            // Show section only if logged in and missing at least one provider
+            bool showLinkingSection = hasUnifiedId && (!hasLinkedPatreon || !hasLinkedDiscord);
+            AccountLinkingSection.Visibility = showLinkingSection ? Visibility.Visible : Visibility.Collapsed;
+
+            // Show individual buttons for unlinked providers
+            BtnLinkPatreon.Visibility = (hasUnifiedId && !hasLinkedPatreon) ? Visibility.Visible : Visibility.Collapsed;
+            BtnLinkDiscord.Visibility = (hasUnifiedId && !hasLinkedDiscord) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Link Patreon account to existing unified account
+        /// </summary>
+        private async void BtnLinkPatreon_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Patreon == null) return;
+
+            BtnLinkPatreon.IsEnabled = false;
+            BtnLinkPatreon.Content = "Connecting...";
+
+            try
+            {
+                // Start Patreon OAuth flow
+                await App.Patreon.StartOAuthFlowAsync();
+
+                // Link to existing unified account
+                var success = await AccountService.LinkProviderV2Async(this, "patreon");
+
+                if (success)
+                {
+                    UpdateQuickPatreonUI();
+                    UpdatePatreonUI();
+                    UpdateAccountLinkingUI();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // User cancelled
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to link Patreon");
+                MessageBox.Show($"Failed to link Patreon account.\n\n{ex.Message}",
+                    "Link Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            finally
+            {
+                BtnLinkPatreon.IsEnabled = true;
+                BtnLinkPatreon.Content = "⭐ Link Patreon";
+            }
+        }
+
+        /// <summary>
+        /// Link Discord account to existing unified account
+        /// </summary>
+        private async void BtnLinkDiscord_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Discord == null) return;
+
+            BtnLinkDiscord.IsEnabled = false;
+            BtnLinkDiscord.Content = "Connecting...";
+
+            try
+            {
+                // Start Discord OAuth flow
+                await App.Discord.StartOAuthFlowAsync();
+
+                // Link to existing unified account
+                var success = await AccountService.LinkProviderV2Async(this, "discord");
+
+                if (success)
+                {
+                    UpdateQuickDiscordUI();
+                    UpdateDiscordUI();
+                    UpdateAccountLinkingUI();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // User cancelled
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to link Discord");
+                MessageBox.Show($"Failed to link Discord account.\n\n{ex.Message}",
+                    "Link Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            finally
+            {
+                BtnLinkDiscord.IsEnabled = true;
+                BtnLinkDiscord.Content = "🎮 Link Discord";
+            }
         }
 
         private void ChkShareAchievements_Changed(object sender, RoutedEventArgs e)
@@ -4220,8 +4737,10 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // Check both Patreon and Discord for display name
-            var displayName = App.Patreon?.DisplayName ?? App.Discord?.DisplayName;
+            // Check unified display name first, then fall back to provider-specific
+            var displayName = App.Settings?.Current?.UserDisplayName
+                           ?? App.Patreon?.DisplayName
+                           ?? App.Discord?.DisplayName;
             if (!string.IsNullOrEmpty(displayName))
             {
                 TxtBannerSecondary.Text = $"Welcome back, {displayName}!";
@@ -4230,6 +4749,109 @@ namespace ConditioningControlPanel
             {
                 // Not logged in - show generic welcome
                 TxtBannerSecondary.Text = "Welcome! Consider logging in with Patreon for extra features.";
+            }
+        }
+
+        /// <summary>
+        /// Shows the "Welcome Back, Pioneer!" popup for Season 0 OG users
+        /// </summary>
+        private void ShowOgWelcomePopup()
+        {
+            try
+            {
+                var dialog = new Window
+                {
+                    Title = "Welcome Back!",
+                    Owner = this,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    SizeToContent = SizeToContent.WidthAndHeight,
+                    ResizeMode = ResizeMode.NoResize,
+                    WindowStyle = WindowStyle.None,
+                    AllowsTransparency = true,
+                    Background = System.Windows.Media.Brushes.Transparent
+                };
+
+                var border = new System.Windows.Controls.Border
+                {
+                    BorderBrush = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00)), // Gold
+                    BorderThickness = new Thickness(2),
+                    CornerRadius = new CornerRadius(10),
+                    Background = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromRgb(0x1A, 0x1A, 0x2E)),
+                    Padding = new Thickness(30)
+                };
+
+                var stack = new System.Windows.Controls.StackPanel
+                {
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    MaxWidth = 400
+                };
+
+                // Star header
+                stack.Children.Add(new System.Windows.Controls.TextBlock
+                {
+                    Text = "⭐ Welcome Back, Pioneer! ⭐",
+                    FontSize = 24,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00)),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 0, 0, 15)
+                });
+
+                // Message
+                stack.Children.Add(new System.Windows.Controls.TextBlock
+                {
+                    Text = "You've been recognized as a Season 0 OG.\n\n" +
+                           "Your account has been reset for Season 1, but your legacy lives on:\n\n" +
+                           "  ⭐ Your name now has a star icon on the leaderboard\n" +
+                           "  ✨ Your row is highlighted in gold\n" +
+                           "  👑 Everyone will know you were here from the beginning\n\n" +
+                           "Your unlocks and achievements have been preserved.\n" +
+                           "Good luck climbing the leaderboard again!",
+                    FontSize = 13,
+                    Foreground = System.Windows.Media.Brushes.White,
+                    TextWrapping = TextWrapping.Wrap,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Margin = new Thickness(0, 0, 0, 20)
+                });
+
+                // Continue button
+                var button = new System.Windows.Controls.Button
+                {
+                    Content = "Continue",
+                    Padding = new Thickness(30, 10, 30, 10),
+                    Background = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4)),
+                    Foreground = System.Windows.Media.Brushes.White,
+                    BorderThickness = new Thickness(0),
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                };
+                button.Click += (s, e) => dialog.Close();
+                stack.Children.Add(button);
+
+                border.Child = stack;
+                dialog.Content = border;
+                dialog.MouseLeftButtonDown += (s, e) =>
+                {
+                    if (e.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
+                        dialog.DragMove();
+                };
+
+                dialog.ShowDialog();
+
+                // Mark as shown so we don't show again
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.HasShownOgWelcome = true;
+                    App.Settings.Save();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to show OG welcome popup");
             }
         }
 
@@ -4498,6 +5120,1206 @@ namespace ConditioningControlPanel
                 {
                     RefreshQuestUI();
                 }
+            });
+        }
+
+        #endregion
+
+        #region Enhancements (Skill Tree)
+
+        // Node size constants for skill tree (sized for image backgrounds)
+        private const double NodeWidth = 156;  // 10% smaller than 173
+        private const double NodeHeight = 139;  // Includes name label row
+        private const double TierSpacing = 350; // Much larger vertical spacing between tiers
+
+        // Skill grid image cell dimensions (determined dynamically from skills1.png)
+        private static int _skillCellWidth = 0;
+        private static int _skillCellHeight = 0;
+        private static bool _skillCellSizeInitialized = false;
+
+        /// <summary>
+        /// Refreshes the entire Enhancements tab UI
+        /// </summary>
+        private void RefreshEnhancementsUI()
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            // Scroll to the beginning to show the header
+            SkillTreeScroller?.ScrollToHorizontalOffset(0);
+
+            // Update skill points display
+            TxtSkillPoints.Text = settings.SkillPoints.ToString();
+
+            // Update XP multiplier display
+            var multiplier = App.SkillTree?.GetTotalXpMultiplier() ?? 1.0;
+            TxtXpMultiplier.Text = $"{multiplier:F2}x";
+
+            // Update conditioning time display
+            TxtConditioningTime.Text = App.SkillTree?.GetFormattedConditioningTime() ?? "0h 0m";
+
+            // Update Pink Rush indicator
+            TxtPinkRushIndicator.Visibility = settings.PinkRushActive ? Visibility.Visible : Visibility.Collapsed;
+
+            // Draw the skill tree on canvas
+            DrawSkillTree();
+
+            // Update active bonuses panel
+            RefreshActiveBonuses();
+        }
+
+        /// <summary>
+        /// Draws the entire skill tree with nodes and connecting lines
+        /// </summary>
+        private void DrawSkillTree()
+        {
+            SkillTreeCanvas.Children.Clear();
+
+            // Add header section at the start of the canvas
+            CreateSkillTreeHeader();
+
+            // 3 LINEAR HORIZONTAL PATHS
+            var nodePositions = new Dictionary<string, (double X, double Y)>();
+
+            var startX = 570.0;  // Start after the header section (20 + 500 + 50 margin)
+            var startY = 0.0;    // Align with header top
+            var colSpacing = 230.0; // Horizontal spacing between nodes
+            var rowSpacing = 130.0; // Reduced vertical spacing between the 3 paths
+
+            // COLUMN 0: Root node (centered, branches to 3 paths)
+            var rootY = startY + rowSpacing; // Center vertically
+            nodePositions["pink_hours"] = (startX, rootY);
+
+            // PATH 1 (TOP ROW): ditzy_data branch
+            var path1Y = startY;
+            nodePositions["ditzy_data"] = (startX + colSpacing, path1Y);
+            nodePositions["hive_mind"] = (startX + colSpacing * 2, path1Y);
+            nodePositions["trophy_case"] = (startX + colSpacing * 3, path1Y);
+            nodePositions["popular_girl"] = (startX + colSpacing * 4, path1Y);
+            nodePositions["quest_refresh"] = (startX + colSpacing * 5, path1Y);
+            nodePositions["better_quests"] = (startX + colSpacing * 6, path1Y);
+
+            // PATH 2 (MIDDLE ROW): sparkle_boost_1 branch
+            var path2Y = startY + rowSpacing;
+            nodePositions["sparkle_boost_1"] = (startX + colSpacing, path2Y);
+            nodePositions["sparkle_boost_2"] = (startX + colSpacing * 2, path2Y);
+            nodePositions["lucky_bimbo"] = (startX + colSpacing * 3, path2Y);
+            nodePositions["sparkle_boost_3"] = (startX + colSpacing * 4, path2Y);
+            nodePositions["lucky_bubbles"] = (startX + colSpacing * 5, path2Y);
+            nodePositions["pink_rush"] = (startX + colSpacing * 6, path2Y);
+
+            // PATH 3 (BOTTOM ROW): good_girl_streak branch
+            var path3Y = startY + rowSpacing * 2;
+            nodePositions["good_girl_streak"] = (startX + colSpacing, path3Y);
+            nodePositions["milestone_rewards"] = (startX + colSpacing * 2, path3Y);
+            nodePositions["oopsie_insurance"] = (startX + colSpacing * 3, path3Y);
+            nodePositions["streak_power"] = (startX + colSpacing * 4, path3Y);
+            nodePositions["reroll_addict"] = (startX + colSpacing * 5, path3Y);
+            nodePositions["perfect_bimbo_week"] = (startX + colSpacing * 6, path3Y);
+
+            // Draw connection lines first (so they're behind nodes)
+            DrawConnectionLines(nodePositions);
+
+            // Draw skill nodes (excluding secret skills)
+            foreach (var skill in Models.SkillDefinition.All.Where(s => !s.IsSecret))
+            {
+                if (nodePositions.TryGetValue(skill.Id, out var pos))
+                {
+                    var node = CreateSkillNode(skill);
+                    Canvas.SetLeft(node, pos.X);
+                    Canvas.SetTop(node, pos.Y);
+                    SkillTreeCanvas.Children.Add(node);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Creates the header panel at the start of the skill tree
+        /// </summary>
+        private void CreateSkillTreeHeader()
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            // Main header border
+            var headerBorder = new Border
+            {
+                Width = 500,
+                Background = new SolidColorBrush(Color.FromRgb(26, 26, 46)),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(15, 8, 15, 15) // Left, Top, Right, Bottom
+            };
+            Canvas.SetLeft(headerBorder, 5);
+            Canvas.SetTop(headerBorder, 0);
+
+            var mainStack = new StackPanel();
+
+            // Title section
+            var titleStack = new StackPanel { Margin = new Thickness(0, 0, 0, 15) };
+            titleStack.Children.Add(new TextBlock
+            {
+                Text = "✨ Bimbo Enhancement Tree",
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                FontSize = 22,
+                FontWeight = FontWeights.Bold
+            });
+            titleStack.Children.Add(new TextBlock
+            {
+                Text = "Like, spend your sparkle points to unlock super cute bonuses~",
+                Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                FontSize = 11,
+                Margin = new Thickness(0, 4, 0, 0)
+            });
+            mainStack.Children.Add(titleStack);
+
+            // Sparkle Points display
+            var pointsBorder = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(42, 42, 74)),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(15, 10, 15, 10),
+                Margin = new Thickness(0, 0, 0, 15)
+            };
+            var pointsStack = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            pointsStack.Children.Add(new TextBlock
+            {
+                Text = "💎",
+                FontSize = 24,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 10, 0)
+            });
+            var pointsInfoStack = new StackPanel();
+            pointsInfoStack.Children.Add(new TextBlock
+            {
+                Text = "Sparkle Points",
+                Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                FontSize = 10
+            });
+            pointsInfoStack.Children.Add(new TextBlock
+            {
+                Text = settings.SkillPoints.ToString(),
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                FontSize = 24,
+                FontWeight = FontWeights.Bold
+            });
+            pointsStack.Children.Add(pointsInfoStack);
+            pointsBorder.Child = pointsStack;
+            mainStack.Children.Add(pointsBorder);
+
+            // Ditzy Data Stats Toggle Button
+            var ditzyButton = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(60, 40, 80)),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(0, 0, 0, 10),
+                Cursor = Cursors.Hand,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                BorderThickness = new Thickness(1)
+            };
+            var ditzyButtonStack = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+            var ditzyArrow = new TextBlock
+            {
+                Text = " ▼",
+                Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            ditzyButtonStack.Children.Add(new TextBlock
+            {
+                Text = "📊 ",
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            ditzyButtonStack.Children.Add(new TextBlock
+            {
+                Text = "Ditzy Data Stats",
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 182, 193)),
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            ditzyButtonStack.Children.Add(ditzyArrow);
+            ditzyButton.Child = ditzyButtonStack;
+
+            // Detailed Stats Box (initially hidden)
+            var detailedStatsBorder = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(22, 22, 42)),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 0, 0, 15),
+                Visibility = Visibility.Collapsed // Start hidden
+            };
+            var detailedStatsStack = new StackPanel();
+
+            // Toggle click handler
+            ditzyButton.MouseLeftButtonDown += (s, e) =>
+            {
+                var isCollapsed = detailedStatsBorder.Visibility == Visibility.Collapsed;
+                detailedStatsBorder.Visibility = isCollapsed ? Visibility.Visible : Visibility.Collapsed;
+                ditzyArrow.Text = isCollapsed ? " ▲" : " ▼";
+            };
+            mainStack.Children.Add(ditzyButton);
+
+            // Stats title
+            detailedStatsStack.Children.Add(new TextBlock
+            {
+                Text = "📊 Ditzy Data Stats",
+                Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            var achievements = App.Achievements?.Progress;
+            if (achievements != null)
+            {
+                // Create a grid for stats layout (3 columns)
+                var statsGrid = new Grid();
+                statsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                statsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                statsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                int row = 0;
+                void AddStatRow(string label, string value, int column)
+                {
+                    var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = label,
+                        Foreground = new SolidColorBrush(Color.FromRgb(140, 140, 140)),
+                        FontSize = 9
+                    });
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = value,
+                        Foreground = new SolidColorBrush(Color.FromRgb(255, 255, 255)),
+                        FontSize = 10,
+                        FontWeight = FontWeights.Bold
+                    });
+                    Grid.SetColumn(stack, column);
+                    Grid.SetRow(stack, row);
+                    statsGrid.Children.Add(stack);
+                }
+
+                // Row 1: Session stats
+                statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                AddStatRow("Sessions Started", achievements.TotalSessionsStarted.ToString("N0"), 0);
+                AddStatRow("Sessions Completed", achievements.CompletedSessions.Count.ToString("N0"), 1);
+                AddStatRow("Sessions Abandoned", achievements.TotalSessionsAbandoned.ToString("N0"), 2);
+                row++;
+
+                // Row 2: XP & Skill Points
+                statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                AddStatRow("Total XP Earned", achievements.TotalXPEarned.ToString("N0"), 0);
+                AddStatRow("Skill Points Earned", achievements.TotalSkillPointsEarned.ToString("N0"), 1);
+                AddStatRow("Longest Session", $"{achievements.LongestSessionMinutes:F1} min", 2);
+                row++;
+
+                // Row 3: Attention checks
+                statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                AddStatRow("Attention Passes", achievements.TotalAttentionChecksPassed.ToString("N0"), 0);
+                AddStatRow("Video Att. Passed", achievements.VideoAttentionChecksPassed.ToString("N0"), 1);
+                AddStatRow("Video Att. Failed", achievements.VideoAttentionChecksFailed.ToString("N0"), 2);
+                row++;
+
+                // Row 4: Bubble count
+                statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                AddStatRow("Bubble Count Games", achievements.TotalBubbleCountGames.ToString("N0"), 0);
+                AddStatRow("BC Correct", achievements.TotalBubbleCountCorrect.ToString("N0"), 1);
+                AddStatRow("BC Best Streak", achievements.BubbleCountBestStreak.ToString("N0"), 2);
+                row++;
+
+                // Row 5: Content consumption
+                statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                AddStatRow("Total Flashes", achievements.TotalFlashImages.ToString("N0"), 0);
+                AddStatRow("Bubbles Popped", achievements.TotalBubblesPopped.ToString("N0"), 1);
+                AddStatRow("Lock Cards Done", achievements.TotalLockCardsCompleted.ToString("N0"), 2);
+                row++;
+
+                // Row 6: Time stats
+                statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                AddStatRow("Pink Filter Time", $"{achievements.TotalPinkFilterMinutes:F1} min", 0);
+                AddStatRow("Spiral Time", $"{achievements.TotalSpiralMinutes:F1} min", 1);
+                AddStatRow("Consecutive Days", achievements.ConsecutiveDays.ToString("N0"), 2);
+
+                detailedStatsStack.Children.Add(statsGrid);
+            }
+
+            detailedStatsBorder.Child = detailedStatsStack;
+            mainStack.Children.Add(detailedStatsBorder);
+
+            // Stats section
+            var statsBorder = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(30, 30, 58)),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(12)
+            };
+            var statsStack = new StackPanel();
+
+            // XP Mult
+            var multiplier = App.SkillTree?.GetTotalXpMultiplier() ?? 1.0;
+            var xpStack = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            xpStack.Children.Add(new TextBlock
+            {
+                Text = "XP Mult: ",
+                Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            xpStack.Children.Add(new TextBlock
+            {
+                Text = $"{multiplier:F2}x",
+                Foreground = new SolidColorBrush(Color.FromRgb(0, 255, 136)),
+                FontSize = 14,
+                FontWeight = FontWeights.Bold,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            if (settings.PinkRushActive)
+            {
+                xpStack.Children.Add(new TextBlock
+                {
+                    Text = " 🔥 RUSH!",
+                    Foreground = new SolidColorBrush(Color.FromRgb(255, 20, 147)),
+                    FontSize = 12,
+                    FontWeight = FontWeights.Bold,
+                    VerticalAlignment = VerticalAlignment.Center
+                });
+            }
+            statsStack.Children.Add(xpStack);
+
+            // Time
+            var conditioningTime = App.SkillTree?.GetFormattedConditioningTime() ?? "0h 0m";
+            var timeStack = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            timeStack.Children.Add(new TextBlock
+            {
+                Text = "⏱️ ",
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            timeStack.Children.Add(new TextBlock
+            {
+                Text = conditioningTime,
+                Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            statsStack.Children.Add(timeStack);
+
+            statsBorder.Child = statsStack;
+            mainStack.Children.Add(statsBorder);
+
+            // Active Bonuses Section
+            var breakdown = App.SkillTree?.GetMultiplierBreakdown() ?? new List<(string, double)>();
+            if (breakdown.Count > 1) // Only show if there are bonuses beyond base
+            {
+                var bonusesTitle = new TextBlock
+                {
+                    Text = "Active Bonuses:",
+                    Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                    FontSize = 11,
+                    Margin = new Thickness(0, 15, 0, 8)
+                };
+                mainStack.Children.Add(bonusesTitle);
+
+                var bonusesWrap = new WrapPanel { Orientation = Orientation.Horizontal };
+                foreach (var (source, value) in breakdown)
+                {
+                    if (source == "Base") continue; // Don't show base multiplier
+
+                    var chip = new Border
+                    {
+                        Background = new SolidColorBrush(Color.FromRgb(60, 40, 80)),
+                        CornerRadius = new CornerRadius(12),
+                        Padding = new Thickness(10, 5, 10, 5),
+                        Margin = new Thickness(0, 0, 8, 8)
+                    };
+
+                    chip.Child = new TextBlock
+                    {
+                        Text = $"{source}: +{value:P0}",
+                        Foreground = new SolidColorBrush(Color.FromRgb(255, 182, 193)),
+                        FontSize = 11
+                    };
+
+                    bonusesWrap.Children.Add(chip);
+                }
+                mainStack.Children.Add(bonusesWrap);
+            }
+
+            headerBorder.Child = mainStack;
+            SkillTreeCanvas.Children.Add(headerBorder);
+        }
+
+        /// <summary>
+        /// Redirects vertical mouse wheel scrolling to horizontal scrolling for the skill tree
+        /// </summary>
+        private void SkillTreeScroller_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+        {
+            if (sender is ScrollViewer scrollViewer)
+            {
+                // Scroll horizontally instead of vertically
+                double offset = scrollViewer.HorizontalOffset - (e.Delta * 0.5);
+                scrollViewer.ScrollToHorizontalOffset(offset);
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// Draws connecting lines between parent and child nodes
+        /// </summary>
+        private void DrawConnectionLines(Dictionary<string, (double X, double Y)> positions)
+        {
+            var connections = new List<(string Parent, string Child)>
+            {
+                // Root branches into 3 paths
+                ("pink_hours", "ditzy_data"),
+                ("pink_hours", "sparkle_boost_1"),
+                ("pink_hours", "good_girl_streak"),
+
+                // PATH 1 (TOP): Linear progression
+                ("ditzy_data", "hive_mind"),
+                ("hive_mind", "trophy_case"),
+                ("trophy_case", "popular_girl"),
+                ("popular_girl", "quest_refresh"),
+                ("quest_refresh", "better_quests"),
+
+                // PATH 2 (MIDDLE): Linear progression
+                ("sparkle_boost_1", "sparkle_boost_2"),
+                ("sparkle_boost_2", "lucky_bimbo"),
+                ("lucky_bimbo", "sparkle_boost_3"),
+                ("sparkle_boost_3", "lucky_bubbles"),
+                ("lucky_bubbles", "pink_rush"),
+
+                // PATH 3 (BOTTOM): Linear progression
+                ("good_girl_streak", "milestone_rewards"),
+                ("milestone_rewards", "oopsie_insurance"),
+                ("oopsie_insurance", "streak_power"),
+                ("streak_power", "reroll_addict"),
+                ("reroll_addict", "perfect_bimbo_week"),
+            };
+
+            foreach (var (parent, child) in connections)
+            {
+                if (positions.TryGetValue(parent, out var parentPos) &&
+                    positions.TryGetValue(child, out var childPos))
+                {
+                    var isParentUnlocked = App.SkillTree?.HasSkill(parent) == true;
+                    var isChildUnlocked = App.SkillTree?.HasSkill(child) == true;
+
+                    // Line color based on unlock state
+                    var lineColor = isChildUnlocked ? Color.FromRgb(100, 255, 150) :
+                                   isParentUnlocked ? Color.FromRgb(255, 105, 180) :
+                                   Color.FromRgb(60, 60, 80);
+
+                    // HORIZONTAL LAYOUT: Connect right edge of parent to left edge of child
+                    var line = new System.Windows.Shapes.Line
+                    {
+                        X1 = parentPos.X + NodeWidth,           // Right edge of parent
+                        Y1 = parentPos.Y + NodeHeight / 2,      // Vertical center of parent
+                        X2 = childPos.X,                        // Left edge of child
+                        Y2 = childPos.Y + NodeHeight / 2,       // Vertical center of child
+                        Stroke = new SolidColorBrush(lineColor),
+                        StrokeThickness = isChildUnlocked ? 3 : 2,
+                        Opacity = isParentUnlocked || isChildUnlocked ? 1.0 : 0.3
+                    };
+
+                    // Add glow effect for unlocked paths
+                    if (isChildUnlocked)
+                    {
+                        line.Effect = new DropShadowEffect
+                        {
+                            Color = Colors.LimeGreen,
+                            BlurRadius = 8,
+                            ShadowDepth = 0,
+                            Opacity = 0.6
+                        };
+                    }
+
+                    SkillTreeCanvas.Children.Add(line);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Creates a skill node for the tree canvas with image background support
+        /// </summary>
+        private Border CreateSkillNode(Models.SkillDefinition skill)
+        {
+            var isUnlocked = App.SkillTree?.HasSkill(skill.Id) == true;
+            var canPurchase = App.SkillTree?.CanPurchaseSkill(skill.Id) == true;
+            var hasPrereq = string.IsNullOrEmpty(skill.PrerequisiteId) ||
+                           App.SkillTree?.HasSkill(skill.PrerequisiteId) == true;
+            var settings = App.Settings?.Current;
+            var isLocked = !isUnlocked && !canPurchase;
+
+            // Border color based on state
+            Color borderColor;
+            if (isUnlocked)
+                borderColor = Color.FromRgb(100, 255, 150);
+            else if (canPurchase)
+                borderColor = Color.FromRgb(255, 105, 180);
+            else
+                borderColor = Color.FromRgb(60, 50, 70);
+
+            var border = new Border
+            {
+                CornerRadius = new CornerRadius(10),
+                Width = NodeWidth,
+                Height = NodeHeight,
+                Cursor = canPurchase ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.Arrow,
+                Tag = skill.Id,
+                ClipToBounds = true,
+                RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+                RenderTransform = new ScaleTransform(1.0, 1.0)
+            };
+
+            // Add glow effect for unlocked or purchasable nodes
+            if (isUnlocked)
+            {
+                border.Effect = new DropShadowEffect
+                {
+                    Color = Colors.LimeGreen,
+                    BlurRadius = 18,
+                    ShadowDepth = 0,
+                    Opacity = 0.6
+                };
+            }
+            else if (canPurchase)
+            {
+                border.Effect = new DropShadowEffect
+                {
+                    Color = Colors.HotPink,
+                    BlurRadius = 15,
+                    ShadowDepth = 0,
+                    Opacity = 0.7
+                };
+            }
+
+            // Hover animation
+            border.MouseEnter += (s, e) =>
+            {
+                var scaleTransform = border.RenderTransform as ScaleTransform;
+                if (scaleTransform != null)
+                {
+                    var anim = new System.Windows.Media.Animation.DoubleAnimation
+                    {
+                        To = 1.1,
+                        Duration = TimeSpan.FromMilliseconds(200),
+                        EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                    };
+                    scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+                    scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+                }
+            };
+
+            border.MouseLeave += (s, e) =>
+            {
+                var scaleTransform = border.RenderTransform as ScaleTransform;
+                if (scaleTransform != null)
+                {
+                    var anim = new System.Windows.Media.Animation.DoubleAnimation
+                    {
+                        To = 1.0,
+                        Duration = TimeSpan.FromMilliseconds(150),
+                        EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+                    };
+                    scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+                    scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+                }
+            };
+
+            // Click handler
+            if (canPurchase)
+            {
+                border.MouseLeftButtonUp += SkillCard_Click;
+            }
+
+            // Tooltip
+            var tooltipStack = new StackPanel { MaxWidth = 280 };
+            tooltipStack.Children.Add(new TextBlock
+            {
+                Text = skill.FlavorText,
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 182, 193)),
+                FontStyle = FontStyles.Italic,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+            tooltipStack.Children.Add(new TextBlock
+            {
+                Text = skill.Description,
+                Foreground = Brushes.White,
+                TextWrapping = TextWrapping.Wrap
+            });
+            if (!string.IsNullOrEmpty(skill.PrerequisiteId) && !hasPrereq)
+            {
+                var prereqSkill = Models.SkillDefinition.All.FirstOrDefault(s => s.Id == skill.PrerequisiteId);
+                tooltipStack.Children.Add(new TextBlock
+                {
+                    Text = $"🔒 Requires: {prereqSkill?.Name ?? skill.PrerequisiteId}",
+                    Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 100)),
+                    Margin = new Thickness(0, 6, 0, 0)
+                });
+            }
+
+            border.ToolTip = new ToolTip
+            {
+                Content = tooltipStack,
+                Background = new SolidColorBrush(Color.FromRgb(30, 30, 50)),
+                Foreground = Brushes.White,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                Padding = new Thickness(10)
+            };
+
+            // Main content grid: image, name label, gap, button
+            var contentGrid = new Grid();
+            contentGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(86) }); // Row 0: Image area
+            contentGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(20) }); // Row 1: Skill name
+            contentGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(3) });  // Row 2: Gap
+            contentGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) }); // Row 3: Button area
+
+            // Row 0: Image (blurred if locked)
+            bool imageLoaded = false;
+
+            // Try to load skill image (will support individual files like skills/hive_mind.png)
+            try
+            {
+                var imagePath = $"pack://application:,,,/Resources/skills/{skill.Id}.png";
+                var skillImage = new System.Windows.Controls.Image
+                {
+                    Source = new BitmapImage(new Uri(imagePath, UriKind.Absolute)),
+                    Stretch = Stretch.UniformToFill
+                };
+
+                // Blur effect if locked
+                if (isLocked)
+                {
+                    skillImage.Effect = new System.Windows.Media.Effects.BlurEffect
+                    {
+                        Radius = 8
+                    };
+                }
+
+                Grid.SetRow(skillImage, 0);
+                contentGrid.Children.Add(skillImage);
+                imageLoaded = true;
+            }
+            catch
+            {
+                // Fallback to gradient placeholder
+                var imagePlaceholder = new Border
+                {
+                    Background = CreateSkillPlaceholderGradient(skill.Tier),
+                    CornerRadius = new CornerRadius(8, 8, 0, 0)
+                };
+
+                // Blur gradient if locked
+                if (isLocked)
+                {
+                    imagePlaceholder.Effect = new System.Windows.Media.Effects.BlurEffect
+                    {
+                        Radius = 8
+                    };
+                }
+
+                Grid.SetRow(imagePlaceholder, 0);
+                contentGrid.Children.Add(imagePlaceholder);
+            }
+
+            // Row 1: Skill name label
+            var nameLabel = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(30, 28, 45)),
+                Child = new TextBlock
+                {
+                    Text = skill.Name,
+                    Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 210)),
+                    FontSize = 9.5,
+                    FontWeight = FontWeights.SemiBold,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                }
+            };
+            Grid.SetRow(nameLabel, 1);
+            contentGrid.Children.Add(nameLabel);
+
+            // Row 3: Cost/Status Button
+            var buttonBg = isUnlocked ? Color.FromRgb(100, 255, 150) :
+                          canPurchase ? Color.FromRgb(255, 105, 180) :
+                          Color.FromRgb(40, 35, 50);
+
+            var buttonText = isUnlocked ? "✓ OWNED" :
+                            canPurchase ? $"💎 {skill.Cost}" :
+                            $"🔒 {skill.Cost}";
+
+            var buttonTextColor = isUnlocked ? Color.FromRgb(20, 20, 30) :
+                                 canPurchase ? Colors.White :
+                                 Color.FromRgb(120, 120, 130);
+
+            var statusButton = new Border
+            {
+                Background = new SolidColorBrush(buttonBg),
+                CornerRadius = new CornerRadius(0, 0, 8, 8),
+                Child = new TextBlock
+                {
+                    Text = buttonText,
+                    Foreground = new SolidColorBrush(buttonTextColor),
+                    FontSize = 10,
+                    FontWeight = FontWeights.Bold,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
+
+            Grid.SetRow(statusButton, 3);  // Row 3 (after gap)
+            contentGrid.Children.Add(statusButton);
+
+            border.Child = contentGrid;
+            return border;
+        }
+
+        /// <summary>
+        /// Creates a placeholder gradient for skill nodes based on tier
+        /// </summary>
+        private LinearGradientBrush CreateSkillPlaceholderGradient(int tier)
+        {
+            // Different color schemes per tier for visual distinction
+            var (startColor, endColor) = tier switch
+            {
+                1 => (Color.FromRgb(80, 50, 100), Color.FromRgb(50, 30, 70)),   // Purple - Foundation
+                2 => (Color.FromRgb(100, 50, 80), Color.FromRgb(60, 30, 50)),   // Pink - Core
+                3 => (Color.FromRgb(80, 60, 100), Color.FromRgb(45, 35, 65)),   // Deep Purple - Specialization
+                4 => (Color.FromRgb(100, 40, 90), Color.FromRgb(55, 25, 50)),   // Hot Pink - Mastery
+                _ => (Color.FromRgb(60, 40, 80), Color.FromRgb(35, 25, 50))     // Default
+            };
+
+            return new LinearGradientBrush
+            {
+                StartPoint = new System.Windows.Point(0, 0),
+                EndPoint = new System.Windows.Point(1, 1),
+                GradientStops = new GradientStopCollection
+                {
+                    new GradientStop(startColor, 0),
+                    new GradientStop(endColor, 1)
+                }
+            };
+        }
+
+        /// <summary>
+        /// Determines the cell dimensions of the skill grid images
+        /// </summary>
+        private static (int cellWidth, int cellHeight) GetSkillGridCellSize()
+        {
+            try
+            {
+                var uri = new Uri("pack://application:,,,/Resources/skills1.png", UriKind.Absolute);
+                var bitmap = new BitmapImage(uri);
+
+                // Grid is 3 columns × 2 rows
+                int cellWidth = bitmap.PixelWidth / 3;
+                int cellHeight = bitmap.PixelHeight / 2;
+
+                return (cellWidth, cellHeight);
+            }
+            catch
+            {
+                // Fallback if image doesn't load
+                return (0, 0);
+            }
+        }
+
+        /// <summary>
+        /// Maps skill IDs to their source image and crop coordinates
+        /// </summary>
+        private (string? imageFile, Int32Rect cropRect) GetSkillImageCrop(string skillId)
+        {
+            // Initialize cell dimensions if not already done
+            if (!_skillCellSizeInitialized)
+            {
+                (_skillCellWidth, _skillCellHeight) = GetSkillGridCellSize();
+                _skillCellSizeInitialized = true;
+            }
+
+            // If dimensions couldn't be determined, return null
+            if (_skillCellWidth == 0 || _skillCellHeight == 0)
+                return (null, new Int32Rect(0, 0, 0, 0));
+
+            var mapping = new Dictionary<string, (string file, int col, int row)>
+            {
+                // skills1.png
+                ["hive_mind"] = ("skills1.png", 0, 0),
+                ["trophy_case"] = ("skills1.png", 1, 0),
+                ["sparkle_boost_2"] = ("skills1.png", 2, 0),
+                ["lucky_bimbo"] = ("skills1.png", 0, 1),
+                ["milestone_rewards"] = ("skills1.png", 1, 1),
+                ["oopsie_insurance"] = ("skills1.png", 2, 1),
+
+                // skills2.png
+                ["popular_girl"] = ("skills2.png", 0, 0),
+                ["quest_refresh"] = ("skills2.png", 1, 0),
+                ["better_quests"] = ("skills2.png", 2, 0),
+                ["sparkle_boost_3"] = ("skills2.png", 0, 1),
+                ["lucky_bubbles"] = ("skills2.png", 1, 1),
+                ["pink_rush"] = ("skills2.png", 2, 1),
+
+                // skills3.png
+                ["streak_power"] = ("skills3.png", 0, 0),
+                ["reroll_addict"] = ("skills3.png", 1, 0),
+                ["perfect_bimbo_week"] = ("skills3.png", 2, 0),
+                ["night_shift"] = ("skills3.png", 0, 1),
+                ["early_bird_bimbo"] = ("skills3.png", 1, 1),
+                ["eternal_doll"] = ("skills3.png", 2, 1),
+            };
+
+            if (mapping.TryGetValue(skillId, out var info))
+            {
+                int x = info.col * _skillCellWidth;
+                int y = info.row * _skillCellHeight;
+                return (info.file, new Int32Rect(x, y, _skillCellWidth, _skillCellHeight));
+            }
+
+            return (null, new Int32Rect(0, 0, 0, 0));
+        }
+
+        /// <summary>
+        /// Populates the secret skills panel
+        /// </summary>
+        private void PopulateSecretSkills()
+        {
+            // DISABLED: Secret skills panel removed from UI
+            return;
+            // SecretSkills.Children.Clear();
+            var secrets = Models.SkillDefinition.All.Where(s => s.IsSecret).ToList();
+
+            foreach (var skill in secrets)
+            {
+                var isAvailable = App.SkillTree?.IsSecretSkillAvailable(skill.Id) == true;
+                var isUnlocked = App.SkillTree?.HasSkill(skill.Id) == true;
+
+                // Show hidden card if not available, actual card if available
+                if (isAvailable || isUnlocked)
+                {
+                    // SecretSkills.Children.Add(CreateSecretSkillCard(skill));
+                }
+                else
+                {
+                    // SecretSkills.Children.Add(CreateHiddenSecretCard(skill));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Creates a hidden secret skill card showing only the requirement hint
+        /// </summary>
+        private Border CreateHiddenSecretCard(Models.SkillDefinition skill)
+        {
+            var border = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(30, 20, 40)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(80, 60, 100)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Width = 140,
+                Height = 100,
+                Margin = new Thickness(5),
+                Padding = new Thickness(8),
+                Opacity = 0.6
+            };
+
+            var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = "🔒",
+                FontSize = 20,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 5)
+            });
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = "???",
+                Foreground = new SolidColorBrush(Color.FromRgb(153, 50, 204)),
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = skill.SecretRequirementDesc ?? "Unknown requirement",
+                Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 128)),
+                FontSize = 9,
+                TextWrapping = TextWrapping.Wrap,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 4, 0, 0)
+            });
+
+            border.Child = stack;
+            return border;
+        }
+
+        /// <summary>
+        /// Creates a secret skill card (revealed but maybe not purchased)
+        /// </summary>
+        private Border CreateSecretSkillCard(Models.SkillDefinition skill)
+        {
+            var settings = App.Settings?.Current;
+            var isUnlocked = App.SkillTree?.HasSkill(skill.Id) == true;
+            var canPurchase = App.SkillTree?.CanPurchaseSkill(skill.Id) == true;
+
+            Color bgColor, borderColor;
+            if (isUnlocked)
+            {
+                bgColor = Color.FromRgb(40, 30, 50);
+                borderColor = Color.FromRgb(180, 100, 255);
+            }
+            else if (canPurchase)
+            {
+                bgColor = Color.FromRgb(50, 30, 60);
+                borderColor = Color.FromRgb(153, 50, 204);
+            }
+            else
+            {
+                bgColor = Color.FromRgb(35, 25, 45);
+                borderColor = Color.FromRgb(100, 70, 130);
+            }
+
+            var border = new Border
+            {
+                Background = new SolidColorBrush(bgColor),
+                BorderBrush = new SolidColorBrush(borderColor),
+                BorderThickness = new Thickness(isUnlocked ? 2 : 1),
+                CornerRadius = new CornerRadius(8),
+                Width = 140,
+                Height = 100,
+                Margin = new Thickness(5),
+                Padding = new Thickness(8),
+                Cursor = canPurchase ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.Arrow,
+                Tag = skill.Id
+            };
+
+            if (isUnlocked)
+            {
+                border.Effect = new DropShadowEffect
+                {
+                    Color = Colors.Purple,
+                    BlurRadius = 12,
+                    ShadowDepth = 0,
+                    Opacity = 0.5
+                };
+            }
+            else if (canPurchase)
+            {
+                border.Effect = new DropShadowEffect
+                {
+                    Color = Colors.MediumPurple,
+                    BlurRadius = 10,
+                    ShadowDepth = 0,
+                    Opacity = 0.4
+                };
+            }
+
+            if (canPurchase)
+            {
+                border.MouseLeftButtonUp += SkillCard_Click;
+            }
+
+            // Tooltip
+            var tooltipStack = new StackPanel { MaxWidth = 280 };
+            tooltipStack.Children.Add(new TextBlock
+            {
+                Text = skill.FlavorText,
+                Foreground = new SolidColorBrush(Color.FromRgb(200, 150, 255)),
+                FontStyle = FontStyles.Italic,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+            tooltipStack.Children.Add(new TextBlock
+            {
+                Text = skill.Description,
+                Foreground = Brushes.White,
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            border.ToolTip = new ToolTip
+            {
+                Content = tooltipStack,
+                Background = new SolidColorBrush(Color.FromRgb(40, 25, 55)),
+                Foreground = Brushes.White,
+                BorderBrush = new SolidColorBrush(Color.FromRgb(153, 50, 204)),
+                Padding = new Thickness(10)
+            };
+
+            var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = skill.Icon,
+                FontSize = 18,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 3)
+            });
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = skill.Name,
+                Foreground = new SolidColorBrush(isUnlocked ? Color.FromRgb(180, 130, 255) : Color.FromRgb(153, 50, 204)),
+                FontSize = 10,
+                FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+                TextAlignment = TextAlignment.Center
+            });
+
+            if (isUnlocked)
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = "✓ OWNED",
+                    Foreground = new SolidColorBrush(Color.FromRgb(180, 130, 255)),
+                    FontSize = 9,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 4, 0, 0)
+                });
+            }
+            else
+            {
+                var costColor = (settings?.SkillPoints >= skill.Cost)
+                    ? Color.FromRgb(255, 215, 0)
+                    : Color.FromRgb(120, 120, 120);
+
+                stack.Children.Add(new TextBlock
+                {
+                    Text = $"💎 {skill.Cost}",
+                    Foreground = new SolidColorBrush(costColor),
+                    FontSize = 10,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 4, 0, 0)
+                });
+            }
+
+            border.Child = stack;
+            return border;
+        }
+
+        /// <summary>
+        /// Handles clicking on a purchasable skill card
+        /// </summary>
+        private void SkillCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (sender is Border border && border.Tag is string skillId)
+            {
+                var skill = Models.SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
+                if (skill == null) return;
+
+                // Show confirmation dialog
+                var result = MessageBox.Show(
+                    $"Purchase '{skill.Name}' for {skill.Cost} sparkle points?\n\n{skill.FlavorText}\n\n{skill.Description}",
+                    "Purchase Enhancement",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    if (App.SkillTree?.PurchaseSkill(skillId) == true)
+                    {
+                        // Show celebration
+                        App.Flash?.PlayRandomSound();
+
+                        // Refresh UI
+                        RefreshEnhancementsUI();
+
+                        // Update Trophy Case columns if trophy_case was purchased
+                        if (skillId == "trophy_case")
+                        {
+                            UpdateTrophyCaseColumns();
+                        }
+
+                        App.Logger?.Information("Skill purchased via UI: {SkillId}", skillId);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Refreshes the active bonuses panel showing current skill effects
+        /// </summary>
+        private void RefreshActiveBonuses()
+        {
+            var breakdown = App.SkillTree?.GetMultiplierBreakdown() ?? new List<(string, double)>();
+
+            if (breakdown.Count <= 1) // Only base
+            {
+                ActiveBonusesPanel.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            ActiveBonusesPanel.Visibility = Visibility.Visible;
+            ActiveBonusesList.Children.Clear();
+
+            foreach (var (source, value) in breakdown)
+            {
+                if (source == "Base") continue; // Don't show base multiplier
+
+                var chip = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromRgb(60, 40, 80)),
+                    CornerRadius = new CornerRadius(12),
+                    Padding = new Thickness(10, 5, 10, 5),
+                    Margin = new Thickness(0, 0, 8, 8)
+                };
+
+                chip.Child = new TextBlock
+                {
+                    Text = $"{source}: +{value:P0}",
+                    Foreground = new SolidColorBrush(Color.FromRgb(255, 182, 193)),
+                    FontSize = 11
+                };
+
+                ActiveBonusesList.Children.Add(chip);
+            }
+        }
+
+        /// <summary>
+        /// Called when skill tree service fires Pink Rush events
+        /// </summary>
+        private void OnPinkRushStarted(object? sender, EventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                TxtPinkRushIndicator.Visibility = Visibility.Visible;
+
+                // Show notification if not on enhancements tab
+                if (EnhancementsTab.Visibility != Visibility.Visible)
+                {
+                    // Could show a toast notification here
+                    App.Logger?.Information("Pink Rush activated!");
+                }
+            });
+        }
+
+        private void OnPinkRushEnded(object? sender, EventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                TxtPinkRushIndicator.Visibility = Visibility.Collapsed;
             });
         }
 
@@ -7192,9 +9014,51 @@ namespace ConditioningControlPanel
             }
             else
             {
-                await App.Discord.StartOAuthFlowAsync();
-                UpdateDiscordTabUI();
-                UpdateDiscordUI();
+                // Check if user is already logged in with another provider
+                var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
+
+                if (hasUnifiedId)
+                {
+                    // Link Discord to existing account
+                    BtnDiscordTabLogin.IsEnabled = false;
+                    BtnDiscordTabLogin.Content = "Connecting...";
+
+                    try
+                    {
+                        await App.Discord.StartOAuthFlowAsync();
+                        var success = await AccountService.LinkProviderV2Async(this, "discord");
+
+                        if (success)
+                        {
+                            UpdateQuickDiscordUI();
+                            UpdateDiscordUI();
+                            UpdateDiscordTabUI();
+                            UpdatePatreonUI();
+                            UpdateAccountLinkingUI();
+                            UpdateBannerWelcomeMessage();
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // User cancelled
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Error(ex, "Failed to link Discord");
+                        MessageBox.Show($"Failed to link Discord account.\n\n{ex.Message}",
+                            "Link Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                    finally
+                    {
+                        BtnDiscordTabLogin.IsEnabled = true;
+                        UpdateDiscordTabUI();
+                    }
+                }
+                else
+                {
+                    // No account yet - open unified login dialog
+                    OpenUnifiedLoginDialog();
+                }
             }
         }
 
@@ -7216,9 +9080,14 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
+                    // Check if user is logged in with another provider (has unified_id)
+                    var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
+
                     TxtDiscordTabStatus.Text = "Not Connected";
                     TxtDiscordTabInfo.Text = "Link Discord for community features";
-                    BtnDiscordTabLogin.Content = "Login with Discord";
+
+                    // Show "Link Discord" if logged in via Patreon, otherwise "Login"
+                    BtnDiscordTabLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
                 }
             }
 
@@ -7280,6 +9149,30 @@ namespace ConditioningControlPanel
             if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Collapsed;
             if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Visible;
             if (ProfileAchievementGrid != null) ProfileAchievementGrid.ItemsSource = null;
+            // Hide OG border and stop animation
+            if (OgBorderContainer != null)
+            {
+                OgBorderContainer.Visibility = Visibility.Collapsed;
+                if (OgBorderContainer.Resources["OgBorderAnimation"] is System.Windows.Media.Animation.Storyboard storyboard)
+                {
+                    storyboard.Stop(OgBorderContainer);
+                }
+            }
+            // Hide OG banner badge
+            if (OgBannerBadge != null)
+            {
+                OgBannerBadge.Visibility = Visibility.Collapsed;
+            }
+            // Hide Patreon tier badge
+            if (ProfilePatreonTierBadge != null)
+            {
+                ProfilePatreonTierBadge.Visibility = Visibility.Collapsed;
+            }
+            // Hide OG level unlock toggle
+            if (OgLevelUnlockToggle != null)
+            {
+                OgLevelUnlockToggle.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void ProfileDiscordHandle_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -7359,6 +9252,44 @@ namespace ConditioningControlPanel
                     catch { }
                 }
             }
+        }
+
+        private void OgLevelUnlockToggle_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Only works for OG users viewing their own profile
+            if (App.Settings?.Current?.IsSeason0Og != true) return;
+
+            // Toggle the setting
+            App.Settings.Current.OgLevelUnlockEnabled = !App.Settings.Current.OgLevelUnlockEnabled;
+            App.Settings.Save();
+
+            // Update the visual indicator
+            UpdateOgLevelUnlockVisual();
+
+            // Refresh all UI components that depend on level unlocks
+            UpdateUnlockablesVisibility(App.Settings.Current.PlayerLevel);
+            RefreshRoadmapUI();
+            SyncCompanionTabUI();
+
+            // Refresh avatar tube companion display if open
+            try
+            {
+                _avatarTubeWindow?.RefreshCompanionDisplay();
+            }
+            catch { /* Avatar window may not be open */ }
+
+            App.Logger?.Information("OG Level Unlock toggled: {Enabled}, refreshing UI", App.Settings.Current.OgLevelUnlockEnabled);
+        }
+
+        private void UpdateOgLevelUnlockVisual()
+        {
+            if (OgLevelUnlockIndicator == null) return;
+
+            var isEnabled = App.Settings?.Current?.OgLevelUnlockEnabled == true;
+            OgLevelUnlockIndicator.Background = new System.Windows.Media.SolidColorBrush(
+                isEnabled
+                    ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF4444")
+                    : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#444444"));
         }
 
         private void SearchAndDisplayProfile(string? searchName)
@@ -7454,11 +9385,49 @@ namespace ConditioningControlPanel
             if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Visible;
             if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Collapsed;
 
-            // Avatar - load from Discord
+            // OG user animated border for own profile
+            var isOg = App.Settings?.Current?.IsSeason0Og == true;
+            if (OgBorderContainer != null)
+            {
+                if (isOg)
+                {
+                    OgBorderContainer.Visibility = Visibility.Visible;
+                    if (OgBorderContainer.Resources["OgBorderAnimation"] is System.Windows.Media.Animation.Storyboard storyboard)
+                    {
+                        storyboard.Begin(OgBorderContainer, true);
+                    }
+                }
+                else
+                {
+                    OgBorderContainer.Visibility = Visibility.Collapsed;
+                    if (OgBorderContainer.Resources["OgBorderAnimation"] is System.Windows.Media.Animation.Storyboard storyboard)
+                    {
+                        storyboard.Stop(OgBorderContainer);
+                    }
+                }
+            }
+            // OG GOOD GIRL banner badge for own profile
+            if (OgBannerBadge != null)
+            {
+                OgBannerBadge.Visibility = isOg ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            // OG LV UNLOCK toggle - only visible for OG users on their own profile
+            if (OgLevelUnlockToggle != null)
+            {
+                OgLevelUnlockToggle.Visibility = isOg ? Visibility.Visible : Visibility.Collapsed;
+                if (isOg)
+                {
+                    UpdateOgLevelUnlockVisual();
+                }
+            }
+
+            // Avatar - load from Discord only if ShareProfilePicture is enabled
             if (ProfileViewerAvatar != null)
             {
                 string? avatarUrl = null;
-                if (App.Discord?.IsAuthenticated == true)
+                // Only show avatar if user has ShareProfilePicture enabled
+                if (App.Settings?.Current?.ShareProfilePicture == true && App.Discord?.IsAuthenticated == true)
                 {
                     avatarUrl = App.Discord.GetAvatarUrl(256);
                 }
@@ -7527,7 +9496,14 @@ namespace ConditioningControlPanel
             // Rank (own rank from leaderboard, if available)
             if (TxtProfileViewerRank != null)
             {
-                TxtProfileViewerRank.Text = "#-"; // Will be set when leaderboard loads
+                // Try to find own rank from leaderboard using display name
+                var displayName = App.Settings?.Current?.UserDisplayName;
+                var ownEntry = !string.IsNullOrEmpty(displayName)
+                    ? App.Leaderboard?.Entries?.FirstOrDefault(e =>
+                        e.DisplayName?.Equals(displayName, StringComparison.OrdinalIgnoreCase) == true)
+                    : null;
+
+                TxtProfileViewerRank.Text = ownEntry?.Rank > 0 ? $"#{ownEntry.Rank}" : "#-";
             }
             if (TxtProfileViewerXp != null) TxtProfileViewerXp.Text = FormatNumber(xp);
             if (TxtProfileViewerBubbles != null) TxtProfileViewerBubbles.Text = FormatNumber(progress?.TotalBubblesPopped ?? 0);
@@ -7545,13 +9521,16 @@ namespace ConditioningControlPanel
                 TxtProfileViewerAchievements.Text = $"{unlocked}/{total}";
             }
 
-            // Patreon badge
+            // Patreon badge - use settings tier (works for Discord-only login with linked Patreon)
+            var patreonTier = App.Settings?.Current?.PatreonTier ?? (int)(App.Patreon?.CurrentTier ?? 0);
+            var hasPatreon = patreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+
             if (ProfilePatreonBadge != null)
             {
-                if (App.Patreon?.IsAuthenticated == true && (int)(App.Patreon?.CurrentTier ?? 0) > 0)
+                if (patreonTier > 0)
                 {
                     ProfilePatreonBadge.Visibility = Visibility.Visible;
-                    ProfilePatreonBadge.Source = LoadPatreonBadgeImage((int)(App.Patreon.CurrentTier));
+                    ProfilePatreonBadge.Source = LoadPatreonBadgeImage(patreonTier);
                 }
                 else
                 {
@@ -7559,19 +9538,32 @@ namespace ConditioningControlPanel
                 }
             }
 
+            // Patreon tier badge next to Discord button (same as leaderboard)
+            if (ProfilePatreonTierBadge != null)
+            {
+                if (hasPatreon)
+                {
+                    ProfilePatreonTierBadge.Visibility = Visibility.Visible;
+                    // Use tier 1 as fallback for whitelisted users with tier 0
+                    ProfilePatreonTierBadge.Source = LoadPatreonBadgeImage(patreonTier > 0 ? patreonTier : 1);
+                }
+                else
+                {
+                    ProfilePatreonTierBadge.Visibility = Visibility.Collapsed;
+                }
+            }
+
             // Patreon tier banner (Pink filter / Prime subject images)
             // Shows for tier 1+, tier 2+, tier 3, OR whitelisted users
             if (ProfilePatreonTierBanner != null && ImgPatreonTierBanner != null)
             {
-                var tier = (int)(App.Patreon?.CurrentTier ?? 0);
-                var isWhitelisted = App.Patreon?.IsWhitelisted == true;
-                if (App.Patreon?.HasPremiumAccess == true || isWhitelisted)
+                if (hasPatreon)
                 {
                     ProfilePatreonTierBanner.Visibility = Visibility.Visible;
                     try
                     {
                         // Tier 3 = Prime subject, everyone else = Pink filter
-                        var bannerImage = tier >= 3 ? "prime subject.webp" : "Pink filter.webp";
+                        var bannerImage = patreonTier >= 3 ? "prime subject.webp" : "Pink filter.webp";
                         ImgPatreonTierBanner.Source = new System.Windows.Media.Imaging.BitmapImage(
                             new Uri($"pack://application:,,,/Resources/{bannerImage}", UriKind.Absolute));
                     }
@@ -7607,6 +9599,34 @@ namespace ConditioningControlPanel
         {
             if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Visible;
             if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Collapsed;
+
+            // OG user animated border
+            if (OgBorderContainer != null)
+            {
+                if (entry.IsSeason0Og)
+                {
+                    OgBorderContainer.Visibility = Visibility.Visible;
+                    // Start the rotation animation
+                    if (OgBorderContainer.Resources["OgBorderAnimation"] is System.Windows.Media.Animation.Storyboard storyboard)
+                    {
+                        storyboard.Begin(OgBorderContainer, true);
+                    }
+                }
+                else
+                {
+                    OgBorderContainer.Visibility = Visibility.Collapsed;
+                    // Stop any running animation
+                    if (OgBorderContainer.Resources["OgBorderAnimation"] is System.Windows.Media.Animation.Storyboard storyboard)
+                    {
+                        storyboard.Stop(OgBorderContainer);
+                    }
+                }
+            }
+            // OG GOOD GIRL banner badge next to name
+            if (OgBannerBadge != null)
+            {
+                OgBannerBadge.Visibility = entry.IsSeason0Og ? Visibility.Visible : Visibility.Collapsed;
+            }
 
             // Avatar - clear previous, will be loaded async
             if (ProfileViewerAvatar != null)
@@ -7671,13 +9691,45 @@ namespace ConditioningControlPanel
             if (TxtProfileViewerLockCards != null) TxtProfileViewerLockCards.Text = entry.LockCardsCompleted.ToString();
             if (TxtProfileViewerAchievements != null) TxtProfileViewerAchievements.Text = entry.AchievementsDisplay;
 
-            // Patreon badge
+            // Check if this is the current user's profile - if so, use local Patreon data
+            // which is more accurate than leaderboard cache
+            var isOwnProfile = entry.DisplayName?.Equals(
+                App.Settings?.Current?.UserDisplayName, StringComparison.OrdinalIgnoreCase) == true;
+
+            // OG LV UNLOCK toggle - only visible for OG users on their own profile
+            if (OgLevelUnlockToggle != null)
+            {
+                var showToggle = isOwnProfile && App.Settings?.Current?.IsSeason0Og == true;
+                OgLevelUnlockToggle.Visibility = showToggle ? Visibility.Visible : Visibility.Collapsed;
+                if (showToggle)
+                {
+                    UpdateOgLevelUnlockVisual();
+                }
+            }
+
+            int tierToUse;
+            bool hasPatreonAccess;
+
+            if (isOwnProfile)
+            {
+                // Use local Patreon data for own profile
+                tierToUse = App.Settings?.Current?.PatreonTier ?? (int)(App.Patreon?.CurrentTier ?? 0);
+                hasPatreonAccess = tierToUse >= 1 || App.Patreon?.IsWhitelisted == true;
+            }
+            else
+            {
+                // Use leaderboard entry data for other users
+                tierToUse = entry.PatreonTier;
+                hasPatreonAccess = entry.IsPatreon && entry.PatreonTier >= 1;
+            }
+
+            // Patreon badge (next to Level/Rank)
             if (ProfilePatreonBadge != null)
             {
-                if (entry.IsPatreon && entry.PatreonTier > 0)
+                if (hasPatreonAccess && tierToUse > 0)
                 {
                     ProfilePatreonBadge.Visibility = Visibility.Visible;
-                    ProfilePatreonBadge.Source = LoadPatreonBadgeImage(entry.PatreonTier);
+                    ProfilePatreonBadge.Source = LoadPatreonBadgeImage(tierToUse);
                 }
                 else
                 {
@@ -7685,17 +9737,32 @@ namespace ConditioningControlPanel
                 }
             }
 
+            // Patreon tier badge next to Discord button (same as leaderboard)
+            if (ProfilePatreonTierBadge != null)
+            {
+                if (hasPatreonAccess)
+                {
+                    ProfilePatreonTierBadge.Visibility = Visibility.Visible;
+                    // Use tier 1 as fallback for whitelisted users with tier 0
+                    ProfilePatreonTierBadge.Source = LoadPatreonBadgeImage(tierToUse > 0 ? tierToUse : 1);
+                }
+                else
+                {
+                    ProfilePatreonTierBadge.Visibility = Visibility.Collapsed;
+                }
+            }
+
             // Patreon tier banner (Pink filter / Prime subject images)
             // Shows for any Patreon supporter (tier 1+)
             if (ProfilePatreonTierBanner != null && ImgPatreonTierBanner != null)
             {
-                if (entry.IsPatreon && entry.PatreonTier >= 1)
+                if (hasPatreonAccess)
                 {
                     ProfilePatreonTierBanner.Visibility = Visibility.Visible;
                     try
                     {
                         // Tier 3 = Prime subject, everyone else = Pink filter
-                        var bannerImage = entry.PatreonTier >= 3 ? "prime subject.webp" : "Pink filter.webp";
+                        var bannerImage = tierToUse >= 3 ? "prime subject.webp" : "Pink filter.webp";
                         ImgPatreonTierBanner.Source = new System.Windows.Media.Imaging.BitmapImage(
                             new Uri($"pack://application:,,,/Resources/{bannerImage}", UriKind.Absolute));
                     }
@@ -7760,9 +9827,13 @@ namespace ConditioningControlPanel
                         string? avatarUrl = lookup.AvatarUrl;
 
                         // Fallback: if viewing own profile and server didn't return avatar, use local Discord avatar
-                        if (string.IsNullOrEmpty(avatarUrl))
+                        // BUT only if user has ShareProfilePicture enabled (respect their privacy setting)
+                        if (string.IsNullOrEmpty(avatarUrl) && App.Settings?.Current?.ShareProfilePicture == true)
                         {
-                            var ownDisplayName = App.Discord?.CustomDisplayName ?? App.Discord?.DisplayName ?? App.Patreon?.DisplayName;
+                            var ownDisplayName = App.Settings?.Current?.UserDisplayName
+                                               ?? App.Discord?.CustomDisplayName
+                                               ?? App.Discord?.DisplayName
+                                               ?? App.Patreon?.DisplayName;
                             if (displayName.Equals(ownDisplayName, StringComparison.OrdinalIgnoreCase) && App.Discord?.IsAuthenticated == true)
                             {
                                 avatarUrl = App.Discord.GetAvatarUrl(256);
@@ -7783,7 +9854,13 @@ namespace ConditioningControlPanel
                             catch (Exception ex)
                             {
                                 App.Logger?.Warning(ex, "Failed to load profile avatar from {Url}", avatarUrl);
+                                ProfileViewerAvatar.ImageSource = null;
                             }
+                        }
+                        else
+                        {
+                            // No avatar URL - clear any previous image
+                            ProfileViewerAvatar.ImageSource = null;
                         }
                     }
 
@@ -8182,9 +10259,14 @@ namespace ConditioningControlPanel
         public void StartEngine()
         {
             SaveSettings();
-            
+
             var settings = App.Settings.Current;
-            
+
+            // Track session count and start skill tree service
+            settings.TotalSessions++;
+            App.SkillTree?.Start();
+            App.SkillTree?.TrackTimeOfDayUsage(); // For secret skill unlocks
+
             App.Flash.Start();
             
             if (settings.MandatoryVideosEnabled)
@@ -8193,33 +10275,33 @@ namespace ConditioningControlPanel
             if (settings.SubliminalEnabled)
                 App.Subliminal.Start();
             
-            // Always start overlay service if level >= 10 (handles spiral and pink filter)
+            // Always start overlay service if pink_hours skill unlocked (handles spiral and pink filter)
             // This allows toggling overlays on/off while engine is running
-            if (settings.PlayerLevel >= 10)
+            if (App.SkillTree?.HasSkill("pink_hours") == true)
             {
                 App.Overlay.Start();
             }
-            
-            // Start bubble service (requires level 20)
-            if (settings.PlayerLevel >= 20 && settings.BubblesEnabled)
+
+            // Start bubble service (requires pink_hours skill)
+            if (App.SkillTree?.HasSkill("pink_hours") == true && settings.BubblesEnabled)
             {
                 App.Bubbles.Start();
             }
-            
+
             // Start lock card service (requires level 35)
-            if (settings.PlayerLevel >= 35 && settings.LockCardEnabled)
+            if (settings.IsLevelUnlocked(35) && settings.LockCardEnabled)
             {
                 App.LockCard.Start();
             }
-            
+
             // Start bubble count game service (requires level 50)
-            if (settings.PlayerLevel >= 50 && settings.BubbleCountEnabled)
+            if (settings.IsLevelUnlocked(50) && settings.BubbleCountEnabled)
             {
                 App.BubbleCount.Start();
             }
-            
+
             // Start bouncing text service (requires level 60)
-            if (settings.PlayerLevel >= 60 && settings.BouncingTextEnabled)
+            if (settings.IsLevelUnlocked(60) && settings.BouncingTextEnabled)
             {
                 App.BouncingText.Start();
             }
@@ -8228,9 +10310,9 @@ namespace ConditioningControlPanel
                 // Ensure bouncing text is stopped if disabled (cleanup any leftover state)
                 App.BouncingText.Stop();
             }
-            
+
             // Start mind wipe service (requires level 75)
-            if (settings.PlayerLevel >= 75 && settings.MindWipeEnabled)
+            if (settings.IsLevelUnlocked(75) && settings.MindWipeEnabled)
             {
                 App.MindWipe.Start(settings.MindWipeFrequency, settings.MindWipeVolume / 100.0);
 
@@ -8242,14 +10324,14 @@ namespace ConditioningControlPanel
             }
 
             // Start brain drain service (requires level 70)
-            if (settings.PlayerLevel >= 70 && settings.BrainDrainEnabled)
+            if (settings.IsLevelUnlocked(70) && settings.BrainDrainEnabled)
             {
                 App.BrainDrain.Start();
             }
 
             // Start autonomy service (requires Patreon + level 100)
             var hasPatreonAccess = settings.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
-            if (hasPatreonAccess && settings.PlayerLevel >= 100 && settings.AutonomyModeEnabled && settings.AutonomyConsentGiven)
+            if (hasPatreonAccess && settings.IsLevelUnlocked(100) && settings.AutonomyModeEnabled && settings.AutonomyConsentGiven)
             {
                 App.Autonomy?.Start();
             }
@@ -8261,11 +10343,14 @@ namespace ConditioningControlPanel
             }
             
             // Browser audio serves as background - no need to play separate music
-            
+
             _isRunning = true;
             UpdateStartButton();
-            
-            App.Logger?.Information("Engine started - Overlay: {Overlay}, Bubbles: {Bubbles}, LockCard: {LockCard}, BubbleCount: {BubbleCount}, MindWipe: {MindWipe}, BrainDrain: {BrainDrain}", 
+
+            // Start conditioning time tracker
+            StartConditioningTimeTracker();
+
+            App.Logger?.Information("Engine started - Overlay: {Overlay}, Bubbles: {Bubbles}, LockCard: {LockCard}, BubbleCount: {BubbleCount}, MindWipe: {MindWipe}, BrainDrain: {BrainDrain}",
                 App.Overlay.IsRunning, App.Bubbles.IsRunning, App.LockCard.IsRunning, App.BubbleCount.IsRunning, App.MindWipe.IsRunning, App.BrainDrain.IsRunning);
         }
 
@@ -8290,6 +10375,7 @@ namespace ConditioningControlPanel
             App.MindWipe.Stop();
             App.BrainDrain.Stop();
             App.Autonomy?.Stop();
+            App.SkillTree?.Stop();
             App.Audio.Unduck();
 
             // Force close any open lock card windows (panic button should close them immediately)
@@ -8298,6 +10384,9 @@ namespace ConditioningControlPanel
 
             // Stop ramp timer and reset sliders
             StopRampTimer();
+
+            // Stop conditioning time tracker
+            StopConditioningTimeTracker();
 
             _isRunning = false;
             UpdateStartButton();
@@ -8997,7 +11086,7 @@ namespace ConditioningControlPanel
 
             // Start autonomy service if it was enabled (works independently of engine)
             var hasPatreonAccess = s.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
-            if (hasPatreonAccess && s.PlayerLevel >= 100 && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
+            if (hasPatreonAccess && s.IsLevelUnlocked(100) && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
             {
                 App.Autonomy?.Start();
                 App.Logger?.Debug("MainWindow: Started autonomy service on settings load");
@@ -9443,6 +11532,9 @@ namespace ConditioningControlPanel
 
             // Update XP bar login state
             UpdateXPBarLoginState();
+
+            // Update stat pills visibility and values
+            UpdateStatPills();
         }
 
         /// <summary>
@@ -9470,6 +11562,298 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Updates the stat pill visibility and values based on unlocked skills.
+        /// Pills only show when their respective skills are unlocked.
+        /// </summary>
+        private void UpdateStatPills()
+        {
+            if (App.SkillTree == null) return;
+
+            // Pink Hours: Total Conditioning Time (5 points - tier 1)
+            if (PillConditioningTime != null)
+            {
+                bool hasPinkHours = App.SkillTree.HasSkill("pink_hours");
+                PillConditioningTime.Visibility = hasPinkHours ? Visibility.Visible : Visibility.Collapsed;
+
+                if (hasPinkHours && TxtPillConditioningTime != null)
+                {
+                    double totalMinutes;
+
+                    if (_isRunning && _conditioningTimeTimer != null)
+                    {
+                        // Use baseline + session elapsed to avoid double-counting
+                        // (storedMinutes gets incremented every 60s by the tracker, so adding
+                        // sessionElapsed on top would count those minutes twice)
+                        var sessionElapsed = DateTime.Now - _conditioningStartTime;
+                        totalMinutes = _conditioningBaselineMinutes + sessionElapsed.TotalMinutes;
+                    }
+                    else
+                    {
+                        totalMinutes = App.Settings?.Current?.TotalConditioningMinutes ?? 0;
+                    }
+
+                    // Format as hours, minutes, and seconds
+                    var totalSeconds = totalMinutes * 60;
+                    var hours = (int)(totalSeconds / 3600);
+                    var minutes = (int)((totalSeconds % 3600) / 60);
+                    var seconds = (int)(totalSeconds % 60);
+                    TxtPillConditioningTime.Text = $"{hours}h {minutes}m {seconds}s";
+                }
+            }
+
+            // Hive Mind: Online Users Count (60 points total - tier 3)
+            if (PillOnlineUsers != null)
+            {
+                bool hasHiveMind = App.SkillTree.HasSkill("hive_mind");
+                PillOnlineUsers.Visibility = hasHiveMind ? Visibility.Visible : Visibility.Collapsed;
+
+                if (hasHiveMind && TxtPillOnlineUsers != null)
+                {
+                    // Get online user count from leaderboard service
+                    var onlineCount = App.Leaderboard?.OnlineUsers ?? 0;
+                    TxtPillOnlineUsers.Text = onlineCount.ToString();
+                }
+            }
+
+            // Popular Girl: Rank Percentile (130 points total - tier 4)
+            if (PillRankPercentile != null)
+            {
+                bool hasPopularGirl = App.SkillTree.HasSkill("popular_girl");
+                PillRankPercentile.Visibility = hasPopularGirl ? Visibility.Visible : Visibility.Collapsed;
+
+                if (hasPopularGirl && TxtPillRankPercentile != null)
+                {
+                    // Get rank percentile from leaderboard
+                    var percentile = App.Leaderboard?.GetPlayerPercentile() ?? 0;
+
+                    if (percentile > 0)
+                    {
+                        TxtPillRankPercentile.Text = $"Top {percentile}%";
+                    }
+                    else if (App.Leaderboard?.Entries?.Count > 0)
+                    {
+                        // Leaderboard loaded but player not found - might be unranked or need to sync
+                        TxtPillRankPercentile.Text = "Unranked";
+                    }
+                    else
+                    {
+                        // Leaderboard not loaded yet
+                        TxtPillRankPercentile.Text = "Loading...";
+                    }
+                }
+            }
+
+            RefreshXPBarBonuses();
+        }
+
+        private void RefreshXPBarBonuses()
+        {
+            if (XPBarBonusList == null) return;
+
+            var breakdown = App.SkillTree?.GetMultiplierBreakdown() ?? new List<(string, double)>();
+            XPBarBonusList.Children.Clear();
+
+            foreach (var (source, value) in breakdown)
+            {
+                if (source == "Base") continue;
+
+                var chip = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromRgb(42, 42, 74)), // #2A2A4A - matches stat pills
+                    CornerRadius = new CornerRadius(10),
+                    Padding = new Thickness(6, 3, 6, 3),
+                    Margin = new Thickness(0, 0, 8, 0)
+                };
+
+                chip.Child = new TextBlock
+                {
+                    Text = $"+{value:P0} {source}",
+                    Foreground = new SolidColorBrush(Color.FromRgb(255, 182, 193)), // #FFB6C1
+                    FontSize = 10,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                XPBarBonusList.Children.Add(chip);
+            }
+        }
+
+        /// <summary>
+        /// Start a timer to periodically update stat pill values (conditioning time, online users, rank).
+        /// Updates every 30 seconds.
+        /// </summary>
+        private void StartStatPillUpdateTimer()
+        {
+            if (_statPillUpdateTimer != null) return; // Already started
+
+            _statPillUpdateTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(30)
+            };
+
+            _statPillUpdateTimer.Tick += (s, e) =>
+            {
+                try
+                {
+                    UpdateStatPills();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Error updating stat pills");
+                }
+            };
+
+            _statPillUpdateTimer.Start();
+            App.Logger?.Debug("Stat pill update timer started (30s interval)");
+        }
+
+        /// <summary>
+        /// Start tracking conditioning time (updates live while engine is running).
+        /// Updates display every second, saves to storage every minute, syncs to server every 15 minutes.
+        /// </summary>
+        private void StartConditioningTimeTracker()
+        {
+            if (_conditioningTimeTimer != null) return; // Already started
+
+            _conditioningStartTime = DateTime.Now;
+            _conditioningBaselineMinutes = App.Settings?.Current?.TotalConditioningMinutes ?? 0;
+            _conditioningTimeSecondCounter = 0;
+
+            // Update display every second for LIVE tracking
+            _conditioningTimeTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+
+            _conditioningTimeTimer.Tick += (s, e) =>
+            {
+                try
+                {
+                    _conditioningTimeSecondCounter++;
+
+                    // Update stat pill display every second (live update)
+                    UpdateStatPills();
+
+                    // Debug log every 10 seconds to verify timer is working
+                    if (_conditioningTimeSecondCounter % 10 == 0)
+                    {
+                        var elapsed = DateTime.Now - _conditioningStartTime;
+                        App.Logger?.Debug("Conditioning time tracker tick: {Seconds}s elapsed, stored: {Minutes}m",
+                            (int)elapsed.TotalSeconds, App.Settings?.Current?.TotalConditioningMinutes ?? 0);
+                    }
+
+                    // Save to local storage every minute (avoid excessive disk writes)
+                    if (_conditioningTimeSecondCounter >= 60)
+                    {
+                        var elapsed = DateTime.Now - _conditioningStartTime;
+                        App.SkillTree?.AddConditioningTime(1.0); // Add 1 minute
+                        _conditioningTimeSecondCounter = 0;
+                        App.Logger?.Debug("Conditioning time saved to storage: {Time}", App.SkillTree?.GetFormattedConditioningTime());
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Error tracking conditioning time");
+                }
+            };
+
+            _conditioningTimeTimer.Start();
+
+            // Start server sync timer (every 15 minutes)
+            _conditioningTimeSyncTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMinutes(15)
+            };
+            _conditioningTimeSyncTimer.Tick += async (s, e) =>
+            {
+                await SyncConditioningTimeToServerAsync();
+            };
+            _conditioningTimeSyncTimer.Start();
+
+            App.Logger?.Debug("Conditioning time tracker started (live updates every second, server sync every 15 minutes)");
+        }
+
+        /// <summary>
+        /// Stop tracking conditioning time and sync to server.
+        /// </summary>
+        private void StopConditioningTimeTracker()
+        {
+            if (_conditioningTimeTimer == null) return;
+
+            _conditioningTimeTimer.Stop();
+            _conditioningTimeTimer = null;
+
+            // Stop server sync timer
+            if (_conditioningTimeSyncTimer != null)
+            {
+                _conditioningTimeSyncTimer.Stop();
+                _conditioningTimeSyncTimer = null;
+            }
+
+            // Add any remaining partial minutes not yet saved by the 60-second tracker
+            try
+            {
+                var elapsed = DateTime.Now - _conditioningStartTime;
+                var expectedTotal = _conditioningBaselineMinutes + elapsed.TotalMinutes;
+                var currentStored = App.Settings?.Current?.TotalConditioningMinutes ?? 0;
+                var remainingMinutes = expectedTotal - currentStored;
+
+                if (remainingMinutes > 0)
+                {
+                    App.SkillTree?.AddConditioningTime(remainingMinutes);
+                    App.Logger?.Debug("Added remaining {Minutes:F2} minutes on stop", remainingMinutes);
+                }
+
+                // Final update to stat pills
+                UpdateStatPills();
+
+                // Sync to server on stop
+                _ = SyncConditioningTimeToServerAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Error finalizing conditioning time");
+            }
+
+            App.Logger?.Debug("Conditioning time tracker stopped");
+        }
+
+        /// <summary>
+        /// Sync conditioning time to server.
+        /// Called every 15 minutes during session and on session end.
+        /// </summary>
+        private async Task SyncConditioningTimeToServerAsync()
+        {
+            try
+            {
+                // Only sync if user is authenticated (Patreon or Discord)
+                if (App.ProfileSync == null)
+                {
+                    App.Logger?.Debug("Skipping conditioning time sync - ProfileSync not available");
+                    return;
+                }
+
+                // Only sync if user is authenticated
+                if (App.Patreon?.IsAuthenticated != true && App.Discord?.IsAuthenticated != true)
+                {
+                    App.Logger?.Debug("Skipping conditioning time sync - user not authenticated");
+                    return;
+                }
+
+                App.Logger?.Information("Syncing conditioning time to server ({Minutes:F1} minutes)",
+                    App.Settings?.Current?.TotalConditioningMinutes ?? 0);
+
+                // ProfileSyncService will automatically include conditioning time in the sync
+                await App.ProfileSync.SyncProfileAsync();
+
+                App.Logger?.Information("Conditioning time synced successfully");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to sync conditioning time to server");
+            }
+        }
+
         private void UpdateUnlockablesVisibility(int level)
         {
             try
@@ -9477,47 +11861,47 @@ namespace ConditioningControlPanel
                 App.Logger?.Debug("UpdateUnlockablesVisibility: Updating visibility for level {Level}", level);
 
                 // Level 10 unlocks: Spiral Overlay, Pink Filter
-                var level10Unlocked = level >= 10;
+                var level10Unlocked = App.Settings?.Current?.IsLevelUnlocked(10) ?? false;
                 if (SpiralLocked != null) SpiralLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (SpiralUnlocked != null) SpiralUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (PinkFilterLocked != null) PinkFilterLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (PinkFilterUnlocked != null) PinkFilterUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                
+
                 if (SpiralFeatureImage != null) SetFeatureImageBlur(SpiralFeatureImage, !level10Unlocked);
                 if (PinkFilterFeatureImage != null) SetFeatureImageBlur(PinkFilterFeatureImage, !level10Unlocked);
-                
+
                 // Level 20 unlocks: Bubbles
-                var level20Unlocked = level >= 20;
+                var level20Unlocked = App.Settings?.Current?.IsLevelUnlocked(20) ?? false;
                 if (BubblesLocked != null) BubblesLocked.Visibility = level20Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (BubblesUnlocked != null) BubblesUnlocked.Visibility = level20Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (BubblePopFeatureImage != null) SetFeatureImageBlur(BubblePopFeatureImage, !level20Unlocked);
-                
+
                 // Level 35 unlocks: Lock Card
-                var level35Unlocked = level >= 35;
+                var level35Unlocked = App.Settings?.Current?.IsLevelUnlocked(35) ?? false;
                 if (LockCardLocked != null) LockCardLocked.Visibility = level35Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (LockCardUnlocked != null) LockCardUnlocked.Visibility = level35Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (LockCardFeatureImage != null) SetFeatureImageBlur(LockCardFeatureImage, !level35Unlocked);
-                
+
                 // Level 50 unlocks: Bubble Count Game
-                var level50Unlocked = level >= 50;
+                var level50Unlocked = App.Settings?.Current?.IsLevelUnlocked(50) ?? false;
                 if (Level50Locked != null) Level50Locked.Visibility = level50Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (Level50Unlocked != null) Level50Unlocked.Visibility = level50Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (BubbleCountFeatureImage != null) SetFeatureImageBlur(BubbleCountFeatureImage, !level50Unlocked);
-                
+
                 // Level 60 unlocks: Bouncing Text
-                var level60Unlocked = level >= 60;
+                var level60Unlocked = App.Settings?.Current?.IsLevelUnlocked(60) ?? false;
                 if (Level60Locked != null) Level60Locked.Visibility = level60Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (Level60Unlocked != null) Level60Unlocked.Visibility = level60Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (BouncingTextFeatureImage != null) SetFeatureImageBlur(BouncingTextFeatureImage, !level60Unlocked);
-                
+
                 // Level 75 unlocks: Mind Wipe
-                var level75Unlocked = level >= 75;
+                var level75Unlocked = App.Settings?.Current?.IsLevelUnlocked(75) ?? false;
                 if (MindWipeLocked != null) MindWipeLocked.Visibility = level75Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (MindWipeUnlocked != null) MindWipeUnlocked.Visibility = level75Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (MindWipeFeatureImage != null) SetFeatureImageBlur(MindWipeFeatureImage, !level75Unlocked);
 
                 // Level 70 unlocks: Brain Drain
-                var level70Unlocked = level >= 70;
+                var level70Unlocked = App.Settings?.Current?.IsLevelUnlocked(70) ?? false;
                 if (BrainDrainLocked != null) BrainDrainLocked.Visibility = level70Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (BrainDrainUnlocked != null) BrainDrainUnlocked.Visibility = level70Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level70Unlocked);
@@ -9839,14 +12223,15 @@ namespace ConditioningControlPanel
         private void ChkBubblesEnabled_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            
+
             var isEnabled = ChkBubblesEnabled.IsChecked ?? false;
             App.Settings.Current.BubblesEnabled = isEnabled;
-            
+
             // Immediately update bubbles if engine is running
             if (_isRunning)
             {
-                if (isEnabled && App.Settings.Current.PlayerLevel >= 20)
+                // Check if player has the pink_hours skill (root skill) instead of level check
+                if (isEnabled && App.SkillTree?.HasSkill("pink_hours") == true)
                 {
                     App.Bubbles.Start();
                 }
@@ -9870,7 +12255,7 @@ namespace ConditioningControlPanel
             // Immediately update lock card service if engine is running
             if (_isRunning)
             {
-                if (isEnabled && App.Settings.Current.PlayerLevel >= 35)
+                if (isEnabled && App.Settings.Current.IsLevelUnlocked(35))
                 {
                     App.LockCard.Start();
                 }
@@ -10024,7 +12409,7 @@ namespace ConditioningControlPanel
             // Immediately update service if engine is running
             if (_isRunning)
             {
-                if (isEnabled && App.Settings.Current.PlayerLevel >= 50)
+                if (isEnabled && App.Settings.Current.IsLevelUnlocked(50))
                 {
                     App.BubbleCount.Start();
                 }
@@ -10112,7 +12497,7 @@ namespace ConditioningControlPanel
             // Immediately update service if engine is running
             if (_isRunning)
             {
-                if (isEnabled && App.Settings.Current.PlayerLevel >= 60)
+                if (isEnabled && App.Settings.Current.IsLevelUnlocked(60))
                 {
                     App.BouncingText.Start();
                 }
@@ -10179,7 +12564,7 @@ namespace ConditioningControlPanel
             // Immediately update service if engine is running (non-session mode)
             if (_isRunning && _sessionEngine?.CurrentSession == null)
             {
-                if (isEnabled && App.Settings.Current.PlayerLevel >= 75)
+                if (isEnabled && App.Settings.Current.IsLevelUnlocked(75))
                 {
                     App.MindWipe.Start(App.Settings.Current.MindWipeFrequency, App.Settings.Current.MindWipeVolume / 100.0);
                 }
@@ -10257,7 +12642,7 @@ namespace ConditioningControlPanel
 
             if (_isRunning)
             {
-                if (isEnabled && App.Settings.Current.PlayerLevel >= 70)
+                if (isEnabled && App.Settings.Current.IsLevelUnlocked(70))
                 {
                     App.BrainDrain.Start();
                 }
@@ -11500,6 +13885,35 @@ namespace ConditioningControlPanel
             if (sender is ScrollViewer scrollViewer)
             {
                 scrollViewer.ScrollToHorizontalOffset(scrollViewer.HorizontalOffset - e.Delta);
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// Handler for horizontal-only ScrollViewers that bubbles vertical scroll events to parent.
+        /// Prevents "dead zones" where scrolling doesn't work.
+        /// </summary>
+        private void HorizontalScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            // Find the parent ScrollViewer and pass the scroll event to it
+            if (sender is not DependencyObject element) return;
+
+            // Walk up the visual tree to find the parent ScrollViewer
+            var parent = VisualTreeHelper.GetParent(element);
+            while (parent != null && parent is not ScrollViewer)
+            {
+                parent = VisualTreeHelper.GetParent(parent);
+            }
+
+            if (parent is ScrollViewer parentScrollViewer)
+            {
+                // Create a new event with the same delta and raise it on the parent
+                var eventArgs = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+                {
+                    RoutedEvent = MouseWheelEvent,
+                    Source = sender
+                };
+                parentScrollViewer.RaiseEvent(eventArgs);
                 e.Handled = true;
             }
         }
@@ -13286,22 +15700,13 @@ namespace ConditioningControlPanel
                         BtnDiscordLogin.ToolTip = null;
                 }
 
-                // Quick Patreon login button (in main area)
-                if (BtnQuickPatreonLogin != null)
+                // Unified login button (in main area)
+                if (BtnUnifiedLogin != null)
                 {
-                    BtnQuickPatreonLogin.IsEnabled = !isOffline;
-                    BtnQuickPatreonLogin.Opacity = isOffline ? 0.5 : 1.0;
+                    BtnUnifiedLogin.IsEnabled = !isOffline;
+                    BtnUnifiedLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        BtnQuickPatreonLogin.ToolTip = "Disabled in offline mode";
-                }
-
-                // Quick Discord login button (in main area)
-                if (BtnQuickDiscordLogin != null)
-                {
-                    BtnQuickDiscordLogin.IsEnabled = !isOffline;
-                    BtnQuickDiscordLogin.Opacity = isOffline ? 0.5 : 1.0;
-                    if (isOffline)
-                        BtnQuickDiscordLogin.ToolTip = "Disabled in offline mode";
+                        BtnUnifiedLogin.ToolTip = "Disabled in offline mode";
                 }
 
                 // Discord tab login button (in Profile/Discord tab)
@@ -13448,7 +15853,7 @@ namespace ConditioningControlPanel
 
                 // Bouncing text needs restart
                 App.BouncingText.Stop();
-                if (App.Settings.Current.BouncingTextEnabled && App.Settings.Current.PlayerLevel >= 60)
+                if (App.Settings.Current.BouncingTextEnabled && App.Settings.Current.IsLevelUnlocked(60))
                 {
                     App.BouncingText.Start();
                 }
@@ -13532,6 +15937,16 @@ namespace ConditioningControlPanel
             {
                 // Kill all audio and effects first - ensures clean exit
                 App.KillAllAudio();
+
+                // Sync conditioning time to server before exit
+                try
+                {
+                    _ = SyncConditioningTimeToServerAsync();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to sync conditioning time on exit");
+                }
 
                 // Actually closing - clean up
                 SaveSettings();
