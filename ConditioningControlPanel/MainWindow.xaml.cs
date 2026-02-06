@@ -387,9 +387,10 @@ namespace ConditioningControlPanel
 
         private void OnCompanionXPDrained(object? sender, double amount)
         {
-            // Update UI when Brain Parasite drains XP
+            // Update UI when Brain Parasite drains player XP
             Dispatcher.Invoke(() =>
             {
+                UpdateLevelDisplay();
                 if (CompanionTab.Visibility == Visibility.Visible)
                 {
                     UpdateCompanionCardsUI();
@@ -953,6 +954,10 @@ namespace ConditioningControlPanel
 
             // Update panic key button
             UpdatePanicKeyButton();
+
+            // Load custom sessions from disk (so they persist across restarts)
+            if (_sessionManager == null)
+                InitializeSessionManager();
 
             // Initialize hypnotube links UI
             RefreshHypnotubeLinksUI();
@@ -2523,7 +2528,7 @@ namespace ConditioningControlPanel
             App.Patreon?.Logout();
             App.Discord?.Logout();
 
-            // Clear unified ID
+            // Clear unified ID and all account-specific data
             App.UnifiedUserId = null;
             if (App.Settings?.Current != null)
             {
@@ -2531,8 +2536,19 @@ namespace ConditioningControlPanel
                 App.Settings.Current.UserDisplayName = null;
                 App.Settings.Current.HasLinkedDiscord = false;
                 App.Settings.Current.HasLinkedPatreon = false;
+
+                // Clear account-specific progression data so next login gets fresh data from server
+                App.Settings.Current.PlayerXP = 0;
+                App.Settings.Current.PlayerLevel = 1;
+                App.Settings.Current.SkillPoints = 0;
+                App.Settings.Current.UnlockedSkills = new List<string>();
+                App.Settings.Current.SeasonalStreakRecoveryUsed = false;
+
                 App.Settings.Save();
             }
+
+            // Redraw skill tree to reflect cleared state
+            DrawSkillTree();
 
             // Update all UI
             UpdateQuickLoginUI();
@@ -3115,6 +3131,11 @@ namespace ConditioningControlPanel
                 {
                     LstLeaderboard.ItemsSource = App.Leaderboard.Entries;
                     TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users";
+
+                    // Update season flavour text
+                    var seasonTitle = App.QuestDefinitions?.SeasonTitle;
+                    if (!string.IsNullOrEmpty(seasonTitle))
+                        TxtLeaderboardSeason.Text = $"{seasonTitle} ~ prove your devotion~";
 
                     // Show/hide Trophy Case columns based on skill unlock
                     UpdateTrophyCaseColumns();
@@ -5636,10 +5657,19 @@ namespace ConditioningControlPanel
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = "Like, spend your sparkle points to unlock super cute bonuses~",
+                Text = "you earn 1 sparkle point every time you level up — spend them wisely~",
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 11,
+                FontStyle = FontStyles.Italic,
                 Margin = new Thickness(0, 4, 0, 0)
+            });
+            titleStack.Children.Add(new TextBlock
+            {
+                Text = "once you pick a path, there's no going back~",
+                Foreground = new SolidColorBrush(Color.FromRgb(136, 170, 204)),
+                FontSize = 10,
+                FontStyle = FontStyles.Italic,
+                Margin = new Thickness(0, 2, 0, 0)
             });
             mainStack.Children.Add(titleStack);
 
@@ -5817,9 +5847,20 @@ namespace ConditioningControlPanel
 
                 // Row 6: Time stats
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Pink Filter Time", $"{achievements.TotalPinkFilterMinutes:F1} min", 0);
-                AddStatRow("Spiral Time", $"{achievements.TotalSpiralMinutes:F1} min", 1);
-                AddStatRow("Consecutive Days", achievements.ConsecutiveDays.ToString("N0"), 2);
+                var videoMin = achievements.TotalVideoMinutes;
+                var videoTimeStr = videoMin >= 60 ? $"{videoMin / 60:F1} hrs" : $"{videoMin:F1} min";
+                AddStatRow("Video Time", videoTimeStr, 0);
+                var pinkMin = achievements.TotalPinkFilterMinutes;
+                var pinkTimeStr = pinkMin >= 60 ? $"{pinkMin / 60:F1} hrs" : $"{pinkMin:F1} min";
+                AddStatRow("Pink Filter Time", pinkTimeStr, 1);
+                var spiralMin = achievements.TotalSpiralMinutes;
+                var spiralTimeStr = spiralMin >= 60 ? $"{spiralMin / 60:F1} hrs" : $"{spiralMin:F1} min";
+                AddStatRow("Spiral Time", spiralTimeStr, 2);
+                row++;
+
+                // Row 7: Misc stats
+                statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                AddStatRow("Consecutive Days", achievements.ConsecutiveDays.ToString("N0"), 0);
 
                 detailedStatsStack.Children.Add(statsGrid);
             }
@@ -8081,6 +8122,12 @@ namespace ConditioningControlPanel
             _sessionManager.SessionAdded += OnSessionAdded;
             _sessionManager.SessionRemoved += OnSessionRemoved;
             _sessionManager.LoadAllSessions();
+
+            // Populate UI with any custom sessions loaded from disk
+            foreach (var session in _sessionManager.CustomSessions)
+            {
+                AddCustomSessionCard(session);
+            }
         }
 
         private void OnSessionAdded(Models.Session session)
@@ -8829,6 +8876,9 @@ namespace ConditioningControlPanel
 
         private void SessionDropZone_Drop(object sender, DragEventArgs e)
         {
+            // Mark handled to prevent Window_Drop from also importing the session
+            e.Handled = true;
+
             // Reset visual state
             SessionDropZone.BorderBrush = new SolidColorBrush(Color.FromRgb(64, 64, 96));
             DropZoneIcon.Text = "📂";

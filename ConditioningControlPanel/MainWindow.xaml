@@ -1103,8 +1103,8 @@
                                 <RowDefinition Height="*"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
-                            <ScrollContentPresenter Grid.Row="0"/>
-                            <ScrollBar Grid.Row="1"
+                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Row="0"/>
+                            <ScrollBar x:Name="PART_HorizontalScrollBar" Grid.Row="1"
                                       Orientation="Horizontal"
                                       Style="{StaticResource SkillTreeScrollBarStyle}"
                                       Value="{TemplateBinding HorizontalOffset}"
@@ -1363,7 +1363,7 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.0-pre2 IS OUT! 💖"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.0-pre3 IS OUT! 💖"
                             Click="BtnUpdateAvailable_Click" ToolTip="v5.5.0-pre2 - Quest Streaks &amp; Profile Fixes"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
@@ -4419,7 +4419,25 @@
                             <TextBlock Text="look how far you've come sweetie...."
                                        FontSize="26" FontStyle="Italic" FontWeight="Light"
                                        Foreground="#CC88AACC" HorizontalAlignment="Center"
-                                       Margin="0,0,0,18" TextAlignment="Center"/>
+                                       Margin="0,0,0,8" TextAlignment="Center"/>
+
+                            <!-- Journal Info Box -->
+                            <Border Background="#30FFD700" BorderBrush="#AAFFD700" BorderThickness="1.5"
+                                    CornerRadius="6" Padding="14,10" Margin="20,0,20,14" MaxWidth="700"
+                                    HorizontalAlignment="Center">
+                                <StackPanel>
+                                    <TextBlock Text="📸  What is the Bimbo Journal?" Foreground="#FFD700" FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+                                    <TextBlock TextWrapping="Wrap" Foreground="#DDFFFFFF" FontSize="12" LineHeight="18">
+                                        <Run Text="Each track has steps that ask you to take a photo as proof of your progress."/>
+                                        <LineBreak/>
+                                        <Run Text="Click a step, take the pic, and upload it to mark it complete and unlock the next one."/>
+                                        <LineBreak/>
+                                        <Run Text="Complete all steps in a track to unlock the next phase of your transformation."/>
+                                    </TextBlock>
+                                    <TextBlock Foreground="#AAFFD700" FontSize="11" FontStyle="Italic" Margin="0,8,0,0"
+                                               Text="All photos are stored locally on your PC only — nothing is ever uploaded or shared."/>
+                                </StackPanel>
+                            </Border>
 
                             <!-- Track Selector Tabs -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
@@ -6739,8 +6757,18 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Help button -->
-                            <Button x:Name="HelpBtnLeaderboard" Grid.Column="0" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Tag="Leaderboard"/>
+                            <!-- Help button + left flavour text -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="HelpBtnLeaderboard" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Tag="Leaderboard"/>
+                                <Border Background="#1888AACC" CornerRadius="8" Padding="12,8" Margin="10,0,0,0" BorderBrush="#3388AACC" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="who's the prettiest bimbo?~" FontStyle="Italic" FontSize="15" FontWeight="Bold"
+                                                   Foreground="#9988AACC"/>
+                                        <TextBlock Text="every level counts, every quest matters~" FontStyle="Italic" FontSize="13" FontWeight="Bold"
+                                                   Foreground="#6688AACC" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
 
                             <!-- Big LEADERBOARD title with stroke effect -->
                             <Grid Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -6752,25 +6780,37 @@
                                            Foreground="#FF69B4"/>
                             </Grid>
 
-                            <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                <TextBlock x:Name="TxtLeaderboardStatus" Foreground="#FF69B4" VerticalAlignment="Center"
-                                           Margin="0,0,15,0" FontSize="13"/>
-                                <Button x:Name="BtnRefreshLeaderboard" Content="Refresh" Padding="15,8"
-                                        Background="#FF69B4" Foreground="White" FontSize="13" FontWeight="SemiBold"
-                                        Click="BtnRefreshLeaderboard_Click" Cursor="Hand">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#FF85C1"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Border Background="#1888AACC" CornerRadius="8" Padding="12,8" Margin="0,0,12,0" BorderBrush="#3388AACC" BorderThickness="1" VerticalAlignment="Center">
+                                        <StackPanel>
+                                            <TextBlock x:Name="TxtLeaderboardSeason" Text="season 1 ~ prove your devotion~"
+                                                       FontStyle="Italic" FontSize="15" FontWeight="Bold" Foreground="#9988AACC"/>
+                                            <TextBlock Text="resets monthly — your rank is everything~" FontStyle="Italic" FontSize="13" FontWeight="Bold"
+                                                       Foreground="#6688AACC" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock x:Name="TxtLeaderboardStatus" Foreground="#FF69B4"
+                                                   HorizontalAlignment="Center" Margin="0,0,0,4" FontSize="13"/>
+                                        <Button x:Name="BtnRefreshLeaderboard" Content="Refresh" Padding="15,8"
+                                                Background="#FF69B4" Foreground="White" FontSize="13" FontWeight="SemiBold"
+                                                Click="BtnRefreshLeaderboard_Click" Cursor="Hand">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#FF85C1"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+                                    </StackPanel>
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
                     </Border>

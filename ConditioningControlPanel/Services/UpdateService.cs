@@ -28,7 +28,40 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.0-pre2 - Quest Streaks & Profile Fixes
+        public const string CurrentPatchNotes = @"v5.5.0-pre3 - Migration & Balance Fixes
+
+🔧 V1 MIGRATION FIXES
+• Fixed Discord login failing for V1 migrated users (username taken error)
+• V1 users now correctly get season data, leaderboard entry on first sync
+• Fixed missing discord_index key for migrated accounts
+
+✨ SKILL POINTS FIX
+• New V2 accounts start with 0 sparkle points (was incorrectly inheriting V1 accumulated points)
+• Server is now source of truth for skill points — no more inflation
+
+🔄 ACCOUNT SWITCHING FIX
+• Logging out now properly clears skills, XP, and level
+• Switching accounts no longer inherits the previous user's skill tree
+• Users with achievements auto-flagged as Season 0 OG
+
+🧠 SLAVEDOLL XP DRAIN
+• Brainwashed Slavedoll avatar now drains player XP at 3/sec (was draining companion XP)
+• Drain stops at 0 XP — never decreases your level
+• Active whenever the avatar is selected, engine on or off
+
+🖱️ SKILL TREE SCROLLBAR
+• Fixed horizontal scrollbar in Enhancements tab not responding to drag
+
+⚙️ SETTINGS LIVE-SAVE
+• Strict Lock, No ESC, and No Panic toggles now apply immediately when turned off
+• No longer requires clicking Save to deactivate dangerous modes
+
+📓 BIMBO JOURNAL
+• Added info box explaining journal functionality and local photo storage
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+v5.5.0-pre2 - Quest Streaks & Profile Fixes
 
 🔥 QUEST STREAK XP MULTIPLIER
 • +3% XP bonus per consecutive day of quest completion

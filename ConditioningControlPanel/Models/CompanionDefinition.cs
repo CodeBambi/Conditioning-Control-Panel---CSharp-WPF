@@ -26,7 +26,7 @@ namespace ConditioningControlPanel.Models
         /// <summary>Bunny: +50% XP when autonomy triggers actions</summary>
         AutonomyBonus,
 
-        /// <summary>Parasite: -5 XP/min constant drain</summary>
+        /// <summary>Parasite: -3 XP/sec constant drain on player XP</summary>
         XPDrain,
 
         /// <summary>Trainer: -50% without strict, +100% with No Escape, -25 XP on attention fail</summary>
@@ -108,7 +108,7 @@ namespace ConditioningControlPanel.Models
                 Id = CompanionId.BrainParasite,
                 Name = "Brainwashed Slavedoll",
                 Description = "A sinister presence that feeds on your mind. Keep training or fall behind!",
-                XPMechanicDescription = "Drains 5 XP/min. You must actively train to outpace the drain!",
+                XPMechanicDescription = "Drains 3 XP/sec. You must actively train to outpace the drain!",
                 RequiredLevel = 125,
                 BonusType = CompanionBonusType.XPDrain,
                 IconResourcePath = "pack://application:,,,/Resources/avatar5_pose1.png",

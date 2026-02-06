@@ -70,10 +70,10 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<double>? XPDrained; // For Brain Parasite
         public event EventHandler<(CompanionId Companion, double Amount, double Modifier)>? XPAwarded;
 
-        // XP Drain timer (for Brain Parasite)
+        // XP Drain timer (for Brain Parasite / Brainwashed Slavedoll)
         private DispatcherTimer? _drainTimer;
-        private const double DRAIN_XP_PER_MINUTE = 5.0;
-        private const double DRAIN_INTERVAL_SECONDS = 60.0;
+        private const double DRAIN_XP_PER_TICK = 3.0;
+        private const double DRAIN_INTERVAL_SECONDS = 1.0;
 
         // Active time tracking
         private DateTime _lastActiveTimeUpdate = DateTime.Now;
@@ -356,26 +356,27 @@ namespace ConditioningControlPanel.Services
                 _drainTimer.Tick += OnDrainTick;
                 _drainTimer.Start();
 
-                App.Logger?.Information("Brain Parasite drain timer started ({DrainRate} XP/min)",
-                    DRAIN_XP_PER_MINUTE);
+                App.Logger?.Information("Brain Parasite drain timer started ({DrainRate} XP/sec)",
+                    DRAIN_XP_PER_TICK);
             }
         }
 
         private void OnDrainTick(object? sender, EventArgs e)
         {
-            var progress = ActiveProgress;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
 
-            // Can't drain below 0 or at max level
-            if (progress.CurrentXP <= 0 || progress.IsMaxLevel)
+            // Can't drain below 0 — don't decrease level
+            if (settings.PlayerXP <= 0)
                 return;
 
-            progress.CurrentXP = Math.Max(0, progress.CurrentXP - DRAIN_XP_PER_MINUTE);
+            settings.PlayerXP = Math.Max(0, settings.PlayerXP - DRAIN_XP_PER_TICK);
             App.Settings?.Save();
 
-            XPDrained?.Invoke(this, DRAIN_XP_PER_MINUTE);
+            XPDrained?.Invoke(this, DRAIN_XP_PER_TICK);
 
-            App.Logger?.Debug("Brain Parasite drained {Amount} XP. Current: {XP:F1}",
-                DRAIN_XP_PER_MINUTE, progress.CurrentXP);
+            App.Logger?.Debug("Brain Parasite drained {Amount} player XP. Current: {XP:F1}",
+                DRAIN_XP_PER_TICK, settings.PlayerXP);
         }
 
         #endregion

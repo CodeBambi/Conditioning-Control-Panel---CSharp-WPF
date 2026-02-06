@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Conditioning Control Panel - Desktop Conditioning App</title>
-    <meta name="description" content="A powerful desktop application for visual and audio conditioning, featuring gamification, scheduling, an interactive companion avatar, and a sleek modern interface.">
+    <meta name="description" content="A powerful desktop application for visual and audio conditioning, featuring quests, skill trees, achievements, leaderboards, an interactive AI companion, and a sleek modern interface.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💗</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-dark: #0d0d1a;
@@ -17,21 +17,16 @@
             --bg-card: #1e1e3a;
             --accent-pink: #ff69b4;
             --accent-purple: #9b59b6;
+            --accent-gold: #FFD700;
+            --accent-green: #50C878;
             --accent-gradient: linear-gradient(135deg, #ff69b4 0%, #9b59b6 100%);
             --text-primary: #ffffff;
             --text-secondary: #b0b0c0;
             --text-muted: #707090;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
 
         body {
             font-family: 'Poppins', sans-serif;
@@ -41,896 +36,374 @@
             overflow-x: hidden;
         }
 
-        /* Animated Background */
+        /* ═══════════ Animated Background ═══════════ */
         .bg-animation {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
             background: var(--bg-dark);
         }
-
         .bg-animation::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background:
-                radial-gradient(ellipse at 20% 20%, rgba(155, 89, 182, 0.15) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 80%, rgba(255, 105, 180, 0.1) 0%, transparent 50%),
-                radial-gradient(ellipse at 50% 50%, rgba(155, 89, 182, 0.05) 0%, transparent 70%);
+                radial-gradient(ellipse at 20% 20%, rgba(155,89,182,0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(255,105,180,0.1) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(155,89,182,0.05) 0%, transparent 70%);
             animation: pulse 8s ease-in-out infinite;
         }
+        @keyframes pulse { 0%,100%{opacity:.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.02)} }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 0.6; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.02); }
-        }
-
-        /* Floating particles */
-        .particles {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: -1;
-            overflow: hidden;
-        }
-
+        .particles { position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:-1;overflow:hidden; }
         .particle {
-            position: absolute;
-            width: 4px;
-            height: 4px;
-            background: var(--accent-pink);
-            border-radius: 50%;
-            opacity: 0.3;
-            animation: float 15s infinite;
+            position:absolute;width:4px;height:4px;background:var(--accent-pink);border-radius:50%;opacity:.3;
+            animation:float 15s infinite;
         }
+        @keyframes float { 0%,100%{transform:translateY(100vh) rotate(0deg);opacity:0} 10%{opacity:.3} 90%{opacity:.3} 100%{transform:translateY(-100vh) rotate(720deg);opacity:0} }
 
-        @keyframes float {
-            0%, 100% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
-            10% { opacity: 0.3; }
-            90% { opacity: 0.3; }
-            100% { transform: translateY(-100vh) rotate(720deg); opacity: 0; }
-        }
-
-        /* Navigation */
+        /* ═══════════ Navigation ═══════════ */
         nav {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 1rem 2rem;
-            background: rgba(13, 13, 26, 0.9);
-            backdrop-filter: blur(10px);
-            z-index: 1000;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid rgba(255, 105, 180, 0.1);
-        }
-
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            list-style: none;
-        }
-
-        .nav-links a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.3s;
-        }
-
-        .nav-links a:hover {
-            color: var(--accent-pink);
-        }
-
-        .nav-links .discord-link {
-            background: #5865F2;
-            color: white !important;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-
-        .nav-links .discord-link:hover {
-            background: #4752C4;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.4);
-        }
-
-        /* Hero Section */
-        .hero {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            padding: 6rem 2rem 4rem;
-            position: relative;
-        }
-
-        .hero-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            background: rgba(255, 105, 180, 0.1);
-            border: 1px solid rgba(255, 105, 180, 0.3);
-            border-radius: 50px;
-            font-size: 0.85rem;
-            color: var(--accent-pink);
-            margin-bottom: 1.5rem;
-        }
-
-        .hero-badge .dot {
-            width: 8px;
-            height: 8px;
-            background: var(--accent-pink);
-            border-radius: 50%;
-            animation: blink 2s infinite;
-        }
-
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-
-        .hero h1 {
-            font-size: clamp(2.5rem, 6vw, 4.5rem);
-            font-weight: 700;
-            margin-bottom: 1rem;
-            line-height: 1.1;
-        }
-
-        .hero h1 span {
-            background: var(--accent-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .hero p {
-            font-size: 1.25rem;
-            color: var(--text-secondary);
-            max-width: 600px;
-            margin-bottom: 2rem;
-        }
-
-        .hero-buttons {
-            display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 1rem 2rem;
-            border-radius: 50px;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.3s;
-            font-size: 1rem;
-        }
-
-        .btn-primary {
-            background: var(--accent-gradient);
-            color: white;
-            box-shadow: 0 4px 20px rgba(255, 105, 180, 0.4);
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 30px rgba(255, 105, 180, 0.5);
-        }
-
-        .btn-secondary {
-            background: var(--bg-secondary);
-            color: var(--text-primary);
-            border: 1px solid rgba(255, 105, 180, 0.3);
-        }
-
-        .btn-secondary:hover {
-            border-color: var(--accent-pink);
-            background: rgba(255, 105, 180, 0.1);
-        }
-
-        .hero-image {
-            margin-top: 3rem;
-            max-width: 900px;
-            width: 100%;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(255, 105, 180, 0.1);
-            border: 1px solid rgba(255, 105, 180, 0.2);
-        }
-
-        .badges {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 2rem;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-
-        .badges img {
-            height: 24px;
-        }
-
-        /* Features Section */
-        .features {
-            padding: 6rem 2rem;
-            background: var(--bg-primary);
-        }
-
-        .section-header {
-            text-align: center;
-            margin-bottom: 4rem;
-        }
-
-        .section-header h2 {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .section-header p {
-            color: var(--text-secondary);
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .feature-card {
-            background: var(--bg-card);
-            border-radius: 24px;
-            padding: 2rem;
-            border: 1px solid rgba(255, 105, 180, 0.1);
-            transition: all 0.3s;
-        }
-
-        .feature-card:hover {
-            transform: translateY(-5px);
-            border-color: rgba(255, 105, 180, 0.3);
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-        }
-
-        .feature-icon {
-            width: 60px;
-            height: 60px;
-            border-radius: 16px;
-            background: var(--accent-gradient);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.8rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .feature-card h3 {
-            font-size: 1.25rem;
-            margin-bottom: 0.75rem;
-        }
-
-        .feature-card p {
-            color: var(--text-secondary);
-            font-size: 0.95rem;
-        }
-
-        .feature-card img {
-            width: 100%;
-            height: 180px;
-            object-fit: cover;
-            border-radius: 16px;
-            margin-bottom: 1.5rem;
-            border: 1px solid rgba(255, 105, 180, 0.2);
-        }
-
-        /* Progression Section */
-        .progression {
-            padding: 6rem 2rem;
-            background: var(--bg-dark);
-        }
-
-        .progression-container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-
-        .level-track {
-            position: relative;
-            padding: 2rem 0;
-        }
-
-        .level-track::before {
-            content: '';
-            position: absolute;
-            left: 30px;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background: var(--bg-secondary);
-            border-radius: 2px;
-        }
-
-        .level-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 2rem;
-            margin-bottom: 2rem;
-            position: relative;
-        }
-
-        .level-badge {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: var(--bg-card);
-            border: 3px solid var(--accent-purple);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 0.9rem;
-            flex-shrink: 0;
-            z-index: 1;
-        }
-
-        .level-content {
-            background: var(--bg-card);
-            padding: 1.5rem;
-            border-radius: 20px;
-            border: 1px solid rgba(155, 89, 182, 0.2);
-            flex-grow: 1;
-        }
-
-        .level-content h4 {
-            color: var(--accent-pink);
-            margin-bottom: 0.5rem;
-        }
-
-        .level-content p {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-        }
-
-        /* Patreon Section */
-        .patreon {
-            padding: 6rem 2rem;
-            background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-dark) 100%);
-        }
-
-        .patreon-features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-            gap: 1.5rem;
-            max-width: 1200px;
-            margin: 0 auto 3rem;
-        }
-
-        .patreon-feature-card {
-            background: var(--bg-card);
-            border-radius: 24px;
-            padding: 2rem;
-            border: 1px solid rgba(255, 66, 77, 0.2);
-            transition: all 0.3s;
-        }
-
-        .patreon-feature-card:hover {
-            transform: translateY(-5px);
-            border-color: rgba(255, 66, 77, 0.5);
-            box-shadow: 0 10px 40px rgba(255, 66, 77, 0.15);
-        }
-
-        .patreon-feature-card.hero-feature {
-            grid-column: 1 / -1;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2rem;
-            align-items: center;
-            padding: 0;
-            overflow: hidden;
-            background: linear-gradient(135deg, var(--bg-card) 0%, rgba(255, 66, 77, 0.1) 100%);
-        }
-
-        .patreon-feature-card.hero-feature img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            border-radius: 24px 0 0 24px;
-            margin: 0;
-        }
-
-        .patreon-feature-content {
-            padding: 2rem;
-        }
-
-        .premium-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, #FF424D 0%, #ff69b4 100%);
-            color: white;
-            padding: 0.35rem 1rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .patreon-feature-card h3 {
-            font-size: 1.35rem;
-            margin-bottom: 0.75rem;
-            color: var(--text-primary);
-        }
-
-        .patreon-feature-card p {
-            color: var(--text-secondary);
-            font-size: 0.95rem;
-            line-height: 1.6;
-        }
-
-        .patreon-feature-card p strong {
-            color: var(--accent-pink);
-        }
-
-        .patreon-feature-icon {
-            width: 60px;
-            height: 60px;
-            border-radius: 16px;
-            background: linear-gradient(135deg, #FF424D 0%, #ff69b4 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.8rem;
-            margin-bottom: 1.25rem;
-        }
-
-        .haptic-logos {
-            display: flex;
-            gap: 0.75rem;
-            margin-top: 1rem;
-        }
-
-        .haptic-badge {
-            padding: 0.4rem 0.9rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-        }
-
-        .haptic-badge.lovense {
-            background: rgba(255, 105, 180, 0.15);
-            color: #ff69b4;
-            border: 1px solid rgba(255, 105, 180, 0.3);
-        }
-
-        .haptic-badge.buttplug {
-            background: rgba(155, 89, 182, 0.15);
-            color: #9b59b6;
-            border: 1px solid rgba(155, 89, 182, 0.3);
-        }
-
-        .patreon-cta {
-            text-align: center;
-            margin-top: 2rem;
-        }
-
-        .patreon-note {
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            margin-top: 1rem;
-        }
-
-        .btn-patreon {
-            background: #FF424D;
-            color: white;
-            box-shadow: 0 4px 20px rgba(255, 66, 77, 0.4);
-        }
-
-        .btn-patreon:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 30px rgba(255, 66, 77, 0.5);
-        }
-
-        @media (max-width: 900px) {
-            .patreon-feature-card.hero-feature {
-                grid-template-columns: 1fr;
-            }
-
-            .patreon-feature-card.hero-feature img {
-                border-radius: 24px 24px 0 0;
-                max-height: 250px;
-            }
-
-            .patreon-features-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* Requirements Section */
-        .requirements {
-            padding: 4rem 2rem;
-            background: var(--bg-primary);
-        }
-
-        .requirements-grid {
-            max-width: 800px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .req-item {
-            background: var(--bg-card);
-            padding: 1.5rem;
-            border-radius: 20px;
-            text-align: center;
-        }
-
-        .req-item span {
-            font-size: 2rem;
-            display: block;
-            margin-bottom: 0.5rem;
-        }
-
-        .req-item h4 {
-            margin-bottom: 0.25rem;
-        }
-
-        .req-item p {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-        }
-
-        /* Footer */
-        footer {
-            padding: 3rem 2rem;
-            background: var(--bg-dark);
-            border-top: 1px solid rgba(255, 105, 180, 0.1);
-            text-align: center;
-        }
-
-        .footer-links {
-            display: flex;
-            gap: 2rem;
-            justify-content: center;
-            margin-bottom: 1.5rem;
-            flex-wrap: wrap;
-        }
-
-        .footer-links a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            transition: color 0.3s;
-        }
-
-        .footer-links a:hover {
-            color: var(--accent-pink);
-        }
-
-        .footer-tagline {
-            color: var(--accent-pink);
-            font-weight: 500;
-            font-size: 1.1rem;
-        }
-
-        .footer-copy {
-            color: var(--text-muted);
-            margin-top: 1rem;
-            font-size: 0.85rem;
-        }
-
-        /* Mobile Responsive */
-        @media (max-width: 768px) {
-            nav {
-                padding: 1rem;
-            }
-
-            .nav-links {
-                display: none;
-            }
-
-            .hero {
-                padding: 5rem 1rem 2rem;
-            }
-
-            .hero h1 {
-                font-size: 2rem;
-            }
-
-            .hero p {
-                font-size: 1rem;
-            }
-
-            .hero-buttons {
-                flex-direction: column;
-                width: 100%;
-                padding: 0 1rem;
-            }
-
-            .btn {
-                width: 100%;
-                justify-content: center;
-            }
-
-            .features, .progression, .patreon {
-                padding: 4rem 1rem;
-            }
-
-            .level-track::before {
-                left: 20px;
-            }
-
-            .level-badge {
-                width: 40px;
-                height: 40px;
-                font-size: 0.7rem;
-            }
-
-            .level-item {
-                gap: 1rem;
-            }
-        }
-
-        /* Security Badge */
-        .security-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1.25rem;
-            background: rgba(46, 204, 113, 0.1);
-            border: 1px solid rgba(46, 204, 113, 0.3);
-            border-radius: 16px;
-            color: #2ecc71;
-            font-size: 0.9rem;
-            margin-top: 1.5rem;
-        }
-
-        .security-badge a {
-            color: #2ecc71;
-            text-decoration: underline;
-        }
+            position:fixed;top:0;left:0;right:0;padding:1rem 2rem;
+            background:rgba(13,13,26,0.9);backdrop-filter:blur(10px);z-index:1000;
+            display:flex;justify-content:space-between;align-items:center;
+            border-bottom:1px solid rgba(255,105,180,0.1);
+        }
+        .logo { font-size:1.5rem;font-weight:700;background:var(--accent-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+        .nav-links { display:flex;gap:2rem;list-style:none; }
+        .nav-links a { color:var(--text-secondary);text-decoration:none;font-weight:500;transition:color .3s; }
+        .nav-links a:hover { color:var(--accent-pink); }
+        .nav-links .discord-link { background:#5865F2;color:white!important;padding:.5rem 1rem;border-radius:20px;font-weight:600;transition:all .3s; }
+        .nav-links .discord-link:hover { background:#4752C4;transform:translateY(-2px);box-shadow:0 4px 15px rgba(88,101,242,0.4); }
+        .logo-wrapper { display:flex;align-items:center;gap:.5rem; }
+        .logo-img { height:40px;width:auto;border-radius:8px;margin-right:.5rem;vertical-align:middle; }
 
         /* Mobile Menu */
-        .menu-toggle {
-            display: none;
-            flex-direction: column;
-            gap: 5px;
-            cursor: pointer;
-            padding: 10px;
-            z-index: 1001;
-        }
+        .menu-toggle { display:none;flex-direction:column;gap:5px;cursor:pointer;padding:10px;z-index:1001; }
+        .menu-toggle span { display:block;width:25px;height:3px;background:var(--accent-pink);border-radius:2px;transition:all .3s; }
+        .menu-toggle.active span:nth-child(1) { transform:rotate(45deg) translate(5px,6px); }
+        .menu-toggle.active span:nth-child(2) { opacity:0; }
+        .menu-toggle.active span:nth-child(3) { transform:rotate(-45deg) translate(5px,-6px); }
+        .mobile-menu { display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(13,13,26,0.98);backdrop-filter:blur(20px);z-index:999;flex-direction:column;justify-content:center;align-items:center;gap:2rem; }
+        .mobile-menu.active { display:flex; }
+        .mobile-menu a { color:var(--text-primary);text-decoration:none;font-size:1.5rem;font-weight:500;transition:color .3s; }
+        .mobile-menu a:hover { color:var(--accent-pink); }
 
-        .menu-toggle span {
-            display: block;
-            width: 25px;
-            height: 3px;
-            background: var(--accent-pink);
-            border-radius: 2px;
-            transition: all 0.3s;
-        }
+        /* ═══════════ Buttons ═══════════ */
+        .btn { display:inline-flex;align-items:center;gap:.5rem;padding:1rem 2rem;border-radius:50px;font-weight:600;text-decoration:none;transition:all .3s;font-size:1rem; }
+        .btn-primary { background:var(--accent-gradient);color:white;box-shadow:0 4px 20px rgba(255,105,180,0.4); }
+        .btn-primary:hover { transform:translateY(-2px);box-shadow:0 6px 30px rgba(255,105,180,0.5); }
+        .btn-secondary { background:var(--bg-secondary);color:var(--text-primary);border:1px solid rgba(255,105,180,0.3); }
+        .btn-secondary:hover { border-color:var(--accent-pink);background:rgba(255,105,180,0.1); }
+        .btn-patreon { background:#FF424D;color:white;box-shadow:0 4px 20px rgba(255,66,77,0.4); }
+        .btn-patreon:hover { transform:translateY(-2px);box-shadow:0 6px 30px rgba(255,66,77,0.5); }
+        .btn-sm { padding:.6rem 1.2rem;font-size:.85rem; }
 
-        .menu-toggle.active span:nth-child(1) {
-            transform: rotate(45deg) translate(5px, 6px);
-        }
+        /* ═══════════ Section Headers ═══════════ */
+        .section-header { text-align:center;margin-bottom:4rem; }
+        .section-header h2 { font-size:2.5rem;margin-bottom:1rem; }
+        .section-header h2 span { background:var(--accent-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+        .section-header p { color:var(--text-secondary);max-width:600px;margin:0 auto; }
 
-        .menu-toggle.active span:nth-child(2) {
-            opacity: 0;
-        }
-
-        .menu-toggle.active span:nth-child(3) {
-            transform: rotate(-45deg) translate(5px, -6px);
-        }
-
-        .mobile-menu {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(13, 13, 26, 0.98);
-            backdrop-filter: blur(20px);
-            z-index: 999;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            gap: 2rem;
-        }
-
-        .mobile-menu.active {
-            display: flex;
-        }
-
-        .mobile-menu a {
-            color: var(--text-primary);
-            text-decoration: none;
-            font-size: 1.5rem;
-            font-weight: 500;
-            transition: color 0.3s;
-        }
-
-        .mobile-menu a:hover {
-            color: var(--accent-pink);
-        }
-
-        /* Global rounded corners */
-        img {
-            border-radius: 12px;
-        }
-
-        /* Keep shield badges flat */
-        .badges img {
-            border-radius: 4px;
-        }
-
-        /* Logo in navbar */
-        .logo-img {
-            height: 40px;
-            width: auto;
-            border-radius: 8px;
-            margin-right: 0.5rem;
-            vertical-align: middle;
-        }
-
-        .logo-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        /* Avatar Banners */
-        .avatar-banner {
-            position: fixed;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 200px;
-            height: 600px;
-            z-index: 100;
-            pointer-events: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .avatar-banner.left {
-            left: 20px;
-        }
-
-        .avatar-banner.right {
-            right: 20px;
-        }
-
-        .avatar-banner img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            border-radius: 0;
-            filter: drop-shadow(0 0 20px rgba(255, 105, 180, 0.3));
-            transition: opacity 0.3s ease-in-out;
-        }
-
-        /* Hide banners on smaller screens */
-        @media (max-width: 1400px) {
-            .avatar-banner {
-                display: none;
-            }
-        }
-
-        /* Video Preview */
-        .hero-video-container {
-            margin-top: 3rem;
-            max-width: 900px;
-            width: 100%;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(255, 105, 180, 0.1);
-            border: 1px solid rgba(255, 105, 180, 0.2);
-            overflow: hidden;
-            position: relative;
-            background: var(--bg-card);
-        }
-
-        .hero-video-container iframe {
-            width: 100%;
-            aspect-ratio: 16/9;
-            border: none;
-            display: block;
-            border-radius: 20px;
-        }
-
-        @media (max-width: 768px) {
-            .menu-toggle {
-                display: flex;
-            }
-
-            .hero-video-container {
-                border-radius: 12px;
-            }
-        }
-
-        /* Update Alert Banner */
+        /* ═══════════ Update Alert Banner ═══════════ */
         .update-alert-banner {
-            background: linear-gradient(135deg, #ff69b4 0%, #9b59b6 100%);
-            color: white;
-            text-align: center;
-            padding: 12px 20px;
-            font-weight: 500;
-            font-size: 0.95rem;
-            position: relative;
-            z-index: 100;
-            box-shadow: 0 2px 10px rgba(255, 105, 180, 0.3);
+            background:linear-gradient(135deg,#ff69b4 0%,#9b59b6 100%);color:white;text-align:center;
+            padding:12px 20px;font-weight:500;font-size:.95rem;position:relative;z-index:100;
+            box-shadow:0 2px 10px rgba(255,105,180,0.3);
+        }
+        .update-alert-banner a { color:white;text-decoration:underline;font-weight:600; }
+        .update-alert-banner a:hover { text-decoration:none; }
+        .update-alert-banner .heart { animation:heartbeat 1.5s ease-in-out infinite;display:inline-block; }
+        @keyframes heartbeat { 0%,100%{transform:scale(1)} 50%{transform:scale(1.2)} }
+
+        /* ═══════════ Hero Section ═══════════ */
+        .hero { min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:6rem 2rem 4rem;position:relative; }
+        .hero-badge { display:inline-flex;align-items:center;gap:.5rem;padding:.5rem 1rem;background:rgba(255,105,180,0.1);border:1px solid rgba(255,105,180,0.3);border-radius:50px;font-size:.85rem;color:var(--accent-pink);margin-bottom:1.5rem; }
+        .hero-badge .dot { width:8px;height:8px;background:var(--accent-pink);border-radius:50%;animation:blink 2s infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+        .hero h1 { font-size:clamp(2.5rem,6vw,4.5rem);font-weight:700;margin-bottom:1rem;line-height:1.1; }
+        .hero h1 span { background:var(--accent-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+        .hero p { font-size:1.25rem;color:var(--text-secondary);max-width:650px;margin-bottom:2rem; }
+        .hero-buttons { display:flex;gap:1rem;flex-wrap:wrap;justify-content:center; }
+        .badges { display:flex;gap:.5rem;margin-top:2rem;flex-wrap:wrap;justify-content:center; }
+        .badges img { height:24px;border-radius:4px; }
+
+        /* Hero Video */
+        .hero-video-container { margin-top:3rem;max-width:900px;width:100%;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 40px rgba(255,105,180,0.1);border:1px solid rgba(255,105,180,0.2);overflow:hidden;background:var(--bg-card); }
+        .hero-video-container iframe { width:100%;aspect-ratio:16/9;border:none;display:block;border-radius:20px; }
+
+        /* ═══════════ What's New Slideshow ═══════════ */
+        .whats-new { padding:6rem 2rem;background:var(--bg-primary);position:relative;overflow:hidden; }
+        .whats-new::before {
+            content:'';position:absolute;top:0;left:0;right:0;bottom:0;
+            background:radial-gradient(ellipse at center,rgba(255,105,180,0.05) 0%,transparent 70%);
+            pointer-events:none;
+        }
+        .slideshow-container { max-width:1000px;margin:0 auto;position:relative; }
+        .slide {
+            display:none;animation:fadeSlide .6s ease-in-out;
+            background:var(--bg-card);border-radius:24px;padding:3rem;
+            border:1px solid rgba(255,105,180,0.15);
+            min-height:320px;
+        }
+        .slide.active { display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center; }
+        .slide.active.single-col { grid-template-columns:1fr; }
+        @keyframes fadeSlide { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+        .slide-content h3 { font-size:1.8rem;margin-bottom:.5rem;color:var(--text-primary); }
+        .slide-content .slide-tag {
+            display:inline-block;padding:.3rem .8rem;border-radius:20px;font-size:.75rem;font-weight:600;
+            text-transform:uppercase;letter-spacing:.5px;margin-bottom:1rem;
+        }
+        .slide-tag.new { background:rgba(80,200,120,0.15);color:var(--accent-green);border:1px solid rgba(80,200,120,0.3); }
+        .slide-tag.improved { background:rgba(255,215,0,0.15);color:var(--accent-gold);border:1px solid rgba(255,215,0,0.3); }
+        .slide-tag.premium { background:rgba(255,66,77,0.15);color:#FF424D;border:1px solid rgba(255,66,77,0.3); }
+        .slide-content p { color:var(--text-secondary);font-size:1rem;line-height:1.7;margin-bottom:1rem; }
+        .slide-content ul { list-style:none;padding:0; }
+        .slide-content ul li { color:var(--text-secondary);font-size:.9rem;padding:.3rem 0;padding-left:1.5rem;position:relative; }
+        .slide-content ul li::before { content:'✦';position:absolute;left:0;color:var(--accent-pink); }
+        .slide-visual { display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:1rem; }
+        .slide-visual img { max-width:100%;border-radius:16px;border:1px solid rgba(255,105,180,0.2); }
+
+        /* Slideshow Controls */
+        .slide-controls { display:flex;justify-content:center;align-items:center;gap:1.5rem;margin-top:2rem; }
+        .slide-dots { display:flex;gap:.5rem; }
+        .slide-dot {
+            width:10px;height:10px;border-radius:50%;background:var(--bg-secondary);border:1px solid rgba(255,105,180,0.3);
+            cursor:pointer;transition:all .3s;
+        }
+        .slide-dot.active { background:var(--accent-pink);transform:scale(1.2); }
+        .slide-arrow {
+            width:40px;height:40px;border-radius:50%;background:var(--bg-secondary);border:1px solid rgba(255,105,180,0.3);
+            color:var(--accent-pink);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;
+            transition:all .3s;
+        }
+        .slide-arrow:hover { background:rgba(255,105,180,0.2);border-color:var(--accent-pink); }
+
+        /* ═══════════ Gamification Section ═══════════ */
+        .gamification { padding:6rem 2rem;background:var(--bg-dark); }
+        .gamification-grid {
+            display:grid;grid-template-columns:repeat(2,1fr);gap:2rem;max-width:1200px;margin:0 auto;
+        }
+        .game-card {
+            background:var(--bg-card);border-radius:24px;padding:2.5rem;
+            border:1px solid rgba(255,105,180,0.1);transition:all .4s;position:relative;overflow:hidden;
+        }
+        .game-card::before {
+            content:'';position:absolute;top:0;left:0;right:0;height:4px;
+            background:var(--accent-gradient);opacity:0;transition:opacity .3s;
+        }
+        .game-card:hover { transform:translateY(-5px);border-color:rgba(255,105,180,0.3);box-shadow:0 15px 50px rgba(0,0,0,0.3); }
+        .game-card:hover::before { opacity:1; }
+        .game-card-icon { font-size:3rem;margin-bottom:1rem; }
+        .game-card h3 { font-size:1.5rem;margin-bottom:.75rem; }
+        .game-card p { color:var(--text-secondary);font-size:.95rem;margin-bottom:1rem; }
+        .game-card-features { display:flex;flex-wrap:wrap;gap:.5rem; }
+        .game-tag {
+            padding:.35rem .75rem;border-radius:12px;font-size:.75rem;font-weight:500;
+            background:rgba(255,105,180,0.1);color:var(--accent-pink);border:1px solid rgba(255,105,180,0.2);
         }
 
-        .update-alert-banner a {
-            color: white;
-            text-decoration: underline;
-            font-weight: 600;
+        /* ═══════════ Achievement Showcase ═══════════ */
+        .achievements { padding:6rem 2rem;background:var(--bg-primary); }
+        .achievement-scroll {
+            max-width:1200px;margin:0 auto;overflow:hidden;position:relative;
+            mask-image:linear-gradient(to right,transparent,black 5%,black 95%,transparent);
+            -webkit-mask-image:linear-gradient(to right,transparent,black 5%,black 95%,transparent);
+        }
+        .achievement-track {
+            display:flex;gap:1.5rem;animation:scrollAchievements 40s linear infinite;width:max-content;
+        }
+        .achievement-track:hover { animation-play-state:paused; }
+        @keyframes scrollAchievements { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+        .achievement-item {
+            flex-shrink:0;width:120px;text-align:center;transition:all .3s;cursor:default;
+        }
+        .achievement-item:hover { transform:scale(1.1); }
+        .achievement-item img {
+            width:100px;height:100px;object-fit:contain;border-radius:16px;
+            background:var(--bg-card);padding:8px;
+            border:2px solid rgba(255,215,0,0.2);transition:all .3s;
+        }
+        .achievement-item:hover img { border-color:var(--accent-gold);box-shadow:0 0 20px rgba(255,215,0,0.2); }
+        .achievement-item span { display:block;font-size:.7rem;color:var(--text-muted);margin-top:.5rem;line-height:1.3; }
+        .achievement-count {
+            text-align:center;margin-bottom:2rem;
+        }
+        .achievement-count .big-number {
+            font-size:4rem;font-weight:900;
+            background:linear-gradient(135deg,#FFD700,#FFA500);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+        }
+        .achievement-count p { color:var(--text-secondary);font-size:1.1rem; }
+
+        /* ═══════════ Companion Section ═══════════ */
+        .companions { padding:6rem 2rem;background:var(--bg-dark); }
+        .companion-grid {
+            display:grid;grid-template-columns:repeat(3,1fr);gap:2rem;max-width:1200px;margin:0 auto;
+        }
+        .companion-card {
+            background:var(--bg-card);border-radius:24px;padding:2rem;text-align:center;
+            border:1px solid rgba(155,89,182,0.15);transition:all .4s;position:relative;
+        }
+        .companion-card:hover { transform:translateY(-8px);border-color:rgba(155,89,182,0.4);box-shadow:0 15px 50px rgba(155,89,182,0.15); }
+        .companion-card img {
+            width:140px;height:200px;object-fit:contain;margin:0 auto 1rem;border-radius:0;
+            filter:drop-shadow(0 0 15px rgba(255,105,180,0.3));transition:all .3s;
+        }
+        .companion-card:hover img { filter:drop-shadow(0 0 25px rgba(255,105,180,0.5));transform:scale(1.05); }
+        .companion-card h4 { font-size:1.1rem;margin-bottom:.3rem; }
+        .companion-card .companion-level {
+            font-size:.8rem;color:var(--accent-purple);font-weight:600;margin-bottom:.5rem;
+        }
+        .companion-card p { color:var(--text-secondary);font-size:.85rem; }
+        .companion-card .companion-bonus {
+            margin-top:.75rem;padding:.4rem .8rem;border-radius:12px;font-size:.75rem;font-weight:500;
+            display:inline-block;
+        }
+        .bonus-xp { background:rgba(80,200,120,0.15);color:var(--accent-green);border:1px solid rgba(80,200,120,0.3); }
+        .bonus-drain { background:rgba(255,66,77,0.15);color:#FF424D;border:1px solid rgba(255,66,77,0.3); }
+        .bonus-luck { background:rgba(255,215,0,0.15);color:var(--accent-gold);border:1px solid rgba(255,215,0,0.3); }
+
+        /* ═══════════ Features Grid ═══════════ */
+        .features { padding:6rem 2rem;background:var(--bg-primary); }
+        .features-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2rem;max-width:1200px;margin:0 auto; }
+        .feature-card {
+            background:var(--bg-card);border-radius:24px;padding:2rem;
+            border:1px solid rgba(255,105,180,0.1);transition:all .3s;
+        }
+        .feature-card:hover { transform:translateY(-5px);border-color:rgba(255,105,180,0.3);box-shadow:0 10px 40px rgba(0,0,0,0.3); }
+        .feature-card img { width:100%;height:180px;object-fit:cover;border-radius:16px;margin-bottom:1.5rem;border:1px solid rgba(255,105,180,0.2); }
+        .feature-card h3 { font-size:1.25rem;margin-bottom:.75rem; }
+        .feature-card p { color:var(--text-secondary);font-size:.95rem; }
+
+        /* ═══════════ Progression Timeline ═══════════ */
+        .progression { padding:6rem 2rem;background:var(--bg-dark); }
+        .progression-container { max-width:1000px;margin:0 auto; }
+        .level-track { position:relative;padding:2rem 0; }
+        .level-track::before { content:'';position:absolute;left:30px;top:0;bottom:0;width:4px;background:var(--bg-secondary);border-radius:2px; }
+        .level-item { display:flex;align-items:flex-start;gap:2rem;margin-bottom:2rem;position:relative; }
+        .level-badge { width:60px;height:60px;border-radius:50%;background:var(--bg-card);border:3px solid var(--accent-purple);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;flex-shrink:0;z-index:1; }
+        .level-content { background:var(--bg-card);padding:1.5rem;border-radius:20px;border:1px solid rgba(155,89,182,0.2);flex-grow:1; }
+        .level-content h4 { color:var(--accent-pink);margin-bottom:.5rem; }
+        .level-content p { color:var(--text-secondary);font-size:.9rem; }
+
+        /* ═══════════ Patreon Section ═══════════ */
+        .patreon { padding:6rem 2rem;background:linear-gradient(180deg,var(--bg-primary) 0%,var(--bg-dark) 100%); }
+        .patreon-features-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.5rem;max-width:1200px;margin:0 auto 3rem; }
+        .patreon-feature-card {
+            background:var(--bg-card);border-radius:24px;padding:2rem;
+            border:1px solid rgba(255,66,77,0.2);transition:all .3s;
+        }
+        .patreon-feature-card:hover { transform:translateY(-5px);border-color:rgba(255,66,77,0.5);box-shadow:0 10px 40px rgba(255,66,77,0.15); }
+        .patreon-feature-card.hero-feature {
+            grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:center;
+            padding:0;overflow:hidden;background:linear-gradient(135deg,var(--bg-card) 0%,rgba(255,66,77,0.1) 100%);
+        }
+        .patreon-feature-card.hero-feature img { width:100%;height:100%;object-fit:cover;border-radius:24px 0 0 24px;margin:0; }
+        .patreon-feature-content { padding:2rem; }
+        .premium-badge { display:inline-block;background:linear-gradient(135deg,#FF424D 0%,#ff69b4 100%);color:white;padding:.35rem 1rem;border-radius:20px;font-size:.8rem;font-weight:600;margin-bottom:1rem;text-transform:uppercase;letter-spacing:.5px; }
+        .patreon-feature-card h3 { font-size:1.35rem;margin-bottom:.75rem; }
+        .patreon-feature-card p { color:var(--text-secondary);font-size:.95rem;line-height:1.6; }
+        .patreon-feature-card p strong { color:var(--accent-pink); }
+        .patreon-feature-icon { width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#FF424D 0%,#ff69b4 100%);display:flex;align-items:center;justify-content:center;font-size:1.8rem;margin-bottom:1.25rem; }
+        .haptic-logos { display:flex;gap:.75rem;margin-top:1rem; }
+        .haptic-badge { padding:.4rem .9rem;border-radius:20px;font-size:.8rem;font-weight:600; }
+        .haptic-badge.lovense { background:rgba(255,105,180,0.15);color:#ff69b4;border:1px solid rgba(255,105,180,0.3); }
+        .haptic-badge.buttplug { background:rgba(155,89,182,0.15);color:#9b59b6;border:1px solid rgba(155,89,182,0.3); }
+        .patreon-cta { text-align:center;margin-top:2rem; }
+        .patreon-note { color:var(--text-muted);font-size:.9rem;margin-top:1rem; }
+
+        /* ═══════════ Requirements ═══════════ */
+        .requirements { padding:4rem 2rem;background:var(--bg-primary); }
+        .requirements-grid { max-width:800px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.5rem; }
+        .req-item { background:var(--bg-card);padding:1.5rem;border-radius:20px;text-align:center; }
+        .req-item span { font-size:2rem;display:block;margin-bottom:.5rem; }
+        .req-item h4 { margin-bottom:.25rem; }
+        .req-item p { color:var(--text-muted);font-size:.85rem; }
+
+        /* ═══════════ Footer ═══════════ */
+        footer { padding:3rem 2rem;background:var(--bg-dark);border-top:1px solid rgba(255,105,180,0.1);text-align:center; }
+        .footer-links { display:flex;gap:2rem;justify-content:center;margin-bottom:1.5rem;flex-wrap:wrap; }
+        .footer-links a { color:var(--text-secondary);text-decoration:none;transition:color .3s; }
+        .footer-links a:hover { color:var(--accent-pink); }
+        .footer-tagline { color:var(--accent-pink);font-weight:500;font-size:1.1rem; }
+        .footer-copy { color:var(--text-muted);margin-top:1rem;font-size:.85rem; }
+
+        /* ═══════════ Avatar Banners ═══════════ */
+        .avatar-banner { position:fixed;top:50%;transform:translateY(-50%);width:200px;height:600px;z-index:100;pointer-events:none;display:flex;align-items:center;justify-content:center; }
+        .avatar-banner.left { left:20px; }
+        .avatar-banner.right { right:20px; }
+        .avatar-banner img { max-width:100%;max-height:100%;object-fit:contain;border-radius:0;filter:drop-shadow(0 0 20px rgba(255,105,180,0.3));transition:opacity .3s ease-in-out; }
+        @media (max-width:1400px) { .avatar-banner { display:none; } }
+
+        /* ═══════════ Skill Showcase Grid ═══════════ */
+        .skill-grid {
+            display:flex;flex-wrap:wrap;gap:.75rem;justify-content:center;padding:1rem;
+        }
+        .skill-icon {
+            width:60px;height:60px;border-radius:12px;background:var(--bg-card);padding:6px;
+            border:2px solid rgba(155,89,182,0.3);transition:all .3s;
+        }
+        .skill-icon:hover { border-color:var(--accent-purple);transform:scale(1.15);box-shadow:0 0 15px rgba(155,89,182,0.3); }
+
+        /* ═══════════ Stats Bar ═══════════ */
+        .stats-bar {
+            display:flex;justify-content:center;gap:3rem;flex-wrap:wrap;padding:3rem 2rem;
+            background:var(--bg-secondary);border-bottom:1px solid rgba(255,105,180,0.1);
+        }
+        .stat-item { text-align:center; }
+        .stat-item .stat-number {
+            font-size:2.5rem;font-weight:900;
+            background:var(--accent-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+        }
+        .stat-item .stat-label { color:var(--text-muted);font-size:.85rem;text-transform:uppercase;letter-spacing:1px; }
+
+        /* ═══════════ Global ═══════════ */
+        img { border-radius:12px; }
+        .badges img { border-radius:4px; }
+
+        /* ═══════════ Responsive ═══════════ */
+        @media (max-width:900px) {
+            .patreon-feature-card.hero-feature { grid-template-columns:1fr; }
+            .patreon-feature-card.hero-feature img { border-radius:24px 24px 0 0;max-height:250px; }
+            .patreon-features-grid { grid-template-columns:1fr; }
+            .slide.active { grid-template-columns:1fr!important; }
+            .slide-visual { display:none; }
         }
 
-        .update-alert-banner a:hover {
-            text-decoration: none;
-        }
-
-        .update-alert-banner .heart {
-            color: #fff;
-            animation: heartbeat 1.5s ease-in-out infinite;
-        }
-
-        @keyframes heartbeat {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.2); }
+        @media (max-width:768px) {
+            nav { padding:1rem; }
+            .nav-links { display:none; }
+            .menu-toggle { display:flex; }
+            .hero { padding:5rem 1rem 2rem; }
+            .hero h1 { font-size:2rem; }
+            .hero p { font-size:1rem; }
+            .hero-buttons { flex-direction:column;width:100%;padding:0 1rem; }
+            .btn { width:100%;justify-content:center; }
+            .features,.progression,.patreon,.gamification,.achievements,.companions,.whats-new { padding:4rem 1rem; }
+            .gamification-grid { grid-template-columns:1fr; }
+            .companion-grid { grid-template-columns:1fr; }
+            .level-track::before { left:20px; }
+            .level-badge { width:40px;height:40px;font-size:.7rem; }
+            .level-item { gap:1rem; }
+            .hero-video-container { border-radius:12px; }
+            .stats-bar { gap:1.5rem; }
+            .stat-item .stat-number { font-size:1.8rem; }
+            .section-header h2 { font-size:2rem; }
         }
     </style>
 </head>
 <body>
     <!-- Avatar Banners -->
-    <div class="avatar-banner left">
-        <img id="avatar-left" src="images/avatar_pose1.png" alt="Avatar">
-    </div>
-    <div class="avatar-banner right">
-        <img id="avatar-right" src="images/avatar2_pose1.png" alt="Avatar">
-    </div>
+    <div class="avatar-banner left"><img id="avatar-left" src="images/avatar_pose1.png" alt="Avatar"></div>
+    <div class="avatar-banner right"><img id="avatar-right" src="images/avatar2_pose1.png" alt="Avatar"></div>
 
     <div class="bg-animation"></div>
     <div class="particles">
-        <div class="particle" style="left: 10%; animation-delay: 0s;"></div>
-        <div class="particle" style="left: 20%; animation-delay: 2s;"></div>
-        <div class="particle" style="left: 30%; animation-delay: 4s;"></div>
-        <div class="particle" style="left: 40%; animation-delay: 1s;"></div>
-        <div class="particle" style="left: 50%; animation-delay: 3s;"></div>
-        <div class="particle" style="left: 60%; animation-delay: 5s;"></div>
-        <div class="particle" style="left: 70%; animation-delay: 2.5s;"></div>
-        <div class="particle" style="left: 80%; animation-delay: 0.5s;"></div>
-        <div class="particle" style="left: 90%; animation-delay: 3.5s;"></div>
+        <div class="particle" style="left:10%;animation-delay:0s"></div>
+        <div class="particle" style="left:20%;animation-delay:2s"></div>
+        <div class="particle" style="left:30%;animation-delay:4s"></div>
+        <div class="particle" style="left:40%;animation-delay:1s"></div>
+        <div class="particle" style="left:50%;animation-delay:3s"></div>
+        <div class="particle" style="left:60%;animation-delay:5s"></div>
+        <div class="particle" style="left:70%;animation-delay:2.5s"></div>
+        <div class="particle" style="left:80%;animation-delay:0.5s"></div>
+        <div class="particle" style="left:90%;animation-delay:3.5s"></div>
     </div>
 
     <nav>
@@ -939,8 +412,9 @@
             <span class="logo">CCP</span>
         </div>
         <ul class="nav-links">
+            <li><a href="#whats-new">What's New</a></li>
+            <li><a href="#gamification">Gamification</a></li>
             <li><a href="#features">Features</a></li>
-            <li><a href="#progression">Progression</a></li>
             <li><a href="guide.html">Guide</a></li>
             <li><a href="leaderboard.html">Leaderboard</a></li>
             <li><a href="#patreon">Patreon</a></li>
@@ -948,42 +422,40 @@
             <li><a href="https://discord.gg/YxVAMt4qaZ" target="_blank" class="discord-link">Discord</a></li>
         </ul>
         <div class="menu-toggle" onclick="toggleMenu()">
-            <span></span>
-            <span></span>
-            <span></span>
+            <span></span><span></span><span></span>
         </div>
     </nav>
 
     <div class="mobile-menu" id="mobileMenu">
+        <a href="#whats-new" onclick="toggleMenu()">What's New</a>
+        <a href="#gamification" onclick="toggleMenu()">Gamification</a>
         <a href="#features" onclick="toggleMenu()">Features</a>
-        <a href="#progression" onclick="toggleMenu()">Progression</a>
         <a href="guide.html" onclick="toggleMenu()">Guide</a>
         <a href="leaderboard.html" onclick="toggleMenu()">Leaderboard</a>
         <a href="#patreon" onclick="toggleMenu()">Patreon</a>
         <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases" target="_blank" onclick="toggleMenu()">Releases</a>
-        <a href="https://discord.gg/YxVAMt4qaZ" target="_blank" onclick="toggleMenu()" style="background: #5865F2; padding: 0.75rem 1.5rem; border-radius: 25px;">Discord</a>
+        <a href="https://discord.gg/YxVAMt4qaZ" target="_blank" onclick="toggleMenu()" style="background:#5865F2;padding:.75rem 1.5rem;border-radius:25px">Discord</a>
         <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/download/v5.4.12/ConditioningControlPanel-5.4.12-Setup.exe" class="btn btn-primary" onclick="toggleMenu()">Download v5.4.12</a>
     </div>
 
     <!-- Update Alert Banner -->
     <div class="update-alert-banner">
-        <span class="heart">❤️</span> Every girl running versions earlier than 5.3 should <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/tag/v5.4.12">update manually</a> - Good girls condition daily <span class="heart">❤️</span>
+        <span class="heart">&#10084;&#65039;</span> Massive update! Girls on versions older than 5.4.9 should <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/tag/v5.4.12">update now</a> to get quests, skill trees, achievements &amp; more <span class="heart">&#10084;&#65039;</span>
     </div>
 
+    <!-- ═══════════ Hero ═══════════ -->
     <section class="hero">
         <div class="hero-badge">
             <span class="dot"></span>
-            v5.4.12 Available Now
+            v5.4.12 Stable &bull; v5.5.0-pre3 Testing
         </div>
         <h1>Conditioning <span>Control Panel</span></h1>
-        <p>A powerful desktop application for visual and audio conditioning, featuring gamification, an interactive AI companion, and a sleek modern interface.</p>
+        <p>The most feature-packed conditioning app on the planet. Quests, skill trees, achievements, leaderboards, AI companions, haptic sync &mdash; your transformation starts here.</p>
 
         <div class="hero-buttons">
             <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/download/v5.4.12/ConditioningControlPanel-5.4.12-Setup.exe" class="btn btn-primary">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
                 Download v5.4.12
             </a>
@@ -1000,218 +472,441 @@
             <img src="https://img.shields.io/badge/WPF-Windows-0078D6?style=flat-square&logo=windows" alt="WPF">
         </div>
 
-        <!-- Video Preview -->
         <div class="hero-video-container">
-            <iframe src="https://www.redgifs.com/ifr/kindhearteddizzyallensbigearedbat"
-                    scrolling="no"
-                    frameborder="0"
-                    allowfullscreen>
-            </iframe>
+            <iframe src="https://www.redgifs.com/ifr/kindhearteddizzyallensbigearedbat" scrolling="no" frameborder="0" allowfullscreen></iframe>
         </div>
     </section>
 
+    <!-- ═══════════ Stats Bar ═══════════ -->
+    <div class="stats-bar">
+        <div class="stat-item"><div class="stat-number" data-target="31">0</div><div class="stat-label">Achievements</div></div>
+        <div class="stat-item"><div class="stat-number" data-target="22">0</div><div class="stat-label">Skill Tree Nodes</div></div>
+        <div class="stat-item"><div class="stat-number" data-target="6">0</div><div class="stat-label">AI Companions</div></div>
+        <div class="stat-item"><div class="stat-number" data-target="12">0</div><div class="stat-label">Conditioning Tools</div></div>
+        <div class="stat-item"><div class="stat-number" data-target="35">0</div><div class="stat-label">Help Tooltips</div></div>
+    </div>
+
+    <!-- ═══════════ What's New Slideshow ═══════════ -->
+    <section class="whats-new" id="whats-new">
+        <div class="section-header">
+            <h2>What's <span>New</span></h2>
+            <p>Massive updates since v5.4.1 &mdash; here's what you've been missing</p>
+        </div>
+
+        <div class="slideshow-container">
+            <!-- Slide 1: Quest System -->
+            <div class="slide active">
+                <div class="slide-content">
+                    <div class="slide-tag new">New in v5.4.9</div>
+                    <h3>Quest System</h3>
+                    <p>Daily and weekly quests give you goals, structure, and XP rewards. Complete streaks for bonus multipliers.</p>
+                    <ul>
+                        <li>3 daily quests refreshed every day</li>
+                        <li>Weekly quests with extended goals</li>
+                        <li>+3% XP bonus per consecutive day streak</li>
+                        <li>Quest completion notifications</li>
+                        <li>XP rewards scale with your level</li>
+                    </ul>
+                </div>
+                <div class="slide-visual">
+                    <div style="font-size:6rem;text-align:center">
+                        <div style="margin-bottom:.5rem">&#128293;</div>
+                        <div style="font-size:1.2rem;color:var(--accent-gold);font-weight:700">Daily Streaks</div>
+                        <div style="font-size:.9rem;color:var(--text-muted)">Don't break the chain~</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 2: Skill Tree -->
+            <div class="slide">
+                <div class="slide-content">
+                    <div class="slide-tag new">New in v5.4.11</div>
+                    <h3>Skill Tree</h3>
+                    <p>Earn sparkle points every level up and spend them on powerful enhancements. Choose your path wisely &mdash; once you pick, there's no going back.</p>
+                    <ul>
+                        <li>22 unique skills across multiple paths</li>
+                        <li>XP multipliers, quest bonuses, lucky bubbles</li>
+                        <li>Trophy Case for leaderboard bragging rights</li>
+                        <li>Oopsie Insurance for streak protection</li>
+                        <li>Skills sync to cloud across devices</li>
+                    </ul>
+                </div>
+                <div class="slide-visual">
+                    <div class="skill-grid">
+                        <img class="skill-icon" src="images/skills/sparkle_boost_1.png" alt="Sparkle Boost" title="Sparkle Boost I">
+                        <img class="skill-icon" src="images/skills/lucky_bubbles.png" alt="Lucky Bubbles" title="Lucky Bubbles">
+                        <img class="skill-icon" src="images/skills/trophy_case.png" alt="Trophy Case" title="Trophy Case">
+                        <img class="skill-icon" src="images/skills/oopsie_insurance.png" alt="Oopsie Insurance" title="Oopsie Insurance">
+                        <img class="skill-icon" src="images/skills/quest_refresh.png" alt="Quest Refresh" title="Quest Refresh">
+                        <img class="skill-icon" src="images/skills/streak_power.png" alt="Streak Power" title="Streak Power">
+                        <img class="skill-icon" src="images/skills/pink_rush.png" alt="Pink Rush" title="Pink Rush">
+                        <img class="skill-icon" src="images/skills/hive_mind.png" alt="Hive Mind" title="Hive Mind">
+                        <img class="skill-icon" src="images/skills/perfect_bimbo_week.png" alt="Perfect Bimbo Week" title="Perfect Bimbo Week">
+                        <img class="skill-icon" src="images/skills/eternal_doll.png" alt="Eternal Doll" title="Eternal Doll">
+                        <img class="skill-icon" src="images/skills/night_shift.png" alt="Night Shift" title="Night Shift">
+                        <img class="skill-icon" src="images/skills/early_bird_bimbo.png" alt="Early Bird Bimbo" title="Early Bird Bimbo">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 3: Leaderboard & Seasons -->
+            <div class="slide">
+                <div class="slide-content">
+                    <div class="slide-tag new">New in v5.4.11</div>
+                    <h3>Seasons &amp; Leaderboard</h3>
+                    <p>Compete globally on the monthly leaderboard. Seasons reset every month &mdash; your rank is everything. OG badges honor the original players.</p>
+                    <ul>
+                        <li>Live global leaderboard with rankings</li>
+                        <li>Monthly season resets keep competition fresh</li>
+                        <li>Season 0 OG badges for early adopters</li>
+                        <li>Online status indicators</li>
+                        <li>Patreon supporter badges</li>
+                        <li>Trophy Case stats visible on profile</li>
+                    </ul>
+                </div>
+                <div class="slide-visual">
+                    <div style="text-align:center">
+                        <div style="font-size:5rem;margin-bottom:.5rem">&#127942;</div>
+                        <div style="font-size:1.3rem;color:var(--accent-gold);font-weight:700">Global Leaderboard</div>
+                        <div style="font-size:.85rem;color:var(--text-muted);margin-top:.3rem">Who's the prettiest bimbo?~</div>
+                        <a href="leaderboard.html" class="btn btn-sm btn-secondary" style="margin-top:1rem">View Leaderboard</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 4: Audio-Synced Haptics -->
+            <div class="slide">
+                <div class="slide-content">
+                    <div class="slide-tag premium">Premium</div>
+                    <h3>Audio-Synced Haptics</h3>
+                    <p>Real-time FFT analysis extracts bass frequencies from HypnoTube videos and syncs them to your Lovense or Buttplug.io devices. Feel every beat.</p>
+                    <ul>
+                        <li>Real-time audio frequency analysis</li>
+                        <li>Adaptive baseline calibration</li>
+                        <li>Bass hit and rhythm detection</li>
+                        <li>Configurable intensity and delay</li>
+                        <li>Auto-connect on app start</li>
+                    </ul>
+                </div>
+                <div class="slide-visual">
+                    <div style="text-align:center">
+                        <div style="font-size:5rem;margin-bottom:.5rem">&#128243;</div>
+                        <div style="display:flex;gap:.75rem;justify-content:center;margin-top:1rem">
+                            <span class="haptic-badge lovense">Lovense</span>
+                            <span class="haptic-badge buttplug">Buttplug.io</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 5: Sissy Hypno Mode -->
+            <div class="slide">
+                <div class="slide-content">
+                    <div class="slide-tag new">New in v5.4.9</div>
+                    <h3>Dual Content Modes</h3>
+                    <p>Choose between Bambi Sleep and Sissy Hypno mode on first launch. Everything adapts &mdash; companion language, session names, video pools, quest images, UI themes.</p>
+                    <ul>
+                        <li>First-run content mode selection</li>
+                        <li>Companion uses mode-appropriate language</li>
+                        <li>Purple theme in Sissy Hypno mode</li>
+                        <li>Separate asset pools per mode</li>
+                        <li>Changeable anytime in Settings</li>
+                    </ul>
+                </div>
+                <div class="slide-visual">
+                    <div style="text-align:center">
+                        <div style="display:flex;gap:2rem;justify-content:center;align-items:center">
+                            <div>
+                                <div style="font-size:3rem">&#127800;</div>
+                                <div style="font-size:.85rem;color:var(--accent-pink);font-weight:600;margin-top:.5rem">Bambi Sleep</div>
+                            </div>
+                            <div style="font-size:1.5rem;color:var(--text-muted)">or</div>
+                            <div>
+                                <div style="font-size:3rem">&#128156;</div>
+                                <div style="font-size:.85rem;color:var(--accent-purple);font-weight:600;margin-top:.5rem">Sissy Hypno</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Slide 6: Comprehensive Help -->
+            <div class="slide">
+                <div class="slide-content">
+                    <div class="slide-tag improved">Improved in v5.4.10</div>
+                    <h3>35 Help Tooltips + Asset Previews</h3>
+                    <p>Every feature now has a help button with rich tooltips explaining what it does, tips for best use, and how it works under the hood.</p>
+                    <ul>
+                        <li>Help buttons across every tab</li>
+                        <li>Right-click thumbnails to preview assets</li>
+                        <li>Video playback with full controls</li>
+                        <li>GIF animation support in previewer</li>
+                        <li>Quest XP scales: 1x/1.5x/2x/2.5x by level</li>
+                    </ul>
+                </div>
+                <div class="slide-visual">
+                    <div style="text-align:center">
+                        <div style="font-size:5rem;margin-bottom:.5rem">&#10068;</div>
+                        <div style="font-size:1.1rem;color:var(--text-secondary)">Every feature explained</div>
+                        <div style="font-size:.85rem;color:var(--text-muted);margin-top:.3rem">No more guessing what things do~</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="slide-controls">
+                <div class="slide-arrow" onclick="changeSlide(-1)">&#8592;</div>
+                <div class="slide-dots" id="slideDots"></div>
+                <div class="slide-arrow" onclick="changeSlide(1)">&#8594;</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════ Gamification ═══════════ -->
+    <section class="gamification" id="gamification">
+        <div class="section-header">
+            <h2>Full <span>RPG Gamification</span></h2>
+            <p>Conditioning isn't just something you do &mdash; it's something you build, track, and compete in</p>
+        </div>
+
+        <div class="gamification-grid">
+            <div class="game-card">
+                <div class="game-card-icon">&#128293;</div>
+                <h3>Daily &amp; Weekly Quests</h3>
+                <p>Get new objectives every day. Complete sessions, pop bubbles, watch videos, maintain streaks. Each quest awards XP and tracks your consistency.</p>
+                <div class="game-card-features">
+                    <span class="game-tag">3 Daily Quests</span>
+                    <span class="game-tag">Weekly Goals</span>
+                    <span class="game-tag">Streak Bonuses</span>
+                    <span class="game-tag">XP Scaling</span>
+                </div>
+            </div>
+
+            <div class="game-card">
+                <div class="game-card-icon">&#10024;</div>
+                <h3>Enhancement Skill Tree</h3>
+                <p>Earn sparkle points with every level up. Invest them in permanent upgrades &mdash; XP multipliers, quest rerolls, lucky bubble chances, and more. Choose wisely.</p>
+                <div class="game-card-features">
+                    <span class="game-tag">22 Skills</span>
+                    <span class="game-tag">Multiple Paths</span>
+                    <span class="game-tag">Permanent Upgrades</span>
+                    <span class="game-tag">Cloud Synced</span>
+                </div>
+            </div>
+
+            <div class="game-card">
+                <div class="game-card-icon">&#127942;</div>
+                <h3>Seasons &amp; Leaderboard</h3>
+                <p>Monthly seasons keep the competition alive. Climb the global leaderboard, earn OG badges, and show off your Trophy Case stats to prove you're the best.</p>
+                <div class="game-card-features">
+                    <span class="game-tag">Monthly Resets</span>
+                    <span class="game-tag">Live Rankings</span>
+                    <span class="game-tag">OG Badges</span>
+                    <span class="game-tag">Trophy Case</span>
+                </div>
+            </div>
+
+            <div class="game-card">
+                <div class="game-card-icon">&#127941;</div>
+                <h3>31 Achievements</h3>
+                <p>Hidden and visible achievements for every milestone. First bubble pop, 10 hours of pink filter, perfect typing, longest sessions, and much more to discover.</p>
+                <div class="game-card-features">
+                    <span class="game-tag">Hidden Unlocks</span>
+                    <span class="game-tag">Milestone Rewards</span>
+                    <span class="game-tag">Profile Display</span>
+                    <span class="game-tag">Cloud Synced</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════ Achievement Showcase ═══════════ -->
+    <section class="achievements" id="achievements">
+        <div class="achievement-count">
+            <div class="big-number">31</div>
+            <p>Achievements to unlock &mdash; how many can you get?</p>
+        </div>
+
+        <div class="achievement-scroll">
+            <div class="achievement-track" id="achievementTrack">
+                <div class="achievement-item"><img src="achievements/lv_10.png" alt="Level 10"><span>Level 10</span></div>
+                <div class="achievement-item"><img src="achievements/lv_50.png" alt="Level 50"><span>Level 50</span></div>
+                <div class="achievement-item"><img src="achievements/pop_the_Thought.png" alt="Pop the Thought"><span>Pop the Thought</span></div>
+                <div class="achievement-item"><img src="achievements/daily_maintenance.png" alt="Daily Maintenance"><span>Daily Maintenance</span></div>
+                <div class="achievement-item"><img src="achievements/spiral_eyes.png" alt="Spiral Eyes"><span>Spiral Eyes</span></div>
+                <div class="achievement-item"><img src="achievements/retinal_burn.png" alt="Retinal Burn"><span>Retinal Burn</span></div>
+                <div class="achievement-item"><img src="achievements/typing_tutor.png" alt="Typing Tutor"><span>Typing Tutor</span></div>
+                <div class="achievement-item"><img src="achievements/10_hours_pink.png" alt="10 Hours Pink"><span>10 Hours Pink</span></div>
+                <div class="achievement-item"><img src="achievements/Neon_obsession.png" alt="Neon Obsession"><span>Neon Obsession</span></div>
+                <div class="achievement-item"><img src="achievements/total_lockdown.png" alt="Total Lockdown"><span>Total Lockdown</span></div>
+                <div class="achievement-item"><img src="achievements/deep_sleep.png" alt="Deep Sleep"><span>Deep Sleep</span></div>
+                <div class="achievement-item"><img src="achievements/obedience_reflex.png" alt="Obedience Reflex"><span>Obedience Reflex</span></div>
+                <div class="achievement-item"><img src="achievements/system_overload.png" alt="System Overload"><span>System Overload</span></div>
+                <div class="achievement-item"><img src="achievements/What_panic_button.png" alt="What Panic Button?"><span>What Panic Button?</span></div>
+                <div class="achievement-item"><img src="achievements/BrainwashedSlavedoll.png" alt="Brainwashed Slavedoll"><span>Brainwashed Slavedoll</span></div>
+                <div class="achievement-item"><img src="achievements/PlatinumPuppet.png" alt="Platinum Puppet"><span>Platinum Puppet</span></div>
+                <div class="achievement-item"><img src="achievements/Dumb_Bimbo.png" alt="Dumb Bimbo"><span>Dumb Bimbo</span></div>
+                <div class="achievement-item"><img src="achievements/corner_hit.png" alt="Corner Hit"><span>Corner Hit</span></div>
+                <div class="achievement-item"><img src="achievements/mercy_beggar.png" alt="Mercy Beggar"><span>Mercy Beggar</span></div>
+                <div class="achievement-item"><img src="achievements/morning_glory.png" alt="Morning Glory"><span>Morning Glory</span></div>
+                <div class="achievement-item"><img src="achievements/how_many.png" alt="How Many?"><span>How Many?</span></div>
+                <div class="achievement-item"><img src="achievements/relapse.png" alt="Relapse"><span>Relapse</span></div>
+                <div class="achievement-item"><img src="achievements/Sofa_decor.png" alt="Sofa Decor"><span>Sofa Decor</span></div>
+                <div class="achievement-item"><img src="achievements/perfect_plastic_puppet.png" alt="Perfect Plastic Puppet"><span>Perfect Plastic Puppet</span></div>
+                <div class="achievement-item"><img src="achievements/clean_slate.png" alt="Clean Slate"><span>Clean Slate</span></div>
+                <div class="achievement-item"><img src="achievements/player_2_disconnected.png" alt="Player 2 Disconnected"><span>Player 2 Disconnected</span></div>
+                <div class="achievement-item"><img src="achievements/look_but_dont_touch.png" alt="Look But Don't Touch"><span>Look But Don't Touch</span></div>
+                <div class="achievement-item"><img src="achievements/Mathematician's_nightmare.png" alt="Mathematician's Nightmare"><span>Mathematician's Nightmare</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════ Companions ═══════════ -->
+    <section class="companions" id="companions">
+        <div class="section-header">
+            <h2>6 AI <span>Companions</span></h2>
+            <p>Each companion evolves with you and has a unique XP mechanic</p>
+        </div>
+
+        <div class="companion-grid">
+            <div class="companion-card">
+                <img src="images/avatar_pose1.png" alt="Good Girl">
+                <h4>Good Girl</h4>
+                <div class="companion-level">Level 1+</div>
+                <p>Your first companion. Encouraging and supportive.</p>
+                <div class="companion-bonus bonus-xp">+10% XP Boost</div>
+            </div>
+            <div class="companion-card">
+                <img src="images/avatar2_pose1.png" alt="Bimbo Doll">
+                <h4>Bimbo Doll</h4>
+                <div class="companion-level">Level 25+</div>
+                <p>Bubbly and playful. Celebrates every achievement.</p>
+                <div class="companion-bonus bonus-xp">+15% XP Boost</div>
+            </div>
+            <div class="companion-card">
+                <img src="images/avatar3_pose1.png" alt="Hypno Queen">
+                <h4>Hypno Queen</h4>
+                <div class="companion-level">Level 50+</div>
+                <p>Commanding and intense. Pushes you deeper.</p>
+                <div class="companion-bonus bonus-xp">+20% XP Boost</div>
+            </div>
+            <div class="companion-card">
+                <img src="images/avatar4_pose1.png" alt="Neon Doll">
+                <h4>Neon Doll</h4>
+                <div class="companion-level">Level 75+</div>
+                <p>Aesthetic perfection with a cyberpunk edge.</p>
+                <div class="companion-bonus bonus-luck">Lucky Drops</div>
+            </div>
+            <div class="companion-card">
+                <img src="images/avatar5_pose1.png" alt="Brainwashed Slavedoll">
+                <h4>Brainwashed Slavedoll</h4>
+                <div class="companion-level">Level 125+</div>
+                <p>A sinister presence. Keep training or fall behind.</p>
+                <div class="companion-bonus bonus-drain">-3 XP/sec Drain</div>
+            </div>
+            <div class="companion-card">
+                <img src="images/avatar6_pose1.png" alt="Bambi Trainer">
+                <h4>Bambi Trainer</h4>
+                <div class="companion-level">Level 150+</div>
+                <p>The ultimate form. Complete mastery achieved.</p>
+                <div class="companion-bonus bonus-xp">+25% XP Boost</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════ Features Grid ═══════════ -->
     <section class="features" id="features">
         <div class="section-header">
-            <h2>Packed with Features</h2>
+            <h2>12 <span>Conditioning Tools</span></h2>
             <p>Everything you need for an immersive conditioning experience</p>
         </div>
 
         <div class="features-grid">
-            <div class="feature-card">
-                <img src="images/features/flash.png" alt="Flash Images">
-                <h3>Flash Images</h3>
-                <p>Random image popups with GIF support, clickable interactions, and optional "Corruption" mode with hydra effect.</p>
-            </div>
-
-            <div class="feature-card">
-                <img src="images/features/mandatory_videos.png" alt="Mandatory Videos">
-                <h3>Mandatory Videos</h3>
-                <p>Fullscreen video playback with Strict Lock mode, attention check mini-games, and haptic feedback integration.</p>
-            </div>
-
-            <div class="feature-card">
-                <img src="images/features/subliminal.png" alt="Subliminal Messages">
-                <h3>Subliminal Messages</h3>
-                <p>Customizable text flashes with audio whisper support and haptic synchronization.</p>
-            </div>
-
-            <div class="feature-card">
-                <img src="images/features/4new.png" alt="AI Companion">
-                <h3>AI Companion</h3>
-                <p>Interactive animated avatar with speech bubbles, trigger mode, and AI chat capabilities.</p>
-            </div>
-
-            <div class="feature-card">
-                <img src="images/features/Bubble_pop.png" alt="Bubble Pop">
-                <h3>Bubble Pop Mini-game</h3>
-                <p>Pop floating bubbles for bonus XP and combo streaks. Unlocks at level 20.</p>
-            </div>
-
-            <div class="feature-card">
-                <img src="images/features/brain_drain.png" alt="Brain Drain">
-                <h3>Brain Drain Overlay</h3>
-                <p>Progressive blur effect during conditioning with customizable intensity.</p>
-            </div>
-
-            <div class="feature-card">
-                <img src="images/features/spiral_overlay.png" alt="Spiral Overlay">
-                <h3>Spiral Overlay</h3>
-                <p>Hypnotic spiral overlay effect to enhance immersion. Unlocks at level 10.</p>
-            </div>
-
-            <div class="feature-card">
-                <img src="images/features/Pink_filter.png" alt="Pink Filter">
-                <h3>Pink Filter</h3>
-                <p>Pink-tinted screen effect with adjustable opacity for aesthetic conditioning.</p>
-            </div>
-
-            <div class="feature-card">
-                <img src="images/features/Phrase_Lock.png" alt="Phrase Lock">
-                <h3>Phrase Lock</h3>
-                <p>Type the passphrase correctly to unlock your screen. Unlocks at level 35.</p>
-            </div>
-
-            <div class="feature-card">
-                <img src="images/features/bouncing_text.png" alt="Bouncing Text">
-                <h3>Bouncing Text</h3>
-                <p>Trigger words bounce around your screen like a DVD screensaver. Unlocks at level 60.</p>
-            </div>
-
-            <div class="feature-card">
-                <img src="images/features/Mind_Wipers.png" alt="Mind Wipers">
-                <h3>Mind Wipe Audio</h3>
-                <p>Periodic audio effects for deeper immersion. Unlocks at level 75.</p>
-            </div>
-
-            <div class="feature-card">
-                <img src="images/features/corner_gif.png" alt="Corner GIF">
-                <h3>Corner GIF</h3>
-                <p>Small animated GIF in the corner of your screen as a constant reminder.</p>
-            </div>
+            <div class="feature-card"><img src="images/features/flash.png" alt="Flash Images"><h3>Flash Images</h3><p>Random image popups with GIF support, clickable interactions, and optional "Corruption" mode with hydra effect.</p></div>
+            <div class="feature-card"><img src="images/features/mandatory_videos.png" alt="Mandatory Videos"><h3>Mandatory Videos</h3><p>Fullscreen video playback with Strict Lock mode, attention check mini-games, and haptic feedback integration.</p></div>
+            <div class="feature-card"><img src="images/features/subliminal.png" alt="Subliminal Messages"><h3>Subliminal Messages</h3><p>Customizable text flashes with audio whisper support and haptic synchronization.</p></div>
+            <div class="feature-card"><img src="images/features/4new.png" alt="AI Companion"><h3>AI Companion</h3><p>Interactive animated avatar with speech bubbles, trigger mode, and AI chat. 6 companions with unique XP mechanics.</p></div>
+            <div class="feature-card"><img src="images/features/Bubble_pop.png" alt="Bubble Pop"><h3>Bubble Pop Mini-game</h3><p>Pop floating bubbles for bonus XP and combo streaks. Unlocks at level 20.</p></div>
+            <div class="feature-card"><img src="images/features/brain_drain.png" alt="Brain Drain"><h3>Brain Drain Overlay</h3><p>Progressive blur effect during conditioning with customizable intensity.</p></div>
+            <div class="feature-card"><img src="images/features/spiral_overlay.png" alt="Spiral Overlay"><h3>Spiral Overlay</h3><p>Hypnotic spiral overlay effect to enhance immersion. Unlocks at level 10.</p></div>
+            <div class="feature-card"><img src="images/features/Pink_filter.png" alt="Pink Filter"><h3>Pink Filter</h3><p>Pink-tinted screen effect with adjustable opacity for aesthetic conditioning.</p></div>
+            <div class="feature-card"><img src="images/features/Phrase_Lock.png" alt="Phrase Lock"><h3>Phrase Lock</h3><p>Type the passphrase correctly to unlock your screen. Unlocks at level 35.</p></div>
+            <div class="feature-card"><img src="images/features/bouncing_text.png" alt="Bouncing Text"><h3>Bouncing Text</h3><p>Trigger words bounce around your screen like a DVD screensaver. Unlocks at level 60.</p></div>
+            <div class="feature-card"><img src="images/features/Mind_Wipers.png" alt="Mind Wipers"><h3>Mind Wipe Audio</h3><p>Periodic audio effects for deeper immersion. Unlocks at level 75.</p></div>
+            <div class="feature-card"><img src="images/features/corner_gif.png" alt="Corner GIF"><h3>Corner GIF</h3><p>Small animated GIF in the corner of your screen as a constant reminder.</p></div>
         </div>
     </section>
 
+    <!-- ═══════════ Progression Timeline ═══════════ -->
     <section class="progression" id="progression">
         <div class="progression-container">
             <div class="section-header">
-                <h2>Unlock as You Progress</h2>
+                <h2>Unlock as You <span>Progress</span></h2>
                 <p>Earn XP through interaction and unlock new features as you level up</p>
             </div>
 
             <div class="level-track">
-                <div class="level-item">
-                    <div class="level-badge">LV 10</div>
-                    <div class="level-content">
-                        <h4>Spiral Overlay + Pink Filter</h4>
-                        <p>Hypnotic spiral overlay and pink-tinted screen effects</p>
-                    </div>
-                </div>
-
-                <div class="level-item">
-                    <div class="level-badge">LV 20</div>
-                    <div class="level-content">
-                        <h4>Bubble Pop Mini-game</h4>
-                        <p>Pop floating bubbles for bonus XP and combo streaks</p>
-                    </div>
-                </div>
-
-                <div class="level-item">
-                    <div class="level-badge">LV 35</div>
-                    <div class="level-content">
-                        <h4>Lock Card Challenge</h4>
-                        <p>Type the passphrase correctly to unlock your screen</p>
-                    </div>
-                </div>
-
-                <div class="level-item">
-                    <div class="level-badge">LV 50</div>
-                    <div class="level-content">
-                        <h4>Bubble Count Challenge</h4>
-                        <p>Count bubbles accurately during video playback</p>
-                    </div>
-                </div>
-
-                <div class="level-item">
-                    <div class="level-badge">LV 60</div>
-                    <div class="level-content">
-                        <h4>Bouncing Text</h4>
-                        <p>Trigger words bounce around your screen</p>
-                    </div>
-                </div>
-
-                <div class="level-item">
-                    <div class="level-badge">LV 70</div>
-                    <div class="level-content">
-                        <h4>Brain Drain Overlay</h4>
-                        <p>Progressive blur effect during conditioning</p>
-                    </div>
-                </div>
-
-                <div class="level-item">
-                    <div class="level-badge">LV 75</div>
-                    <div class="level-content">
-                        <h4>Mind Wipe Audio</h4>
-                        <p>Periodic audio effects for deeper immersion</p>
-                    </div>
-                </div>
+                <div class="level-item"><div class="level-badge">LV 10</div><div class="level-content"><h4>Spiral Overlay + Pink Filter</h4><p>Hypnotic spiral overlay and pink-tinted screen effects</p></div></div>
+                <div class="level-item"><div class="level-badge">LV 20</div><div class="level-content"><h4>Bubble Pop Mini-game</h4><p>Pop floating bubbles for bonus XP and combo streaks</p></div></div>
+                <div class="level-item"><div class="level-badge">LV 25</div><div class="level-content"><h4>Bimbo Doll Companion</h4><p>Unlock your second AI companion with +15% XP boost</p></div></div>
+                <div class="level-item"><div class="level-badge">LV 35</div><div class="level-content"><h4>Lock Card Challenge</h4><p>Type the passphrase correctly to unlock your screen</p></div></div>
+                <div class="level-item"><div class="level-badge">LV 50</div><div class="level-content"><h4>Bubble Count + Hypno Queen</h4><p>Count bubbles during videos. Third companion with +20% XP</p></div></div>
+                <div class="level-item"><div class="level-badge">LV 60</div><div class="level-content"><h4>Bouncing Text</h4><p>Trigger words bounce around your screen</p></div></div>
+                <div class="level-item"><div class="level-badge">LV 75</div><div class="level-content"><h4>Mind Wipe Audio + Neon Doll</h4><p>Audio effects for deeper immersion. Fourth companion with Lucky Drops</p></div></div>
+                <div class="level-item"><div class="level-badge">LV 125</div><div class="level-content"><h4>Brainwashed Slavedoll</h4><p>Fifth companion &mdash; drains 3 XP/sec. Can you outpace the drain?</p></div></div>
+                <div class="level-item"><div class="level-badge">LV 150</div><div class="level-content"><h4>Bambi Trainer</h4><p>The ultimate companion. +25% XP boost. Complete mastery.</p></div></div>
             </div>
         </div>
     </section>
 
+    <!-- ═══════════ Patreon ═══════════ -->
     <section class="patreon" id="patreon">
         <div class="section-header">
-            <h2>Patreon Exclusive Features</h2>
+            <h2>Patreon <span>Exclusive</span> Features</h2>
             <p>Support development and unlock powerful AI-driven features</p>
         </div>
 
         <div class="patreon-features-grid">
-            <!-- Bambi Takeover - Hero Feature -->
             <div class="patreon-feature-card hero-feature">
                 <img src="images/features/bambi takeover.png" alt="Bambi Takeover">
                 <div class="patreon-feature-content">
                     <div class="premium-badge">Premium</div>
                     <h3>Bambi Takeover</h3>
-                    <p>Let your companion take full control. Autonomy mode activates after idle periods - she'll control your flashes, videos, overlays, and whisper commands. Complete surrender to your AI companion.</p>
+                    <p>Let your companion take full control. Autonomy mode activates after idle periods &mdash; she'll control your flashes, videos, overlays, and whisper commands. Complete surrender to your AI companion.</p>
                 </div>
             </div>
 
-            <!-- AI Chat -->
             <div class="patreon-feature-card">
-                <div class="patreon-feature-icon">🤖</div>
+                <div class="patreon-feature-icon">&#129302;</div>
                 <h3>AI Companion Chat</h3>
-                <p>Have real conversations with your companion. She responds with personality, remembers context, and reacts to what you say. Multiple personality presets available including the exclusive <strong>Slut Mode</strong> for explicit interactions.</p>
+                <p>Have real conversations with your companion. She responds with personality, remembers context, and reacts to what you say. Multiple personality presets available including <strong>Slut Mode</strong> for explicit interactions.</p>
             </div>
 
-            <!-- Haptic Feedback -->
             <div class="patreon-feature-card">
-                <div class="patreon-feature-icon">📳</div>
-                <h3>Haptic Feedback</h3>
-                <p>Connect your <strong>Lovense</strong> or <strong>Buttplug.io</strong> compatible devices for synchronized vibrations during conditioning. Triggers, subliminals, and videos pulse through your body.</p>
+                <div class="patreon-feature-icon">&#128243;</div>
+                <h3>Audio-Synced Haptics</h3>
+                <p>Connect your <strong>Lovense</strong> or <strong>Buttplug.io</strong> devices. Real-time FFT audio analysis syncs vibrations to video beats. Auto-connect on startup.</p>
                 <div class="haptic-logos">
                     <span class="haptic-badge lovense">Lovense</span>
                     <span class="haptic-badge buttplug">Buttplug.io</span>
                 </div>
             </div>
 
-            <!-- Window Awareness -->
             <div class="patreon-feature-card">
-                <div class="patreon-feature-icon">👁️</div>
+                <div class="patreon-feature-icon">&#128065;&#65039;</div>
                 <h3>Browser Awareness</h3>
                 <p>Your companion watches what you browse. Visit <strong>HypnoTube</strong>, <strong>BambiCloud</strong>, or other hypno sites and she'll react with encouragement. She knows when you're being a good girl.</p>
             </div>
 
-            <!-- Content Packs Bandwidth -->
             <div class="patreon-feature-card">
-                <div class="patreon-feature-icon">📦</div>
+                <div class="patreon-feature-icon">&#128230;</div>
                 <h3>10x Download Bandwidth</h3>
                 <p>Get <strong>100 GB/month</strong> bandwidth for premium content packs (vs 10 GB for free users). Download exclusive flash packs, video collections, and audio sets.</p>
             </div>
 
-            <!-- Cloud Sync -->
             <div class="patreon-feature-card">
-                <div class="patreon-feature-icon">☁️</div>
+                <div class="patreon-feature-icon">&#9729;&#65039;</div>
                 <h3>Cloud Sync &amp; Leaderboard</h3>
-                <p>Sync your progress across devices. Compete on the global leaderboard. Your XP, level, and achievements follow you everywhere.</p>
+                <p>Sync your progress across devices. Compete on the global leaderboard. Your XP, level, skills, and achievements follow you everywhere.</p>
             </div>
         </div>
 
@@ -1226,35 +921,23 @@
         </div>
     </section>
 
+    <!-- ═══════════ Requirements ═══════════ -->
     <section class="requirements">
-        <div class="section-header">
-            <h2>Requirements</h2>
-        </div>
-
+        <div class="section-header"><h2>Requirements</h2></div>
         <div class="requirements-grid">
-            <div class="req-item">
-                <span>💻</span>
-                <h4>Windows 10/11</h4>
-                <p>64-bit required</p>
-            </div>
-            <div class="req-item">
-                <span>⚙️</span>
-                <h4>.NET 8.0 Runtime</h4>
-                <p>Desktop Runtime</p>
-            </div>
-            <div class="req-item">
-                <span>🌐</span>
-                <h4>WebView2</h4>
-                <p>Usually pre-installed</p>
-            </div>
+            <div class="req-item"><span>&#128187;</span><h4>Windows 10/11</h4><p>64-bit required</p></div>
+            <div class="req-item"><span>&#9881;&#65039;</span><h4>.NET 8.0 Runtime</h4><p>Desktop Runtime</p></div>
+            <div class="req-item"><span>&#127760;</span><h4>WebView2</h4><p>Usually pre-installed</p></div>
         </div>
     </section>
 
+    <!-- ═══════════ Footer ═══════════ -->
     <footer>
         <div class="footer-links">
             <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
             <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
             <a href="guide.html">Guide</a>
+            <a href="leaderboard.html">Leaderboard</a>
             <a href="https://www.patreon.com/CodeBambi">Patreon</a>
             <a href="https://discord.gg/YxVAMt4qaZ">Discord</a>
             <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/issues">Report Issue</a>
@@ -1264,7 +947,7 @@
     </footer>
 
     <script>
-        // Mobile menu toggle
+        // ═══════════ Mobile Menu ═══════════
         function toggleMenu() {
             const toggle = document.querySelector('.menu-toggle');
             const menu = document.getElementById('mobileMenu');
@@ -1272,110 +955,113 @@
             menu.classList.toggle('active');
             document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
         }
-
-        // Close mobile menu on escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 const menu = document.getElementById('mobileMenu');
-                if (menu.classList.contains('active')) {
-                    toggleMenu();
-                }
+                if (menu.classList.contains('active')) toggleMenu();
             }
         });
 
-        // Smooth scroll for nav links
+        // ═══════════ Smooth Scroll ═══════════
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
+            anchor.addEventListener('click', function(e) {
                 e.preventDefault();
-                document.querySelector(this.getAttribute('href')).scrollIntoView({
-                    behavior: 'smooth'
-                });
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) target.scrollIntoView({ behavior: 'smooth' });
             });
         });
 
-        // Navbar background on scroll
+        // ═══════════ Navbar Scroll ═══════════
         window.addEventListener('scroll', () => {
             const nav = document.querySelector('nav');
-            if (window.scrollY > 50) {
-                nav.style.background = 'rgba(13, 13, 26, 0.95)';
-            } else {
-                nav.style.background = 'rgba(13, 13, 26, 0.9)';
-            }
+            nav.style.background = window.scrollY > 50 ? 'rgba(13,13,26,0.95)' : 'rgba(13,13,26,0.9)';
         });
 
-        // Add more particles dynamically
+        // ═══════════ Particles ═══════════
         const particlesContainer = document.querySelector('.particles');
         for (let i = 0; i < 15; i++) {
-            const particle = document.createElement('div');
-            particle.className = 'particle';
-            particle.style.left = Math.random() * 100 + '%';
-            particle.style.animationDelay = Math.random() * 10 + 's';
-            particle.style.animationDuration = (10 + Math.random() * 10) + 's';
-            particlesContainer.appendChild(particle);
+            const p = document.createElement('div');
+            p.className = 'particle';
+            p.style.left = Math.random()*100+'%';
+            p.style.animationDelay = Math.random()*10+'s';
+            p.style.animationDuration = (10+Math.random()*10)+'s';
+            particlesContainer.appendChild(p);
         }
 
-        // Avatar pose animation
+        // ═══════════ Avatar Animation ═══════════
         const avatarSets = [
-            { prefix: 'avatar', poses: 4 },
-            { prefix: 'avatar2', poses: 4 },
-            { prefix: 'avatar3', poses: 4 },
-            { prefix: 'avatar4', poses: 4 },
-            { prefix: 'avatar5', poses: 4 },
-            { prefix: 'avatar6', poses: 4 }
+            {prefix:'avatar',poses:4},{prefix:'avatar2',poses:4},{prefix:'avatar3',poses:4},
+            {prefix:'avatar4',poses:4},{prefix:'avatar5',poses:4},{prefix:'avatar6',poses:4}
         ];
+        let leftSet=0,rightSet=1,leftPose=1,rightPose=1;
+        function changePose(id,setIdx,pose){
+            const el=document.getElementById(id);
+            if(el){el.style.opacity='0';setTimeout(()=>{el.src=`images/${avatarSets[setIdx].prefix}_pose${pose}.png`;el.style.opacity='1'},150);}
+        }
+        function animLeft(){leftPose=(leftPose%4)+1;changePose('avatar-left',leftSet,leftPose);setTimeout(animLeft,2000+Math.random()*2000);}
+        function animRight(){rightPose=(rightPose%4)+1;changePose('avatar-right',rightSet,rightPose);setTimeout(animRight,2000+Math.random()*2000);}
+        function changeLeft(){leftSet=(leftSet+2)%avatarSets.length;if(leftSet===rightSet)leftSet=(leftSet+1)%avatarSets.length;leftPose=1;changePose('avatar-left',leftSet,leftPose);setTimeout(changeLeft,15000+Math.random()*15000);}
+        function changeRight(){rightSet=(rightSet+2)%avatarSets.length;if(rightSet===leftSet)rightSet=(rightSet+1)%avatarSets.length;rightPose=1;changePose('avatar-right',rightSet,rightPose);setTimeout(changeRight,15000+Math.random()*15000);}
+        setTimeout(animLeft,1000);setTimeout(animRight,1500);setTimeout(changeLeft,20000);setTimeout(changeRight,25000);
 
-        let leftAvatarSet = 0;
-        let rightAvatarSet = 1;
-        let leftPose = 1;
-        let rightPose = 1;
+        // ═══════════ Slideshow ═══════════
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const dotsContainer = document.getElementById('slideDots');
+        let autoSlideTimer;
 
-        function changeAvatarPose(avatarId, setIndex, pose) {
-            const avatar = document.getElementById(avatarId);
-            if (avatar) {
-                const set = avatarSets[setIndex];
-                avatar.style.opacity = '0';
-                setTimeout(() => {
-                    avatar.src = `images/${set.prefix}_pose${pose}.png`;
-                    avatar.style.opacity = '1';
-                }, 150);
-            }
+        // Create dots
+        slides.forEach((_, i) => {
+            const dot = document.createElement('div');
+            dot.className = 'slide-dot' + (i === 0 ? ' active' : '');
+            dot.onclick = () => goToSlide(i);
+            dotsContainer.appendChild(dot);
+        });
+
+        function goToSlide(n) {
+            slides[currentSlide].classList.remove('active');
+            dotsContainer.children[currentSlide].classList.remove('active');
+            currentSlide = ((n % slides.length) + slides.length) % slides.length;
+            slides[currentSlide].classList.add('active');
+            dotsContainer.children[currentSlide].classList.add('active');
+            resetAutoSlide();
         }
 
-        // Change poses every 2-4 seconds randomly
-        function animateLeftAvatar() {
-            leftPose = (leftPose % 4) + 1;
-            changeAvatarPose('avatar-left', leftAvatarSet, leftPose);
-            setTimeout(animateLeftAvatar, 2000 + Math.random() * 2000);
-        }
+        function changeSlide(dir) { goToSlide(currentSlide + dir); }
 
-        function animateRightAvatar() {
-            rightPose = (rightPose % 4) + 1;
-            changeAvatarPose('avatar-right', rightAvatarSet, rightPose);
-            setTimeout(animateRightAvatar, 2000 + Math.random() * 2000);
+        function resetAutoSlide() {
+            clearInterval(autoSlideTimer);
+            autoSlideTimer = setInterval(() => changeSlide(1), 6000);
         }
+        resetAutoSlide();
 
-        // Change avatar character every 15-30 seconds
-        function changeLeftAvatarSet() {
-            leftAvatarSet = (leftAvatarSet + 2) % avatarSets.length; // Skip to different avatar
-            if (leftAvatarSet === rightAvatarSet) leftAvatarSet = (leftAvatarSet + 1) % avatarSets.length;
-            leftPose = 1;
-            changeAvatarPose('avatar-left', leftAvatarSet, leftPose);
-            setTimeout(changeLeftAvatarSet, 15000 + Math.random() * 15000);
+        // ═══════════ Stat Counter Animation ═══════════
+        const statObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    document.querySelectorAll('.stat-number').forEach(el => {
+                        const target = parseInt(el.dataset.target);
+                        let current = 0;
+                        const step = Math.max(1, Math.floor(target / 30));
+                        const timer = setInterval(() => {
+                            current += step;
+                            if (current >= target) { current = target; clearInterval(timer); }
+                            el.textContent = current;
+                        }, 40);
+                    });
+                    statObserver.disconnect();
+                }
+            });
+        }, { threshold: 0.5 });
+        statObserver.observe(document.querySelector('.stats-bar'));
+
+        // ═══════════ Achievement Infinite Scroll ═══════════
+        // Duplicate items for seamless loop
+        const track = document.getElementById('achievementTrack');
+        if (track) {
+            const items = track.innerHTML;
+            track.innerHTML = items + items;
         }
-
-        function changeRightAvatarSet() {
-            rightAvatarSet = (rightAvatarSet + 2) % avatarSets.length;
-            if (rightAvatarSet === leftAvatarSet) rightAvatarSet = (rightAvatarSet + 1) % avatarSets.length;
-            rightPose = 1;
-            changeAvatarPose('avatar-right', rightAvatarSet, rightPose);
-            setTimeout(changeRightAvatarSet, 15000 + Math.random() * 15000);
-        }
-
-        // Start avatar animations
-        setTimeout(animateLeftAvatar, 1000);
-        setTimeout(animateRightAvatar, 1500);
-        setTimeout(changeLeftAvatarSet, 20000);
-        setTimeout(changeRightAvatarSet, 25000);
     </script>
 </body>
 </html>
