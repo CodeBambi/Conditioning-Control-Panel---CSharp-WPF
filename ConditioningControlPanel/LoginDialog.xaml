@@ -1,0 +1,129 @@
+<Window x:Class="ConditioningControlPanel.LoginDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Login" Height="400" Width="420"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="#1A1A2E" WindowStyle="None" AllowsTransparency="True"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <Border BorderBrush="#FF69B4" BorderThickness="2" CornerRadius="10">
+        <Grid Margin="25">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                <TextBlock Text="Welcome!"
+                           FontSize="28" FontWeight="Bold" Foreground="#FF69B4"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="Choose how you'd like to login"
+                           FontSize="13" Foreground="#B0B0B0"
+                           HorizontalAlignment="Center" Margin="0,5,0,0"/>
+            </StackPanel>
+
+            <!-- Provider Selection (Initial State) -->
+            <StackPanel x:Name="ProviderPanel" Grid.Row="2" VerticalAlignment="Center">
+                <Button x:Name="BtnLoginDiscord"
+                        Padding="20,15" Margin="0,0,0,15"
+                        Background="#5865F2" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="16"
+                        Cursor="Hand" Click="BtnLoginDiscord_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x1F3AE;" FontSize="20" Margin="0,0,10,0"/>
+                        <TextBlock Text="Login with Discord" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="BtnLoginPatreon"
+                        Padding="20,15" Margin="0,0,0,15"
+                        Background="#FF424D" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="16"
+                        Cursor="Hand" Click="BtnLoginPatreon_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x2B50;" FontSize="20" Margin="0,0,10,0"/>
+                        <TextBlock Text="Login with Patreon" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <TextBlock Text="If you had an account before v5.5, use the same login method you originally used."
+                           FontSize="11" Foreground="#808080" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" Margin="0,10,0,0"/>
+            </StackPanel>
+
+            <!-- Not Found Panel (shown when user not in Season 0) -->
+            <StackPanel x:Name="NotFoundPanel" Grid.Row="2" Visibility="Collapsed" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtNotFoundMessage"
+                           Text="We couldn't find an existing account."
+                           FontSize="14" Foreground="White" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" Margin="0,0,0,20"/>
+
+                <TextBlock Text="Did you have an account before v5.5?"
+                           FontSize="13" Foreground="#B0B0B0"
+                           HorizontalAlignment="Center" Margin="0,0,0,15"/>
+
+                <Button x:Name="BtnTryOtherProvider"
+                        Padding="15,12" Margin="0,0,0,10"
+                        Background="#5865F2" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="14"
+                        Cursor="Hand" Click="BtnTryOtherProvider_Click">
+                    <TextBlock x:Name="TxtTryOtherProvider" Text="Yes, I used Discord"/>
+                </Button>
+
+                <Button x:Name="BtnNewAccount"
+                        Content="No, create new account"
+                        Padding="15,12" Margin="0,0,0,10"
+                        Background="#352545" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="14"
+                        Cursor="Hand" Click="BtnNewAccount_Click"/>
+            </StackPanel>
+
+            <!-- Username Entry Panel (for new accounts or OG recovery) -->
+            <StackPanel x:Name="UsernamePanel" Grid.Row="2" Visibility="Collapsed" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtUsernameTitle" Text="Choose your display name"
+                           FontSize="16" FontWeight="Bold" Foreground="White"
+                           HorizontalAlignment="Center" Margin="0,0,0,5"/>
+                <TextBlock x:Name="TxtUsernameSubtitle" Text="This will be shown on the leaderboard"
+                           FontSize="12" Foreground="#B0B0B0"
+                           HorizontalAlignment="Center" Margin="0,0,0,15"/>
+
+                <TextBox x:Name="TxtUsername" FontSize="18" Padding="12,10"
+                         Background="#252542" Foreground="White" BorderBrush="#FF69B4"
+                         MaxLength="30" TextChanged="TxtUsername_TextChanged"
+                         HorizontalAlignment="Stretch"/>
+
+                <TextBlock x:Name="TxtAvailability" FontSize="11" Margin="0,8,0,0"
+                           Foreground="#B0B0B0" Text="Enter a unique name (3-30 characters)"
+                           HorizontalAlignment="Center"/>
+
+                <Button x:Name="BtnConfirmUsername"
+                        Content="Confirm"
+                        Padding="30,12" Margin="0,20,0,0"
+                        Background="#FF69B4" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="14"
+                        Cursor="Hand" IsEnabled="False"
+                        HorizontalAlignment="Center"
+                        Click="BtnConfirmUsername_Click"/>
+            </StackPanel>
+
+            <!-- Loading Panel -->
+            <StackPanel x:Name="LoadingPanel" Grid.Row="2" Visibility="Collapsed"
+                        VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="TxtLoadingMessage" Text="Connecting..."
+                           FontSize="16" Foreground="White" HorizontalAlignment="Center"/>
+                <ProgressBar IsIndeterminate="True" Width="200" Height="4" Margin="0,15,0,0"
+                             Foreground="#FF69B4" Background="#352545"/>
+            </StackPanel>
+
+            <!-- Cancel Button -->
+            <Button x:Name="BtnCancel" Grid.Row="3" Content="Cancel"
+                    Padding="20,8" HorizontalAlignment="Right"
+                    Background="Transparent" Foreground="#808080"
+                    BorderThickness="0" Cursor="Hand"
+                    Click="BtnCancel_Click"/>
+        </Grid>
+    </Border>
+</Window>

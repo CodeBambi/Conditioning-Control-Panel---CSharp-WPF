@@ -186,6 +186,7 @@ namespace ConditioningControlPanel
         public static MindWipeService MindWipe { get; private set; } = null!;
         public static BrainDrainService BrainDrain { get; private set; } = null!;
         public static AchievementService Achievements { get; private set; } = null!;
+        public static QuestDefinitionService QuestDefinitions { get; private set; } = null!;
         public static QuestService Quests { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
         public static AiService Ai { get; private set; } = null!;
@@ -207,6 +208,7 @@ namespace ConditioningControlPanel
         public static CommunityPromptService CommunityPrompts { get; private set; } = null!;
         public static PersonalityService Personality { get; private set; } = null!;
         public static RoadmapService Roadmap { get; private set; } = null!;
+        public static SkillTreeService SkillTree { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with either Patreon or Discord (required for progression tracking)
@@ -233,8 +235,11 @@ namespace ConditioningControlPanel
                     return Settings.Current.OfflineUsername;
                 }
 
-                // Otherwise use online service names
-                return Patreon?.DisplayName ?? Discord?.CustomDisplayName ?? Discord?.DisplayName;
+                // Prioritize V2 unified display name (leaderboard name), then fall back to provider names
+                return Settings?.Current?.UserDisplayName
+                    ?? Patreon?.DisplayName
+                    ?? Discord?.CustomDisplayName
+                    ?? Discord?.DisplayName;
             }
         }
 
@@ -515,9 +520,21 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.75, "Loading achievements...");
             Achievements = new AchievementService();
+            QuestDefinitions = new QuestDefinitionService();
+            _ = QuestDefinitions.InitializeAsync(); // Fire and forget - will load from cache first
             Quests = new QuestService();
+            QuestDefinitions.QuestDefinitionsUpdated += () =>
+            {
+                // When server definitions change, re-check quests (regenerates if definition was removed)
+                Quests?.CheckAndGenerateQuests();
+            };
             Roadmap = new RoadmapService();
+            SkillTree = new SkillTreeService();
             Tutorial = new TutorialService();
+
+            // Award daily streak bonus now that SkillTree is available
+            // (AchievementService runs UpdateDailyStreak in its constructor before SkillTree exists)
+            Achievements?.Progress?.AwardDeferredStreakBonus();
 
             splash.SetProgress(0.85, "Initializing companion...");
             Ai = new AiService();
@@ -641,7 +658,7 @@ namespace ConditioningControlPanel
                 // Start autonomy service if it should be enabled
                 // (might have been skipped during LoadSettings if whitelist wasn't loaded yet)
                 var s = Settings?.Current;
-                if (s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven && s.PlayerLevel >= 100)
+                if (s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven && s.IsLevelUnlocked(100))
                 {
                     var hasPatreonAccess = s.PatreonTier >= 1 || Patreon?.IsWhitelisted == true;
                     if (hasPatreonAccess && Autonomy?.IsEnabled != true)
@@ -1629,6 +1646,8 @@ Application State:
             Autonomy?.Dispose();
             ContentPacks?.Dispose();
             Roadmap?.Dispose();
+            SkillTree?.Dispose();
+            QuestDefinitions?.Dispose();
             Audio?.Dispose();
             Settings?.Save();
 

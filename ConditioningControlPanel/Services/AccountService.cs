@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using static ConditioningControlPanel.Services.V2AuthService;
 
 namespace ConditioningControlPanel.Services;
 
@@ -205,6 +206,267 @@ public static class AccountService
             return false;
         }
     }
+
+    #region V2 Authentication (v5.5+ Seasons System)
+
+    /// <summary>
+    /// Result of V2 authentication flow
+    /// </summary>
+    public class V2AuthResult
+    {
+        public bool Success { get; set; }
+        public bool IsLegacyUser { get; set; }
+        public bool ShouldShowOgWelcome { get; set; }
+        public string? UnifiedId { get; set; }
+        public string? DisplayName { get; set; }
+        public string? Error { get; set; }
+    }
+
+    /// <summary>
+    /// Handle post-authentication flow using V2 API (v5.5+ with seasons system).
+    /// This is called after OAuth completes to authenticate/register with the new system.
+    /// </summary>
+    public static async Task<V2AuthResult> HandlePostAuthV2Async(Window owner, string provider)
+    {
+        var v2Auth = new V2AuthService();
+
+        try
+        {
+            App.Logger?.Information("AccountService: Handling V2 post-auth for {Provider}", provider);
+
+            // Get the access token from the appropriate service
+            var accessToken = provider == "patreon"
+                ? App.Patreon?.GetAccessToken()
+                : App.Discord?.GetAccessToken();
+
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                App.Logger?.Warning("AccountService: No access token available for {Provider}", provider);
+                return new V2AuthResult { Success = false, Error = "No access token available" };
+            }
+
+            // Step 1: Authenticate with V2 API
+            V2AuthResponse authResponse;
+            if (provider == "discord")
+            {
+                authResponse = await v2Auth.AuthenticateWithDiscordAsync(accessToken);
+            }
+            else
+            {
+                authResponse = await v2Auth.AuthenticateWithPatreonAsync(accessToken);
+            }
+
+            if (!authResponse.Success)
+            {
+                App.Logger?.Warning("AccountService: V2 auth failed for {Provider}: {Error}", provider, authResponse.Error);
+                return new V2AuthResult { Success = false, Error = authResponse.Error ?? "Authentication failed" };
+            }
+
+            // Step 2: If needs registration, show username picker
+            if (authResponse.NeedsRegistration)
+            {
+                App.Logger?.Information("AccountService: User needs registration, showing username picker");
+
+                var dialog = new UsernamePickerDialog
+                {
+                    Owner = owner,
+                    Topmost = true,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+                dialog.Activated += (s, args) => dialog.Topmost = false;
+
+                // Configure for legacy (OG) user or new user
+                if (authResponse.IsLegacyUser && authResponse.LegacyData != null)
+                {
+                    dialog.ConfigureForLegacyUser(authResponse.LegacyData.DisplayName);
+                }
+                else
+                {
+                    dialog.ConfigureForNewUser();
+                }
+
+                if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.ChosenDisplayName))
+                {
+                    // Re-authenticate with the chosen display name
+                    if (provider == "discord")
+                    {
+                        authResponse = await v2Auth.AuthenticateWithDiscordAsync(accessToken, dialog.ChosenDisplayName);
+                    }
+                    else
+                    {
+                        authResponse = await v2Auth.AuthenticateWithPatreonAsync(accessToken, dialog.ChosenDisplayName);
+                    }
+
+                    if (!authResponse.Success)
+                    {
+                        App.Logger?.Warning("AccountService: V2 registration failed: {Error}", authResponse.Error);
+                        MessageBox.Show(owner, authResponse.Error ?? "Registration failed", "Error",
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return new V2AuthResult { Success = false, Error = authResponse.Error };
+                    }
+                }
+                else
+                {
+                    // User cancelled - logout to prevent orphan state
+                    App.Logger?.Information("AccountService: User cancelled registration, logging out {Provider}", provider);
+                    if (provider == "patreon")
+                        App.Patreon?.Logout();
+                    else
+                        App.Discord?.Logout();
+
+                    return new V2AuthResult { Success = false, Error = "User cancelled registration" };
+                }
+            }
+
+            // Step 3: Check for conflict - user already logged in with DIFFERENT account
+            if (authResponse.User != null)
+            {
+                var currentUnifiedId = App.Settings?.Current?.UnifiedId;
+                var otherProvider = provider == "patreon" ? "Discord" : "Patreon";
+                var otherProviderLoggedIn = provider == "patreon"
+                    ? App.Discord?.IsAuthenticated == true
+                    : App.Patreon?.IsAuthenticated == true;
+
+                // If user is logged in with another provider AND the new provider returns a DIFFERENT user, REJECT
+                if (!string.IsNullOrEmpty(currentUnifiedId) &&
+                    otherProviderLoggedIn &&
+                    authResponse.User.UnifiedId != currentUnifiedId)
+                {
+                    App.Logger?.Warning("AccountService: CONFLICT! {Provider} returns user \"{NewName}\" ({NewId}) but already logged in as \"{CurrentName}\" ({CurrentId}) via {OtherProvider}",
+                        provider, authResponse.User.DisplayName, authResponse.User.UnifiedId,
+                        App.Settings?.Current?.UserDisplayName, currentUnifiedId, otherProvider);
+
+                    MessageBox.Show(owner,
+                        $"This {provider} account is already linked to a different profile (\"{authResponse.User.DisplayName}\").\n\n" +
+                        $"You are currently logged in as \"{App.Settings?.Current?.UserDisplayName}\" via {otherProvider}.\n\n" +
+                        $"If you want to switch to \"{authResponse.User.DisplayName}\", please logout of {otherProvider} first.\n\n" +
+                        $"If you want to link this {provider} to your current account, use the 'Link {provider}' button in Settings instead.",
+                        "Account Conflict",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+
+                    // Logout the provider we just tried to login with
+                    if (provider == "patreon")
+                        App.Patreon?.Logout();
+                    else
+                        App.Discord?.Logout();
+
+                    return new V2AuthResult { Success = false, Error = "Account conflict - different user" };
+                }
+
+                // Apply user data to settings
+                v2Auth.ApplyUserDataToSettings(authResponse.User);
+
+                // Also update App static properties for compatibility
+                App.UnifiedUserId = authResponse.User.UnifiedId;
+
+                // Update service-specific properties
+                if (provider == "patreon" && App.Patreon != null)
+                {
+                    App.Patreon.UnifiedUserId = authResponse.User.UnifiedId;
+                    App.Patreon.DisplayName = authResponse.User.DisplayName;
+                }
+                else if (provider == "discord" && App.Discord != null)
+                {
+                    App.Discord.UnifiedUserId = authResponse.User.UnifiedId;
+                    App.Discord.CustomDisplayName = authResponse.User.DisplayName;
+                }
+
+                App.Logger?.Information("AccountService: V2 auth complete - {DisplayName} ({UnifiedId}), OG={IsOg}",
+                    authResponse.User.DisplayName, authResponse.User.UnifiedId, authResponse.User.IsSeason0Og);
+
+                // Start profile sync heartbeat
+                App.ProfileSync?.StartHeartbeat();
+
+                // Determine if we should show OG welcome
+                bool shouldShowOgWelcome = authResponse.User.IsSeason0Og &&
+                                           App.Settings?.Current?.HasShownOgWelcome != true;
+
+                return new V2AuthResult
+                {
+                    Success = true,
+                    IsLegacyUser = authResponse.User.IsSeason0Og,
+                    ShouldShowOgWelcome = shouldShowOgWelcome,
+                    UnifiedId = authResponse.User.UnifiedId,
+                    DisplayName = authResponse.User.DisplayName
+                };
+            }
+
+            return new V2AuthResult { Success = false, Error = "No user data returned" };
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error(ex, "AccountService: HandlePostAuthV2Async failed for {Provider}", provider);
+            return new V2AuthResult { Success = false, Error = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Link a second provider to the current unified account using V2 API
+    /// </summary>
+    public static async Task<bool> LinkProviderV2Async(Window owner, string provider)
+    {
+        var v2Auth = new V2AuthService();
+
+        try
+        {
+            var unifiedId = App.Settings?.Current?.UnifiedId;
+            if (string.IsNullOrEmpty(unifiedId))
+            {
+                App.Logger?.Warning("AccountService: Cannot link provider - no unified ID");
+                MessageBox.Show(owner, "Please log in first before linking another account.",
+                    "Not Logged In", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+
+            // Get the access token from the newly authenticated provider
+            var accessToken = provider == "patreon"
+                ? App.Patreon?.GetAccessToken()
+                : App.Discord?.GetAccessToken();
+
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                App.Logger?.Warning("AccountService: No access token available for linking {Provider}", provider);
+                return false;
+            }
+
+            // Call V2 link endpoint
+            var result = await v2Auth.LinkProviderAsync(unifiedId, provider, accessToken);
+
+            if (result.Success)
+            {
+                App.Logger?.Information("AccountService: Successfully linked {Provider} to {UnifiedId}", provider, unifiedId);
+
+                // Update settings
+                if (provider == "discord")
+                    App.Settings!.Current!.HasLinkedDiscord = true;
+                else if (provider == "patreon")
+                    App.Settings!.Current!.HasLinkedPatreon = true;
+
+                App.Settings?.Save();
+
+                MessageBox.Show(owner, $"Successfully linked your {provider} account!",
+                    "Account Linked", MessageBoxButton.OK, MessageBoxImage.Information);
+                return true;
+            }
+            else
+            {
+                App.Logger?.Warning("AccountService: Failed to link {Provider}: {Error}", provider, result.Error);
+                MessageBox.Show(owner, result.Error ?? $"Failed to link {provider} account.",
+                    "Link Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error(ex, "AccountService: LinkProviderV2Async failed for {Provider}", provider);
+            return false;
+        }
+    }
+
+    #endregion
+
+    #region V1 Authentication (Legacy - pre v5.5)
 
     /// <summary>
     /// Look up if a provider account is linked to a unified user
@@ -511,7 +773,7 @@ public static class AccountService
         return true;
     }
 
-    #region Result Classes
+    #region V1 Result Classes
 
     private class LookupResult
     {
@@ -543,5 +805,7 @@ public static class AccountService
         public string? Error { get; set; }
     }
 
-    #endregion
+    #endregion // V1 Result Classes
+
+    #endregion // V1 Authentication
 }

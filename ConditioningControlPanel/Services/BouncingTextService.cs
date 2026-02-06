@@ -48,7 +48,7 @@ public class BouncingTextService : IDisposable
         var settings = App.Settings.Current;
 
         // Check level requirement (Level 60) unless bypassed (e.g., during sessions)
-        if (!bypassLevelCheck && settings.PlayerLevel < 60)
+        if (!bypassLevelCheck && !settings.IsLevelUnlocked(60))
         {
             App.Logger?.Information("BouncingTextService: Level {Level} is below 60, not available", settings.PlayerLevel);
             return;

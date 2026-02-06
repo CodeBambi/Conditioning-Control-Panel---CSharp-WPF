@@ -99,7 +99,7 @@ namespace ConditioningControlPanel.Services
         
         public void Start(bool bypassLevelCheck = false)
         {
-            if (!bypassLevelCheck && App.Settings.Current.PlayerLevel < 70)
+            if (!bypassLevelCheck && !App.Settings.Current.IsLevelUnlocked(70))
             {
                 App.Logger?.Information("BrainDrain: Level {Level} is below 70, not available", App.Settings.Current.PlayerLevel);
                 return;

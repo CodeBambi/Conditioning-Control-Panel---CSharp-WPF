@@ -405,8 +405,10 @@ public class SkillTreeService : IDisposable
     }
 
     /// <summary>
-    /// Use oopsie insurance to restore a broken streak for 500 XP
-    /// Returns true if successful
+    /// Use oopsie insurance to restore a broken streak for 500 XP.
+    /// This is the automatic trigger from AchievementProgress.UpdateDailyStreak().
+    /// For the manual button, MainWindow uses ProfileSyncService.UseOopsieInsuranceAsync() directly.
+    /// Falls back to local-only if offline (acceptable for passive auto-trigger).
     /// </summary>
     public bool UseOopsieInsurance()
     {
@@ -417,9 +419,28 @@ public class SkillTreeService : IDisposable
         if (settings.SeasonalStreakRecoveryUsed) return false;
         if (settings.PlayerXP < 500) return false;
 
+        // Try server-side validation if online
+        var unifiedId = settings.UnifiedId;
+        if (!string.IsNullOrEmpty(unifiedId) && App.ProfileSync != null)
+        {
+            // Fire-and-forget server call for the auto-trigger (non-blocking)
+            // The local deduction happens immediately; server sync catches up
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var today = DateTime.Today.ToString("yyyy-MM-dd");
+                    await App.ProfileSync.UseOopsieInsuranceAsync(today);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Auto oopsie server sync failed (local fallback used): {Error}", ex.Message);
+                }
+            });
+        }
+
         settings.PlayerXP -= 500;
         settings.SeasonalStreakRecoveryUsed = true;
-        // Note: The actual streak restoration logic would be in ProgressionService
 
         App.Logger?.Information("Oopsie Insurance used! Streak restored for 500 XP");
         App.Settings?.Save();
@@ -429,21 +450,27 @@ public class SkillTreeService : IDisposable
 
     /// <summary>
     /// Get daily welcome bonus XP based on current streak length.
-    /// Scales with streak tier: 25 (1-3d), 50 (4-6d), 75 (7-13d), 100 (14-29d), 150 (30+d)
+    /// Base XP by streak tier: 50 (1-3d), 100 (4-6d), 150 (7-13d), 200 (14-29d), 300 (30+d)
+    /// Scales with player level: +3% per level (e.g. level 50 = +150% = 2.5x)
     /// </summary>
     public int GetDailyStreakBonus(int streakDays)
     {
         if (!HasSkill("milestone_rewards")) return 0;
         if (streakDays <= 0) return 0;
 
-        var xp = streakDays switch
+        var baseXp = streakDays switch
         {
-            <= 3 => 25,
-            <= 6 => 50,
-            <= 13 => 75,
-            <= 29 => 100,
-            _ => 150
+            <= 3 => 50,
+            <= 6 => 100,
+            <= 13 => 150,
+            <= 29 => 200,
+            _ => 300
         };
+
+        // Scale with player level: +3% per level
+        var level = App.Settings?.Current?.PlayerLevel ?? 1;
+        var levelMultiplier = 1.0 + (level - 1) * 0.03;
+        var xp = (int)Math.Round(baseXp * levelMultiplier);
 
         ShowDailyStreakNotification(xp, streakDays);
         return xp;
@@ -460,12 +487,13 @@ public class SkillTreeService : IDisposable
             {
                 Id = "daily_streak_bonus",
                 Name = $"Day {streakDays} Streak Bonus!",
-                FlavorText = $"Welcome back! +{xpAwarded} XP for keeping your {streakDays}-day streak going~",
+                FlavorText = $"Welcome back! +{xpAwarded} XP for your {streakDays}-day streak~",
                 ImageName = "../skills/milestone_rewards.png",
                 Category = Models.AchievementCategory.TimeSessions
             };
 
-            Application.Current?.Dispatcher.Invoke(() =>
+            // Delay popup slightly so the main window has time to finish loading
+            Application.Current?.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () =>
             {
                 try
                 {
@@ -751,6 +779,12 @@ public class SkillTreeService : IDisposable
 
         App.Logger?.Information("Seasonal skill data reset");
         App.Settings?.Save();
+
+        // Sync reset streak to server
+        if (App.ProfileSync?.IsSyncEnabled == true)
+        {
+            _ = App.ProfileSync.SyncProfileAsync();
+        }
     }
 
     #endregion

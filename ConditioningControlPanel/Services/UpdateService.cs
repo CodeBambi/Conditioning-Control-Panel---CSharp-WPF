@@ -22,17 +22,48 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.4.12";
+        public const string AppVersion = "5.5.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.4.12 - Cumulative Update (All Changes Since v5.4.8)
+        public const string CurrentPatchNotes = @"v5.5.0-pre2 - Quest Streaks & Profile Fixes
 
-🔧 v5.4.12 - BUG FIX
-• Fixed 'Download size: 0 bytes' in update dialog
-• Proper JSON parsing for GitHub release assets
+🔥 QUEST STREAK XP MULTIPLIER
+• +3% XP bonus per consecutive day of quest completion
+• Streak bonus shown inline on quest cards as orange indicator
+• Skill reroll bonus shown as separate blue indicator
+• Updated streak tooltip to display bonus percentage
+
+🎭 MODE-AWARE SESSIONS
+• Session names and descriptions adapt to current content mode
+• No more Bambi references when in Sissy Hypno mode
+• Takeover label in Exclusives tab respects content mode
+
+👤 PROFILE VIEWER FIX
+• Fixed 'My Profile' button not working for Discord-only users
+• Profile lookup now uses V2 unified display name consistently
+• Leaderboard never falls back to raw Patreon/Discord provider names
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+v5.5.0-pre1 - Season System & Leaderboard
+
+🏆 LEADERBOARD V3
+• New leaderboard endpoint with improved reliability
+• Trophy Case stats (Best Session, Best Streak) only visible for users with the skill
+• Skills now sync to cloud in V2 system
+
+🛡️ SERVER-SIDE OOPSIE INSURANCE
+• Streak fix now validated server-side to prevent cheating
+• 500 XP deducted on server, once per season enforced server-side
+• Requires internet connection
+
+📅 ADMIN SEASON MANAGEMENT
+• New season transition with automatic leaderboard snapshot
+• Season config (title) served to clients via quest definitions
+• Admin endpoints for season reset, snapshots, and config updates
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

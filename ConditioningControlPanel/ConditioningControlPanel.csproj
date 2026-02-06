@@ -8,7 +8,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>5.4.12</Version>
+    <Version>5.5.0</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -184,6 +184,9 @@
 
     <!-- Achievement images -->
     <Resource Include="Resources\achievements\*.png" />
+
+    <!-- Skill tree images (individual skill files) -->
+    <Resource Include="Resources\skills\*.png" />
   </ItemGroup>
 
   <ItemGroup>

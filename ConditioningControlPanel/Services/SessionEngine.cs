@@ -225,6 +225,12 @@ namespace ConditioningControlPanel.Services
             // Update Discord presence back to idle
             App.DiscordRpc?.SetIdleActivity();
 
+            // Track abandoned session if not completed
+            if (!completed)
+            {
+                App.Achievements?.TrackSessionAbandoned();
+            }
+
             if (completed && _currentSession != null)
             {
                 // Calculate XP with pause penalty (100 XP per pause)
@@ -320,17 +326,17 @@ namespace ConditioningControlPanel.Services
             var settings = _currentSession.Settings;
             if (settings.FlashEnabled) App.Flash?.Start();
             if (settings.SubliminalEnabled) App.Subliminal?.Start();
-            if (settings.BubblesEnabled && App.Settings.Current.PlayerLevel >= 20) App.Bubbles?.Start();
-            if (settings.LockCardEnabled && App.Settings.Current.PlayerLevel >= 35) App.LockCard?.Start();
-            if (settings.BubbleCountEnabled && App.Settings.Current.PlayerLevel >= 50) App.BubbleCount?.Start();
-            if (settings.BouncingTextEnabled && App.Settings.Current.PlayerLevel >= 60) App.BouncingText?.Start();
-            if (settings.MindWipeEnabled && App.Settings.Current.PlayerLevel >= 75)
+            if (settings.BubblesEnabled && App.SkillTree?.HasSkill("pink_hours") == true) App.Bubbles?.Start();
+            if (settings.LockCardEnabled && App.Settings.Current.IsLevelUnlocked(35)) App.LockCard?.Start();
+            if (settings.BubbleCountEnabled && App.Settings.Current.IsLevelUnlocked(50)) App.BubbleCount?.Start();
+            if (settings.BouncingTextEnabled && App.Settings.Current.IsLevelUnlocked(60)) App.BouncingText?.Start();
+            if (settings.MindWipeEnabled && App.Settings.Current.IsLevelUnlocked(75))
                 App.MindWipe?.Start(settings.MindWipeBaseMultiplier, settings.MindWipeVolume / 100.0);
             // DISABLED: Brain Drain is up for rework due to performance issues
-            // if (_brainDrainActive && App.Settings.Current.PlayerLevel >= 70) App.BrainDrain?.Start();
+            // if (_brainDrainActive && App.Settings.Current.IsLevelUnlocked(70)) App.BrainDrain?.Start();
             if (settings.MandatoryVideosEnabled) App.Video?.Start();
             // Re-enable overlays via the overlay service
-            if (App.Settings.Current.PlayerLevel >= 10) App.Overlay?.Start();
+            if (App.SkillTree?.HasSkill("pink_hours") == true) App.Overlay?.Start();
 
             App.Logger?.Information("Session resumed");
         }
@@ -883,8 +889,8 @@ namespace ConditioningControlPanel.Services
                 App.BubbleCount?.Stop();
             }
 
-            // Start overlay service if level >= 10 (handles spiral and pink filter)
-            if (App.Settings.Current.PlayerLevel >= 10)
+            // Start overlay service if pink_hours skill unlocked (handles spiral and pink filter)
+            if (App.SkillTree?.HasSkill("pink_hours") == true)
             {
                 App.Overlay?.Start();
             }

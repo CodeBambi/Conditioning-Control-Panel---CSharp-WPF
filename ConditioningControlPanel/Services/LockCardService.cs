@@ -24,9 +24,9 @@ namespace ConditioningControlPanel.Services
             if (_isRunning) return;
             
             var settings = App.Settings.Current;
-            
+
             // Check level requirement
-            if (settings.PlayerLevel < 35)
+            if (!settings.IsLevelUnlocked(35))
             {
                 App.Logger?.Information("LockCardService: Level {Level} is below 35, not available", settings.PlayerLevel);
                 return;
@@ -84,7 +84,7 @@ namespace ConditioningControlPanel.Services
             }
             
             // Check if enabled
-            if (!settings.LockCardEnabled || settings.PlayerLevel < 35) return;
+            if (!settings.LockCardEnabled || !settings.IsLevelUnlocked(35)) return;
             
             // Show the lock card
             ShowLockCard();

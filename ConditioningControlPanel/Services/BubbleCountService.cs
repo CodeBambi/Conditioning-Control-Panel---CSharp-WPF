@@ -41,9 +41,9 @@ public class BubbleCountService : IDisposable
         if (_isRunning) return;
         
         var settings = App.Settings.Current;
-        
+
         // Check level requirement (Level 50)
-        if (settings.PlayerLevel < 50)
+        if (!settings.IsLevelUnlocked(50))
         {
             App.Logger?.Information("BubbleCountService: Level {Level} is below 50, not available", settings.PlayerLevel);
             return;
@@ -118,7 +118,7 @@ public class BubbleCountService : IDisposable
         var settings = App.Settings.Current;
 
         // Level check - skip for forced tests
-        if (!forceTest && settings.PlayerLevel < 50) return;
+        if (!forceTest && !settings.IsLevelUnlocked(50)) return;
 
         // Check if another fullscreen interaction is active (video, lock card)
         // If so, queue this bubble count for later
@@ -169,7 +169,10 @@ public class BubbleCountService : IDisposable
                     
                     // Determine difficulty settings
                     var difficulty = (Difficulty)settings.BubbleCountDifficulty;
-                    
+
+                    // Track game started
+                    App.Achievements?.TrackBubbleCountGameStarted();
+
                     // Show the game on all monitors
                     BubbleCountWindow.ShowOnAllMonitors(videoPath, difficulty, settings.BubbleCountStrictLock, OnGameComplete);
                 }

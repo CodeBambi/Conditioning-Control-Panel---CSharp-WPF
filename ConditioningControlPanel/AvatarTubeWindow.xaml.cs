@@ -382,36 +382,43 @@ namespace ConditioningControlPanel
         /// Determines the highest avatar set unlocked based on player level.
         /// Note: Sets are not unlocked sequentially - set 7 (Bambi Cow) unlocks at level 75.
         /// </summary>
-        /// <param name="level">Player's current level</param>
+        /// <param name="level">Player's current level (unused - kept for API compatibility)</param>
         /// <returns>Avatar set number (1-7)</returns>
         public static int GetAvatarSetForLevel(int level)
         {
-            // Find the highest unlocked set
+            // Find the highest unlocked set using IsLevelUnlocked which respects OG unlock and HighestLevelEver
+            var settings = App.Settings?.Current;
+            if (settings == null) return 1;
+
             int maxSet = 1;
-            if (level >= 20) maxSet = 2;
-            if (level >= 35) maxSet = 3;
-            if (level >= 50) maxSet = 4;
-            if (level >= 75) maxSet = 7;  // Bambi Cow unlocks at 75 (set 7 > set 4)
-            if (level >= 100) maxSet = 7; // Still 7 since 7 > 4
-            if (level >= 125) maxSet = 7; // Still 7 since 7 > 5
-            if (level >= 150) maxSet = 7; // Still 7 since 7 > 6
+            if (settings.IsLevelUnlocked(20)) maxSet = 2;
+            if (settings.IsLevelUnlocked(35)) maxSet = 3;
+            if (settings.IsLevelUnlocked(50)) maxSet = 4;
+            if (settings.IsLevelUnlocked(75)) maxSet = 7;  // Bambi Cow unlocks at 75 (set 7 > set 4)
+            if (settings.IsLevelUnlocked(100)) maxSet = 7; // Still 7 since 7 > 4
+            if (settings.IsLevelUnlocked(125)) maxSet = 7; // Still 7 since 7 > 5
+            if (settings.IsLevelUnlocked(150)) maxSet = 7; // Still 7 since 7 > 6
             return maxSet;
         }
 
         /// <summary>
         /// Checks if a specific avatar set is unlocked for the given level.
+        /// Uses IsLevelUnlocked which respects OG unlock and HighestLevelEver.
         /// </summary>
         public static bool IsAvatarSetUnlocked(int setNumber, int level)
         {
+            var settings = App.Settings?.Current;
+            if (settings == null) return setNumber == 1;
+
             return setNumber switch
             {
-                1 => true,                    // Always unlocked
-                2 => level >= 20,             // Level 20
-                3 => level >= 35,             // Level 35
-                4 => level >= 50,             // Level 50 (CultBunny companion requirement is 100, but avatar unlocks at 50)
-                5 => level >= 125,            // Level 125
-                6 => level >= 150,            // Level 150
-                7 => level >= 75,             // Level 75 (Bambi Cow)
+                1 => true,                              // Always unlocked
+                2 => settings.IsLevelUnlocked(20),      // Level 20
+                3 => settings.IsLevelUnlocked(35),      // Level 35
+                4 => settings.IsLevelUnlocked(50),      // Level 50 (CultBunny companion requirement is 100, but avatar unlocks at 50)
+                5 => settings.IsLevelUnlocked(125),     // Level 125
+                6 => settings.IsLevelUnlocked(150),     // Level 150
+                7 => settings.IsLevelUnlocked(75),      // Level 75 (Bambi Cow)
                 _ => false
             };
         }

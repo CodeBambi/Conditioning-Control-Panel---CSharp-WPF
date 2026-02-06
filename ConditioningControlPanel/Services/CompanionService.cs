@@ -144,8 +144,8 @@ namespace ConditioningControlPanel.Services
             var def = CompanionDefinition.GetById(newCompanion);
             var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
 
-            // Validate player level for unlock requirement
-            if (playerLevel < def.RequiredLevel)
+            // Validate player level for unlock requirement (respects OG unlock toggle)
+            if (!(App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false))
             {
                 App.Logger?.Warning("Cannot switch to {Companion} - requires Level {Level}, player is Level {PlayerLevel}",
                     def.Name, def.RequiredLevel, playerLevel);
@@ -329,8 +329,7 @@ namespace ConditioningControlPanel.Services
         public bool IsCompanionUnlocked(CompanionId id)
         {
             var def = CompanionDefinition.GetById(id);
-            var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
-            return playerLevel >= def.RequiredLevel;
+            return App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false;
         }
 
         /// <summary>

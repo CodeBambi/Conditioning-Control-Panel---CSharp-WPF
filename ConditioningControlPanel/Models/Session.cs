@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 namespace ConditioningControlPanel.Models
 {
@@ -69,6 +70,57 @@ namespace ConditioningControlPanel.Models
             };
         }
         
+        /// <summary>
+        /// Returns the session name adjusted for the current content mode.
+        /// </summary>
+        public string GetModeAwareName()
+        {
+            var mode = App.Settings?.Current?.ContentMode ?? ContentMode.BambiSleep;
+            if (mode == ContentMode.BambiSleep) return Name;
+            return MakeModeAware(Name, mode);
+        }
+
+        /// <summary>
+        /// Returns the session description adjusted for the current content mode.
+        /// Replaces Bambi-specific trigger names with generic equivalents in SH mode.
+        /// </summary>
+        public string GetModeAwareDescription()
+        {
+            var mode = App.Settings?.Current?.ContentMode ?? ContentMode.BambiSleep;
+            if (mode == ContentMode.BambiSleep) return Description;
+            return MakeModeAware(Description, mode);
+        }
+
+        /// <summary>
+        /// Replaces Bambi-specific references with generic equivalents for SH mode.
+        /// </summary>
+        private static string MakeModeAware(string text, ContentMode mode)
+        {
+            if (string.IsNullOrEmpty(text) || mode == ContentMode.BambiSleep) return text;
+
+            var result = text;
+            // Replace specific trigger/phrase references
+            result = result.Replace("'Bambi Sleep'", "'Deep Sleep'");
+            result = result.Replace("'Bambi Freeze'", "'Sissy Freeze'");
+            result = result.Replace("'Bambi Reset'", "'Sissy Reset'");
+            result = result.Replace("'Bambi Cum and Collapse'", "'Cum and Collapse'");
+            result = result.Replace("Bambi Freeze", "Sissy Freeze");
+            result = result.Replace("Bambi Reset", "Sissy Reset");
+            result = result.Replace("BAMBI FREEZE", "SISSY FREEZE");
+            result = result.Replace("BAMBI RESET", "SISSY RESET");
+            result = result.Replace("BAMBI SLEEP", "DEEP SLEEP");
+            result = result.Replace("BAMBI CUM AND COLLAPSE", "CUM AND COLLAPSE");
+            result = result.Replace("BAMBI UNIFORM LOCK", "UNIFORM LOCK");
+            result = result.Replace("BAMBI DOES AS SHE'S TOLD", "SHE DOES AS SHE'S TOLD");
+            result = result.Replace("Bambi Time", "Bimbo Time");
+            result = result.Replace("Bambi Takeover", "Bimbo Takeover");
+            result = result.Replace("Full Bambi mode", "Full bimbo mode");
+            // Generic fallback for any remaining "Bambi" references
+            result = result.Replace("Bambi", "Bimbo");
+            result = result.Replace("bambi", "bimbo");
+            return result;
+        }
+
         /// <summary>
         /// Gets the Morning Drift session - gentle passive conditioning
         /// </summary>
@@ -238,10 +290,10 @@ Just play your game. Let everything else happen on its own.
                 SpiralOpacity = 1,
                 SpiralOpacityEnd = 10,
                 
-                // Bubbles - floating only, no clicking required (reduced for performance)
+                // Bubbles - clickable bursts (reduced for performance)
                 BubblesEnabled = true,
                 BubblesIntermittent = true,
-                BubblesClickable = false, // Float and auto-disappear
+                BubblesClickable = true, // Always poppable
                 BubblesBurstCount = 6,
                 BubblesPerBurst = 2, // Reduced from 5 for performance
                 BubblesGapMin = 6,
@@ -336,10 +388,10 @@ Everything is designed to be viewed from a distance while your mind drifts away.
                 SpiralOpacity = 5,
                 SpiralOpacityEnd = 15,
                 
-                // Bubbles - Rare visual-only bursts (reduced for performance)
+                // Bubbles - Rare clickable bursts (reduced for performance)
                 BubblesEnabled = true,
                 BubblesIntermittent = true,
-                BubblesClickable = false, // Visual only
+                BubblesClickable = true, // Always poppable
                 BubblesBurstCount = 5, // ~5 times in 45 min
                 BubblesPerBurst = 1, // Reduced from 3 for performance
                 BubblesGapMin = 7,

@@ -138,7 +138,8 @@ public class QuestService : IDisposable
     #region Quest Generation
 
     /// <summary>
-    /// Check for expired quests and generate new ones if needed
+    /// Check for expired quests and generate new ones if needed.
+    /// Also regenerates quests whose definitions are no longer available (removed from server).
     /// </summary>
     public void CheckAndGenerateQuests()
     {
@@ -173,9 +174,27 @@ public class QuestService : IDisposable
                 Progress.GetDailyQuestsCompletedToday(), MaxDailyQuestsPerDay);
         }
 
+        // If daily quest definition is missing (removed from server), regenerate
+        if (Progress.DailyQuest != null && !Progress.DailyQuest.IsCompleted && GetCurrentDailyDefinition() == null)
+        {
+            App.Logger?.Information("Daily quest definition '{QuestId}' no longer available, regenerating",
+                Progress.DailyQuest.DefinitionId);
+            GenerateNewDailyQuest();
+            changed = true;
+        }
+
         // Check weekly quest
         if (Progress.IsWeeklyExpired() || Progress.WeeklyQuest == null)
         {
+            GenerateNewWeeklyQuest();
+            changed = true;
+        }
+
+        // If weekly quest definition is missing (removed from server), regenerate
+        if (Progress.WeeklyQuest != null && !Progress.WeeklyQuest.IsCompleted && GetCurrentWeeklyDefinition() == null)
+        {
+            App.Logger?.Information("Weekly quest definition '{QuestId}' no longer available, regenerating",
+                Progress.WeeklyQuest.DefinitionId);
             GenerateNewWeeklyQuest();
             changed = true;
         }
@@ -223,6 +242,32 @@ public class QuestService : IDisposable
 
         App.Logger?.Information("Generated new weekly quest: {QuestId} (from {Source})",
             selectedQuest.Id, App.QuestDefinitions != null ? "server" : "embedded");
+    }
+
+    /// <summary>
+    /// Force regenerate the weekly quest (called by server-side reset flag)
+    /// </summary>
+    public void ForceRegenerateWeeklyQuest()
+    {
+        var oldId = Progress.WeeklyQuest?.DefinitionId;
+        GenerateNewWeeklyQuest(excludeId: oldId);
+        _isDirty = true;
+        Save();
+        App.Logger?.Information("Force-regenerated weekly quest (old: {OldId}, new: {NewId})",
+            oldId, Progress.WeeklyQuest?.DefinitionId);
+    }
+
+    /// <summary>
+    /// Force regenerate the daily quest (called by server-side reset flag)
+    /// </summary>
+    public void ForceRegenerateDailyQuest()
+    {
+        var oldId = Progress.DailyQuest?.DefinitionId;
+        GenerateNewDailyQuest(excludeId: oldId);
+        _isDirty = true;
+        Save();
+        App.Logger?.Information("Force-regenerated daily quest (old: {OldId}, new: {NewId})",
+            oldId, Progress.DailyQuest?.DefinitionId);
     }
 
     private static DateTime GetStartOfWeek(DateTime date)
@@ -617,7 +662,10 @@ public class QuestService : IDisposable
         // Scale XP reward based on player level (+2% per level)
         var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
         var betterQuestsMultiplier = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
-        var scaledXP = (int)Math.Round(def.XPReward * (1 + playerLevel * 0.02) * betterQuestsMultiplier);
+        // Quest streak bonus: +3% per consecutive day
+        var questStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
+        var streakMultiplier = 1.0 + (questStreak * 0.03);
+        var scaledXP = (int)Math.Round(def.XPReward * (1 + playerLevel * 0.02) * betterQuestsMultiplier * streakMultiplier);
 
         Progress.TotalXPFromQuests += scaledXP;
 
@@ -640,8 +688,8 @@ public class QuestService : IDisposable
         // Play celebration effects
         PlayCompletionEffects();
 
-        App.Logger?.Information("Quest completed: {QuestName} ({Type}) - Awarded {XP} XP (base: {BaseXP}, level: {Level})",
-            def.Name, type, scaledXP, def.XPReward, playerLevel);
+        App.Logger?.Information("Quest completed: {QuestName} ({Type}) - Awarded {XP} XP (base: {BaseXP}, level: {Level}, streak: {Streak}x{StreakPct}%)",
+            def.Name, type, scaledXP, def.XPReward, playerLevel, questStreak, questStreak * 3);
 
         // Fire event
         QuestCompleted?.Invoke(this, new QuestCompletedEventArgs(def, scaledXP, type));

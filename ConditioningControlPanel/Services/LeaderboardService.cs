@@ -78,7 +78,7 @@ public class LeaderboardService : IDisposable
 
             // Use V2 leaderboard (monthly seasons system)
             var season = DateTime.UtcNow.ToString("yyyy-MM");
-            var response = await _httpClient.GetAsync($"{ProxyBaseUrl}/v2/leaderboard?season={season}&limit=1000");
+            var response = await _httpClient.GetAsync($"{ProxyBaseUrl}/v3/leaderboard?season={season}&limit=1000");
 
             if (!response.IsSuccessStatusCode)
             {
@@ -320,16 +320,24 @@ public class LeaderboardEntry
     [JsonProperty("achievements_count")]
     public int AchievementsCount { get; set; }
 
+    [JsonProperty("has_trophy_case")]
+    public bool HasTrophyCase { get; set; }
+
     [JsonProperty("longest_session_minutes")]
     public double LongestSessionMinutes { get; set; }
 
     /// <summary>
-    /// Formatted longest session display (e.g., "123.5 min")
+    /// Formatted longest session display — blank if user doesn't have trophy_case skill
     /// </summary>
-    public string LongestSessionDisplay => $"{LongestSessionMinutes:F1}";
+    public string LongestSessionDisplay => HasTrophyCase ? $"{LongestSessionMinutes:F1}" : "";
 
     [JsonProperty("highest_streak")]
     public int HighestStreak { get; set; }
+
+    /// <summary>
+    /// Formatted highest streak display — blank if user doesn't have trophy_case skill
+    /// </summary>
+    public string HighestStreakDisplay => HasTrophyCase ? HighestStreak.ToString() : "";
 
     [JsonProperty("is_online", NullValueHandling = NullValueHandling.Ignore)]
     public bool IsOnline { get; set; }

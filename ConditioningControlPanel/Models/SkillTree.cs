@@ -34,7 +34,7 @@ public class SkillDefinition
     public static readonly List<SkillDefinition> All = new()
     {
         // ═══════════════════════════════════════════════════════════════
-        // TIER 1 - Foundation (5 points)
+        // TIER 1 - Foundation (2 points)
         // ═══════════════════════════════════════════════════════════════
         new()
         {
@@ -42,7 +42,7 @@ public class SkillDefinition
             Name = "Pink Hours",
             Icon = "⏱️💕",
             Tier = 1,
-            Cost = 5,
+            Cost = 2,
             FlavorText = "Like, how long have you been getting all pink and pretty? Every second makes your brain more bubbly~",
             Description = "Shows total conditioning time across all sessions",
             EffectType = SkillEffectType.StatDisplay,
@@ -50,7 +50,7 @@ public class SkillDefinition
         },
 
         // ═══════════════════════════════════════════════════════════════
-        // TIER 2 - Core Branches (15 points each)
+        // TIER 2 - Core Branches (5-8 points)
         // ═══════════════════════════════════════════════════════════════
         new()
         {
@@ -58,7 +58,7 @@ public class SkillDefinition
             Name = "Ditzy Data",
             Icon = "📊💭",
             Tier = 2,
-            Cost = 15,
+            Cost = 5,
             PrerequisiteId = "pink_hours",
             FlavorText = "Numbers are like, SO hard... but these ones are pretty! See all your bimbo stats in one adorable place~",
             Description = "Unlocks statistics panel with session data",
@@ -71,7 +71,7 @@ public class SkillDefinition
             Name = "Sparkle Boost",
             Icon = "✨⚡",
             Tier = 2,
-            Cost = 15,
+            Cost = 8,
             PrerequisiteId = "pink_hours",
             FlavorText = "Good girls deserve extra sparkles! You're just THAT special, sweetie~",
             Description = "+10% XP from all sources",
@@ -84,7 +84,7 @@ public class SkillDefinition
             Name = "Good Girl Streak",
             Icon = "🔥💖",
             Tier = 2,
-            Cost = 15,
+            Cost = 5,
             PrerequisiteId = "pink_hours",
             FlavorText = "Being obedient every single day? That deserves protection! One free oopsie per week~",
             Description = "Enhanced streak display + 1 weekly streak shield",
@@ -93,7 +93,7 @@ public class SkillDefinition
         },
 
         // ═══════════════════════════════════════════════════════════════
-        // TIER 3 - Specialization (40 points each)
+        // TIER 3 - Specialization (10-15 points)
         // ═══════════════════════════════════════════════════════════════
         new()
         {
@@ -101,7 +101,7 @@ public class SkillDefinition
             Name = "Hive Mind",
             Icon = "👯‍♀️💕",
             Tier = 3,
-            Cost = 40,
+            Cost = 10,
             PrerequisiteId = "ditzy_data",
             FlavorText = "See how many other bimbos are conditioning RIGHT NOW! You're never alone in your journey to empty~",
             Description = "Shows live online user count",
@@ -114,7 +114,7 @@ public class SkillDefinition
             Name = "Trophy Case",
             Icon = "🏆✨",
             Tier = 3,
-            Cost = 40,
+            Cost = 10,
             PrerequisiteId = "ditzy_data",
             FlavorText = "Look at all your pretty accomplishments! Longest session, biggest streak... you're doing SO well!",
             Description = "Shows personal best records",
@@ -127,7 +127,7 @@ public class SkillDefinition
             Name = "Extra Sparkly",
             Icon = "💎⚡",
             Tier = 3,
-            Cost = 40,
+            Cost = 15,
             PrerequisiteId = "sparkle_boost_1",
             FlavorText = "Even MORE sparkles?! +15% extra (25% total!) You're practically GLOWING~",
             Description = "+15% more XP (stacks to 25%)",
@@ -140,7 +140,7 @@ public class SkillDefinition
             Name = "Lucky Bimbo",
             Icon = "🍀💋",
             Tier = 3,
-            Cost = 40,
+            Cost = 15,
             PrerequisiteId = "sparkle_boost_1",
             FlavorText = "Being an airhead pays off sometimes! 5% chance any flash gives 5x XP~ Tee-hee!",
             Description = "5% chance for 5x XP on flash images",
@@ -153,10 +153,10 @@ public class SkillDefinition
             Name = "Milestone Rewards",
             Icon = "🎁🎀",
             Tier = 3,
-            Cost = 40,
+            Cost = 15,
             PrerequisiteId = "good_girl_streak",
             FlavorText = "Good girls who show up every day deserve a treat~ The longer your streak, the bigger your daily welcome bonus!",
-            Description = "Daily XP: 25 (1-3d) / 50 (4-6d) / 75 (7-13d) / 100 (14-29d) / 150 (30+d)",
+            Description = "Daily XP: 50 (1-3d) / 100 (4-6d) / 150 (7-13d) / 200 (14-29d) / 300 (30+d) — scales +3%/level",
             EffectType = SkillEffectType.StreakMilestones,
             EffectValue = 0
         },
@@ -166,7 +166,7 @@ public class SkillDefinition
             Name = "Oopsie Insurance",
             Icon = "💕🩹",
             Tier = 3,
-            Cost = 40,
+            Cost = 12,
             PrerequisiteId = "good_girl_streak",
             FlavorText = "Everyone forgets sometimes, silly! Pay 500 XP to fix a broken streak once per season~",
             Description = "Restore broken streak for 500 XP (once per season)",
@@ -175,7 +175,7 @@ public class SkillDefinition
         },
 
         // ═══════════════════════════════════════════════════════════════
-        // TIER 4 - Mastery (70 points each)
+        // TIER 4 - Mastery (15-25 points)
         // ═══════════════════════════════════════════════════════════════
         new()
         {
@@ -183,7 +183,7 @@ public class SkillDefinition
             Name = "Popular Girl",
             Icon = "👑💅",
             Tier = 4,
-            Cost = 70,
+            Cost = 15,
             PrerequisiteId = "hive_mind",
             FlavorText = "OMG find out how pretty you are compared to everyone! Top X%... are you the PRETTIEST?",
             Description = "Shows your rank percentile",
@@ -196,7 +196,7 @@ public class SkillDefinition
             Name = "Quest Refresh",
             Icon = "🔄💫",
             Tier = 4,
-            Cost = 70,
+            Cost = 15,
             PrerequisiteId = "trophy_case",
             FlavorText = "Don't like your quest? Swap it for free once a day! Good bimbos get choices~",
             Description = "1 free daily quest reroll",
@@ -209,7 +209,7 @@ public class SkillDefinition
             Name = "Better Quests",
             Icon = "✨📜",
             Tier = 4,
-            Cost = 70,
+            Cost = 20,
             PrerequisiteId = "trophy_case",
             FlavorText = "Your rerolled quests are extra rewarding now! +25% XP on any quest you refresh~",
             Description = "+25% XP on rerolled quests",
@@ -222,7 +222,7 @@ public class SkillDefinition
             Name = "Maximum Sparkle",
             Icon = "💖👸",
             Tier = 4,
-            Cost = 70,
+            Cost = 25,
             PrerequisiteId = "sparkle_boost_2",
             FlavorText = "THE MOST SPARKLES POSSIBLE! +20% more (45% total!) You're basically made of glitter now~",
             Description = "+20% more XP (stacks to 45%)",
@@ -235,7 +235,7 @@ public class SkillDefinition
             Name = "Lucky Bubbles",
             Icon = "🫧🎰",
             Tier = 4,
-            Cost = 70,
+            Cost = 20,
             PrerequisiteId = "lucky_bimbo",
             FlavorText = "Pop pop POP! 5% chance bubbles give 10x points! Empty heads LOVE bubbles~",
             Description = "5% chance for 10x bubble points",
@@ -248,7 +248,7 @@ public class SkillDefinition
             Name = "Pink Rush",
             Icon = "⚡💗",
             Tier = 4,
-            Cost = 70,
+            Cost = 25,
             PrerequisiteId = "lucky_bimbo",
             FlavorText = "Random 60-second PINK EMERGENCY! 3x XP while your brain goes completely cotton candy~",
             Description = "Random 60-sec windows of 3x XP",
@@ -261,7 +261,7 @@ public class SkillDefinition
             Name = "Streak Power",
             Icon = "💪🔥",
             Tier = 4,
-            Cost = 70,
+            Cost = 20,
             PrerequisiteId = "milestone_rewards",
             FlavorText = "Each day you're good adds +0.5% XP! At 30 days that's +15%! Consistency is SO hot~",
             Description = "+0.5% XP per streak day (max 15%)",
@@ -274,7 +274,7 @@ public class SkillDefinition
             Name = "Reroll Addict",
             Icon = "🎰💕",
             Tier = 4,
-            Cost = 70,
+            Cost = 15,
             PrerequisiteId = "milestone_rewards",
             FlavorText = "Can't stop rerolling? Now you have 2 EXTRA rerolls every day! Spin spin spin~",
             Description = "+2 extra daily quest rerolls",
@@ -287,7 +287,7 @@ public class SkillDefinition
             Name = "Perfect Bimbo Week",
             Icon = "⭐👼",
             Tier = 4,
-            Cost = 70,
+            Cost = 20,
             PrerequisiteId = "oopsie_insurance",
             FlavorText = "Presents for persistent princesses! Earn huge XP bonuses at 7, 14, and 30 day daily quest streaks! ✨",
             Description = "3000/6000/10000 XP at 7/14/30 day streaks (scales with level +2%/lv)",
@@ -296,7 +296,7 @@ public class SkillDefinition
         },
 
         // ═══════════════════════════════════════════════════════════════
-        // SECRET TIER - Hidden (25 points each)
+        // SECRET TIER - Hidden (8-10 points)
         // ═══════════════════════════════════════════════════════════════
         new()
         {
@@ -304,7 +304,7 @@ public class SkillDefinition
             Name = "Night Shift",
             Icon = "🌙😴",
             Tier = 5,
-            Cost = 25,
+            Cost = 10,
             IsSecret = true,
             SecretRequirementDesc = "Use the app after midnight 10 times",
             FlavorText = "Good bimbos condition when they should be sleeping~ The pink thoughts never stop!",
@@ -318,7 +318,7 @@ public class SkillDefinition
             Name = "Early Bird Bimbo",
             Icon = "🌅☀️",
             Tier = 5,
-            Cost = 25,
+            Cost = 10,
             IsSecret = true,
             SecretRequirementDesc = "Use the app before 7am 10 times",
             FlavorText = "Starting your day with programming? Morning conditioning hits DIFFERENT~",
@@ -332,7 +332,7 @@ public class SkillDefinition
             Name = "Eternal Doll",
             Icon = "💎♾️",
             Tier = 5,
-            Cost = 25,
+            Cost = 8,
             IsSecret = true,
             SecretRequirementDesc = "Reach level 50 in any season",
             FlavorText = "Your dedication is FOREVER. Lifetime stats that never reset... you've always been a bimbo~",

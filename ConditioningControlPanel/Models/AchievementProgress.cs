@@ -144,6 +144,12 @@ public class AchievementProgress
     }
     
     /// <summary>
+    /// Whether a streak bonus needs to be awarded after SkillTree is initialized.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool PendingStreakBonus { get; set; }
+
+    /// <summary>
     /// Check and update consecutive days streak.
     /// Integrates streak shields, oopsie insurance, milestone rewards, and CurrentStreak sync.
     /// </summary>
@@ -161,14 +167,7 @@ public class AchievementProgress
         {
             // Launched yesterday, increment streak
             ConsecutiveDays++;
-
-            // Award daily streak bonus (scales with streak length)
-            var streakXP = App.SkillTree?.GetDailyStreakBonus(ConsecutiveDays) ?? 0;
-            if (streakXP > 0)
-            {
-                App.Progression?.AddXP(streakXP, XPSource.Other);
-                App.Logger?.Information("Daily streak bonus! {Days} days - awarded {XP} XP", ConsecutiveDays, streakXP);
-            }
+            PendingStreakBonus = true;
         }
         else
         {
@@ -178,13 +177,17 @@ public class AchievementProgress
                 // Shield saved the streak! Increment as normal
                 ConsecutiveDays++;
                 App.Logger?.Information("Streak shield protected streak! Now at {Days} days", ConsecutiveDays);
+                PendingStreakBonus = true;
 
-                // Award daily streak bonus even when shield saved us
-                var streakXP = App.SkillTree?.GetDailyStreakBonus(ConsecutiveDays) ?? 0;
-                if (streakXP > 0)
+                // Record the missed day(s) that were shielded
+                var settings = App.Settings?.Current;
+                if (settings != null)
                 {
-                    App.Progression?.AddXP(streakXP, XPSource.Other);
-                    App.Logger?.Information("Daily streak bonus! {Days} days - awarded {XP} XP", ConsecutiveDays, streakXP);
+                    for (var d = lastDate.AddDays(1); d < today; d = d.AddDays(1))
+                    {
+                        if (!settings.StreakShieldUsedDates.Contains(d.Date))
+                            settings.StreakShieldUsedDates.Add(d.Date);
+                    }
                 }
             }
             else if (App.SkillTree?.UseOopsieInsurance() == true)
@@ -203,6 +206,22 @@ public class AchievementProgress
 
         // Sync CurrentStreak in AppSettings with ConsecutiveDays
         SyncCurrentStreak();
+    }
+
+    /// <summary>
+    /// Called after SkillTree is initialized to award streak bonus that was deferred during startup.
+    /// </summary>
+    public void AwardDeferredStreakBonus()
+    {
+        if (!PendingStreakBonus) return;
+        PendingStreakBonus = false;
+
+        var streakXP = App.SkillTree?.GetDailyStreakBonus(ConsecutiveDays) ?? 0;
+        if (streakXP > 0)
+        {
+            App.Progression?.AddXP(streakXP, XPSource.Other);
+            App.Logger?.Information("Daily streak bonus! {Days} days - awarded {XP} XP", ConsecutiveDays, streakXP);
+        }
     }
 
     /// <summary>

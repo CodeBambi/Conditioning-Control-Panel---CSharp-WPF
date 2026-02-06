@@ -64,9 +64,9 @@
             <Setter Property="BorderThickness" Value="2"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="MinWidth" Value="110"/>
-            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="13,7"/>
+            <Setter Property="MinWidth" Value="116"/>
+            <Setter Property="Height" Value="38"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -96,9 +96,9 @@
             <Setter Property="BorderThickness" Value="2"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="MinWidth" Value="110"/>
-            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="13,7"/>
+            <Setter Property="MinWidth" Value="116"/>
+            <Setter Property="Height" Value="38"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -1207,15 +1207,26 @@
                     </Border>
                     <TextBlock x:Name="TxtHeaderVersion" Text="" Foreground="{StaticResource PinkBrush}" FontSize="12" FontWeight="Normal"
                                VerticalAlignment="Bottom" Margin="6,0,0,2"/>
+                    <!-- Streak Fire Icon (unlocked by Good Girl Streak skill) -->
+                    <StackPanel x:Name="StreakFirePill" Orientation="Horizontal" VerticalAlignment="Center"
+                                Margin="10,0,0,0" Visibility="Collapsed"
+                                ToolTip="Daily login streak (Good Girl Streak skill)">
+                        <TextBlock Text="🔥" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtStreakFireCount" Text="0" Foreground="#FF6B35" FontSize="14"
+                                   FontWeight="Bold" VerticalAlignment="Center" Margin="2,0,0,0"/>
+                        <TextBlock x:Name="TxtStreakShieldIcon" Text="🛡️" FontFamily="Segoe UI Emoji" FontSize="12"
+                                   VerticalAlignment="Center" Margin="4,0,0,0" Visibility="Collapsed"
+                                   ToolTip="Streak shield available — protects your streak if you miss a day"/>
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- Row 1 Tab Buttons: Settings, Presets, Progression, Assets -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="BtnSettings" Tag="Settings" Style="{StaticResource TabButtonActive}"
-                            Margin="6,0" Click="BtnSettings_Click" ToolTip="Settings">
+                            Margin="6,0" Click="BtnSettings_Click" ToolTip="Dashboard">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⚙" FontSize="14" Margin="0,0,6,0"/>
-                            <TextBlock Text="Settings" FontSize="12"/>
+                            <TextBlock Text="📊" FontSize="14" Margin="0,0,6,0"/>
+                            <TextBlock Text="Dashboard" FontSize="12"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnPresets" Tag="Presets" Style="{StaticResource TabButton}"
@@ -1243,7 +1254,7 @@
                             Margin="6,0" Click="BtnEnhancements_Click" ToolTip="Bimbo Enhancement Tree">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="✨" FontSize="14" Margin="0,0,6,0"/>
-                            <TextBlock Text="Enhance" FontSize="12"/>
+                            <TextBlock Text="Enhancements" FontSize="12"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource TabButton}"
@@ -1352,8 +1363,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.4.12 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.4.12 - Sissy Hypno Mode Polish, Video Haptic Sync UI"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.0-pre2 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.0-pre2 - Quest Streaks &amp; Profile Fixes"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -1455,14 +1466,14 @@
                             Margin="2,0" Click="BtnAchievements_Click" ToolTip="Achievements">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🏆" FontSize="11" Margin="0,0,3,0"/>
-                            <TextBlock Text="Achieve" FontSize="10"/>
+                            <TextBlock Text="Achievements" FontSize="10"/>
                         </StackPanel>
                     </Button>
                     <Button Grid.Column="1" x:Name="BtnLeaderboard" Tag="Leaderboard" Style="{StaticResource TabButton}"
                             Margin="2,0" Click="BtnLeaderboard_Click" ToolTip="Leaderboard">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="📊" FontSize="11" Margin="0,0,3,0"/>
-                            <TextBlock Text="Leader" FontSize="10"/>
+                            <TextBlock Text="Leaderboard" FontSize="10"/>
                         </StackPanel>
                     </Button>
                     <Button Grid.Column="2" x:Name="BtnCompanion" Tag="Companion" Style="{StaticResource TabButton}"
@@ -1646,7 +1657,22 @@
                 <StackPanel>
                     
                     <!-- Flash Images Section -->
-                    <Border x:Name="FlashSection" Style="{StaticResource SectionPanel}" Padding="10,6">
+                    <Border x:Name="FlashSection" CornerRadius="10" Padding="10,6" Margin="0,0,0,6" BorderThickness="1">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#1E1E3A" Offset="0"/>
+                                <GradientStop Color="#252548" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#FF69B4" Offset="0"/>
+                                <GradientStop Color="#9B59B6" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.BorderBrush>
+                        <Border.Effect>
+                            <DropShadowEffect Color="#FF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                        </Border.Effect>
                         <StackPanel>
                             <Grid Margin="0,0,0,2">
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="⚡ Flash Images" Margin="0"/>
@@ -1711,7 +1737,22 @@
                     </Border>
 
                     <!-- Visuals Section -->
-                    <Border x:Name="VisualsSection" Style="{StaticResource SectionPanel}" Padding="10,6">
+                    <Border x:Name="VisualsSection" CornerRadius="10" Padding="10,6" Margin="0,0,0,6" BorderThickness="1">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#1E1E3A" Offset="0"/>
+                                <GradientStop Color="#252548" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#9370DB" Offset="0"/>
+                                <GradientStop Color="#7B68EE" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.BorderBrush>
+                        <Border.Effect>
+                            <DropShadowEffect Color="#9370DB" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                        </Border.Effect>
                         <StackPanel>
                             <Grid Margin="0,0,0,2">
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="👁 Visuals" Margin="0"/>
@@ -1785,7 +1826,22 @@
                 <StackPanel>
                     
                     <!-- Mandatory Video Section -->
-                    <Border x:Name="VideoSection" Style="{StaticResource SectionPanel}" Padding="10,7">
+                    <Border x:Name="VideoSection" CornerRadius="10" Padding="10,7" Margin="0,0,0,6" BorderThickness="1">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#1E1E3A" Offset="0"/>
+                                <GradientStop Color="#252548" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#FF69B4" Offset="0"/>
+                                <GradientStop Color="#9B59B6" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.BorderBrush>
+                        <Border.Effect>
+                            <DropShadowEffect Color="#FF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                        </Border.Effect>
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="🎬 Mandatory Video"/>
@@ -1811,7 +1867,7 @@
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Enable" Margin="6,0,15,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" ToolTip="Strict mode: videos cannot be skipped, must watch entirely">
-                                    <CheckBox x:Name="ChkStrictLock" Style="{StaticResource ToggleStyle}" Checked="ChkStrictLock_Checked"/>
+                                    <CheckBox x:Name="ChkStrictLock" Style="{StaticResource ToggleStyle}" Checked="ChkStrictLock_Checked" Unchecked="ChkStrictLock_Unchecked"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="⚠ Strict" Foreground="#FFB347" Margin="6,0,15,0"/>
                                 </StackPanel>
                                 <Slider Grid.Column="2" x:Name="SliderPerHour" Minimum="1" Maximum="20" Value="2" ValueChanged="SliderPerHour_Changed"
@@ -1875,7 +1931,22 @@
                     </Border>
 
                     <!-- Subliminals Section -->
-                    <Border x:Name="SubliminalSection" Style="{StaticResource SectionPanel}" Padding="10,7">
+                    <Border x:Name="SubliminalSection" CornerRadius="10" Padding="10,7" Margin="0,0,0,6" BorderThickness="1">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#1E1E3A" Offset="0"/>
+                                <GradientStop Color="#252548" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#9370DB" Offset="0"/>
+                                <GradientStop Color="#7B68EE" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.BorderBrush>
+                        <Border.Effect>
+                            <DropShadowEffect Color="#9370DB" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                        </Border.Effect>
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="💭 Subliminals"/>
@@ -1928,7 +1999,22 @@
                     </Border>
 
                     <!-- System Section -->
-                    <Border x:Name="SystemSection" Style="{StaticResource SectionPanel}" Padding="10,7">
+                    <Border x:Name="SystemSection" CornerRadius="10" Padding="10,7" Margin="0,0,0,6" BorderThickness="1">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#1E1E3A" Offset="0"/>
+                                <GradientStop Color="#252548" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#FF69B4" Offset="0"/>
+                                <GradientStop Color="#9B59B6" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.BorderBrush>
+                        <Border.Effect>
+                            <DropShadowEffect Color="#FF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                        </Border.Effect>
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="⚙ System"/>
@@ -2031,7 +2117,22 @@
                 </Grid.RowDefinitions>
 
                 <!-- Browser Section -->
-                <Border Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="0,0,0,5">
+                <Border Grid.Row="0" CornerRadius="10" Padding="9" Margin="0,0,0,5" BorderThickness="1">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#1E1E3A" Offset="0"/>
+                            <GradientStop Color="#252548" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Border.BorderBrush>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#FF69B4" Offset="0"/>
+                            <GradientStop Color="#9B59B6" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.BorderBrush>
+                    <Border.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                    </Border.Effect>
                     <StackPanel>
                         <!-- Browser Header - single row with title, tabs, status, pop out -->
                         <Grid Margin="0,0,0,4">
@@ -2147,7 +2248,7 @@
                         </Grid>
 
                         <!-- Browser Container -->
-                        <Border Background="#1E1E3A" CornerRadius="6" ClipToBounds="True" Height="395">
+                        <Border Background="#1E1E3A" CornerRadius="6" ClipToBounds="True" Height="365">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
@@ -2216,7 +2317,22 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- Audio Section (left half) -->
-                    <Border x:Name="AudioSection" Grid.Column="0" Style="{StaticResource SectionPanel}" VerticalAlignment="Stretch">
+                    <Border x:Name="AudioSection" Grid.Column="0" CornerRadius="10" Padding="9" Margin="0,0,0,6" BorderThickness="1" VerticalAlignment="Stretch">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#1E1E3A" Offset="0"/>
+                                <GradientStop Color="#252548" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#9370DB" Offset="0"/>
+                                <GradientStop Color="#7B68EE" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.BorderBrush>
+                        <Border.Effect>
+                            <DropShadowEffect Color="#9370DB" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                        </Border.Effect>
                         <StackPanel>
                             <Grid>
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="📊 Audio" FontSize="12"/>
@@ -2287,7 +2403,22 @@
                     </Border>
 
                     <!-- Quick Actions (right half) -->
-                    <Border Grid.Column="2" Style="{StaticResource SectionPanel}" VerticalAlignment="Stretch">
+                    <Border Grid.Column="2" CornerRadius="10" Padding="9" Margin="0,0,0,6" BorderThickness="1" VerticalAlignment="Stretch">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#1E1E3A" Offset="0"/>
+                                <GradientStop Color="#252548" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#FF69B4" Offset="0"/>
+                                <GradientStop Color="#9B59B6" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.BorderBrush>
+                        <Border.Effect>
+                            <DropShadowEffect Color="#FF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                        </Border.Effect>
                         <StackPanel>
                             <Grid Margin="0,0,0,6">
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="🔗 Quick Links" FontSize="12" Margin="0"/>
@@ -2350,62 +2481,66 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Discord Join Button -->
-                            <Button Click="BtnDiscord_Click" Margin="0,4,0,2"
-                                    ToolTip="Join the Discord community" Cursor="Hand"
-                                    HorizontalAlignment="Stretch">
-                                <Button.Style>
-                                    <Style TargetType="Button">
-                                        <Setter Property="Background" Value="Transparent"/>
-                                        <Setter Property="BorderThickness" Value="0"/>
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border x:Name="border" Background="#5865F2" CornerRadius="5"
-                                                            Padding="0,4" HorizontalAlignment="Stretch">
-                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                                            <TextBlock Text="💬" FontSize="11" VerticalAlignment="Center"/>
-                                                            <TextBlock Text="Join Discord" Foreground="White" FontSize="10" FontWeight="Bold"
-                                                                       VerticalAlignment="Center" Margin="5,0,0,0"/>
-                                                        </StackPanel>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="border" Property="Background" Value="#6C75F2"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-
-                            <!-- Discord Rich Presence row -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,3,0,0">
-                                <StackPanel.ToolTip>
-                                    <ToolTip Background="#1E1E3A" BorderBrush="#FF69B4" BorderThickness="1" Padding="10">
-                                        <StackPanel MaxWidth="280">
-                                            <TextBlock Text="Discord Rich Presence" Foreground="#FF69B4" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
-                                            <TextBlock Foreground="#CCCCCC" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
-                                                Shows "Playing Conditioning Control Panel" in your Discord status, along with your current level and session time.
-                                            </TextBlock>
-                                            <TextBlock Text="Who can see this?" Foreground="#9B59B6" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                                            <TextBlock Foreground="#AAAAAA" FontSize="10" TextWrapping="Wrap">
-                                                Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your "Currently Playing" status like any other game.
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </ToolTip>
-                                </StackPanel.ToolTip>
-                                <CheckBox x:Name="ChkQuickDiscordRichPresence" Style="{StaticResource ToggleStyle}"
-                                          Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed">
-                                    <CheckBox.LayoutTransform>
-                                        <ScaleTransform ScaleX="0.85" ScaleY="0.85"/>
-                                    </CheckBox.LayoutTransform>
-                                </CheckBox>
-                                <TextBlock Text="Rich Presence" Foreground="#808090" FontSize="9"
-                                           VerticalAlignment="Center" Margin="4,0,0,0"/>
-                            </StackPanel>
+                            <!-- Discord Join Button + Rich Presence -->
+                            <Grid Margin="0,4,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Click="BtnDiscord_Click"
+                                        ToolTip="Join the Discord community" Cursor="Hand"
+                                        HorizontalAlignment="Stretch">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="border" Background="#5865F2" CornerRadius="5"
+                                                                Padding="0,4" HorizontalAlignment="Stretch">
+                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                                <TextBlock Text="💬" FontSize="11" VerticalAlignment="Center"/>
+                                                                <TextBlock Text="Join Discord" Foreground="White" FontSize="10" FontWeight="Bold"
+                                                                           VerticalAlignment="Center" Margin="5,0,0,0"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="border" Property="Background" Value="#6C75F2"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,0,0">
+                                    <StackPanel.ToolTip>
+                                        <ToolTip Background="#1E1E3A" BorderBrush="#FF69B4" BorderThickness="1" Padding="10">
+                                            <StackPanel MaxWidth="280">
+                                                <TextBlock Text="Discord Rich Presence" Foreground="#FF69B4" FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
+                                                <TextBlock Foreground="#CCCCCC" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
+                                                    Shows "Playing Conditioning Control Panel" in your Discord status, along with your current level and session time.
+                                                </TextBlock>
+                                                <TextBlock Text="Who can see this?" Foreground="#9B59B6" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
+                                                <TextBlock Foreground="#AAAAAA" FontSize="10" TextWrapping="Wrap">
+                                                    Only people who can already see your Discord activity status (friends, server members if enabled in your Discord privacy settings). This does NOT send notifications - it simply updates your "Currently Playing" status like any other game.
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </StackPanel.ToolTip>
+                                    <CheckBox x:Name="ChkQuickDiscordRichPresence" Style="{StaticResource ToggleStyle}"
+                                              Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed">
+                                        <CheckBox.LayoutTransform>
+                                            <ScaleTransform ScaleX="0.85" ScaleY="0.85"/>
+                                        </CheckBox.LayoutTransform>
+                                    </CheckBox>
+                                    <TextBlock Text="RP" Foreground="#808090" FontSize="9"
+                                               VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -3307,8 +3442,8 @@
                                 <Grid Margin="0,8,0,0">
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Strict Lock"
                                                ToolTip="Prevent ESC key from closing the lock card"/>
-                                    <CheckBox x:Name="ChkLockCardStrict" Style="{StaticResource ToggleStyle}" 
-                                              HorizontalAlignment="Right" Checked="ChkLockCardStrict_Checked"
+                                    <CheckBox x:Name="ChkLockCardStrict" Style="{StaticResource ToggleStyle}"
+                                              HorizontalAlignment="Right" Checked="ChkLockCardStrict_Checked" Unchecked="ChkLockCardStrict_Unchecked"
                                               ToolTip="⚠ Cannot escape - must complete typing!"/>
                                 </Grid>
                                 <Grid Margin="0,10,0,0">
@@ -3910,13 +4045,57 @@
                             <Button x:Name="BtnQuestSubDaily" Content="Daily/Weekly"
                                     Style="{StaticResource TabButtonActive}"
                                     Click="BtnQuestSubDaily_Click" Width="120"/>
-                            <Button x:Name="BtnQuestSubRoadmap" Content="Transformation"
+                            <Button x:Name="BtnQuestSubRoadmap" Content="BIMBO JOURNAL"
                                     Style="{StaticResource TabButton}"
-                                    Click="BtnQuestSubRoadmap_Click" Margin="10,0,0,0" Width="130"/>
+                                    Click="BtnQuestSubRoadmap_Click" Margin="10,0,0,0" Width="150"/>
                         </StackPanel>
 
                         <!-- Daily/Weekly Quests Panel -->
                         <StackPanel x:Name="DailyWeeklyPanel">
+                            <!-- Season Title Banner -->
+                            <Border Background="#1A1A2E" CornerRadius="12" Padding="20,14" Margin="0,0,0,18"
+                                    BorderThickness="1" BorderBrush="#3D3D60">
+                                <TextBlock x:Name="TxtSeasonTitle" Text="Fucked-up February"
+                                           FontSize="28" FontWeight="ExtraBold" FontStyle="Italic"
+                                           HorizontalAlignment="Center" TextAlignment="Center">
+                                    <TextBlock.Foreground>
+                                        <LinearGradientBrush x:Name="SeasonTitleBrush" StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop x:Name="SeasonGrad1" Color="#FF69B4" Offset="0.0"/>
+                                            <GradientStop x:Name="SeasonGrad2" Color="#DA70D6" Offset="0.25"/>
+                                            <GradientStop x:Name="SeasonGrad3" Color="#FF1493" Offset="0.5"/>
+                                            <GradientStop x:Name="SeasonGrad4" Color="#DA70D6" Offset="0.75"/>
+                                            <GradientStop x:Name="SeasonGrad5" Color="#FF69B4" Offset="1.0"/>
+                                        </LinearGradientBrush>
+                                    </TextBlock.Foreground>
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.6"/>
+                                    </TextBlock.Effect>
+                                    <TextBlock.Triggers>
+                                        <EventTrigger RoutedEvent="Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever">
+                                                    <!-- Shimmer: animate gradient start/end points -->
+                                                    <PointAnimation Storyboard.TargetName="SeasonTitleBrush"
+                                                                    Storyboard.TargetProperty="StartPoint"
+                                                                    From="-1,0.5" To="1,0.5"
+                                                                    Duration="0:0:3"/>
+                                                    <PointAnimation Storyboard.TargetName="SeasonTitleBrush"
+                                                                    Storyboard.TargetProperty="EndPoint"
+                                                                    From="0,0.5" To="2,0.5"
+                                                                    Duration="0:0:3"/>
+                                                    <!-- Pulsing glow -->
+                                                    <DoubleAnimation Storyboard.TargetName="TxtSeasonTitle"
+                                                                     Storyboard.TargetProperty="(TextBlock.Effect).(DropShadowEffect.Opacity)"
+                                                                     From="0.3" To="0.9"
+                                                                     Duration="0:0:1.5"
+                                                                     AutoReverse="True"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </TextBlock.Triggers>
+                                </TextBlock>
+                            </Border>
+
                             <!-- Header -->
                             <Grid Margin="0,0,0,20">
                                 <StackPanel Orientation="Horizontal">
@@ -3993,9 +4172,22 @@
                                                 <Border Background="#3D3D60" CornerRadius="5"
                                                         Padding="10,5" Margin="0,10,0,0"
                                                         HorizontalAlignment="Left">
-                                                    <TextBlock x:Name="TxtDailyXP" Text="🎁 0 XP"
-                                                               Foreground="#FF69B4" FontSize="14"
-                                                               FontWeight="Bold"/>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock x:Name="TxtDailyXP" Text="🎁 0 XP"
+                                                                   Foreground="#FF69B4" FontSize="14"
+                                                                   FontWeight="Bold"/>
+                                                        <TextBlock x:Name="TxtDailyStreakBonus" Text=""
+                                                                   Foreground="#FFB347" FontSize="12"
+                                                                   FontWeight="Bold" Margin="6,1,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   FontFamily="Segoe UI Emoji"
+                                                                   Visibility="Collapsed"/>
+                                                        <TextBlock x:Name="TxtDailyRerollBonus" Text=""
+                                                                   Foreground="#7BC8F6" FontSize="12"
+                                                                   FontWeight="Bold" Margin="6,1,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Visibility="Collapsed"/>
+                                                    </StackPanel>
                                                 </Border>
                                             </StackPanel>
                                             <!-- Quest Image -->
@@ -4094,9 +4286,22 @@
                                                 <Border Background="#3D3D60" CornerRadius="5"
                                                         Padding="10,5" Margin="0,10,0,0"
                                                         HorizontalAlignment="Left">
-                                                    <TextBlock x:Name="TxtWeeklyXP" Text="🎁 0 XP"
-                                                               Foreground="#FF69B4" FontSize="14"
-                                                               FontWeight="Bold"/>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock x:Name="TxtWeeklyXP" Text="🎁 0 XP"
+                                                                   Foreground="#FF69B4" FontSize="14"
+                                                                   FontWeight="Bold"/>
+                                                        <TextBlock x:Name="TxtWeeklyStreakBonus" Text=""
+                                                                   Foreground="#FFB347" FontSize="12"
+                                                                   FontWeight="Bold" Margin="6,1,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   FontFamily="Segoe UI Emoji"
+                                                                   Visibility="Collapsed"/>
+                                                        <TextBlock x:Name="TxtWeeklyRerollBonus" Text=""
+                                                                   Foreground="#7BC8F6" FontSize="12"
+                                                                   FontWeight="Bold" Margin="6,1,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Visibility="Collapsed"/>
+                                                    </StackPanel>
                                                 </Border>
                                             </StackPanel>
                                             <!-- Quest Image -->
@@ -4148,12 +4353,22 @@
                             <Border Background="#1A1A2E" CornerRadius="10" Padding="15,12" Margin="0,20,0,0">
                                 <StackPanel>
                                     <Grid Margin="0,0,0,10">
-                                        <TextBlock Text="📅 Quest Streak" Foreground="White" FontSize="14" FontWeight="Bold"/>
-                                        <TextBlock x:Name="TxtQuestStreakCount" Text="" Foreground="#FFD700"
-                                                   FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="📅 Quest Streak" Foreground="White" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtQuestStreakCount" Grid.Column="1" Text="" Foreground="#FFD700"
+                                                   FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                        <Button x:Name="BtnFixStreak" Grid.Column="2" Content="🔧 Fix Day"
+                                                Style="{StaticResource OutlineButton}" Padding="8,3" FontSize="11"
+                                                Click="BtnFixStreak_Click" Visibility="Collapsed" VerticalAlignment="Center"/>
                                     </Grid>
                                     <Canvas x:Name="StreakCalendarCanvas" Height="50" ClipToBounds="True"
                                            SizeChanged="StreakCalendarCanvas_SizeChanged"/>
+                                    <TextBlock x:Name="TxtFixStreakStatus" Text="" Foreground="#FF69B4" FontSize="11"
+                                               TextAlignment="Center" Margin="0,5,0,0" Visibility="Collapsed"/>
                                 </StackPanel>
                             </Border>
 
@@ -4198,8 +4413,14 @@
                         </StackPanel>
                         <!-- End Daily/Weekly Panel -->
 
-                        <!-- Transformation Roadmap Panel -->
+                        <!-- Bimbo Journal Panel -->
                         <StackPanel x:Name="RoadmapPanel" Visibility="Collapsed">
+                            <!-- Journal Header -->
+                            <TextBlock Text="look how far you've come sweetie...."
+                                       FontSize="26" FontStyle="Italic" FontWeight="Light"
+                                       Foreground="#CC88AACC" HorizontalAlignment="Center"
+                                       Margin="0,0,0,18" TextAlignment="Center"/>
+
                             <!-- Track Selector Tabs -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
                                 <Button x:Name="BtnTrack1" Content="The Empty Doll"
@@ -4334,11 +4555,23 @@
             </Border>
         </ContentControl>
 
-        <!-- Companion Tab (v5.3 - Larger, More Visible Layout) -->
+        <!-- Companion Tab (v5.5 - Revamped with outlined sections) -->
         <ContentControl x:Name="CompanionTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
             <Border Style="{StaticResource SectionPanel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
+
+                        <!-- Tab Header -->
+                        <Grid Margin="0,0,0,15">
+                            <StackPanel>
+                                <TextBlock Text="Companion" Foreground="White" FontSize="22" FontWeight="Bold">
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect Color="#9370DB" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                                    </TextBlock.Effect>
+                                </TextBlock>
+                                <TextBlock Text="Manage your AI companion, personalities, and controls" Foreground="#666680" FontSize="11" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Grid>
 
                         <!-- ROW 1: Companions + Community Prompts -->
                         <Grid Margin="0,0,0,10">
@@ -4349,7 +4582,22 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- COMPANIONS BOX -->
-                            <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="10" Padding="15">
+                            <Border Grid.Column="0" CornerRadius="10" Padding="15" BorderThickness="1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#1E1E3A" Offset="0"/>
+                                        <GradientStop Color="#252548" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#FF69B4" Offset="0"/>
+                                        <GradientStop Color="#9B59B6" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#FF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                                </Border.Effect>
                                 <StackPanel>
                                     <Grid Margin="0,0,0,12">
                                         <StackPanel Orientation="Horizontal">
@@ -4361,11 +4609,17 @@
                                         <Button x:Name="HelpBtnCompanions" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Companions"/>
                                     </Grid>
 
-                                    <!-- Companion Cards 3x2 - Unlock at levels 50, 75, 100, 125, 150 -->
+                                    <!-- Companion Cards 3x2 -->
                                     <UniformGrid Rows="3" Columns="2" Margin="0,0,0,12">
-                                        <Border x:Name="CompanionCard0" Background="#1A1A32" CornerRadius="8" Margin="0,0,5,5"
+                                        <Border x:Name="CompanionCard0" CornerRadius="8" Margin="0,0,5,5"
                                                 Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="0"
                                                 BorderThickness="2" BorderBrush="Transparent">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#1A1A32" Offset="0"/>
+                                                    <GradientStop Color="#201A38" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
                                             <StackPanel>
                                                 <Grid>
                                                     <StackPanel Orientation="Horizontal">
@@ -4387,9 +4641,15 @@
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
-                                        <Border x:Name="CompanionCard1" Background="#1A1A32" CornerRadius="8" Margin="5,0,0,5"
+                                        <Border x:Name="CompanionCard1" CornerRadius="8" Margin="5,0,0,5"
                                                 Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="1"
                                                 BorderThickness="2" BorderBrush="Transparent">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#1A1A32" Offset="0"/>
+                                                    <GradientStop Color="#201A38" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
                                             <StackPanel>
                                                 <Grid>
                                                     <StackPanel Orientation="Horizontal">
@@ -4411,9 +4671,15 @@
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
-                                        <Border x:Name="CompanionCard2" Background="#1A1A32" CornerRadius="8" Margin="0,5,5,0"
+                                        <Border x:Name="CompanionCard2" CornerRadius="8" Margin="0,5,5,0"
                                                 Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="2"
                                                 BorderThickness="2" BorderBrush="Transparent">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#1A1A32" Offset="0"/>
+                                                    <GradientStop Color="#201A38" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
                                             <StackPanel>
                                                 <Grid>
                                                     <StackPanel Orientation="Horizontal">
@@ -4435,9 +4701,15 @@
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
-                                        <Border x:Name="CompanionCard3" Background="#1A1A32" CornerRadius="8" Margin="5,5,0,0"
+                                        <Border x:Name="CompanionCard3" CornerRadius="8" Margin="5,5,0,0"
                                                 Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="3"
                                                 BorderThickness="2" BorderBrush="Transparent">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#1A1A32" Offset="0"/>
+                                                    <GradientStop Color="#201A38" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
                                             <StackPanel>
                                                 <Grid>
                                                     <StackPanel Orientation="Horizontal">
@@ -4459,9 +4731,15 @@
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
-                                        <Border x:Name="CompanionCard4" Background="#1A1A32" CornerRadius="8" Margin="0,5,5,0"
+                                        <Border x:Name="CompanionCard4" CornerRadius="8" Margin="0,5,5,0"
                                                 Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="4"
                                                 BorderThickness="2" BorderBrush="Transparent">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#1A1A32" Offset="0"/>
+                                                    <GradientStop Color="#201A38" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
                                             <StackPanel>
                                                 <Grid>
                                                     <StackPanel Orientation="Horizontal">
@@ -4486,7 +4764,13 @@
                                     </UniformGrid>
 
                                     <!-- Active Companion Info -->
-                                    <Border Background="#16162B" CornerRadius="8" Padding="12">
+                                    <Border CornerRadius="8" Padding="12" BorderBrush="#33FF69B4" BorderThickness="1">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                <GradientStop Color="#16162B" Offset="0"/>
+                                                <GradientStop Color="#1C1635" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
                                         <StackPanel>
                                             <Grid>
                                                 <StackPanel Orientation="Horizontal">
@@ -4509,7 +4793,22 @@
                             </Border>
 
                             <!-- COMMUNITY PROMPTS BOX -->
-                            <Border Grid.Column="2" Background="#1A1A2E" CornerRadius="10" Padding="15">
+                            <Border Grid.Column="2" CornerRadius="10" Padding="15" BorderThickness="1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#1E1E3A" Offset="0"/>
+                                        <GradientStop Color="#252548" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#9370DB" Offset="0"/>
+                                        <GradientStop Color="#7B68EE" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#9370DB" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                                </Border.Effect>
                                 <StackPanel>
                                     <Grid Margin="0,0,0,12">
                                         <StackPanel Orientation="Horizontal">
@@ -4525,7 +4824,13 @@
                                     </Grid>
 
                                     <!-- Active Prompt -->
-                                    <Border Background="#16162B" CornerRadius="8" Padding="12" Margin="0,0,0,10">
+                                    <Border CornerRadius="8" Padding="12" Margin="0,0,0,10" BorderBrush="#339370DB" BorderThickness="1">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                <GradientStop Color="#16162B" Offset="0"/>
+                                                <GradientStop Color="#1C1635" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
                                         <Grid>
                                             <StackPanel>
                                                 <TextBlock Text="Active Personality" Foreground="#707070" FontSize="11"/>
@@ -4542,8 +4847,14 @@
 
                                     <!-- Installed List -->
                                     <TextBlock Text="Installed Prompts" Foreground="#707070" FontSize="11" Margin="0,0,0,6"/>
-                                    <Border Background="#16162B" CornerRadius="8" Padding="10" MinHeight="80" MaxHeight="120"
-                                            Margin="0,0,0,12">
+                                    <Border CornerRadius="8" Padding="10" MinHeight="80" MaxHeight="120"
+                                            Margin="0,0,0,12" BorderBrush="#22808080" BorderThickness="1">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                <GradientStop Color="#16162B" Offset="0"/>
+                                                <GradientStop Color="#1A1832" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
                                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                                             <StackPanel x:Name="InstalledPromptsPanel">
                                                 <TextBlock x:Name="TxtNoInstalledPrompts" Text="No prompts installed yet"
@@ -4598,6 +4909,17 @@
                             </Border>
                         </Grid>
 
+                        <!-- Divider -->
+                        <Border Height="1" Margin="20,5,20,10" CornerRadius="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="Transparent" Offset="0"/>
+                                    <GradientStop Color="#9370DB" Offset="0.5"/>
+                                    <GradientStop Color="Transparent" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+
                         <!-- ROW 2: Settings + Quick Controls -->
                         <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
@@ -4607,7 +4929,22 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- SETTINGS BOX -->
-                            <Border Grid.Column="0" Background="#1A1A2E" CornerRadius="10" Padding="15">
+                            <Border Grid.Column="0" CornerRadius="10" Padding="15" BorderThickness="1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#1E1E3A" Offset="0"/>
+                                        <GradientStop Color="#252548" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#FF69B4" Offset="0"/>
+                                        <GradientStop Color="#9B59B6" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#FF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                                </Border.Effect>
                                 <StackPanel>
                                     <Grid Margin="0,0,0,15">
                                         <TextBlock Text="COMPANION SETTINGS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
@@ -4661,7 +4998,22 @@
                             </Border>
 
                             <!-- QUICK CONTROLS BOX -->
-                            <Border Grid.Column="2" Background="#1A1A2E" CornerRadius="10" Padding="15">
+                            <Border Grid.Column="2" CornerRadius="10" Padding="15" BorderThickness="1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#1E1E3A" Offset="0"/>
+                                        <GradientStop Color="#252548" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#9370DB" Offset="0"/>
+                                        <GradientStop Color="#7B68EE" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#9370DB" BlurRadius="12" ShadowDepth="0" Opacity="0.2"/>
+                                </Border.Effect>
                                 <StackPanel>
                                     <Grid Margin="0,0,0,15">
                                         <TextBlock Text="QUICK CONTROLS" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
@@ -4702,7 +5054,13 @@
                                     </Grid>
 
                                     <!-- Tips -->
-                                    <Border Background="#16162B" CornerRadius="6" Padding="10" Margin="0,8,0,0">
+                                    <Border CornerRadius="6" Padding="10" Margin="0,8,0,0" BorderBrush="#22808080" BorderThickness="1">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                <GradientStop Color="#16162B" Offset="0"/>
+                                                <GradientStop Color="#1A1832" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
                                         <TextBlock Foreground="#606060" FontSize="11" TextWrapping="Wrap" TextAlignment="Center">
                                             <Run Text="Click avatar for progress · Right-click for menu · Double-click to chat"/>
                                         </TextBlock>
@@ -4712,7 +5070,22 @@
                         </Grid>
 
                         <!-- ROW 3: Triggers -->
-                        <Border Background="#1A1A2E" CornerRadius="10" Padding="15">
+                        <Border CornerRadius="10" Padding="15" BorderThickness="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1E1E3A" Offset="0"/>
+                                    <GradientStop Color="#252548" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="#9370DB" Offset="0"/>
+                                    <GradientStop Color="#FF69B4" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#9370DB" BlurRadius="12" ShadowDepth="0" Opacity="0.15"/>
+                            </Border.Effect>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -5740,7 +6113,7 @@
                                         <!-- Locked State -->
                                         <StackPanel x:Name="AutonomyLocked" Visibility="Visible">
                                             <Grid>
-                                                <TextBlock Text="🤖 Bambi Takeover" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                                <TextBlock x:Name="TxtTakeoverLocked" Text="🤖 Bambi Takeover" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
                                                 <TextBlock x:Name="TxtAutonomyLockStatus" Text="🔒 Patreon Only" Foreground="#9B59B6" HorizontalAlignment="Right" FontSize="11"/>
                                             </Grid>
                                             <TextBlock x:Name="TxtAutonomyLockMessage" Text="Support on Patreon to unlock" Foreground="{StaticResource PinkBrush}" FontSize="11" Margin="0,4,0,0"/>
@@ -5751,7 +6124,7 @@
                                             <!-- Header -->
                                             <Grid>
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="🤖 Bambi Takeover" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
+                                                    <TextBlock x:Name="TxtTakeoverUnlocked" Text="🤖 Bambi Takeover" Foreground="{StaticResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
                                                     <Border Background="#2A1A3A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" BorderBrush="#FF69B4" BorderThickness="1">
                                                         <TextBlock Text="No engine needed" Foreground="#FF69B4" FontSize="9"/>
                                                     </Border>
@@ -5874,8 +6247,7 @@
                                                    Foreground="#808080" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,12"/>
                                         <Border Background="#1E1E3A" CornerRadius="8" Padding="8">
                                             <Image x:Name="ImgTakeover" Source="pack://application:,,,/Resources/features/bambi takeover.png"
-                                                   Stretch="Uniform" MaxHeight="200"
-                                                   ToolTip="Bambi Takeover - Let her take control~"/>
+                                                   Stretch="Uniform" MaxHeight="200"/>
                                         </Border>
                                     </StackPanel>
                                 </Border>
@@ -5914,7 +6286,7 @@
                             <StackPanel>
                                 <TextBlock Text="Support Development" Foreground="#9B59B6" FontSize="14" FontWeight="Bold"/>
                                 <TextBlock TextWrapping="Wrap" Foreground="#808080" FontSize="12" Margin="0,8,0,0">
-                                    <Run Text="Patreon unlocks:"/> <Run Text="AI Chat, Window Awareness, Slut Mode, Bambi Takeover" Foreground="White"/>
+                                    <Run Text="Patreon unlocks:"/> <Run x:Name="RunPatreonFeatures" Text="AI Chat, Window Awareness, Slut Mode, Bambi Takeover" Foreground="White"/>
                                 </TextBlock>
                                 <Button x:Name="BtnVisitPatreon" Content="Visit Patreon"
                                         Background="#9B59B6" Foreground="White"
@@ -6543,7 +6915,7 @@
                                 <GridViewColumn x:Name="ColLongestSession" Header="Best Session" Width="110">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
-                                            <StackPanel>
+                                            <StackPanel Visibility="{Binding HasTrophyCase, Converter={StaticResource BoolToVisibility}}">
                                                 <TextBlock Text="{Binding LongestSessionDisplay}" HorizontalAlignment="Center"/>
                                                 <TextBlock Text="min" FontSize="11" Foreground="#B0B0B0" HorizontalAlignment="Center" Margin="0,-3,0,0"/>
                                             </StackPanel>
@@ -6553,8 +6925,8 @@
                                 <GridViewColumn x:Name="ColHighestStreak" Header="Best Streak" Width="100">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding HighestStreak}" HorizontalAlignment="Center"/>
+                                            <StackPanel Visibility="{Binding HasTrophyCase, Converter={StaticResource BoolToVisibility}}">
+                                                <TextBlock Text="{Binding HighestStreakDisplay}" HorizontalAlignment="Center"/>
                                                 <TextBlock Text="days" FontSize="11" Foreground="#B0B0B0" HorizontalAlignment="Center" Margin="0,-3,0,0"/>
                                             </StackPanel>
                                         </DataTemplate>
@@ -7140,7 +7512,7 @@
                     <Border x:Name="ActiveBonusesPanel"/>
                 </StackPanel>
 
-                <Border Background="#151528" CornerRadius="12" Padding="5" Margin="20,5,20,20">
+                <Border x:Name="SkillTreeOuterBorder" Background="#151528" CornerRadius="12" Padding="5" Margin="20,5,20,20">
                     <ScrollViewer x:Name="SkillTreeScroller"
                              Style="{StaticResource SkillTreeScrollViewerStyle}"
                              HorizontalScrollBarVisibility="Visible"

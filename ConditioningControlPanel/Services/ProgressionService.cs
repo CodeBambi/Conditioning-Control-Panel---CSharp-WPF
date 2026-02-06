@@ -38,9 +38,26 @@ namespace ConditioningControlPanel.Services
             var inOfflineMode = isOfflineMode && hasOfflineUsername;
 
             var settings = App.Settings.Current;
+
+            // Apply skill tree XP multiplier (sparkle boost, time bonuses, pink rush, etc.)
+            var skillMultiplier = App.SkillTree?.GetTotalXpMultiplier() ?? 1.0;
+            var adjustedAmount = amount * skillMultiplier;
+
             var previousXP = settings.PlayerXP;
-            settings.PlayerXP += amount;
-            App.Logger?.Information("XP awarded: +{Amount} (was {Prev}, now {Now})", amount, previousXP, settings.PlayerXP);
+            settings.PlayerXP += adjustedAmount;
+
+            // Track total XP earned (for stats)
+            App.Achievements?.TrackXPEarned(adjustedAmount);
+
+            if (Math.Abs(skillMultiplier - 1.0) > 0.001)
+            {
+                App.Logger?.Information("XP awarded: +{Amount} (base {Base} x {Mult:P0} skill bonus) - was {Prev}, now {Now}",
+                    adjustedAmount, amount, skillMultiplier, previousXP, settings.PlayerXP);
+            }
+            else
+            {
+                App.Logger?.Information("XP awarded: +{Amount} (was {Prev}, now {Now})", adjustedAmount, previousXP, settings.PlayerXP);
+            }
 
             // Route XP to the active companion (v5.3 companion leveling system)
             App.Companion?.AddCompanionXP(amount, source, context);
@@ -54,11 +71,21 @@ namespace ConditioningControlPanel.Services
             {
                 settings.PlayerXP -= xpNeeded;
                 settings.PlayerLevel++;
+
+                // Track highest level ever for permanent unlocks across seasons
+                if (settings.PlayerLevel > settings.HighestLevelEver)
+                {
+                    settings.HighestLevelEver = settings.PlayerLevel;
+                }
+
                 xpNeeded = GetXPForLevel(settings.PlayerLevel);
                 LevelUp?.Invoke(this, settings.PlayerLevel);
                 _ = App.Haptics?.LevelUpPatternAsync();
                 _ = App.Haptics?.LevelUpPatternAsync();
                 App.Logger.Information("Level up! Now level {Level}", settings.PlayerLevel);
+
+                // Award skill points for the enhancement tree (5 points per level)
+                App.SkillTree?.OnLevelUp(settings.PlayerLevel);
 
                 // Skip cloud/network features in offline mode
                 if (!inOfflineMode)

@@ -130,7 +130,7 @@ public class OverlayService : IDisposable
         {
             var settings = App.Settings.Current;
 
-            if (settings.PlayerLevel < 10)
+            if (!settings.IsLevelUnlocked(10))
             {
                 App.Logger?.Information("OverlayService: Level {Level} is below 10, overlays not available", settings.PlayerLevel);
                 return;
@@ -148,7 +148,7 @@ public class OverlayService : IDisposable
                 StartSpiral();
             }
 
-            if (settings.BrainDrainEnabled && settings.PlayerLevel >= 70)
+            if (settings.BrainDrainEnabled && settings.IsLevelUnlocked(70))
             {
                 StartBrainDrainBlur((int)settings.BrainDrainIntensity);
             }
@@ -190,7 +190,7 @@ public class OverlayService : IDisposable
         {
             var settings = App.Settings.Current;
 
-            if (settings.PinkFilterEnabled && settings.PlayerLevel >= 10)
+            if (settings.PinkFilterEnabled && App.SkillTree?.HasSkill("pink_hours") == true)
             {
                 if (_pinkFilterWindows.Count == 0)
                     StartPinkFilter();
@@ -203,7 +203,7 @@ public class OverlayService : IDisposable
             }
 
             var spiralPath = GetSpiralPath();
-            if (settings.SpiralEnabled && settings.PlayerLevel >= 10 && !string.IsNullOrEmpty(spiralPath))
+            if (settings.SpiralEnabled && App.SkillTree?.HasSkill("pink_hours") == true && !string.IsNullOrEmpty(spiralPath))
             {
                 _spiralPath = spiralPath;
                 if (_spiralWindows.Count == 0)
@@ -237,7 +237,7 @@ public class OverlayService : IDisposable
             var settings = App.Settings.Current;
 
             // Stop and restart pink filter if enabled
-            if (settings.PinkFilterEnabled && settings.PlayerLevel >= 10)
+            if (settings.PinkFilterEnabled && App.SkillTree?.HasSkill("pink_hours") == true)
             {
                 StopPinkFilter();
                 StartPinkFilter();
@@ -245,7 +245,7 @@ public class OverlayService : IDisposable
 
             // Stop and restart spiral if enabled
             var spiralPath = GetSpiralPath();
-            if (settings.SpiralEnabled && settings.PlayerLevel >= 10 && !string.IsNullOrEmpty(spiralPath))
+            if (settings.SpiralEnabled && App.SkillTree?.HasSkill("pink_hours") == true && !string.IsNullOrEmpty(spiralPath))
             {
                 StopSpiral();
                 _spiralPath = spiralPath;
@@ -253,7 +253,7 @@ public class OverlayService : IDisposable
             }
 
             // Stop and restart brain drain if enabled
-            if (settings.BrainDrainEnabled && settings.PlayerLevel >= 70)
+            if (settings.BrainDrainEnabled && settings.IsLevelUnlocked(70))
             {
                 StopBrainDrainBlur();
                 StartBrainDrainBlur((int)settings.BrainDrainIntensity);
@@ -268,7 +268,7 @@ public class OverlayService : IDisposable
     {
         var settings = App.Settings.Current;
 
-        if (settings.PlayerLevel < 10)
+        if (!settings.IsLevelUnlocked(10))
         {
             StopPinkFilter();
             StopSpiral();
@@ -1609,7 +1609,7 @@ public class OverlayService : IDisposable
             return;
         }
 
-        if (settings.BrainDrainEnabled && settings.PlayerLevel >= 70) // Level 70 requirement for Brain Drain
+        if (settings.BrainDrainEnabled && settings.IsLevelUnlocked(70)) // Level 70 requirement for Brain Drain
         {
             if (_brainDrainBlurWindows.Count == 0)
             {

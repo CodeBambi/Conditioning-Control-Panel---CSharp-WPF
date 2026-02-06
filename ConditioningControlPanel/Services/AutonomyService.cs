@@ -828,28 +828,28 @@ namespace ConditioningControlPanel.Services
             if (settings.AutonomyCanTriggerSubliminal)
                 candidates.Add((AutonomyActionType.Subliminal, 25));
 
-            if (settings.AutonomyCanTriggerBrainDrain && settings.PlayerLevel >= 70)
+            if (settings.AutonomyCanTriggerBrainDrain && settings.IsLevelUnlocked(70))
                 candidates.Add((AutonomyActionType.BrainDrainPulse, 10));
 
-            if (settings.AutonomyCanTriggerBubbles && settings.PlayerLevel >= 20)
+            if (settings.AutonomyCanTriggerBubbles && App.SkillTree?.HasSkill("pink_hours") == true)
                 candidates.Add((AutonomyActionType.StartBubbles, 15));
 
             if (settings.AutonomyCanComment)
                 candidates.Add((AutonomyActionType.Comment, 20));
 
             // New progression features
-            if (settings.AutonomyCanTriggerMindWipe && settings.PlayerLevel >= 80)
+            if (settings.AutonomyCanTriggerMindWipe && settings.IsLevelUnlocked(80))
                 candidates.Add((AutonomyActionType.MindWipe, 15));
 
-            if (settings.AutonomyCanTriggerLockCard && settings.PlayerLevel >= 35)
+            if (settings.AutonomyCanTriggerLockCard && settings.IsLevelUnlocked(35))
                 candidates.Add((AutonomyActionType.LockCard, 10)); // Lower weight - very disruptive
 
             // Note: SpiralPulse removed from autonomy - can interfere with user experience
 
-            if (settings.AutonomyCanTriggerPinkFilter && settings.PlayerLevel >= 10)
+            if (settings.AutonomyCanTriggerPinkFilter && App.SkillTree?.HasSkill("pink_hours") == true)
                 candidates.Add((AutonomyActionType.PinkFilterPulse, 20));
 
-            if (settings.AutonomyCanTriggerBouncingText && settings.PlayerLevel >= 60)
+            if (settings.AutonomyCanTriggerBouncingText && settings.IsLevelUnlocked(60))
                 candidates.Add((AutonomyActionType.BouncingText, 15));
 
             // Web video - plays random HypnoTube video fullscreen in browser

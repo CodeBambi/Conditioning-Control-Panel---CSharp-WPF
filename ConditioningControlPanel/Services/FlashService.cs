@@ -666,8 +666,19 @@ namespace ConditioningControlPanel.Services
             
             // Award XP for viewing
             var xpAmount = _soundPlayingForCurrentFlash ? 15 : 7;
-            App.Progression?.AddXP(xpAmount, XPSource.Flash);
-            
+
+            // Roll for lucky flash (5% chance for 5x XP if skill unlocked)
+            var multiplier = App.SkillTree?.RollLuckyFlash() ?? 1;
+            var isLucky = multiplier > 1;
+
+            // Play lucky flash sound if triggered
+            if (isLucky)
+            {
+                PlayLuckyFlashSound();
+            }
+
+            App.Progression?.AddXP(xpAmount * multiplier, XPSource.Flash);
+
             // Track for achievement
             App.Achievements?.TrackFlashImage();
         }
@@ -1152,6 +1163,52 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Debug("Failed to play random sound: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Plays the Burst.mp3 sound for lucky flash (5x XP)
+        /// </summary>
+        private void PlayLuckyFlashSound()
+        {
+            try
+            {
+                var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
+                var burstPath = Path.Combine(soundsPath, "Burst.mp3");
+
+                if (File.Exists(burstPath))
+                {
+                    Task.Run(() =>
+                    {
+                        try
+                        {
+                            using var audioFile = new AudioFileReader(burstPath);
+                            using var outputDevice = new WaveOutEvent();
+
+                            var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                            var volume = (float)Math.Pow(masterVolume, 1.5);
+                            audioFile.Volume = volume;
+
+                            outputDevice.Init(audioFile);
+                            outputDevice.Play();
+
+                            while (outputDevice.PlaybackState == PlaybackState.Playing)
+                            {
+                                Thread.Sleep(50);
+                            }
+
+                            App.Logger?.Information("🎉 Lucky Flash! 5x XP!");
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("Failed to play lucky flash sound: {Error}", ex.Message);
+                        }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to play lucky flash sound: {Error}", ex.Message);
             }
         }
 

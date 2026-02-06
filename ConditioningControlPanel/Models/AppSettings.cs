@@ -81,6 +81,220 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Skill Tree / Enhancements
+
+        private int _skillPoints = 0;
+        /// <summary>
+        /// Available skill points to spend on the enhancement tree.
+        /// Earned when leveling up: 5 points per level.
+        /// </summary>
+        public int SkillPoints
+        {
+            get => _skillPoints;
+            set { _skillPoints = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private List<string> _unlockedSkills = new();
+        /// <summary>
+        /// IDs of skills that have been unlocked in the enhancement tree.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> UnlockedSkills
+        {
+            get => _unlockedSkills;
+            set { _unlockedSkills = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private double _totalConditioningMinutes = 0;
+        /// <summary>
+        /// Total conditioning time across all sessions (accumulated).
+        /// Used by the "Pink Hours" skill display.
+        /// </summary>
+        public double TotalConditioningMinutes
+        {
+            get => _totalConditioningMinutes;
+            set { _totalConditioningMinutes = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _totalSessions = 0;
+        /// <summary>
+        /// Total number of conditioning sessions started.
+        /// </summary>
+        public int TotalSessions
+        {
+            get => _totalSessions;
+            set { _totalSessions = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _dailyQuestStreak = 0;
+        /// <summary>
+        /// Consecutive days of completing the daily quest.
+        /// Used by "Perfect Bimbo Week" skill.
+        /// </summary>
+        public int DailyQuestStreak
+        {
+            get => _dailyQuestStreak;
+            set { _dailyQuestStreak = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private DateTime? _lastDailyQuestDate = null;
+        /// <summary>
+        /// Last date a daily quest was completed (UTC date only).
+        /// </summary>
+        public DateTime? LastDailyQuestDate
+        {
+            get => _lastDailyQuestDate;
+            set { _lastDailyQuestDate = value; OnPropertyChanged(); }
+        }
+
+        private int _streakShieldsRemaining = 0;
+        /// <summary>
+        /// Weekly streak shields remaining.
+        /// Granted by "Good Girl Streak" skill.
+        /// </summary>
+        public int StreakShieldsRemaining
+        {
+            get => _streakShieldsRemaining;
+            set { _streakShieldsRemaining = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private DateTime? _lastStreakShieldResetDate = null;
+        /// <summary>
+        /// Date when weekly streak shields were last reset.
+        /// Resets on Sunday.
+        /// </summary>
+        public DateTime? LastStreakShieldResetDate
+        {
+            get => _lastStreakShieldResetDate;
+            set { _lastStreakShieldResetDate = value; OnPropertyChanged(); }
+        }
+
+        private List<DateTime> _streakShieldUsedDates = new();
+        /// <summary>
+        /// Dates where a streak shield was used to cover a missed day.
+        /// </summary>
+        public List<DateTime> StreakShieldUsedDates
+        {
+            get => _streakShieldUsedDates;
+            set { _streakShieldUsedDates = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private bool _seasonalStreakRecoveryUsed = false;
+        /// <summary>
+        /// Whether "Oopsie Insurance" streak recovery has been used this season.
+        /// </summary>
+        public bool SeasonalStreakRecoveryUsed
+        {
+            get => _seasonalStreakRecoveryUsed;
+            set { _seasonalStreakRecoveryUsed = value; OnPropertyChanged(); }
+        }
+
+        private int _nightTimeUsageCount = 0;
+        /// <summary>
+        /// Number of times app was used between 11pm-5am.
+        /// Used to unlock "Night Shift" secret skill.
+        /// </summary>
+        public int NightTimeUsageCount
+        {
+            get => _nightTimeUsageCount;
+            set { _nightTimeUsageCount = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _earlyMorningUsageCount = 0;
+        /// <summary>
+        /// Number of times app was used between 5am-8am.
+        /// Used to unlock "Early Bird Bimbo" secret skill.
+        /// </summary>
+        public int EarlyMorningUsageCount
+        {
+            get => _earlyMorningUsageCount;
+            set { _earlyMorningUsageCount = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _freeRerollsUsedToday = 0;
+        /// <summary>
+        /// Number of free quest rerolls used today.
+        /// Resets daily. Max determined by skills.
+        /// </summary>
+        public int FreeRerollsUsedToday
+        {
+            get => _freeRerollsUsedToday;
+            set { _freeRerollsUsedToday = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private DateTime? _lastRerollResetDate = null;
+        /// <summary>
+        /// Date when daily free rerolls were last reset.
+        /// </summary>
+        public DateTime? LastRerollResetDate
+        {
+            get => _lastRerollResetDate;
+            set { _lastRerollResetDate = value; OnPropertyChanged(); }
+        }
+
+        private int _currentStreak = 0;
+        /// <summary>
+        /// Current consecutive day streak (used for streak multiplier skill).
+        /// </summary>
+        public int CurrentStreak
+        {
+            get => _currentStreak;
+            set
+            {
+                _currentStreak = Math.Max(0, value);
+                // Track highest streak achieved
+                if (_currentStreak > HighestStreak)
+                {
+                    HighestStreak = _currentStreak;
+                }
+                OnPropertyChanged();
+            }
+        }
+
+        private int _highestStreak = 0;
+        /// <summary>
+        /// Highest consecutive day streak ever achieved (for Trophy Case display).
+        /// </summary>
+        public int HighestStreak
+        {
+            get => _highestStreak;
+            set { _highestStreak = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private DateTime? _lastStreakDate = null;
+        /// <summary>
+        /// Last date the streak was maintained.
+        /// </summary>
+        public DateTime? LastStreakDate
+        {
+            get => _lastStreakDate;
+            set { _lastStreakDate = value; OnPropertyChanged(); }
+        }
+
+        private bool _pinkRushActive = false;
+        /// <summary>
+        /// Whether a Pink Rush bonus window is currently active.
+        /// </summary>
+        [JsonIgnore]
+        public bool PinkRushActive
+        {
+            get => _pinkRushActive;
+            set { _pinkRushActive = value; OnPropertyChanged(); }
+        }
+
+        private DateTime? _pinkRushEndTime = null;
+        /// <summary>
+        /// When the current Pink Rush window ends.
+        /// </summary>
+        [JsonIgnore]
+        public DateTime? PinkRushEndTime
+        {
+            get => _pinkRushEndTime;
+            set { _pinkRushEndTime = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Flash Images
 
         private bool _flashEnabled = true;
@@ -2048,6 +2262,124 @@ namespace ConditioningControlPanel.Models
         [JsonIgnore]
         public bool PatreonCacheValid =>
             (DateTime.UtcNow - LastPatreonVerification).TotalHours < 24;
+
+        #endregion
+
+        #region V5.5 Season System
+
+        private string? _unifiedId = null;
+        /// <summary>
+        /// Unified user ID from v5.5+ server. Persists across logout to enable
+        /// seamless re-login with any linked provider.
+        /// </summary>
+        public string? UnifiedId
+        {
+            get => _unifiedId;
+            set { _unifiedId = value; OnPropertyChanged(); }
+        }
+
+        private string? _userDisplayName = null;
+        /// <summary>
+        /// User's display name (synced with server). Used across all providers.
+        /// </summary>
+        public string? UserDisplayName
+        {
+            get => _userDisplayName;
+            set { _userDisplayName = value; OnPropertyChanged(); }
+        }
+
+        private bool _isSeason0Og = false;
+        /// <summary>
+        /// Whether user is a Season 0 OG (had account before v5.5).
+        /// Grants special badge and leaderboard flair.
+        /// </summary>
+        public bool IsSeason0Og
+        {
+            get => _isSeason0Og;
+            set { _isSeason0Og = value; OnPropertyChanged(); }
+        }
+
+        private bool _ogLevelUnlockEnabled = false;
+        /// <summary>
+        /// Whether OG users have enabled the level unlock bypass.
+        /// When true, OG users can access all level-gated features regardless of current level.
+        /// </summary>
+        public bool OgLevelUnlockEnabled
+        {
+            get => _ogLevelUnlockEnabled;
+            set { _ogLevelUnlockEnabled = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Check if a feature at the specified level is unlocked for this user.
+        /// Features are unlocked if:
+        /// 1. OG user has OgLevelUnlockEnabled toggled on, OR
+        /// 2. User has reached this level in any previous season (HighestLevelEver), OR
+        /// 3. User's current level meets the requirement
+        /// </summary>
+        public bool IsLevelUnlocked(int requiredLevel)
+        {
+            // OG users with unlock toggle enabled bypass all level requirements
+            if (IsSeason0Og && OgLevelUnlockEnabled) return true;
+
+            // Check against highest level ever reached (permanent unlocks across seasons)
+            if (HighestLevelEver >= requiredLevel) return true;
+
+            // Check current level
+            return PlayerLevel >= requiredLevel;
+        }
+
+        private string? _currentSeason = null;
+        /// <summary>
+        /// Current season identifier (e.g., "2026-02").
+        /// Used to detect season changes and trigger resets.
+        /// </summary>
+        public string? CurrentSeason
+        {
+            get => _currentSeason;
+            set { _currentSeason = value; OnPropertyChanged(); }
+        }
+
+        private int _highestLevelEver = 0;
+        /// <summary>
+        /// Highest level ever achieved (persists across season resets).
+        /// Used for determining permanent unlocks.
+        /// </summary>
+        public int HighestLevelEver
+        {
+            get => _highestLevelEver;
+            set { _highestLevelEver = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private bool _hasShownOgWelcome = false;
+        /// <summary>
+        /// Whether the OG welcome popup has been shown to this user.
+        /// </summary>
+        public bool HasShownOgWelcome
+        {
+            get => _hasShownOgWelcome;
+            set { _hasShownOgWelcome = value; OnPropertyChanged(); }
+        }
+
+        private bool _hasLinkedDiscord = false;
+        /// <summary>
+        /// Whether a Discord account is linked to this unified user.
+        /// </summary>
+        public bool HasLinkedDiscord
+        {
+            get => _hasLinkedDiscord;
+            set { _hasLinkedDiscord = value; OnPropertyChanged(); }
+        }
+
+        private bool _hasLinkedPatreon = false;
+        /// <summary>
+        /// Whether a Patreon account is linked to this unified user.
+        /// </summary>
+        public bool HasLinkedPatreon
+        {
+            get => _hasLinkedPatreon;
+            set { _hasLinkedPatreon = value; OnPropertyChanged(); }
+        }
 
         #endregion
 

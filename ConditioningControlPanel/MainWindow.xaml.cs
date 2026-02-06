@@ -59,6 +59,7 @@ namespace ConditioningControlPanel
         private bool _isCapturingPanicKey = false;
         private bool _exitRequested = false;
         private int _panicPressCount = 0;
+        private bool _isStreakFixMode = false;
 
         /// <summary>
         /// Fires when the engine is stopped (for avatar reactions)
@@ -600,6 +601,14 @@ namespace ConditioningControlPanel
                 bitmap.EndInit();
 
                 ImgTakeover.Source = bitmap;
+
+                // Update mode-aware takeover labels
+                var takeoverLabel = Models.ContentModeConfig.GetTakeoverLabel(mode);
+                TxtTakeoverLocked.Text = $"🤖 {takeoverLabel}";
+                TxtTakeoverUnlocked.Text = $"🤖 {takeoverLabel}";
+                BtnAutonomyStartStop.ToolTip = $"Start/Stop {takeoverLabel}";
+                ImgTakeover.ToolTip = $"{takeoverLabel} - Let her take control~";
+                RunPatreonFeatures.Text = $"AI Chat, Window Awareness, Slut Mode, {takeoverLabel}";
             }
             catch (Exception ex)
             {
@@ -1872,6 +1881,13 @@ namespace ConditioningControlPanel
             var questService = App.Quests;
             if (questService == null) return;
 
+            // Update season title from server or defaults
+            var seasonTitle = App.QuestDefinitions?.SeasonTitle;
+            if (!string.IsNullOrEmpty(seasonTitle))
+            {
+                TxtSeasonTitle.Text = seasonTitle;
+            }
+
             // Update daily quest counter badge
             int dailyCompleted = questService.GetDailyQuestsCompletedToday();
             TxtDailyQuestCounter.Text = $"{dailyCompleted}/{QuestService.MaxDailyQuestsPerDay}";
@@ -1897,10 +1913,31 @@ namespace ConditioningControlPanel
                 TxtDailyQuestName.Text = dailyDef.Name;
                 TxtDailyQuestDesc.Text = dailyDef.Description;
                 TxtDailyProgress.Text = $"{dailyProgress.CurrentProgress} / {dailyDef.TargetValue}";
-                // Show scaled XP based on level (+2% per level)
+                // Show scaled XP based on level (+2% per level), reroll bonus, and streak bonus
                 var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
-                var scaledDailyXP = (int)Math.Round(dailyDef.XPReward * (1 + playerLevel * 0.02));
+                var rerollMult = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
+                var questStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
+                var streakMult = 1.0 + (questStreak * 0.03);
+                var scaledDailyXP = (int)Math.Round(dailyDef.XPReward * (1 + playerLevel * 0.02) * rerollMult * streakMult);
                 TxtDailyXP.Text = $"🎁 {scaledDailyXP} XP";
+                if (questStreak > 0)
+                {
+                    TxtDailyStreakBonus.Text = $"(+{questStreak * 3}%\U0001f525)";
+                    TxtDailyStreakBonus.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    TxtDailyStreakBonus.Visibility = Visibility.Collapsed;
+                }
+                if (rerollMult > 1.0)
+                {
+                    TxtDailyRerollBonus.Text = $"(+{(int)((rerollMult - 1.0) * 100)}%\U0001f503)";
+                    TxtDailyRerollBonus.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    TxtDailyRerollBonus.Visibility = Visibility.Collapsed;
+                }
 
                 // Load quest image (supports remote cached images)
                 try
@@ -1947,9 +1984,31 @@ namespace ConditioningControlPanel
                 TxtWeeklyQuestName.Text = weeklyDef.Name;
                 TxtWeeklyQuestDesc.Text = weeklyDef.Description;
                 TxtWeeklyProgress.Text = $"{weeklyProgress.CurrentProgress} / {weeklyDef.TargetValue}";
-                // Show scaled XP based on level (+2% per level)
-                var scaledWeeklyXP = (int)Math.Round(weeklyDef.XPReward * (1 + (App.Settings?.Current?.PlayerLevel ?? 1) * 0.02));
+                // Show scaled XP based on level (+2% per level), reroll bonus, and streak bonus
+                var wPlayerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+                var wRerollMult = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
+                var wQuestStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
+                var wStreakMult = 1.0 + (wQuestStreak * 0.03);
+                var scaledWeeklyXP = (int)Math.Round(weeklyDef.XPReward * (1 + wPlayerLevel * 0.02) * wRerollMult * wStreakMult);
                 TxtWeeklyXP.Text = $"🎁 {scaledWeeklyXP} XP";
+                if (wQuestStreak > 0)
+                {
+                    TxtWeeklyStreakBonus.Text = $"(+{wQuestStreak * 3}%\U0001f525)";
+                    TxtWeeklyStreakBonus.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    TxtWeeklyStreakBonus.Visibility = Visibility.Collapsed;
+                }
+                if (wRerollMult > 1.0)
+                {
+                    TxtWeeklyRerollBonus.Text = $"(+{(int)((wRerollMult - 1.0) * 100)}%\U0001f503)";
+                    TxtWeeklyRerollBonus.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    TxtWeeklyRerollBonus.Visibility = Visibility.Collapsed;
+                }
 
                 // Load quest image (supports remote cached images)
                 try
@@ -2011,8 +2070,16 @@ namespace ConditioningControlPanel
                 questService?.Progress?.DailyQuestCompletionDates?.Select(d => d.Date)
                 ?? Enumerable.Empty<DateTime>());
 
+            var shieldedDates = new HashSet<DateTime>(
+                App.Settings?.Current?.StreakShieldUsedDates?.Select(d => d.Date)
+                ?? Enumerable.Empty<DateTime>());
+
             var today = DateTime.Today;
-            var days = Enumerable.Range(0, 30).Select(i => today.AddDays(-29 + i)).ToList();
+
+            // Show current month's days
+            int daysInMonth = DateTime.DaysInMonth(today.Year, today.Month);
+            var days = Enumerable.Range(1, daysInMonth)
+                .Select(d => new DateTime(today.Year, today.Month, d)).ToList();
 
             // Canvas doesn't auto-stretch, so use parent's actual width minus padding
             double canvasWidth = StreakCalendarCanvas.ActualWidth;
@@ -2023,11 +2090,14 @@ namespace ConditioningControlPanel
             }
             if (canvasWidth <= 0) canvasWidth = 600;
 
-            double spacing = canvasWidth / 30.0;
+            double spacing = canvasWidth / daysInMonth;
             double centerY = 25;
 
             double prevCenterX = 0;
             bool prevCompleted = false;
+            bool hasMissedDays = false;
+
+            string[] dayLetters = { "S", "M", "T", "W", "T", "F", "S" };
 
             for (int i = 0; i < days.Count; i++)
             {
@@ -2035,8 +2105,12 @@ namespace ConditioningControlPanel
                 bool isSunday = day.DayOfWeek == DayOfWeek.Sunday;
                 bool isToday = day.Date == today;
                 bool isCompleted = completedDates.Contains(day.Date);
+                bool isFuture = day.Date > today;
+                bool isMissed = !isCompleted && !isFuture && day.Date < today;
 
-                double nodeSize = isSunday ? 24 : 18;
+                if (isMissed) hasMissedDays = true;
+
+                double nodeSize = isSunday ? 26 : 20;
                 double centerX = spacing * i + spacing / 2.0;
 
                 // Draw connecting line from previous node
@@ -2057,11 +2131,13 @@ namespace ConditioningControlPanel
                     StreakCalendarCanvas.Children.Add(line);
                 }
 
-                // Draw node ellipse
-                var ellipse = new System.Windows.Shapes.Ellipse
+                // Draw node (rounded rectangle to fit text)
+                var rect = new System.Windows.Shapes.Rectangle
                 {
                     Width = nodeSize,
                     Height = nodeSize,
+                    RadiusX = nodeSize / 2.0,
+                    RadiusY = nodeSize / 2.0,
                     Fill = isCompleted
                         ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"))
                         : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252542")),
@@ -2071,20 +2147,22 @@ namespace ConditioningControlPanel
                     StrokeThickness = isToday ? 2 : 1
                 };
 
-                Canvas.SetLeft(ellipse, centerX - nodeSize / 2.0);
-                Canvas.SetTop(ellipse, centerY - nodeSize / 2.0);
-                Canvas.SetZIndex(ellipse, 1);
-                StreakCalendarCanvas.Children.Add(ellipse);
+                Canvas.SetLeft(rect, centerX - nodeSize / 2.0);
+                Canvas.SetTop(rect, centerY - nodeSize / 2.0);
+                Canvas.SetZIndex(rect, 1);
+                StreakCalendarCanvas.Children.Add(rect);
 
-                // Day letter
-                string[] dayLetters = { "S", "M", "T", "W", "T", "F", "S" };
+                // Day letter + day number label (e.g. "S1", "M2", "T3")
+                string dayLetter = dayLetters[(int)day.DayOfWeek];
                 var label = new TextBlock
                 {
-                    Text = dayLetters[(int)day.DayOfWeek],
+                    Text = $"{dayLetter}{day.Day}",
                     Foreground = isCompleted
                         ? Brushes.White
-                        : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#666666")),
-                    FontSize = isSunday ? 11 : 10,
+                        : isFuture
+                            ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#444444"))
+                            : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888")),
+                    FontSize = 7,
                     FontWeight = FontWeights.Bold,
                     TextAlignment = TextAlignment.Center
                 };
@@ -2094,18 +2172,277 @@ namespace ConditioningControlPanel
                 Canvas.SetZIndex(label, 2);
                 StreakCalendarCanvas.Children.Add(label);
 
+                // Shield overlay on days protected by streak shield
+                if (shieldedDates.Contains(day.Date))
+                {
+                    var shieldLabel = new TextBlock
+                    {
+                        Text = "🛡️",
+                        FontFamily = new FontFamily("Segoe UI Emoji"),
+                        FontSize = 10,
+                        TextAlignment = TextAlignment.Center
+                    };
+                    shieldLabel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    Canvas.SetLeft(shieldLabel, centerX - shieldLabel.DesiredSize.Width / 2.0);
+                    Canvas.SetTop(shieldLabel, centerY - nodeSize / 2.0 - shieldLabel.DesiredSize.Height + 2);
+                    Canvas.SetZIndex(shieldLabel, 4);
+                    StreakCalendarCanvas.Children.Add(shieldLabel);
+                }
+
+                // In fix mode, overlay a pulsing pink highlight on missed days
+                if (_isStreakFixMode && isMissed)
+                {
+                    double highlightSize = nodeSize + 4;
+                    var highlight = new System.Windows.Shapes.Rectangle
+                    {
+                        Width = highlightSize,
+                        Height = highlightSize,
+                        RadiusX = highlightSize / 2.0,
+                        RadiusY = highlightSize / 2.0,
+                        Fill = Brushes.Transparent,
+                        Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
+                        StrokeThickness = 2,
+                        Cursor = System.Windows.Input.Cursors.Hand,
+                        Tag = day.Date
+                    };
+
+                    // Pulsing opacity animation
+                    var pulseAnim = new System.Windows.Media.Animation.DoubleAnimation
+                    {
+                        From = 1.0,
+                        To = 0.3,
+                        Duration = TimeSpan.FromMilliseconds(600),
+                        AutoReverse = true,
+                        RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+                    };
+                    highlight.BeginAnimation(OpacityProperty, pulseAnim);
+
+                    highlight.MouseLeftButtonDown += StreakFixDay_Click;
+
+                    Canvas.SetLeft(highlight, centerX - highlightSize / 2.0);
+                    Canvas.SetTop(highlight, centerY - highlightSize / 2.0);
+                    Canvas.SetZIndex(highlight, 3);
+                    StreakCalendarCanvas.Children.Add(highlight);
+                }
+
                 prevCenterX = centerX;
                 prevCompleted = isCompleted;
             }
 
             // Update streak text
             var streak = App.Settings?.Current?.DailyQuestStreak ?? 0;
-            TxtQuestStreakCount.Text = streak > 0 ? "\U0001f525 " + streak + " day streak" : "";
+            TxtQuestStreakCount.Text = streak > 0 ? $"\U0001f525 {streak} day streak (+{streak * 3}% XP)" : "";
+
+            // Show/hide/enable Fix Day button based on skill, XP, season usage, and missed days
+            var settings = App.Settings?.Current;
+            bool hasSkill = App.SkillTree?.HasSkill("oopsie_insurance") == true;
+            bool alreadyUsed = settings?.SeasonalStreakRecoveryUsed == true;
+            bool hasEnoughXP = (settings?.PlayerXP ?? 0) >= 500;
+
+            if (hasSkill)
+            {
+                BtnFixStreak.Visibility = Visibility.Visible;
+                BtnFixStreak.IsEnabled = !_isStreakFixMode || _isStreakFixMode; // Always enabled when skill owned
+
+                if (_isStreakFixMode)
+                {
+                    BtnFixStreak.Content = "✖ Cancel";
+                }
+                else
+                {
+                    BtnFixStreak.Content = "🔧 Fix Day";
+                }
+
+                if (alreadyUsed)
+                    BtnFixStreak.ToolTip = "Already used this season";
+                else if (!hasEnoughXP)
+                    BtnFixStreak.ToolTip = "Requires 500 XP";
+                else if (!hasMissedDays)
+                    BtnFixStreak.ToolTip = "No missed days — your streak is perfect!";
+                else
+                    BtnFixStreak.ToolTip = "Use Oopsie Insurance to fix a missed day (500 XP)";
+            }
+            else
+            {
+                BtnFixStreak.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void StreakCalendarCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             RefreshStreakCalendar();
+        }
+
+        private void BtnFixStreak_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isStreakFixMode)
+            {
+                ExitStreakFixMode();
+                return;
+            }
+
+            // Validate prerequisites with user-friendly messages
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            if (App.SkillTree?.HasSkill("oopsie_insurance") != true) return;
+
+            if (settings.SeasonalStreakRecoveryUsed)
+            {
+                TxtFixStreakStatus.Text = "Already used Oopsie Insurance this season!";
+                TxtFixStreakStatus.Visibility = Visibility.Visible;
+                return;
+            }
+
+            // Check if there are any missed days
+            var questService = App.Quests;
+            var completedDates = new HashSet<DateTime>(
+                questService?.Progress?.DailyQuestCompletionDates?.Select(d => d.Date)
+                ?? Enumerable.Empty<DateTime>());
+            var today = DateTime.Today;
+            bool hasMissedDays = Enumerable.Range(1, today.Day - 1)
+                .Select(d => new DateTime(today.Year, today.Month, d))
+                .Any(d => !completedDates.Contains(d.Date));
+
+            if (!hasMissedDays)
+            {
+                TxtFixStreakStatus.Text = "No broken streak — you're doing great sweetie!";
+                TxtFixStreakStatus.Visibility = Visibility.Visible;
+                return;
+            }
+
+            if (settings.PlayerXP < 500)
+            {
+                TxtFixStreakStatus.Text = "Not enough XP! You need 500 XP to fix a day.";
+                TxtFixStreakStatus.Visibility = Visibility.Visible;
+                return;
+            }
+
+            // Enter fix mode
+            _isStreakFixMode = true;
+            TxtFixStreakStatus.Text = "Click a missed day to fix it (costs 500 XP, once per season)";
+            TxtFixStreakStatus.Visibility = Visibility.Visible;
+            RefreshStreakCalendar();
+        }
+
+        private void ExitStreakFixMode()
+        {
+            _isStreakFixMode = false;
+            TxtFixStreakStatus.Visibility = Visibility.Collapsed;
+            TxtFixStreakStatus.Text = "";
+            RefreshStreakCalendar();
+        }
+
+        private async void StreakFixDay_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (sender is not System.Windows.Shapes.Rectangle highlight) return;
+            if (highlight.Tag is not DateTime fixDate) return;
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            // Confirm with user
+            var result = MessageBox.Show(
+                $"Fix {fixDate:MMMM d}?\n\nThis will cost 500 XP and can only be used once per season.",
+                "Oopsie Insurance",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes) return;
+
+            // Use server-side oopsie insurance if online
+            var fixDateStr = fixDate.ToString("yyyy-MM-dd");
+            if (App.ProfileSync != null && !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId))
+            {
+                TxtFixStreakStatus.Text = "Processing...";
+                TxtFixStreakStatus.Visibility = Visibility.Visible;
+
+                var (success, error, newXp) = await App.ProfileSync.UseOopsieInsuranceAsync(fixDateStr);
+                if (!success)
+                {
+                    TxtFixStreakStatus.Text = $"❌ {error ?? "Failed to use Oopsie Insurance"}";
+                    TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF5252"));
+                    TxtFixStreakStatus.Visibility = Visibility.Visible;
+                    return;
+                }
+
+                // Server succeeded - update local state
+                if (newXp.HasValue)
+                {
+                    // Server returns total XP; convert back to current-level XP
+                    var currentLevel = settings.PlayerLevel;
+                    var newLevelXp = App.Progression?.GetCurrentLevelXP(currentLevel, newXp.Value) ?? (settings.PlayerXP - 500);
+                    settings.PlayerXP = Math.Max(0, newLevelXp);
+                }
+                else
+                {
+                    settings.PlayerXP -= 500;
+                }
+                settings.SeasonalStreakRecoveryUsed = true;
+            }
+            else
+            {
+                // Offline fallback
+                TxtFixStreakStatus.Text = "❌ Oopsie Insurance requires an internet connection";
+                TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF5252"));
+                TxtFixStreakStatus.Visibility = Visibility.Visible;
+                return;
+            }
+
+            // Add the fixed date to completion dates
+            var questService = App.Quests;
+            if (questService?.Progress != null)
+            {
+                questService.Progress.DailyQuestCompletionDates.Add(fixDate);
+                questService.Save();
+            }
+
+            // Recalculate the streak
+            RecalculateDailyQuestStreak();
+
+            App.Settings?.Save();
+            App.Logger?.Information("Oopsie Insurance used to fix {Date} for 500 XP (server-validated)", fixDate);
+
+            // Exit fix mode and refresh
+            _isStreakFixMode = false;
+            TxtFixStreakStatus.Text = $"✅ Fixed {fixDate:MMMM d}! Streak updated.";
+            TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#00E676"));
+            TxtFixStreakStatus.Visibility = Visibility.Visible;
+            RefreshStreakCalendar();
+
+            // Auto-hide status after 3 seconds
+            await Task.Delay(3000);
+            if (!_isStreakFixMode)
+            {
+                TxtFixStreakStatus.Visibility = Visibility.Collapsed;
+                TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
+            }
+        }
+
+        private void RecalculateDailyQuestStreak()
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            var questService = App.Quests;
+            var completedDates = new HashSet<DateTime>(
+                questService?.Progress?.DailyQuestCompletionDates?.Select(d => d.Date)
+                ?? Enumerable.Empty<DateTime>());
+
+            // Walk backward from today through completion dates to compute contiguous streak
+            int streak = 0;
+            var checkDate = DateTime.Today;
+
+            // If today isn't completed yet, start checking from yesterday
+            if (!completedDates.Contains(checkDate))
+                checkDate = checkDate.AddDays(-1);
+
+            while (completedDates.Contains(checkDate))
+            {
+                streak++;
+                checkDate = checkDate.AddDays(-1);
+            }
+
+            settings.DailyQuestStreak = streak;
         }
 
         private void BtnAchievements_Click(object sender, RoutedEventArgs e)
@@ -5091,6 +5428,8 @@ namespace ConditioningControlPanel
 
         #region Quests
 
+        private QuestCompletePopup? _questCompletePopup;
+
         private void OnQuestCompleted(object? sender, Services.QuestCompletedEventArgs e)
         {
             Dispatcher.Invoke(() =>
@@ -5098,14 +5437,24 @@ namespace ConditioningControlPanel
                 // Play celebration sound from flashes audio
                 App.Flash?.PlayRandomSound();
 
-                // Show completion banner
+                // Show floating popup notification
+                try
+                {
+                    _questCompletePopup?.Close();
+                }
+                catch { }
+
+                _questCompletePopup = new QuestCompletePopup(e.QuestDefinition.Name, e.XPAwarded);
+                _questCompletePopup.Show();
+
+                // Also show inline banner if quest tab is visible
                 QuestCompleteBanner.Visibility = Visibility.Visible;
                 TxtQuestComplete.Text = $"{e.QuestDefinition.Name} COMPLETE! +{e.XPAwarded} XP";
 
                 // Refresh the quest UI
                 RefreshQuestUI();
 
-                // Hide banner after 5 seconds
+                // Hide inline banner after 5 seconds
                 Task.Delay(5000).ContinueWith(_ =>
                 {
                     if (Application.Current?.Dispatcher != null)
@@ -5118,6 +5467,12 @@ namespace ConditioningControlPanel
                 });
 
                 App.Logger?.Information("Quest completed: {Name} (+{XP} XP)", e.QuestDefinition.Name, e.XPAwarded);
+
+                // Sync quest streak data to server
+                if (App.ProfileSync?.IsSyncEnabled == true)
+                {
+                    _ = App.ProfileSync.SyncProfileAsync();
+                }
             });
         }
 
@@ -5184,6 +5539,12 @@ namespace ConditioningControlPanel
         private void DrawSkillTree()
         {
             SkillTreeCanvas.Children.Clear();
+
+            // Set animated background on the outer border
+            SkillTreeOuterBorder.Background = CreateAnimatedSkillTreeBrush(isHeader: false);
+
+            // Add sparkle particles behind everything
+            AddSkillTreeParticles();
 
             // Add header section at the start of the canvas
             CreateSkillTreeHeader();
@@ -5255,7 +5616,7 @@ namespace ConditioningControlPanel
             var headerBorder = new Border
             {
                 Width = 500,
-                Background = new SolidColorBrush(Color.FromRgb(26, 26, 46)),
+                Background = CreateAnimatedSkillTreeBrush(isHeader: true),
                 CornerRadius = new CornerRadius(12),
                 Padding = new Thickness(15, 8, 15, 15) // Left, Top, Right, Bottom
             };
@@ -5320,7 +5681,8 @@ namespace ConditioningControlPanel
             pointsBorder.Child = pointsStack;
             mainStack.Children.Add(pointsBorder);
 
-            // Ditzy Data Stats Toggle Button
+            // Ditzy Data Stats Toggle Button (only show if ditzy_data skill is unlocked)
+            var hasDitzyData = App.SkillTree?.HasSkill("ditzy_data") == true;
             var ditzyButton = new Border
             {
                 Background = new SolidColorBrush(Color.FromRgb(60, 40, 80)),
@@ -5374,7 +5736,8 @@ namespace ConditioningControlPanel
                 detailedStatsBorder.Visibility = isCollapsed ? Visibility.Visible : Visibility.Collapsed;
                 ditzyArrow.Text = isCollapsed ? " ▲" : " ▼";
             };
-            mainStack.Children.Add(ditzyButton);
+            if (hasDitzyData)
+                mainStack.Children.Add(ditzyButton);
 
             // Stats title
             detailedStatsStack.Children.Add(new TextBlock
@@ -5462,7 +5825,8 @@ namespace ConditioningControlPanel
             }
 
             detailedStatsBorder.Child = detailedStatsStack;
-            mainStack.Children.Add(detailedStatsBorder);
+            if (hasDitzyData)
+                mainStack.Children.Add(detailedStatsBorder);
 
             // Stats section
             var statsBorder = new Border
@@ -5573,6 +5937,141 @@ namespace ConditioningControlPanel
 
             headerBorder.Child = mainStack;
             SkillTreeCanvas.Children.Add(headerBorder);
+        }
+
+        /// <summary>
+        /// Creates an animated gradient brush for the skill tree background or header
+        /// </summary>
+        private LinearGradientBrush CreateAnimatedSkillTreeBrush(bool isHeader)
+        {
+            var brush = new LinearGradientBrush();
+            brush.StartPoint = new Point(0, 0);
+            brush.EndPoint = new Point(1, 1);
+
+            if (isHeader)
+            {
+                // Header: dark purple → vivid purple-pink → dark purple
+                brush.GradientStops.Add(new GradientStop(Color.FromRgb(35, 20, 60), 0.0));    // deeper purple edge
+                brush.GradientStops.Add(new GradientStop(Color.FromRgb(80, 30, 100), 0.5));   // vivid purple-pink center
+                brush.GradientStops.Add(new GradientStop(Color.FromRgb(35, 20, 60), 1.0));    // deeper purple edge
+
+                // Animate middle stop offset: drift 0.2 ↔ 0.8
+                var offsetAnim = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = 0.2,
+                    To = 0.8,
+                    Duration = TimeSpan.FromSeconds(5),
+                    AutoReverse = true,
+                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                    EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+                };
+                brush.GradientStops[1].BeginAnimation(GradientStop.OffsetProperty, offsetAnim);
+
+                // Animate middle stop color: shift between purple tones
+                var colorAnim = new System.Windows.Media.Animation.ColorAnimation
+                {
+                    From = Color.FromRgb(80, 30, 100),   // vivid purple
+                    To = Color.FromRgb(120, 40, 90),      // bright magenta-purple
+                    Duration = TimeSpan.FromSeconds(4),
+                    AutoReverse = true,
+                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                    EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+                };
+                brush.GradientStops[1].BeginAnimation(GradientStop.ColorProperty, colorAnim);
+            }
+            else
+            {
+                // Canvas background: deep purple → vivid purple → rich blue-purple → deep purple
+                brush.GradientStops.Add(new GradientStop(Color.FromRgb(25, 15, 50), 0.0));    // deep purple
+                brush.GradientStops.Add(new GradientStop(Color.FromRgb(60, 25, 80), 0.3));    // vivid purple
+                brush.GradientStops.Add(new GradientStop(Color.FromRgb(30, 35, 75), 0.7));    // rich blue-purple
+                brush.GradientStops.Add(new GradientStop(Color.FromRgb(25, 15, 50), 1.0));    // deep purple
+
+                // Animate stop[1] offset: drift 0.15 ↔ 0.5
+                var offset1Anim = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = 0.15,
+                    To = 0.5,
+                    Duration = TimeSpan.FromSeconds(6),
+                    AutoReverse = true,
+                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                    EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+                };
+                brush.GradientStops[1].BeginAnimation(GradientStop.OffsetProperty, offset1Anim);
+
+                // Animate stop[2] offset: drift 0.5 ↔ 0.85
+                var offset2Anim = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = 0.5,
+                    To = 0.85,
+                    Duration = TimeSpan.FromSeconds(8),
+                    AutoReverse = true,
+                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                    EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+                };
+                brush.GradientStops[2].BeginAnimation(GradientStop.OffsetProperty, offset2Anim);
+
+                // Animate stop[1] color: shift between purple and blue tones
+                var colorAnim = new System.Windows.Media.Animation.ColorAnimation
+                {
+                    From = Color.FromRgb(60, 25, 80),    // vivid purple
+                    To = Color.FromRgb(35, 40, 90),       // bright blue
+                    Duration = TimeSpan.FromSeconds(7),
+                    AutoReverse = true,
+                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                    EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+                };
+                brush.GradientStops[1].BeginAnimation(GradientStop.ColorProperty, colorAnim);
+            }
+
+            return brush;
+        }
+
+        /// <summary>
+        /// Adds floating sparkle particles to the skill tree canvas background
+        /// </summary>
+        private void AddSkillTreeParticles()
+        {
+            var rng = new Random();
+            var colors = new[]
+            {
+                Color.FromArgb(90, 255, 105, 180),   // pink
+                Color.FromArgb(80, 180, 130, 255),    // purple
+                Color.FromArgb(70, 255, 255, 255),    // white
+                Color.FromArgb(100, 255, 182, 193),   // light pink
+                Color.FromArgb(85, 200, 160, 255),    // lavender
+            };
+
+            for (int i = 0; i < 35; i++)
+            {
+                var size = 3.0 + rng.NextDouble() * 5.0; // 3-8px
+                var ellipse = new System.Windows.Shapes.Ellipse
+                {
+                    Width = size,
+                    Height = size,
+                    Fill = new SolidColorBrush(colors[rng.Next(colors.Length)]),
+                    Opacity = 0
+                };
+
+                Canvas.SetLeft(ellipse, rng.NextDouble() * 2400);
+                Canvas.SetTop(ellipse, rng.NextDouble() * 460);
+                Canvas.SetZIndex(ellipse, -1);
+
+                // Pulsing opacity animation with random duration and start delay
+                var opacityAnim = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = 0,
+                    To = 1,
+                    Duration = TimeSpan.FromSeconds(2 + rng.NextDouble() * 3), // 2-5s
+                    BeginTime = TimeSpan.FromSeconds(rng.NextDouble() * 5),     // 0-5s delay
+                    AutoReverse = true,
+                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                    EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
+                };
+                ellipse.BeginAnimation(System.Windows.UIElement.OpacityProperty, opacityAnim);
+
+                SkillTreeCanvas.Children.Add(ellipse);
+            }
         }
 
         /// <summary>
@@ -5720,17 +6219,18 @@ namespace ConditioningControlPanel
                 };
             }
 
-            // Hover animation
+            // Hover animation - scale up with pop effect
             border.MouseEnter += (s, e) =>
             {
                 var scaleTransform = border.RenderTransform as ScaleTransform;
                 if (scaleTransform != null)
                 {
+                    Canvas.SetZIndex(border, 10); // bring to front while hovered
                     var anim = new System.Windows.Media.Animation.DoubleAnimation
                     {
-                        To = 1.1,
-                        Duration = TimeSpan.FromMilliseconds(200),
-                        EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                        To = 1.25,
+                        Duration = TimeSpan.FromMilliseconds(250),
+                        EasingFunction = new System.Windows.Media.Animation.BackEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut, Amplitude = 0.4 }
                     };
                     scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
                     scaleTransform.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
@@ -5742,10 +6242,11 @@ namespace ConditioningControlPanel
                 var scaleTransform = border.RenderTransform as ScaleTransform;
                 if (scaleTransform != null)
                 {
+                    Canvas.SetZIndex(border, 0); // restore z-order
                     var anim = new System.Windows.Media.Animation.DoubleAnimation
                     {
                         To = 1.0,
-                        Duration = TimeSpan.FromMilliseconds(150),
+                        Duration = TimeSpan.FromMilliseconds(200),
                         EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
                     };
                     scaleTransform.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
@@ -5873,7 +6374,7 @@ namespace ConditioningControlPanel
                           canPurchase ? Color.FromRgb(255, 105, 180) :
                           Color.FromRgb(40, 35, 50);
 
-            var buttonText = isUnlocked ? "✓ OWNED" :
+            var buttonText = isUnlocked ? $"💎{skill.Cost} ✓ OWNED" :
                             canPurchase ? $"💎 {skill.Cost}" :
                             $"🔒 {skill.Cost}";
 
@@ -6202,7 +6703,7 @@ namespace ConditioningControlPanel
             {
                 stack.Children.Add(new TextBlock
                 {
-                    Text = "✓ OWNED",
+                    Text = $"💎{skill.Cost} ✓ OWNED",
                     Foreground = new SolidColorBrush(Color.FromRgb(180, 130, 255)),
                     FontSize = 9,
                     HorizontalAlignment = HorizontalAlignment.Center,
@@ -7153,9 +7654,10 @@ namespace ConditioningControlPanel
                     BtnStartSession.Content = $"STOP SESSION ({remaining.Minutes:D2}:{remaining.Seconds:D2})";
 
                     // Update Start button label with session name + timer
-                    var name = session.Name.Length > 14
-                        ? session.Name.Substring(0, 11) + "..."
-                        : session.Name;
+                    var mName = session.GetModeAwareName();
+                    var name = mName.Length > 14
+                        ? mName.Substring(0, 11) + "..."
+                        : mName;
                     var pauseIndicator = _sessionEngine.IsPaused ? " [PAUSED]" : "";
                     TxtStartLabel.Text = $"{name} {remaining.Minutes:D2}:{remaining.Seconds:D2}{pauseIndicator}";
                 }
@@ -7183,9 +7685,10 @@ namespace ConditioningControlPanel
                 if (session != null)
                 {
                     // Abbreviate name if over 22 chars
-                    var name = session.Name.Length > 22
-                        ? session.Name.Substring(0, 19) + "..."
-                        : session.Name;
+                    var mName = session.GetModeAwareName();
+                    var name = mName.Length > 22
+                        ? mName.Substring(0, 19) + "..."
+                        : mName;
 
                     TxtStartIcon.Text = "⏹";
                     TxtStartLabel.Text = name;
@@ -7639,7 +8142,7 @@ namespace ConditioningControlPanel
 
             var nameText = new TextBlock
             {
-                Text = $"{session.Icon} {session.Name}",
+                Text = $"{session.Icon} {session.GetModeAwareName()}",
                 Foreground = new SolidColorBrush(Colors.White),
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 15
@@ -7712,7 +8215,7 @@ namespace ConditioningControlPanel
             {
                 Text = string.IsNullOrEmpty(session.Description)
                     ? "Custom session"
-                    : session.Description.Split('\n')[0].Substring(0, Math.Min(60, session.Description.Split('\n')[0].Length)) + "...",
+                    : session.GetModeAwareDescription().Split('\n')[0].Substring(0, Math.Min(60, session.GetModeAwareDescription().Split('\n')[0].Length)) + "...",
                 Foreground = new SolidColorBrush(Color.FromRgb(160, 160, 160)),
                 FontSize = 13,
                 Margin = new Thickness(0, 6, 0, 0)
@@ -7839,7 +8342,7 @@ namespace ConditioningControlPanel
             SessionSpoilerPanel.Visibility = Visibility.Collapsed;
             BtnRevealSpoilers.Content = "👁 Reveal Details";
 
-            TxtDetailTitle.Text = $"{session.Icon} {session.Name}";
+            TxtDetailTitle.Text = $"{session.Icon} {session.GetModeAwareName()}";
             TxtDetailSubtitle.Text = GenerateSessionTimelineDescription(session);
             TxtSessionDuration.Text = $"{session.DurationMinutes} minutes";
 
@@ -7854,8 +8357,8 @@ namespace ConditioningControlPanel
 
             TxtSessionDifficulty.Text = session.GetDifficultyText();
 
-            // Show manual description + auto-generated feature summary
-            var description = session.Description ?? "";
+            // Show manual description + auto-generated feature summary (mode-aware)
+            var description = session.GetModeAwareDescription() ?? "";
             var featureSummary = session.GenerateFeatureDescription();
             if (!string.IsNullOrWhiteSpace(description))
                 TxtSessionDescription.Text = description + "\n\n─────────────────\n\n" + featureSummary;
@@ -9124,8 +9627,9 @@ namespace ConditioningControlPanel
                 if (ChkDiscordTabShowOnline != null) ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
             }
 
-            // Pre-fill search bar with user's display name and auto-display own profile
-            var displayName = App.Discord?.CustomDisplayName ?? App.Discord?.DisplayName ?? App.Patreon?.DisplayName;
+            // Pre-fill search bar with user's unified display name (V2 auth) or fallback
+            var displayName = App.Settings?.Current?.UserDisplayName
+                ?? App.Discord?.CustomDisplayName ?? App.Discord?.DisplayName ?? App.Patreon?.DisplayName;
             if (TxtProfileSearch != null && !string.IsNullOrEmpty(displayName))
             {
                 TxtProfileSearch.Text = displayName;
@@ -9152,8 +9656,9 @@ namespace ConditioningControlPanel
 
         private void BtnViewMyProfile_Click(object sender, RoutedEventArgs e)
         {
-            // Find current user in leaderboard by their display name
-            var displayName = App.Discord?.CustomDisplayName ?? App.Discord?.DisplayName ?? App.Patreon?.DisplayName;
+            // Find current user in leaderboard by their unified display name (V2 auth) or fallback
+            var displayName = App.Settings?.Current?.UserDisplayName
+                ?? App.Discord?.CustomDisplayName ?? App.Discord?.DisplayName ?? App.Patreon?.DisplayName;
             if (string.IsNullOrEmpty(displayName))
             {
                 // Not logged in - show own local stats
@@ -9320,14 +9825,19 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            App.Logger?.Information("SearchAndDisplayProfile: Searching for '{SearchName}'", searchName);
+
             // Search in leaderboard entries
             var entries = App.Leaderboard?.Entries;
             if (entries == null || entries.Count == 0)
             {
+                App.Logger?.Information("SearchAndDisplayProfile: No entries, refreshing leaderboard...");
                 // Try to refresh leaderboard first
                 _ = RefreshAndSearchAsync(searchName);
                 return;
             }
+
+            App.Logger?.Information("SearchAndDisplayProfile: Searching {Count} entries", entries.Count);
 
             // Find matching entry (case-insensitive)
             var entry = entries.FirstOrDefault(e =>
@@ -9335,6 +9845,7 @@ namespace ConditioningControlPanel
 
             if (entry != null)
             {
+                App.Logger?.Information("SearchAndDisplayProfile: Found exact match '{Name}'", entry.DisplayName);
                 DisplayProfileEntry(entry);
             }
             else
@@ -9345,10 +9856,12 @@ namespace ConditioningControlPanel
 
                 if (entry != null)
                 {
+                    App.Logger?.Information("SearchAndDisplayProfile: Found partial match '{Name}'", entry.DisplayName);
                     DisplayProfileEntry(entry);
                 }
                 else
                 {
+                    App.Logger?.Information("SearchAndDisplayProfile: No match found for '{SearchName}'", searchName);
                     // Show not found message
                     if (NoProfileSelected != null)
                     {
@@ -9476,9 +9989,10 @@ namespace ConditioningControlPanel
                 }
             }
 
-            // Name - only show user-chosen display name, never real Discord/Patreon names
+            // Name - use V2 unified display name (leaderboard name), never raw provider names
             if (TxtProfileViewerName != null)
-                TxtProfileViewerName.Text = App.Discord?.CustomDisplayName ?? App.Patreon?.DisplayName ?? "You";
+                TxtProfileViewerName.Text = App.Settings?.Current?.UserDisplayName
+                    ?? App.Discord?.CustomDisplayName ?? App.Patreon?.DisplayName ?? "You";
 
             // Online status
             if (TxtProfileViewerOnline != null)
@@ -9497,8 +10011,9 @@ namespace ConditioningControlPanel
                 if (App.Settings?.Current?.AllowDiscordDm == true && !string.IsNullOrEmpty(App.Discord?.UserId))
                 {
                     BtnProfileDiscord.Visibility = Visibility.Visible;
-                    // Use CustomDisplayName (user-chosen) for privacy, not Discord global_name
-                    TxtProfileDiscordId.Text = App.Discord.CustomDisplayName ?? App.Patreon?.DisplayName ?? App.Discord.UserId;
+                    // Use V2 unified name for consistency, fall back to Discord display
+                    TxtProfileDiscordId.Text = App.Settings?.Current?.UserDisplayName
+                        ?? App.Discord.CustomDisplayName ?? App.Discord.UserId;
                     BtnProfileDiscord.Tag = App.Discord.UserId; // Store ID for click handler
                 }
                 else
@@ -9618,6 +10133,8 @@ namespace ConditioningControlPanel
 
         private void DisplayProfileEntry(Services.LeaderboardEntry entry)
         {
+            try
+            {
             if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Visible;
             if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Collapsed;
 
@@ -9808,6 +10325,11 @@ namespace ConditioningControlPanel
             {
                 TxtNoAchievements.Text = $"{entry.AchievementsCount} achievements unlocked";
                 TxtNoAchievements.Visibility = Visibility.Visible;
+            }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "DisplayProfileEntry failed for {Name}", entry?.DisplayName);
             }
         }
 
@@ -11665,6 +12187,32 @@ namespace ConditioningControlPanel
                 }
             }
 
+            // Good Girl Streak: Fire icon with current streak count (tier 2)
+            if (StreakFirePill != null)
+            {
+                bool hasGoodGirlStreak = App.SkillTree?.HasSkill("good_girl_streak") == true;
+                StreakFirePill.Visibility = hasGoodGirlStreak ? Visibility.Visible : Visibility.Collapsed;
+
+                if (hasGoodGirlStreak)
+                {
+                    if (TxtStreakFireCount != null)
+                    {
+                        var streak = App.Achievements?.Progress?.ConsecutiveDays ?? 0;
+                        TxtStreakFireCount.Text = streak.ToString();
+                    }
+
+                    // Show shield icon if shields are available
+                    if (TxtStreakShieldIcon != null)
+                    {
+                        var shieldsRemaining = App.Settings?.Current?.StreakShieldsRemaining ?? 0;
+                        TxtStreakShieldIcon.Visibility = shieldsRemaining > 0 ? Visibility.Visible : Visibility.Collapsed;
+                        TxtStreakShieldIcon.ToolTip = shieldsRemaining > 0
+                            ? "Streak shield available — protects your streak if you miss a day"
+                            : "Streak shield used — resets weekly";
+                    }
+                }
+            }
+
             RefreshXPBarBonuses();
         }
 
@@ -13510,6 +14058,18 @@ namespace ConditioningControlPanel
             {
                 ChkLockCardStrict.IsChecked = false;
             }
+            else
+            {
+                App.Settings.Current.LockCardStrict = true;
+                App.Settings?.Save();
+            }
+        }
+
+        private void ChkLockCardStrict_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.LockCardStrict = false;
+            App.Settings?.Save();
         }
 
         private void BtnSelectSpiral_Click(object sender, RoutedEventArgs e)
@@ -15606,6 +16166,18 @@ namespace ConditioningControlPanel
             {
                 ChkStrictLock.IsChecked = false;
             }
+            else
+            {
+                App.Settings.Current.StrictLockEnabled = true;
+                App.Settings?.Save();
+            }
+        }
+
+        private void ChkStrictLock_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.StrictLockEnabled = false;
+            App.Settings?.Save();
         }
 
         private void ChkNoPanic_Checked(object sender, RoutedEventArgs e)
@@ -15628,6 +16200,8 @@ namespace ConditioningControlPanel
             {
                 // Stop keyboard hook when panic key is disabled (privacy improvement)
                 _keyboardHook?.Stop();
+                App.Settings.Current.PanicKeyEnabled = false;
+                App.Settings?.Save();
                 App.Logger?.Information("Keyboard hook stopped - panic key disabled");
             }
         }
@@ -15638,6 +16212,8 @@ namespace ConditioningControlPanel
 
             // Start keyboard hook when panic key is re-enabled
             _keyboardHook?.Start();
+            App.Settings.Current.PanicKeyEnabled = true;
+            App.Settings?.Save();
             App.Logger?.Information("Keyboard hook started - panic key enabled");
         }
 
