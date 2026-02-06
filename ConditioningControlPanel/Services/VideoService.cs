@@ -332,7 +332,16 @@ namespace ConditioningControlPanel.Services
             // because Stop is typically called during app shutdown
             _videoPlaying = false;
             _strictActive = false;
-            CloseAll(synchronous: true);
+            try
+            {
+                CloseAll(synchronous: true);
+            }
+            catch (FileNotFoundException)
+            {
+                // LibVLCSharp.WPF assembly not loaded (no video was played this session)
+                // CloseAll references VideoView type which triggers JIT assembly load
+                App.Logger?.Debug("VideoService.Stop: LibVLCSharp.WPF not loaded, skipping CloseAll");
+            }
 
             App.Logger?.Information("VideoService stopped");
         }
@@ -1628,6 +1637,9 @@ namespace ConditioningControlPanel.Services
                     var bonus = 200;
                     App.Progression?.AddXP(xpForPlays + bonus, XPSource.Video);
 
+                    // Track successful attention check
+                    App.Achievements?.TrackAttentionCheckPassed(isVideo: true);
+
                     if (_random.NextDouble() < 0.1)
                     {
                         loop = troll = true;
@@ -1638,6 +1650,8 @@ namespace ConditioningControlPanel.Services
                     loop = true;
                     // Track attention check failure for "Mercy Beggar" achievement
                     App.Achievements?.TrackAttentionCheckFailed();
+                    // Track video-specific failure stat
+                    App.Achievements?.TrackVideoAttentionCheckFailed();
                     // Apply Trainer companion penalty (-25 XP)
                     App.Companion?.OnAttentionCheckFailed();
                 }

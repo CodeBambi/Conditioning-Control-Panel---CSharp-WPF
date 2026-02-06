@@ -535,7 +535,9 @@ public class QuestService : IDisposable
 
         // Check weekly quest
         var weeklyDef = GetCurrentWeeklyDefinition();
-        if (weeklyDef != null && weeklyDef.Category == category && Progress.WeeklyQuest?.IsCompleted == false)
+        // Skip quests that have dedicated tracking methods (conditioning_champion_w tracks XP via TrackXPEarned, not overlay minutes)
+        var weeklyHasDedicatedTracking = weeklyDef?.Id is "conditioning_champion_w" or "streak_keeper_w";
+        if (weeklyDef != null && weeklyDef.Category == category && Progress.WeeklyQuest?.IsCompleted == false && !weeklyHasDedicatedTracking)
         {
             Progress.WeeklyQuest.CurrentProgress += amount;
             _isDirty = true;
