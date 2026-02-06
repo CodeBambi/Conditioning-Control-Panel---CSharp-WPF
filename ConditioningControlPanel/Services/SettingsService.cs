@@ -128,46 +128,45 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void ValidateLevelLockedFeatures(AppSettings settings)
         {
-            var level = settings.PlayerLevel;
             var anyFixed = false;
 
             // Brain Drain requires Level 70
-            if (settings.BrainDrainEnabled && level < 70)
+            if (settings.BrainDrainEnabled && !settings.IsLevelUnlocked(70))
             {
                 settings.BrainDrainEnabled = false;
-                App.Logger?.Warning("Settings: Disabled BrainDrain (requires Level 70, user is {Level})", level);
+                App.Logger?.Warning("Settings: Disabled BrainDrain (requires Level 70, user is {Level})", settings.PlayerLevel);
                 anyFixed = true;
             }
 
             // Bouncing Text requires Level 60
-            if (settings.BouncingTextEnabled && level < 60)
+            if (settings.BouncingTextEnabled && !settings.IsLevelUnlocked(60))
             {
                 settings.BouncingTextEnabled = false;
-                App.Logger?.Warning("Settings: Disabled BouncingText (requires Level 60, user is {Level})", level);
+                App.Logger?.Warning("Settings: Disabled BouncingText (requires Level 60, user is {Level})", settings.PlayerLevel);
                 anyFixed = true;
             }
 
             // Bubble Count requires Level 50
-            if (settings.BubbleCountEnabled && level < 50)
+            if (settings.BubbleCountEnabled && !settings.IsLevelUnlocked(50))
             {
                 settings.BubbleCountEnabled = false;
-                App.Logger?.Warning("Settings: Disabled BubbleCount (requires Level 50, user is {Level})", level);
+                App.Logger?.Warning("Settings: Disabled BubbleCount (requires Level 50, user is {Level})", settings.PlayerLevel);
                 anyFixed = true;
             }
 
             // Lock Card requires Level 35
-            if (settings.LockCardEnabled && level < 35)
+            if (settings.LockCardEnabled && !settings.IsLevelUnlocked(35))
             {
                 settings.LockCardEnabled = false;
-                App.Logger?.Warning("Settings: Disabled LockCard (requires Level 35, user is {Level})", level);
+                App.Logger?.Warning("Settings: Disabled LockCard (requires Level 35, user is {Level})", settings.PlayerLevel);
                 anyFixed = true;
             }
 
             // Bubbles require Level 20
-            if (settings.BubblesEnabled && level < 20)
+            if (settings.BubblesEnabled && !settings.IsLevelUnlocked(20))
             {
                 settings.BubblesEnabled = false;
-                App.Logger?.Warning("Settings: Disabled Bubbles (requires Level 20, user is {Level})", level);
+                App.Logger?.Warning("Settings: Disabled Bubbles (requires Level 20, user is {Level})", settings.PlayerLevel);
                 anyFixed = true;
             }
 

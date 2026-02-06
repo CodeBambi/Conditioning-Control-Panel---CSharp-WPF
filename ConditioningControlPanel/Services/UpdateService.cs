@@ -28,171 +28,72 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.0-pre3 - Migration & Balance Fixes
+        public const string CurrentPatchNotes = @"v5.5.0 - THE BIG ONE: Seasons, Skill Tree, Achievements & More
 
-🔧 V1 MIGRATION FIXES
-• Fixed Discord login failing for V1 migrated users (username taken error)
-• V1 users now correctly get season data, leaderboard entry on first sync
-• Fixed missing discord_index key for migrated accounts
+🏆 SEASON SYSTEM
+• Monthly competitive seasons with leaderboard resets
+• New season = new theme, new quests, fresh leaderboard
+• All-time stats and highest level preserved forever
+• Season 0 OG recognition for early adopters
 
-✨ SKILL POINTS FIX
-• New V2 accounts start with 0 sparkle points (was incorrectly inheriting V1 accumulated points)
-• Server is now source of truth for skill points — no more inflation
+🌳 SKILL TREE (22 Nodes)
+• Spend sparkle points to unlock passive bonuses
+• Sparkle Boost (3 tiers), Lucky Bubbles, Streak Power, Quest Refresh
+• Early Bird Bimbo, Night Shift, Perfect Bimbo Week, Good Girl Streak
+• Oopsie Insurance, Trophy Case, Hive Mind, and more
+• OG users with unlock toggle bypass all skill requirements
 
-🔄 ACCOUNT SWITCHING FIX
-• Logging out now properly clears skills, XP, and level
-• Switching accounts no longer inherits the previous user's skill tree
-• Users with achievements auto-flagged as Season 0 OG
+🎖️ 28 ACHIEVEMENTS
+• Hidden and visible milestones across the entire app
+• Cloud-synced to your profile and visible on leaderboard
+• From first bubble pop to marathon sessions and secret triggers
 
-🧠 SLAVEDOLL XP DRAIN
-• Brainwashed Slavedoll avatar now drains player XP at 3/sec (was draining companion XP)
-• Drain stops at 0 XP — never decreases your level
-• Active whenever the avatar is selected, engine on or off
-
-🖱️ SKILL TREE SCROLLBAR
-• Fixed horizontal scrollbar in Enhancements tab not responding to drag
-
-⚙️ SETTINGS LIVE-SAVE
-• Strict Lock, No ESC, and No Panic toggles now apply immediately when turned off
-• No longer requires clicking Save to deactivate dangerous modes
-
-📓 BIMBO JOURNAL
-• Added info box explaining journal functionality and local photo storage
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-v5.5.0-pre2 - Quest Streaks & Profile Fixes
-
-🔥 QUEST STREAK XP MULTIPLIER
-• +3% XP bonus per consecutive day of quest completion
-• Streak bonus shown inline on quest cards as orange indicator
-• Skill reroll bonus shown as separate blue indicator
-• Updated streak tooltip to display bonus percentage
-
-🎭 MODE-AWARE SESSIONS
-• Session names and descriptions adapt to current content mode
-• No more Bambi references when in Sissy Hypno mode
-• Takeover label in Exclusives tab respects content mode
-
-👤 PROFILE VIEWER FIX
-• Fixed 'My Profile' button not working for Discord-only users
-• Profile lookup now uses V2 unified display name consistently
-• Leaderboard never falls back to raw Patreon/Discord provider names
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-v5.5.0-pre1 - Season System & Leaderboard
-
-🏆 LEADERBOARD V3
-• New leaderboard endpoint with improved reliability
-• Trophy Case stats (Best Session, Best Streak) only visible for users with the skill
-• Skills now sync to cloud in V2 system
-
-🛡️ SERVER-SIDE OOPSIE INSURANCE
-• Streak fix now validated server-side to prevent cheating
-• 500 XP deducted on server, once per season enforced server-side
-• Requires internet connection
-
-📅 ADMIN SEASON MANAGEMENT
-• New season transition with automatic leaderboard snapshot
-• Season config (title) served to clients via quest definitions
-• Admin endpoints for season reset, snapshots, and config updates
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎀 v5.4.11 - SISSY HYPNO MODE POLISH
-
-💜 SISSY HYPNO MODE - FULLY MODE-AWARE
-• Companion uses mode-appropriate terms ('babe' instead of 'Bambi')
-• All personality presets adapt language to current mode
-• Video suggestions filtered - no Bambi videos in SH mode
-• Empty SH pool gives generic 'browse HypnoTube' suggestions
-• Menu items, tray icon, UI elements respect content mode
-• Fixed 'Talk to Bambi' menu not updating when switching modes
-
-🎵 VIDEO HAPTIC SYNC - ENHANCED UI
-• Prominent featured card with algorithm selection
-• Visual preview image for the feature
-• Algorithm cards: Audio Reactive (active), Beat Detection & AI Enhanced (coming soon)
-• Integrated delay and power sliders
-• Help button with detailed tooltip
-
-🌈 UI IMPROVEMENTS
-• Animated gradient backgrounds on Profile tab
-• HypnoTube links feature for custom video pools
-• Mode-aware quest images
-
-🐄 COMPANION AI FIXES
-• Bimbo Cow personality fully mode-aware
-• AI prompts dynamically adapt to content mode
-• Video suggestions respect mode settings
-• Fixed personality name display in menus
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-❓ v5.4.10 - HELP SYSTEM & ASSET PREVIEWS
-
-📚 COMPREHENSIVE HELP SYSTEM
-• 35 help buttons added across ALL tabs
-• Rich tooltips: what it does, tips, how it works
-• Covers: Flashes, Videos, Overlays, Subliminals, Audio, Haptics, Sessions, Quests, Profile
-
-🖼️ MINI ASSET PREVIEW PLAYER
-• Right-click thumbnails to preview instantly
-• Video playback with full controls
-• GIF animation support
-• Image viewing with zoom
-
-⚡ QUEST XP SCALING
-• Higher levels earn more XP from quests
-• Level 1-10: Base XP | Level 11-25: 1.5x | Level 26-50: 2x | Level 51+: 2.5x
-
-🎬 VIDEO SHUFFLE FIX
-• Fisher-Yates algorithm for proper randomization
-• No repeats until playlist exhausted
-
-🔧 ADDITIONAL FIXES
-• Preview window positioning on multi-monitor
-• Spiral/overlay quest tracking fixed
-• Avatar context menu restyled
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🎯 v5.4.9 - QUEST SYSTEM & AUDIO HAPTICS
+👤 CLOUD ACCOUNTS & SYNC
+• Log in with Discord or Patreon
+• XP, level, skills, achievements, quests sync across devices
+• Server is source of truth — no more lost progress
 
 📋 QUEST SYSTEM
-• Daily quests: sessions, flashes, videos, bubbles, streaks
-• Weekly quests: extended goals, cumulative targets
-• XP rewards, progress tracking, completion notifications
+• Daily, weekly, and seasonal quests
+• Up to 3 daily refreshes with skill tree upgrades
+• Quest streak XP multiplier (+3% per consecutive day)
+• Server-delivered quest definitions with season themes
 
-🎵 AUDIO-SYNCED HAPTICS FOR HYPNOTUBE
-• Real-time FFT analysis extracts bass frequencies
-• Adaptive baseline calibrates to video audio
-• Transient detection for bass hits and rhythm
-• Configurable intensity, delay, sensitivity
+🏅 GLOBAL LEADERBOARD
+• Compete against every user each season
+• Badges, OG flair, achievement counts on display
+• Trophy Case stats for skilled players
 
-💜 SISSY HYPNO CONTENT MODE
-• First-run selection dialog
-• Purple theme when in SH mode
-• Separate asset pools for each mode
-• Changeable anytime in Settings
+🤖 6 AI COMPANIONS
+• Each with unique personality and XP mechanic
+• Cheerleader, Cult Bunny, Brain Parasite, Synthetic Blowdoll, Bimbo Cow, Brainwashed Slavedoll
+• Slavedoll drains player XP at 3/sec while active
 
-🔌 HAPTICS AUTO-CONNECT
-• Devices connect automatically on app start
-• Toggle in Settings > Haptics tab
+🛡️ SERVER-SIDE OOPSIE INSURANCE
+• Streak fix validated server-side to prevent cheating
+• 500 XP cost, once per season, enforced on server
 
-💬 DISCORD RICH PRESENCE
-• Detailed tooltips explaining what's shared
-• Privacy clarity - only friends can see
+🎭 MODE-AWARE SESSIONS
+• Session names and descriptions adapt to content mode
+• No Bambi references in Sissy Hypno mode
 
-🔧 BUG FIXES
-• Pack detection after moving assets folder
-• Bandwidth protection for failed downloads
-• Speech bubble Z-order fixed
-• AI response timing improved
-• Haptics calibration enhanced
-• Tab buttons fit smaller screens
-• Transformation Roadmap feature added";
+📚 HELP SYSTEM
+• 35 help buttons across all tabs with rich tooltips
+
+🖼️ ASSET PREVIEW PLAYER
+• Right-click thumbnails to preview images, GIFs, and videos
+
+🎵 AUDIO-SYNCED HAPTICS
+• Real-time FFT bass analysis for HypnoTube videos
+
+⚙️ ADDITIONAL
+• Skill tree scrollbar fix, settings live-save
+• Account switching properly clears data
+• V1 migration fixes for legacy users
+• Bimbo Journal with local photo storage
+• Pink Rush bonus XP windows
+• Bubble Count minigame (Level 50+)
+• Brain Drain, Bouncing Text, Mind Wipe effects";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

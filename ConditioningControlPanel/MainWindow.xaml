@@ -64,9 +64,9 @@
             <Setter Property="BorderThickness" Value="2"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="13,7"/>
-            <Setter Property="MinWidth" Value="116"/>
-            <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="MinWidth" Value="110"/>
+            <Setter Property="Height" Value="36"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -96,9 +96,9 @@
             <Setter Property="BorderThickness" Value="2"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="13,7"/>
-            <Setter Property="MinWidth" Value="116"/>
-            <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="MinWidth" Value="110"/>
+            <Setter Property="Height" Value="36"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -1363,7 +1363,7 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.0-pre3 IS OUT! 💖"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.0 IS OUT! 💖"
                             Click="BtnUpdateAvailable_Click" ToolTip="v5.5.0-pre2 - Quest Streaks &amp; Profile Fixes"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>

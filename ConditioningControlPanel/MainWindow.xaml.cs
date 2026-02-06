@@ -13687,6 +13687,12 @@ namespace ConditioningControlPanel
                     _ = Task.Delay(5000).ContinueWith(_ => Dispatcher.Invoke(CheckServerUpdateBanner));
                 }));
 
+                // Check for server-triggered announcement popup
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _ = Task.Delay(7000).ContinueWith(_ => Dispatcher.Invoke(CheckServerAnnouncement));
+                }));
+
                 // Start 5-minute refresh timer to check for server-side message updates
                 _marqueeRefreshTimer = new DispatcherTimer
                 {
@@ -13807,6 +13813,69 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Debug("Failed to check server update banner: {Error}", ex.Message);
+            }
+        }
+
+        #endregion
+
+        #region Server-Triggered Announcement
+
+        private class AnnouncementResponse
+        {
+            public bool enabled { get; set; }
+            public string? id { get; set; }
+            public string? title { get; set; }
+            public string? message { get; set; }
+            public string? image_url { get; set; }
+        }
+
+        /// <summary>
+        /// Check server for a triggered announcement popup. Shows once per unique announcement ID.
+        /// </summary>
+        private async void CheckServerAnnouncement()
+        {
+            try
+            {
+                using var httpClient = new System.Net.Http.HttpClient
+                {
+                    Timeout = TimeSpan.FromSeconds(10)
+                };
+
+                var url = "https://codebambi-proxy.vercel.app/config/announcement";
+                var unifiedId = App.Settings?.Current?.UnifiedId;
+                if (!string.IsNullOrWhiteSpace(unifiedId))
+                {
+                    url += $"?unified_id={Uri.EscapeDataString(unifiedId)}";
+                }
+
+                var response = await httpClient.GetAsync(url);
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    var result = System.Text.Json.JsonSerializer.Deserialize<AnnouncementResponse>(json);
+
+                    if (result?.enabled == true
+                        && !string.IsNullOrWhiteSpace(result.id)
+                        && !string.IsNullOrWhiteSpace(result.title)
+                        && result.id != App.Settings?.Current?.DismissedAnnouncementId)
+                    {
+                        App.Logger?.Information("Server announcement received: id={Id}, title={Title}", result.id, result.title);
+
+                        Dispatcher.Invoke(() =>
+                        {
+                            var popup = new AnnouncementPopup(
+                                result.id!,
+                                result.title!,
+                                result.message ?? "",
+                                result.image_url);
+                            popup.Show();
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to check server announcement: {Error}", ex.Message);
             }
         }
 
