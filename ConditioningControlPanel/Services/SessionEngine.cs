@@ -243,25 +243,34 @@ namespace ConditioningControlPanel.Services
                 double multiplier = App.Progression?.GetSessionXPMultiplier(App.Settings.Current.PlayerLevel) ?? 1.0;
                 int finalXP = (int)Math.Round(baseXP * multiplier);
 
-                SessionCompleted?.Invoke(this, new SessionCompletedEventArgs(
-                    _currentSession,
-                    finalElapsedTime,
-                    finalXP,
-                    _pauseCount
-                ));
-
-                App.Logger?.Information("Session completed: {Name}, XP: {XP} (base: {Base}, multiplier: {Mult:F2}x, paused {PauseCount}x, penalty: -{Penalty})",
-                    _currentSession.Name, finalXP, baseXP, multiplier, _pauseCount, XPPenalty);
-
-                // Track achievement for session completion
-                // Use App.Settings.Current for panic/strict lock as these are app-level settings
+                // Track achievement BEFORE firing SessionCompleted event (which opens ShowDialog).
+                // If the completion dialog or cloud sync throws, achievement tracking must still run.
                 var appSettings = App.Settings.Current;
+                App.Logger?.Information("Session achievement check: Session={Name}, NoPanic={NoPanic}, StrictLock={Strict}",
+                    _currentSession.Name, !appSettings.PanicKeyEnabled, appSettings.StrictLockEnabled);
                 App.Achievements?.TrackSessionComplete(
                     _currentSession.Name,
                     finalElapsedTime.TotalMinutes,
-                    !appSettings.PanicKeyEnabled, // No panic = disabled
+                    !appSettings.PanicKeyEnabled, // No panic = panic key disabled
                     appSettings.StrictLockEnabled
                 );
+
+                try
+                {
+                    SessionCompleted?.Invoke(this, new SessionCompletedEventArgs(
+                        _currentSession,
+                        finalElapsedTime,
+                        finalXP,
+                        _pauseCount
+                    ));
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Error in SessionCompleted event handler");
+                }
+
+                App.Logger?.Information("Session completed: {Name}, XP: {XP} (base: {Base}, multiplier: {Mult:F2}x, paused {PauseCount}x, penalty: -{Penalty})",
+                    _currentSession.Name, finalXP, baseXP, multiplier, _pauseCount, XPPenalty);
             }
             else
             {
