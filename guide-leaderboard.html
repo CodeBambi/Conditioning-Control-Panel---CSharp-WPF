@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaderboard & Seasons | CCP Guide</title>
+    <meta name="description" content="Compete with other users in monthly seasons and climb the rankings">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏅</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Leaderboard & Seasons</span>
+            </div>
+            <h1>Leaderboard & Seasons</h1>
+            <p>Compete with other users in monthly seasons and climb the rankings</p>
+        </div>
+
+        <div class="guide-content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#seasons">Monthly Seasons</a></li>
+                    <li><a href="#rankings">Rankings</a></li>
+                    <li><a href="#og-badges">OG Badges</a></li>
+                    <li><a href="#profile">Profile Viewer</a></li>
+                    <li><a href="#web-leaderboard">Web Leaderboard</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+
+                <p>The leaderboard tracks all users' XP and level progress within each season. Compete for top positions by earning XP through conditioning activities, quests, and streaks. Your rank updates in real-time as you earn XP.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>📅</span>
+                        <h5>Monthly Seasons</h5>
+                        <p>Fresh competition every month</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>📊</span>
+                        <h5>Live Rankings</h5>
+                        <p>Real-time position updates</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🏅</span>
+                        <h5>OG Badges</h5>
+                        <p>Permanent recognition for early adopters</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="seasons">
+                <h2>Monthly Seasons</h2>
+
+                <p>Seasons run on a monthly cycle, each with a themed title to keep things fresh and competitive.</p>
+
+                <h3>How Seasons Work</h3>
+                <ul>
+                    <li><strong>Monthly Cycle</strong> — Each season follows a YYYY-MM format (e.g., 2026-02)</li>
+                    <li><strong>Themed Titles</strong> — Every season has a unique name (e.g., "Fucked-up February", "Jerk-it January")</li>
+                    <li><strong>Season Reset</strong> — At the start of a new season, XP and level reset to 0, and stats are archived to your all-time stats</li>
+                </ul>
+
+                <h3>What Persists Between Seasons</h3>
+                <ul>
+                    <li>Skill tree unlocks</li>
+                    <li>Achievements</li>
+                    <li>Account data</li>
+                </ul>
+
+                <h3>What Resets Each Season</h3>
+                <ul>
+                    <li>XP and level</li>
+                    <li>Session stats</li>
+                    <li>Quest progress</li>
+                    <li>Streak</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>📝 Note</h5>
+                    <p>Don't worry about losing progress — your all-time stats are always preserved, and skill tree investments carry over between seasons.</p>
+                </div>
+            </section>
+
+            <section id="rankings">
+                <h2>Rankings</h2>
+
+                <p>The leaderboard is sorted by total XP within the current season. Your level and title are displayed alongside your rank, and online status is shown via a heartbeat signal sent every 45 seconds.</p>
+
+                <p>Your display name is customizable for privacy, and you can view other users' profiles including their achievements and stats.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Rank Display</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Position</td>
+                            <td>Your # rank out of all players</td>
+                        </tr>
+                        <tr>
+                            <td>Level & Title</td>
+                            <td>Current season level with title</td>
+                        </tr>
+                        <tr>
+                            <td>XP</td>
+                            <td>Total XP earned this season</td>
+                        </tr>
+                        <tr>
+                            <td>Online Status</td>
+                            <td>Green dot if heartbeat within 45s</td>
+                        </tr>
+                        <tr>
+                            <td>Display Name</td>
+                            <td>Customizable (default: platform username)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="og-badges">
+                <h2>OG Badges</h2>
+
+                <p>The "Season 0 OG" badge is awarded to all participants in the first season. This badge is retroactively applied — even if you started before the badge system was introduced.</p>
+
+                <ul>
+                    <li><strong>Permanent</strong> — OG status is a permanent flag on your account</li>
+                    <li><strong>Visible</strong> — Displayed as a special indicator on the leaderboard and profile</li>
+                    <li><strong>Automatic</strong> — No action required to claim it</li>
+                </ul>
+
+                <div class="info-box success">
+                    <h5>✅ Automatic Recognition</h5>
+                    <p>If you participated in Season 0, you automatically have OG status — no action needed!</p>
+                </div>
+            </section>
+
+            <section id="profile">
+                <h2>Profile Viewer</h2>
+
+                <p>Click any user on the leaderboard to view their profile. Profiles display level, XP, achievements, stats, and online status.</p>
+
+                <h3>Privacy Settings</h3>
+                <p>You control what others can see on your profile:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Display Name</td>
+                            <td>Customizable name shown on the leaderboard</td>
+                        </tr>
+                        <tr>
+                            <td>Profile Picture Sharing</td>
+                            <td>Toggle whether your profile picture is visible to others</td>
+                        </tr>
+                        <tr>
+                            <td>Online Status Visibility</td>
+                            <td>Toggle whether others can see when you're online</td>
+                        </tr>
+                        <tr>
+                            <td>Discord DM Allowance</td>
+                            <td>Toggle whether users can send you Discord DMs</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="web-leaderboard">
+                <h2>Web Leaderboard</h2>
+
+                <p>The leaderboard is also accessible via the web at the app's website. It shows the same data as the in-app leaderboard and updates in real-time.</p>
+
+                <p>You can access the web leaderboard from the main docs site at <a href="leaderboard.html">leaderboard.html</a>.</p>
+
+                <div class="info-box">
+                    <h5>📝 Note</h5>
+                    <p>You can check the leaderboard anytime from your browser — no need to have the app open!</p>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-skill-tree.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Skill Tree</span>
+                    </div>
+                </a>
+                <a href="guide-sessions.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Sessions</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

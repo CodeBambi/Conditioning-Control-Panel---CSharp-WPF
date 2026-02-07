@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Sync & Accounts | CCP Guide</title>
+    <meta name="description" content="Keep your progress synchronized across devices with unified cloud accounts">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x2601;&#xFE0F;</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Cloud Sync & Accounts</span>
+            </div>
+            <h1>Cloud Sync & Accounts</h1>
+            <p>Keep your progress synchronized across devices with unified cloud accounts</p>
+        </div>
+
+        <div class="guide-content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#unified-accounts">Unified Accounts</a></li>
+                    <li><a href="#login-methods">Login Methods</a></li>
+                    <li><a href="#what-syncs">What Syncs</a></li>
+                    <li><a href="#cross-device">Cross-Device Sync</a></li>
+                    <li><a href="#offline">Offline Mode</a></li>
+                    <li><a href="#privacy">Privacy</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+
+                <p>Cloud sync keeps your conditioning progress backed up and synchronized. It is available to users with a Patreon or Discord account linked to the app. The system uses a unified account model (V2) that ties your identity across platforms, and data syncs automatically on login and after sessions.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>🔄</span>
+                        <h5>Auto Sync</h5>
+                        <p>Progress syncs on login and after sessions</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>💻</span>
+                        <h5>Cross-Device</h5>
+                        <p>Pick up where you left off on any PC</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>⬆️</span>
+                        <h5>Higher Wins Merge</h5>
+                        <p>The best value is always kept</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="unified-accounts">
+                <h2>Unified Accounts (V2)</h2>
+
+                <p>The V2 account system assigns a <strong>unified_id</strong> that spans platforms. Your unified_id is the same whether you log in via Patreon or Discord. This replaced the legacy per-platform system in v5.5.</p>
+
+                <h3>Benefits</h3>
+                <ul>
+                    <li><strong>Single Identity</strong> - One account across all platforms</li>
+                    <li><strong>Cross-Platform Data</strong> - Your progress follows you regardless of login method</li>
+                    <li><strong>Unified Leaderboard Position</strong> - One rank, one profile, one you</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>📝 Migration Note</h5>
+                    <p>If you were using the app before v5.5, your data was automatically migrated to the unified system on your next login.</p>
+                </div>
+            </section>
+
+            <section id="login-methods">
+                <h2>Login Methods</h2>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>🅿️</span>
+                        <h5>Patreon OAuth</h5>
+                        <p>Primary login method</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🎮</span>
+                        <h5>Discord OAuth</h5>
+                        <p>Alternative login method</p>
+                    </div>
+                </div>
+
+                <h3>Patreon OAuth</h3>
+                <ul>
+                    <li>Primary login method for the app</li>
+                    <li>Grants access to premium features based on your subscription tier</li>
+                    <li>Tokens are stored encrypted locally via Windows DPAPI</li>
+                </ul>
+
+                <h3>Discord OAuth</h3>
+                <ul>
+                    <li>Alternative login method if you prefer Discord</li>
+                    <li>Can inherit Patreon benefits if your accounts are linked</li>
+                    <li>Tokens are stored encrypted locally via Windows DPAPI</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>💡 One Is Enough</h5>
+                    <p>You only need one login method. Choose whichever platform you prefer — your data is the same either way.</p>
+                </div>
+            </section>
+
+            <section id="what-syncs">
+                <h2>What Syncs</h2>
+
+                <p>The following data is kept in sync between your local app and the cloud:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Level & XP</strong></td>
+                            <td>Total accumulated XP and current level</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Achievements</strong></td>
+                            <td>All unlocked achievement IDs</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Skill Points</strong></td>
+                            <td>Server is source of truth</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Unlocked Skills</strong></td>
+                            <td>Union of local + cloud (never lose skills)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Conditioning Minutes</strong></td>
+                            <td>Total time across all sessions</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Session Stats</strong></td>
+                            <td>Completed, longest, started, abandoned</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Flash Stats</strong></td>
+                            <td>Total images viewed</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Streak Data</strong></td>
+                            <td>Current streak, highest streak, last date</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Quest Progress</strong></td>
+                            <td>Daily/weekly completions, quest XP, streak</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Bubble Stats</strong></td>
+                            <td>Total popped, bubble count games</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Video Stats</strong></td>
+                            <td>Minutes watched, attention checks</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Display Name</strong></td>
+                            <td>Your customizable public name</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Privacy Settings</strong></td>
+                            <td>DM, online status, profile pic preferences</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="cross-device">
+                <h2>Cross-Device Sync</h2>
+
+                <p>Sync triggers automatically on login and after each session ends. A heartbeat is sent every 45 seconds to maintain your online status on the leaderboard.</p>
+
+                <h3>Merge Strategy: "Higher Wins"</h3>
+                <ul>
+                    <li><strong>Numeric stats</strong> (XP, level, minutes, etc.) — the higher value is kept</li>
+                    <li><strong>Collections</strong> (achievements, skills) — union of both sets, so you never lose unlocks</li>
+                    <li><strong>Skill points</strong> — server value always takes priority</li>
+                    <li><strong>Streak data</strong> — higher streak wins, most recent date is used</li>
+                </ul>
+
+                <div class="info-box warning">
+                    <h5>⚠️ Important</h5>
+                    <p>Cloud sync is <strong>not</strong> real-time during sessions. Your data syncs when you log in and when a session ends. If you switch devices mid-session, finish your current session first.</p>
+                </div>
+            </section>
+
+            <section id="offline">
+                <h2>Offline Mode</h2>
+
+                <p>Toggle <strong>Offline Mode</strong> in Settings to disable all cloud communication.</p>
+
+                <ul>
+                    <li>When offline: all data stays local, no sync, no downloads, no heartbeat</li>
+                    <li>Useful for privacy or limited internet connectivity</li>
+                    <li>Re-enabling online mode will trigger a sync on your next login</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>✈️ Travel Friendly</h5>
+                    <p>Offline mode is great for travel or privacy. Your local progress is safe and will merge with the cloud when you go back online.</p>
+                </div>
+            </section>
+
+            <section id="privacy">
+                <h2>Privacy</h2>
+
+                <p>Your display name defaults to your platform username but can be customized at any time. Control what others see via privacy toggles:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Show Online Status</strong></td>
+                            <td>Whether you appear "online" on the leaderboard</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Share Profile Picture</strong></td>
+                            <td>Whether your avatar is visible to others</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Allow Discord DM</strong></td>
+                            <td>Whether other users can message you</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <p>All data is stored on secure servers (Upstash Redis on Vercel). No personal information beyond your platform username is collected.</p>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-patreon.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Patreon Features</span>
+                    </div>
+                </a>
+                <a href="guide-content-packs.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Content Packs</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

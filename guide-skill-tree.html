@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skill Tree | CCP Guide</title>
+    <meta name="description" content="Unlock powerful enhancements by spending sparkle points earned from leveling up">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Skill Tree</span>
+            </div>
+            <h1>Skill Tree</h1>
+            <p>Unlock powerful enhancements by spending sparkle points earned from leveling up</p>
+        </div>
+
+        <div class="guide-content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#sparkle-points">Sparkle Points</a></li>
+                    <li><a href="#tier-1">Tier 1 — Foundation</a></li>
+                    <li><a href="#tier-2">Tier 2 — Core Branches</a></li>
+                    <li><a href="#tier-3">Tier 3 — Specialization</a></li>
+                    <li><a href="#tier-4">Tier 4 — Mastery</a></li>
+                    <li><a href="#secret-skills">Secret Skills</a></li>
+                    <li><a href="#pink-rush">Pink Rush</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+
+                <p>The Skill Tree lets you customize your conditioning experience with permanent enhancements. Spend sparkle points to unlock skills across 4 tiers plus hidden secret skills. Skills persist across seasons — they are <strong>NOT</strong> reset.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>🌳</span>
+                        <h5>4 Tiers</h5>
+                        <p>+ 3 Secret</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>✨</span>
+                        <h5>5 Points/Level</h5>
+                        <p>Earned on each level up</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>💎</span>
+                        <h5>22+ Skills Total</h5>
+                        <p>Permanent enhancements</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="sparkle-points">
+                <h2>Sparkle Points</h2>
+
+                <p>Sparkle points are the currency used to unlock skills in the Skill Tree. You earn them automatically as you level up.</p>
+
+                <ul>
+                    <li>Earn <strong>5 sparkle points</strong> per level up</li>
+                    <li>Points are managed <strong>server-side</strong> (source of truth)</li>
+                    <li>Skills once unlocked <strong>cannot be refunded</strong> (unless admin force-reset)</li>
+                    <li>At Level 50 you'll have earned approximately <strong>245 total sparkle points</strong></li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>🔄 Server Sync</h5>
+                    <p>The server is the source of truth for your skill points. If your local count differs, the server value takes priority during sync.</p>
+                </div>
+            </section>
+
+            <section id="tier-1">
+                <h2>Tier 1 — Foundation</h2>
+
+                <p>The entry point to the Skill Tree. Unlock this first to access all other branches.</p>
+
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">⏱️💕</span>
+                            <span class="node-name">Pink Hours</span>
+                            <span class="node-cost">2 pts</span>
+                        </div>
+                        <p class="node-effect">Shows total conditioning time across all sessions</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tier-2">
+                <h2>Tier 2 — Core Branches</h2>
+
+                <p>Three branches split from Pink Hours, each focusing on a different aspect of your conditioning journey.</p>
+
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">📊💭</span>
+                            <span class="node-name">Ditzy Data</span>
+                            <span class="node-cost">5 pts</span>
+                        </div>
+                        <p class="node-effect">Unlocks statistics panel with session data</p>
+                        <p class="node-prereq">Requires: Pink Hours</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">✨⚡</span>
+                            <span class="node-name">Sparkle Boost</span>
+                            <span class="node-cost">8 pts</span>
+                        </div>
+                        <p class="node-effect">+10% XP from all sources</p>
+                        <p class="node-prereq">Requires: Pink Hours</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🔥💖</span>
+                            <span class="node-name">Good Girl Streak</span>
+                            <span class="node-cost">5 pts</span>
+                        </div>
+                        <p class="node-effect">1 weekly streak shield (forgives a missed day)</p>
+                        <p class="node-prereq">Requires: Pink Hours</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tier-3">
+                <h2>Tier 3 — Specialization</h2>
+
+                <p>Skills branch further from Tier 2, offering deeper specialization in each path.</p>
+
+                <h3>From Ditzy Data</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">👯‍♀️💕</span>
+                            <span class="node-name">Hive Mind</span>
+                            <span class="node-cost">10 pts</span>
+                        </div>
+                        <p class="node-effect">Shows live online user count</p>
+                        <p class="node-prereq">Requires: Ditzy Data</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🏆✨</span>
+                            <span class="node-name">Trophy Case</span>
+                            <span class="node-cost">10 pts</span>
+                        </div>
+                        <p class="node-effect">Shows personal best records</p>
+                        <p class="node-prereq">Requires: Ditzy Data</p>
+                    </div>
+                </div>
+
+                <h3>From Sparkle Boost</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">💎⚡</span>
+                            <span class="node-name">Extra Sparkly</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">+15% XP (stacks to 25% total)</p>
+                        <p class="node-prereq">Requires: Sparkle Boost</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🍀💋</span>
+                            <span class="node-name">Lucky Bimbo</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">5% chance for 5x XP on flash images</p>
+                        <p class="node-prereq">Requires: Sparkle Boost</p>
+                    </div>
+                </div>
+
+                <h3>From Good Girl Streak</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🎁🎀</span>
+                            <span class="node-name">Milestone Rewards</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">Daily XP based on streak tier (50-300 XP)</p>
+                        <p class="node-prereq">Requires: Good Girl Streak</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">💕🩹</span>
+                            <span class="node-name">Oopsie Insurance</span>
+                            <span class="node-cost">12 pts</span>
+                        </div>
+                        <p class="node-effect">Recover broken streak for 500 XP (once/season)</p>
+                        <p class="node-prereq">Requires: Good Girl Streak</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tier-4">
+                <h2>Tier 4 — Mastery</h2>
+
+                <p>The most powerful skills in the tree. These require significant investment but offer game-changing enhancements.</p>
+
+                <h3>From Hive Mind</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">👑💅</span>
+                            <span class="node-name">Popular Girl</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">Shows your rank percentile</p>
+                        <p class="node-prereq">Requires: Hive Mind</p>
+                    </div>
+                </div>
+
+                <h3>From Trophy Case</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🔄💫</span>
+                            <span class="node-name">Quest Refresh</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">1 free daily quest reroll</p>
+                        <p class="node-prereq">Requires: Trophy Case</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">✨📜</span>
+                            <span class="node-name">Better Quests</span>
+                            <span class="node-cost">20 pts</span>
+                        </div>
+                        <p class="node-effect">+25% XP on rerolled quests</p>
+                        <p class="node-prereq">Requires: Trophy Case</p>
+                    </div>
+                </div>
+
+                <h3>From Extra Sparkly</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">💖👸</span>
+                            <span class="node-name">Maximum Sparkle</span>
+                            <span class="node-cost">25 pts</span>
+                        </div>
+                        <p class="node-effect">+20% XP (stacks to 45% total!)</p>
+                        <p class="node-prereq">Requires: Extra Sparkly</p>
+                    </div>
+                </div>
+
+                <h3>From Lucky Bimbo</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🫧🎰</span>
+                            <span class="node-name">Lucky Bubbles</span>
+                            <span class="node-cost">20 pts</span>
+                        </div>
+                        <p class="node-effect">5% chance for 10x bubble points</p>
+                        <p class="node-prereq">Requires: Lucky Bimbo</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">⚡💗</span>
+                            <span class="node-name">Pink Rush</span>
+                            <span class="node-cost">25 pts</span>
+                        </div>
+                        <p class="node-effect">Random 60s windows of 3x XP</p>
+                        <p class="node-prereq">Requires: Lucky Bimbo</p>
+                    </div>
+                </div>
+
+                <h3>From Milestone Rewards</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">💪🔥</span>
+                            <span class="node-name">Streak Power</span>
+                            <span class="node-cost">20 pts</span>
+                        </div>
+                        <p class="node-effect">+0.5% XP per streak day (max +15%)</p>
+                        <p class="node-prereq">Requires: Milestone Rewards</p>
+                    </div>
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">🎰💕</span>
+                            <span class="node-name">Reroll Addict</span>
+                            <span class="node-cost">15 pts</span>
+                        </div>
+                        <p class="node-effect">+2 extra daily quest rerolls</p>
+                        <p class="node-prereq">Requires: Milestone Rewards</p>
+                    </div>
+                </div>
+
+                <h3>From Oopsie Insurance</h3>
+                <div class="skill-node-grid">
+                    <div class="skill-node">
+                        <div class="node-header">
+                            <span class="node-icon">⭐👼</span>
+                            <span class="node-name">Perfect Bimbo Week</span>
+                            <span class="node-cost">20 pts</span>
+                        </div>
+                        <p class="node-effect">Huge XP bonuses at streak milestones (3,000 at 7d, 6,000 at 14d, 10,000 at 30d)</p>
+                        <p class="node-prereq">Requires: Oopsie Insurance</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="secret-skills">
+                <h2>Secret Skills</h2>
+
+                <p>Hidden skills that only appear after meeting their secret unlock conditions. These offer unique bonuses for dedicated users.</p>
+
+                <div class="skill-node-grid">
+                    <div class="skill-node secret">
+                        <div class="node-header">
+                            <span class="node-icon">🌙😴</span>
+                            <span class="node-name">Night Shift</span>
+                            <span class="node-cost">10 pts</span>
+                        </div>
+                        <p class="node-effect">+50% XP between 11pm-5am</p>
+                        <p class="node-prereq">Unlock: Use app after midnight 10 times</p>
+                    </div>
+                    <div class="skill-node secret">
+                        <div class="node-header">
+                            <span class="node-icon">🌅☀️</span>
+                            <span class="node-name">Early Bird Bimbo</span>
+                            <span class="node-cost">10 pts</span>
+                        </div>
+                        <p class="node-effect">+50% XP between 5am-8am</p>
+                        <p class="node-prereq">Unlock: Use app before 7am 10 times</p>
+                    </div>
+                    <div class="skill-node secret">
+                        <div class="node-header">
+                            <span class="node-icon">💎♾️</span>
+                            <span class="node-name">Eternal Doll</span>
+                            <span class="node-cost">8 pts</span>
+                        </div>
+                        <p class="node-effect">Shows lifetime stats across all seasons (never reset)</p>
+                        <p class="node-prereq">Unlock: Reach level 50 in any season</p>
+                    </div>
+                </div>
+
+                <div class="info-box warning">
+                    <h5>🔍 Hidden Until Discovered</h5>
+                    <p>Secret skills only appear after meeting their hidden unlock conditions. Keep exploring to discover them!</p>
+                </div>
+            </section>
+
+            <section id="pink-rush">
+                <h2>Pink Rush</h2>
+
+                <p>Pink Rush is one of the most exciting skills in the Skill Tree, offering massive XP bursts during random windows of opportunity.</p>
+
+                <ul>
+                    <li>Unlocked via the <strong>Pink Rush</strong> skill (Tier 4, 25 points)</li>
+                    <li>~50% chance to trigger every 5 minutes while engine is running</li>
+                    <li>Lasts exactly <strong>60 seconds</strong></li>
+                    <li>During Pink Rush: all XP gains are multiplied by <strong>3x</strong></li>
+                    <li>Can trigger <strong>multiple times</strong> per session</li>
+                </ul>
+
+                <div class="info-box success">
+                    <h5>🚀 Stacking Multipliers</h5>
+                    <p>Pink Rush stacks with other XP multipliers like Sparkle Boost and Streak Power for massive XP gains!</p>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-quests.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Daily & Weekly Quests</span>
+                    </div>
+                </a>
+                <a href="guide-leaderboard.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Leaderboard & Seasons</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>
