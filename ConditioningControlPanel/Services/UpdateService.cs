@@ -22,60 +22,22 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.0";
+        public const string AppVersion = "5.5.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.0 - THE BIG ONE: Seasons, Skill Tree, Achievements & More
+        public const string CurrentPatchNotes = @"v5.5.1 - Season Reset & Skill Tree Fixes
 
-🏆 SEASON SYSTEM
-• Monthly competitive seasons with leaderboard resets
-• New season = new theme, new quests, fresh leaderboard
-• All-time stats and highest level preserved forever
-• Season 0 OG recognition for early adopters
-
-🌳 SKILL TREE (22 Nodes)
-• Spend sparkle points to unlock passive bonuses
-• Sparkle Boost (3 tiers), Lucky Bubbles, Streak Power, Quest Refresh
-• Early Bird Bimbo, Night Shift, Perfect Bimbo Week, Good Girl Streak
-• Oopsie Insurance, Trophy Case, Hive Mind, and more
-• OG users with unlock toggle bypass all skill requirements
-
-🎖️ 28 ACHIEVEMENTS
-• Hidden and visible milestones across the entire app
-• Cloud-synced to your profile and visible on leaderboard
-• From first bubble pop to marathon sessions and secret triggers
-
-👤 CLOUD ACCOUNTS & SYNC
-• Log in with Discord or Patreon
-• XP, level, skills, achievements, quests sync across devices
-• Server is source of truth — no more lost progress
-
-📋 QUEST SYSTEM
-• Daily, weekly, and seasonal quests
-• Up to 3 daily refreshes with skill tree upgrades
-• Quest streak XP multiplier (+3% per consecutive day)
-• Server-delivered quest definitions with season themes
-
-🏅 GLOBAL LEADERBOARD
-• Compete against every user each season
-• Badges, OG flair, achievement counts on display
-• Trophy Case stats for skilled players
-
-🤖 6 AI COMPANIONS
-• Each with unique personality and XP mechanic
-• Cheerleader, Cult Bunny, Brain Parasite, Synthetic Blowdoll, Bimbo Cow, Brainwashed Slavedoll
-• Slavedoll drains player XP at 3/sec while active
-
-🛡️ SERVER-SIDE OOPSIE INSURANCE
-• Streak fix validated server-side to prevent cheating
-• 500 XP cost, once per season, enforced on server
-
-🎭 MODE-AWARE SESSIONS
-• Session names and descriptions adapt to content mode
-• No Bambi references in Sissy Hypno mode
+🔧 FIXES
+• Skill tree sparkle points now award 1 per level (was 5)
+• Bouncing text no longer drops framerate when app is minimized
+• Season reset now properly clears levels, XP, skill points, and skills
+• Server-side protection prevents clients from pushing old cached levels back
+• OG users with unlock toggle now properly bypass all skill requirements
+• Bubbles, pink filter, and spiral now work correctly for OG users
+• Tab button sizing fixed to prevent clipping
 
 📚 HELP SYSTEM
 • 35 help buttons across all tabs with rich tooltips

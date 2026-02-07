@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content Packs | CCP Guide</title>
+    <meta name="description" content="Download curated image and video packs to get started quickly">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Content Packs</span>
+            </div>
+            <h1>Content Packs</h1>
+            <p>Download curated image and video packs to get started quickly</p>
+        </div>
+
+        <div class="guide-content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#available-packs">Available Packs</a></li>
+                    <li><a href="#downloading">Downloading</a></li>
+                    <li><a href="#managing">Managing Packs</a></li>
+                    <li><a href="#bandwidth">Bandwidth & Limits</a></li>
+                    <li><a href="#troubleshooting">Troubleshooting</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+
+                <p>Content packs are curated collections of images and videos for use with the conditioning engine. They provide a quick way to get started with high-quality content without having to source and organize your own files.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>🎨</span>
+                        <h5>Curated Content</h5>
+                        <p>Hand-picked images and videos</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🔒</span>
+                        <h5>Encrypted Storage</h5>
+                        <p>AES encryption on disk</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🔄</span>
+                        <h5>Resumable Downloads</h5>
+                        <p>Pick up where you left off</p>
+                    </div>
+                </div>
+
+                <ul>
+                    <li>Available to <strong>Patreon subscribers</strong> (premium feature)</li>
+                    <li>Packs are downloaded securely and stored encrypted on your device</li>
+                    <li>Once installed, pack content automatically integrates with the flash and video systems</li>
+                </ul>
+            </section>
+
+            <section id="available-packs">
+                <h2>Available Packs</h2>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Pack</th>
+                            <th>Content</th>
+                            <th>Size</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Basic Bimbo Starter Pack</td>
+                            <td>113 images, 7 videos</td>
+                            <td>2.23 GB</td>
+                            <td>Base content pack</td>
+                        </tr>
+                        <tr>
+                            <td>Enhanced Bimbodoll Video Pack</td>
+                            <td>27 videos</td>
+                            <td>4.09 GB</td>
+                            <td>Premium video collection</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box">
+                    <h5>📝 Note</h5>
+                    <p>More packs may be added in the future. Check the <a href="https://www.patreon.com/CodeBambi" target="_blank">Patreon page</a> for announcements about new content.</p>
+                </div>
+            </section>
+
+            <section id="downloading">
+                <h2>Downloading</h2>
+
+                <ol>
+                    <li>Navigate to the <strong>Content Packs</strong> section in the app (Patreon tab)</li>
+                    <li>Click a pack to begin downloading</li>
+                    <li>Wait for the download to complete &mdash; progress is shown in the UI</li>
+                </ol>
+
+                <p>Downloads support <strong>resume</strong> &mdash; if interrupted, they pick up where they left off. This is achieved using HTTP Range headers for efficient partial downloads.</p>
+
+                <ul>
+                    <li>Up to <strong>10 automatic retry attempts</strong> with exponential backoff</li>
+                    <li>Download timeout: <strong>30 minutes</strong> per pack</li>
+                </ul>
+
+                <div class="info-box warning">
+                    <h5>⚠️ Large Downloads</h5>
+                    <p>Large packs (4+ GB) may take a while on slower connections. The download is resumable, so feel free to close and reopen the app.</p>
+                </div>
+            </section>
+
+            <section id="managing">
+                <h2>Managing Packs</h2>
+
+                <ul>
+                    <li>Packs are stored in a hidden <code>.packs/</code> folder inside your assets directory</li>
+                    <li>Files are encrypted with <strong>AES encryption</strong> and renamed with GUIDs</li>
+                    <li>An encrypted manifest tracks the contents of each pack</li>
+                    <li>Pack images are automatically available in the <strong>flash rotation</strong> once installed</li>
+                    <li>Pack videos appear in the <strong>mandatory video pool</strong></li>
+                    <li>To remove a pack, use the <strong>in-app management interface</strong></li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>📝 Note</h5>
+                    <p>Don't manually modify files in the <code>.packs/</code> folder &mdash; the encryption and manifest system expects specific file names. Use the in-app tools instead.</p>
+                </div>
+            </section>
+
+            <section id="bandwidth">
+                <h2>Bandwidth & Limits</h2>
+
+                <p>Downloads are rate-limited to prevent abuse. Patreon subscribers receive higher bandwidth limits.</p>
+
+                <p>The server tracks:</p>
+                <ul>
+                    <li>Downloads remaining (daily limit)</li>
+                    <li>Bandwidth used vs. bandwidth limit</li>
+                    <li>Reset time for limits</li>
+                </ul>
+
+                <p>If you hit the rate limit, you'll receive an error with the reset time. Successful downloads are reported to the server; failed downloads refund bandwidth.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Limit Type</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Daily Downloads</td>
+                            <td>Limited per day, resets at midnight UTC</td>
+                        </tr>
+                        <tr>
+                            <td>Bandwidth</td>
+                            <td>Total GB tracked per period</td>
+                        </tr>
+                        <tr>
+                            <td>Patreon Bonus</td>
+                            <td>Higher limits for active subscribers</td>
+                        </tr>
+                        <tr>
+                            <td>Rate Limit</td>
+                            <td>HTTP 429 returned when exceeded</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="troubleshooting">
+                <h2>Troubleshooting</h2>
+
+                <h3>Download stuck or failing</h3>
+                <ul>
+                    <li>Check your internet connection</li>
+                    <li>The app will retry up to 10 times automatically</li>
+                    <li>Close and reopen the app &mdash; downloads resume from where they left off</li>
+                </ul>
+
+                <h3>"Rate limit exceeded" error</h3>
+                <ul>
+                    <li>You've hit the daily download limit</li>
+                    <li>Wait until the displayed reset time</li>
+                    <li>Patreon subscribers have higher limits</li>
+                </ul>
+
+                <h3>Pack not showing in rotation</h3>
+                <ul>
+                    <li>Ensure the download completed fully (check progress)</li>
+                    <li>Restart the app after download completes</li>
+                    <li>Check that the pack isn't disabled in pack management</li>
+                </ul>
+
+                <h3>"Offline mode" blocking downloads</h3>
+                <ul>
+                    <li>Disable <strong>Offline Mode</strong> in Settings to allow downloads</li>
+                    <li>Downloads require an active internet connection</li>
+                </ul>
+
+                <div class="info-box danger">
+                    <h5>🚫 Important</h5>
+                    <p>Never share your downloaded pack files. They are encrypted and tied to your account. Redistributing content is a violation of the Patreon terms.</p>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-cloud-sync.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Cloud Sync & Accounts</span>
+                    </div>
+                </a>
+                <a href="guide-advanced.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Advanced & FAQ</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

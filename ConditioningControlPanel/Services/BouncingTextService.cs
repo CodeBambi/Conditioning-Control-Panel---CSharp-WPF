@@ -87,8 +87,8 @@ public class BouncingTextService : IDisposable
         // Create windows for each screen
         CreateWindows(settings.DualMonitorEnabled, settings.BouncingTextOpacity);
 
-        // Start animation timer (~60 FPS)
-        _animTimer = new DispatcherTimer
+        // Start animation timer (~60 FPS) - use Send priority so it doesn't throttle when main window is minimized
+        _animTimer = new DispatcherTimer(DispatcherPriority.Send)
         {
             Interval = TimeSpan.FromMilliseconds(16)
         };

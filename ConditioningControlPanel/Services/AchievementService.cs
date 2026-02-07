@@ -657,6 +657,17 @@ public class AchievementService : IDisposable
     }
 
     /// <summary>
+    /// Reset all achievement progress (used on logout to clear account-specific data)
+    /// </summary>
+    public void ResetProgress()
+    {
+        _progress = new AchievementProgress();
+        _isDirty = false;
+        Save();
+        App.Logger?.Information("AchievementService progress reset");
+    }
+
+    /// <summary>
     /// Get unlock count
     /// </summary>
     public int GetUnlockedCount() => _progress.UnlockedAchievements.Count;

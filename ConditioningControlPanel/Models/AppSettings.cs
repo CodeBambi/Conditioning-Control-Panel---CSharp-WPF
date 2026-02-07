@@ -79,6 +79,16 @@ namespace ConditioningControlPanel.Models
             set { _lastSeenVersion = value ?? ""; OnPropertyChanged(); }
         }
 
+        private string _dismissedAnnouncementId = "";
+        /// <summary>
+        /// ID of the last server announcement the user dismissed. Prevents showing the same announcement again.
+        /// </summary>
+        public string DismissedAnnouncementId
+        {
+            get => _dismissedAnnouncementId;
+            set { _dismissedAnnouncementId = value ?? ""; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Skill Tree / Enhancements

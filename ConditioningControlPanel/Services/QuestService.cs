@@ -728,6 +728,21 @@ public class QuestService : IDisposable
 
     #endregion
 
+    /// <summary>
+    /// Reset all quest progress (used on logout to clear account-specific data)
+    /// </summary>
+    public void ResetProgress()
+    {
+        Progress = new QuestProgress();
+        _isDirty = false;
+        Save();
+
+        // Generate fresh quests so the UI doesn't show "Loading..."
+        CheckAndGenerateQuests();
+
+        App.Logger?.Information("QuestService progress reset");
+    }
+
     #region IDisposable
 
     public void Dispose()

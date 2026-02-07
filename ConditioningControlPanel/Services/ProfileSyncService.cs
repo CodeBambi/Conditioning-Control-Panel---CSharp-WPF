@@ -436,6 +436,20 @@ namespace ConditioningControlPanel.Services
                             App.Settings?.Save();
                             App.Logger?.Information("V2 Sync: User retroactively flagged as Season 0 OG by server");
                         }
+
+                        // Handle level_reset — server admin reset all levels, force client to accept
+                        if (v2Result?.LevelReset == true && v2Result.User != null)
+                        {
+                            var serverLevel = v2Result.User.Level;
+                            var serverXp = v2Result.User.Xp;
+                            var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverXp) ?? 0;
+
+                            App.Logger?.Information("V2 Sync: Level reset by admin — forcing Level {Level}, XP {Xp}", serverLevel, serverXp);
+                            settings.PlayerLevel = serverLevel;
+                            settings.PlayerXP = serverLevelXp;
+                            settings.HighestLevelEver = 0;
+                            App.Settings?.Save();
+                        }
                     }
                     catch (Exception parseEx)
                     {
@@ -987,6 +1001,94 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Change the user's display name via server-side validation.
+        /// Name must be unique (case-insensitive). Case-only changes are allowed.
+        /// </summary>
+        public async Task<(bool success, string? error, string? newName)> ChangeDisplayNameAsync(string newName)
+        {
+            var unifiedId = App.Settings?.Current?.UnifiedId;
+            if (string.IsNullOrEmpty(unifiedId))
+            {
+                return (false, "You must be logged in to change your name", null);
+            }
+
+            try
+            {
+                var requestData = new { unified_id = unifiedId, new_display_name = newName };
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/change-display-name");
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(requestData),
+                    Encoding.UTF8,
+                    "application/json"
+                );
+
+                var response = await _httpClient.SendAsync(request);
+                var json = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorResult = JsonConvert.DeserializeObject<ChangeDisplayNameErrorResponse>(json);
+                    var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
+                    App.Logger?.Warning("Change display name failed: {Error}", errorMsg);
+                    return (false, errorMsg, null);
+                }
+
+                var result = JsonConvert.DeserializeObject<ChangeDisplayNameResponse>(json);
+                App.Logger?.Information("Display name changed to: {NewName}", result?.NewDisplayName);
+                return (true, null, result?.NewDisplayName);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Change display name request failed");
+                return (false, "Name change requires an internet connection", null);
+            }
+        }
+
+        /// <summary>
+        /// Delete the user's account and all server-side data (GDPR).
+        /// Requires confirmation string "DELETE".
+        /// </summary>
+        public async Task<(bool success, string? error)> DeleteAccountAsync()
+        {
+            var unifiedId = App.Settings?.Current?.UnifiedId;
+            if (string.IsNullOrEmpty(unifiedId))
+            {
+                return (false, "You must be logged in to delete your account");
+            }
+
+            try
+            {
+                var requestData = new { unified_id = unifiedId, confirmation = "DELETE" };
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/delete-account");
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(requestData),
+                    Encoding.UTF8,
+                    "application/json"
+                );
+
+                var response = await _httpClient.SendAsync(request);
+                var json = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorResult = JsonConvert.DeserializeObject<DeleteAccountErrorResponse>(json);
+                    var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
+                    App.Logger?.Warning("Delete account failed: {Error}", errorMsg);
+                    return (false, errorMsg);
+                }
+
+                var result = JsonConvert.DeserializeObject<DeleteAccountResponse>(json);
+                App.Logger?.Information("Account deleted: {UnifiedId} ({Name})", result?.DeletedUnifiedId, result?.DeletedDisplayName);
+                return (true, null);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Delete account request failed");
+                return (false, "Account deletion requires an internet connection");
+            }
+        }
+
         public void Dispose()
         {
             if (_disposed) return;
@@ -1145,6 +1247,21 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("is_season0_og")]
             public bool? IsSeason0Og { get; set; }
+
+            [JsonProperty("level_reset")]
+            public bool? LevelReset { get; set; }
+
+            [JsonProperty("user")]
+            public V2SyncUser? User { get; set; }
+        }
+
+        private class V2SyncUser
+        {
+            [JsonProperty("level")]
+            public int Level { get; set; }
+
+            [JsonProperty("xp")]
+            public int Xp { get; set; }
         }
 
         private class OopsieSuccessResponse
@@ -1160,6 +1277,39 @@ namespace ConditioningControlPanel.Services
         }
 
         private class OopsieErrorResponse
+        {
+            [JsonProperty("error")]
+            public string? Error { get; set; }
+        }
+
+        private class ChangeDisplayNameResponse
+        {
+            [JsonProperty("success")]
+            public bool Success { get; set; }
+
+            [JsonProperty("new_display_name")]
+            public string? NewDisplayName { get; set; }
+        }
+
+        private class ChangeDisplayNameErrorResponse
+        {
+            [JsonProperty("error")]
+            public string? Error { get; set; }
+        }
+
+        private class DeleteAccountResponse
+        {
+            [JsonProperty("success")]
+            public bool Success { get; set; }
+
+            [JsonProperty("deleted_unified_id")]
+            public string? DeletedUnifiedId { get; set; }
+
+            [JsonProperty("deleted_display_name")]
+            public string? DeletedDisplayName { get; set; }
+        }
+
+        private class DeleteAccountErrorResponse
         {
             [JsonProperty("error")]
             public string? Error { get; set; }

@@ -2505,8 +2505,31 @@ namespace ConditioningControlPanel
                 UpdateBannerWelcomeMessage();
                 UpdateAccountLinkingUI();
 
+                // Clear stale progression data from previous account before syncing
+                ClearProgressionData();
+
                 // Start profile sync
                 App.ProfileSync?.StartHeartbeat();
+
+                // Fetch the new account's data from the server
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(500); // Let auth tokens settle
+                    if (App.ProfileSync != null)
+                    {
+                        await App.ProfileSync.SyncProfileAsync();
+                        await App.ProfileSync.LoadProfileAsync();
+
+                        // Refresh UI on the dispatcher thread after sync completes
+                        Application.Current?.Dispatcher?.Invoke(() =>
+                        {
+                            UpdateLevelDisplay();
+                            RefreshQuestUI();
+                            DrawSkillTree();
+                            UpdateQuickLoginUI();
+                        });
+                    }
+                });
 
                 // Show OG welcome if applicable
                 if (result.ShouldShowOgWelcome)
@@ -2514,6 +2537,97 @@ namespace ConditioningControlPanel
                     ShowOgWelcomePopup();
                 }
             }
+        }
+
+        /// <summary>
+        /// Clears all progression, quest, achievement, and streak data from local state.
+        /// Does NOT clear identity fields (UnifiedId, UserDisplayName, link flags).
+        /// Called on login (before sync), logout, and account deletion.
+        /// </summary>
+        private void ClearProgressionData()
+        {
+            if (App.Settings?.Current != null)
+            {
+                var s = App.Settings.Current;
+
+                // Progression
+                s.PlayerXP = 0;
+                s.PlayerLevel = 1;
+                s.SkillPoints = 0;
+                s.UnlockedSkills = new List<string>();
+                s.SeasonalStreakRecoveryUsed = false;
+                s.HighestLevelEver = 0;
+
+                // Quest streak
+                s.DailyQuestStreak = 0;
+                s.LastDailyQuestDate = null;
+
+                // Streak shields
+                s.StreakShieldsRemaining = 0;
+                s.LastStreakShieldResetDate = null;
+                s.StreakShieldUsedDates = new List<DateTime>();
+
+                // Usage streaks
+                s.CurrentStreak = 0;
+                s.LastStreakDate = null;
+                s.HighestStreak = 0;
+
+                // Usage stats
+                s.NightTimeUsageCount = 0;
+                s.EarlyMorningUsageCount = 0;
+
+                // Rerolls
+                s.FreeRerollsUsedToday = 0;
+                s.LastRerollResetDate = null;
+
+                // Season / OG
+                s.IsSeason0Og = false;
+                s.CurrentSeason = null;
+                s.PatreonTier = 0;
+
+                App.Settings.Save();
+            }
+
+            // Reset quest progress (active quests + stats in quests.json)
+            App.Quests?.ResetProgress();
+
+            // Reset achievement progress (unlocked achievements + stats in achievements.json)
+            App.Achievements?.ResetProgress();
+
+            // Redraw skill tree to reflect cleared state
+            DrawSkillTree();
+        }
+
+        /// <summary>
+        /// Clears all account-specific data from settings, quests, and achievements.
+        /// Called on logout and account deletion to prevent stale data bleeding into the next session.
+        /// </summary>
+        private void ClearAccountData()
+        {
+            // Clear identity
+            App.UnifiedUserId = null;
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.UnifiedId = null;
+                App.Settings.Current.UserDisplayName = null;
+                App.Settings.Current.HasLinkedDiscord = false;
+                App.Settings.Current.HasLinkedPatreon = false;
+            }
+
+            // Clear all progression data
+            ClearProgressionData();
+
+            // Update all UI
+            UpdateQuickLoginUI();
+            UpdateQuickPatreonUI();
+            UpdateQuickDiscordUI();
+            UpdatePatreonUI();
+            UpdateDiscordUI();
+            UpdateBannerWelcomeMessage();
+            UpdateAccountLinkingUI();
+
+            // Clear profile viewer so stale profile card doesn't linger
+            ClearProfileViewer();
         }
 
         /// <summary>
@@ -2528,36 +2642,7 @@ namespace ConditioningControlPanel
             App.Patreon?.Logout();
             App.Discord?.Logout();
 
-            // Clear unified ID and all account-specific data
-            App.UnifiedUserId = null;
-            if (App.Settings?.Current != null)
-            {
-                App.Settings.Current.UnifiedId = null;
-                App.Settings.Current.UserDisplayName = null;
-                App.Settings.Current.HasLinkedDiscord = false;
-                App.Settings.Current.HasLinkedPatreon = false;
-
-                // Clear account-specific progression data so next login gets fresh data from server
-                App.Settings.Current.PlayerXP = 0;
-                App.Settings.Current.PlayerLevel = 1;
-                App.Settings.Current.SkillPoints = 0;
-                App.Settings.Current.UnlockedSkills = new List<string>();
-                App.Settings.Current.SeasonalStreakRecoveryUsed = false;
-
-                App.Settings.Save();
-            }
-
-            // Redraw skill tree to reflect cleared state
-            DrawSkillTree();
-
-            // Update all UI
-            UpdateQuickLoginUI();
-            UpdateQuickPatreonUI();
-            UpdateQuickDiscordUI();
-            UpdatePatreonUI();
-            UpdateDiscordUI();
-            UpdateBannerWelcomeMessage();
-            UpdateAccountLinkingUI();
+            ClearAccountData();
         }
 
         /// <summary>
@@ -2573,6 +2658,10 @@ namespace ConditioningControlPanel
 
             BtnUnifiedLogin.Visibility = isLoggedIn ? Visibility.Collapsed : Visibility.Visible;
             LoggedInStatusPanel.Visibility = isLoggedIn ? Visibility.Visible : Visibility.Collapsed;
+
+            // Show/hide login overlays on gated tabs
+            QuestsLoginOverlay.Visibility = isLoggedIn ? Visibility.Collapsed : Visibility.Visible;
+            EnhancementsLoginOverlay.Visibility = isLoggedIn ? Visibility.Collapsed : Visibility.Visible;
 
             if (isLoggedIn)
             {
@@ -7578,38 +7667,32 @@ namespace ConditioningControlPanel
         private List<string> GetLockedFeaturesForSession(Models.Session session)
         {
             var locked = new List<string>();
-            int level = App.Settings.Current.PlayerLevel;
+            var s = App.Settings.Current;
             var settings = session.Settings;
 
-            // Level 10: Spiral, Pink Filter
-            if (level < 10)
+            // Use IsLevelUnlocked which accounts for OG toggle + HighestLevelEver + current level
+            if (!s.IsLevelUnlocked(10))
             {
                 if (settings.SpiralEnabled) locked.Add("Spiral Overlay (Lv.10)");
                 if (settings.PinkFilterEnabled) locked.Add("Pink Filter (Lv.10)");
             }
 
-            // Level 20: Bubbles
-            if (level < 20 && settings.BubblesEnabled)
+            if (!s.IsLevelUnlocked(20) && settings.BubblesEnabled)
                 locked.Add("Bubbles (Lv.20)");
 
-            // Level 35: Lock Cards
-            if (level < 35 && settings.LockCardEnabled)
+            if (!s.IsLevelUnlocked(35) && settings.LockCardEnabled)
                 locked.Add("Lock Cards (Lv.35)");
 
-            // Level 50: Bubble Count
-            if (level < 50 && settings.BubbleCountEnabled)
+            if (!s.IsLevelUnlocked(50) && settings.BubbleCountEnabled)
                 locked.Add("Bubble Count Game (Lv.50)");
 
-            // Level 60: Bouncing Text
-            if (level < 60 && settings.BouncingTextEnabled)
+            if (!s.IsLevelUnlocked(60) && settings.BouncingTextEnabled)
                 locked.Add("Bouncing Text (Lv.60)");
 
-            // Level 70: Brain Drain
-            if (level < 70 && settings.BrainDrainEnabled)
+            if (!s.IsLevelUnlocked(70) && settings.BrainDrainEnabled)
                 locked.Add("Brain Drain (Lv.70)");
 
-            // Level 75: Mind Wipe
-            if (level < 75 && settings.MindWipeEnabled)
+            if (!s.IsLevelUnlocked(75) && settings.MindWipeEnabled)
                 locked.Add("Mind Wipe (Lv.75)");
 
             return locked;
@@ -9722,6 +9805,11 @@ namespace ConditioningControlPanel
         private void BtnClearProfile_Click(object sender, RoutedEventArgs e)
         {
             if (TxtProfileSearch != null) TxtProfileSearch.Text = "";
+            ClearProfileViewer();
+        }
+
+        private void ClearProfileViewer()
+        {
             if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Collapsed;
             if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Visible;
             if (ProfileAchievementGrid != null) ProfileAchievementGrid.ItemsSource = null;
@@ -9827,6 +9915,113 @@ namespace ConditioningControlPanel
                     }
                     catch { }
                 }
+            }
+        }
+
+        private async void BtnChangeDisplayName_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var currentName = App.Settings?.Current?.UserDisplayName ?? "";
+                var dialog = new DisplayNameDialog(isChangeName: true, currentName: currentName);
+                dialog.Owner = this;
+                if (dialog.ShowDialog() != true) return;
+
+                var newName = dialog.DisplayName;
+                if (string.Equals(newName, currentName, StringComparison.Ordinal)) return;
+
+                if (App.ProfileSync == null) return;
+
+                // Disable button during request
+                if (BtnChangeDisplayName != null) BtnChangeDisplayName.IsEnabled = false;
+
+                var (success, error, resultName) = await App.ProfileSync.ChangeDisplayNameAsync(newName);
+
+                if (success && resultName != null)
+                {
+                    if (App.Settings?.Current != null)
+                    {
+                        App.Settings.Current.UserDisplayName = resultName;
+                        App.Settings.Save();
+                    }
+                    if (TxtProfileViewerName != null)
+                        TxtProfileViewerName.Text = resultName;
+                    UpdateQuickLoginUI();
+                }
+                else
+                {
+                    MessageBox.Show(
+                        error ?? "Failed to change display name",
+                        "Name Change Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Error changing display name");
+                MessageBox.Show(
+                    "An error occurred while changing your name. Please try again.",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (BtnChangeDisplayName != null) BtnChangeDisplayName.IsEnabled = true;
+            }
+        }
+
+        private async void BtnDeleteProfile_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dialog = new DisplayNameDialog("delete");
+                dialog.Owner = this;
+                if (dialog.ShowDialog() != true) return;
+
+                if (App.ProfileSync == null) return;
+
+                // Disable button during request
+                if (BtnDeleteProfile != null) BtnDeleteProfile.IsEnabled = false;
+
+                var (success, error) = await App.ProfileSync.DeleteAccountAsync();
+
+                if (success)
+                {
+                    App.ProfileSync?.StopHeartbeat();
+                    App.Patreon?.Logout();
+                    App.Discord?.Logout();
+
+                    ClearAccountData();
+
+                    MessageBox.Show(
+                        "Your profile has been deleted.",
+                        "Profile Deleted",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show(
+                        error ?? "Failed to delete profile",
+                        "Deletion Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Error deleting profile");
+                MessageBox.Show(
+                    "An error occurred while deleting your profile. Please try again.",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (BtnDeleteProfile != null) BtnDeleteProfile.IsEnabled = true;
             }
         }
 
@@ -10043,6 +10238,16 @@ namespace ConditioningControlPanel
             if (TxtProfileViewerName != null)
                 TxtProfileViewerName.Text = App.Settings?.Current?.UserDisplayName
                     ?? App.Discord?.CustomDisplayName ?? App.Patreon?.DisplayName ?? "You";
+
+            // Show edit name button for own profile (only if logged in with unified ID)
+            if (BtnChangeDisplayName != null)
+                BtnChangeDisplayName.Visibility = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId)
+                    ? Visibility.Visible : Visibility.Collapsed;
+
+            // Show delete profile button for own profile (only if logged in with unified ID)
+            if (BtnDeleteProfile != null)
+                BtnDeleteProfile.Visibility = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId)
+                    ? Visibility.Visible : Visibility.Collapsed;
 
             // Online status
             if (TxtProfileViewerOnline != null)
@@ -10283,6 +10488,16 @@ namespace ConditioningControlPanel
             // which is more accurate than leaderboard cache
             var isOwnProfile = entry.DisplayName?.Equals(
                 App.Settings?.Current?.UserDisplayName, StringComparison.OrdinalIgnoreCase) == true;
+
+            // Edit name button - only visible on own profile
+            if (BtnChangeDisplayName != null)
+                BtnChangeDisplayName.Visibility = isOwnProfile && !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId)
+                    ? Visibility.Visible : Visibility.Collapsed;
+
+            // Delete profile button - only visible on own profile
+            if (BtnDeleteProfile != null)
+                BtnDeleteProfile.Visibility = isOwnProfile && !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId)
+                    ? Visibility.Visible : Visibility.Collapsed;
 
             // OG LV UNLOCK toggle - only visible for OG users on their own profile
             if (OgLevelUnlockToggle != null)

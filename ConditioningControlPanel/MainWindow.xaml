@@ -1363,8 +1363,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.0 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.0-pre2 - Quest Streaks &amp; Profile Fixes"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.1 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.1 - Season Reset &amp; Skill Tree Fixes"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -4037,6 +4037,7 @@
 
         <!-- Quests Tab -->
         <ContentControl x:Name="QuestsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+            <Grid>
             <Border Style="{StaticResource SectionPanel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
@@ -4538,6 +4539,19 @@
                     </StackPanel>
                 </ScrollViewer>
             </Border>
+
+            <!-- Login Required Overlay -->
+            <Border x:Name="QuestsLoginOverlay" Background="#E6151528" CornerRadius="12" Visibility="Collapsed">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
+                    <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                    <TextBlock Text="Login Required" Foreground="#FF69B4" FontSize="22" FontWeight="Bold"
+                               HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock Text="Log in with Discord or Patreon to access Quests and Streaks!"
+                               Foreground="#AA99AA" FontSize="14" HorizontalAlignment="Center"
+                               TextAlignment="Center" TextWrapping="Wrap" MaxWidth="350"/>
+                </StackPanel>
+            </Border>
+            </Grid>
         </ContentControl>
 
         <!-- Achievements Tab -->
@@ -6526,6 +6540,24 @@
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock x:Name="TxtProfileViewerName" Text="Display Name"
                                                            Foreground="White" FontSize="18" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                                <!-- Edit display name button (own profile only) -->
+                                                <Button x:Name="BtnChangeDisplayName" Visibility="Collapsed"
+                                                        Width="24" Height="24" Margin="6,0,0,0"
+                                                        Background="Transparent" BorderThickness="0"
+                                                        Cursor="Hand" VerticalAlignment="Center"
+                                                        ToolTip="Change display name"
+                                                        Click="BtnChangeDisplayName_Click">
+                                                    <TextBlock Text="&#x270E;" Foreground="#888" FontSize="14" VerticalAlignment="Center"/>
+                                                </Button>
+                                                <!-- Delete profile button (own profile only) -->
+                                                <Button x:Name="BtnDeleteProfile" Visibility="Collapsed"
+                                                        Width="24" Height="24" Margin="4,0,0,0"
+                                                        Background="Transparent" BorderThickness="0"
+                                                        Cursor="Hand" VerticalAlignment="Center"
+                                                        ToolTip="Delete your profile"
+                                                        Click="BtnDeleteProfile_Click">
+                                                    <TextBlock Text="&#x1F5D1;" Foreground="#FF4444" FontSize="13" VerticalAlignment="Center"/>
+                                                </Button>
                                                 <!-- OG GOOD GIRL Banner -->
                                                 <Border x:Name="OgBannerBadge" Visibility="Collapsed" Margin="10,0,0,0" Padding="8,3" CornerRadius="4"
                                                         VerticalAlignment="Center">
@@ -7562,6 +7594,18 @@
                             <!-- Header and skill nodes will be drawn programmatically -->
                         </Canvas>
                     </ScrollViewer>
+                </Border>
+
+                <!-- Login Required Overlay -->
+                <Border x:Name="EnhancementsLoginOverlay" Background="#E6151528" CornerRadius="12" Visibility="Collapsed">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
+                        <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                        <TextBlock Text="Login Required" Foreground="#FF69B4" FontSize="22" FontWeight="Bold"
+                                   HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                        <TextBlock Text="Log in with Discord or Patreon to access Enhancements!"
+                                   Foreground="#AA99AA" FontSize="14" HorizontalAlignment="Center"
+                                   TextAlignment="Center" TextWrapping="Wrap" MaxWidth="350"/>
+                    </StackPanel>
                 </Border>
             </Grid>
         </ContentControl>

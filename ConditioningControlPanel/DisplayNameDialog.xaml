@@ -27,13 +27,13 @@
             </Grid.RowDefinitions>
 
             <!-- Title -->
-            <TextBlock Grid.Row="0" Text="Welcome! Choose Your Display Name"
+            <TextBlock x:Name="TxtTitle" Grid.Row="0" Text="Welcome! Choose Your Display Name"
                        Foreground="{StaticResource PinkBrush}"
                        FontSize="18" FontWeight="Bold" Margin="0,0,0,10"
                        HorizontalAlignment="Center"/>
 
             <!-- Warning -->
-            <Border Grid.Row="1" Background="#2A2A3E" CornerRadius="4" Padding="12,8" Margin="0,0,0,15">
+            <Border x:Name="WarningPanel" Grid.Row="1" Background="#2A2A3E" CornerRadius="4" Padding="12,8" Margin="0,0,0,15">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                     <TextBlock Text="Warning:" Foreground="{StaticResource WarningBrush}"
                                FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
@@ -52,11 +52,11 @@
                      Background="#252542" Foreground="White"
                      BorderBrush="{StaticResource PinkBrush}"
                      Padding="12,10" FontSize="15"
-                     MaxLength="30"
+                     MaxLength="20"
                      KeyDown="TxtDisplayName_KeyDown"/>
 
             <!-- Character count -->
-            <TextBlock x:Name="TxtCharCount" Grid.Row="4" Text="0/30 characters"
+            <TextBlock x:Name="TxtCharCount" Grid.Row="4" Text="0/20 characters"
                        Foreground="#888" FontSize="11" Margin="0,5,0,0"
                        HorizontalAlignment="Right" VerticalAlignment="Top"/>
 

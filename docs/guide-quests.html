@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily & Weekly Quests | CCP Guide</title>
+    <meta name="description" content="Complete daily and weekly challenges for bonus XP and maintain your streak">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📜</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>Daily & Weekly Quests</span>
+            </div>
+            <h1>Daily & Weekly Quests</h1>
+            <p>Complete daily and weekly challenges for bonus XP and maintain your streak</p>
+        </div>
+
+        <div class="guide-content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#daily-quests">Daily Quests</a></li>
+                    <li><a href="#weekly-quests">Weekly Quests</a></li>
+                    <li><a href="#quest-refresh">Quest Refresh</a></li>
+                    <li><a href="#rerolls">Rerolls</a></li>
+                    <li><a href="#streaks">Streaks</a></li>
+                    <li><a href="#seasonal">Seasonal Quests</a></li>
+                </ul>
+            </div>
+
+            <section id="overview">
+                <h2>Overview</h2>
+
+                <p>Quests are challenges that reward bonus XP for completing specific activities. They give you daily and weekly goals to work toward, keeping your conditioning routine fresh and rewarding.</p>
+
+                <ul>
+                    <li><strong>3 daily quests</strong> and <strong>3 weekly quests</strong> are active at any time</li>
+                    <li>Quest XP scales by <strong>+2% per level</strong>, so higher-level users earn more from the same quests</li>
+                    <li>Quests are part of the <strong>seasonal system</strong> — progress resets each season</li>
+                </ul>
+            </section>
+
+            <section id="daily-quests">
+                <h2>Daily Quests</h2>
+
+                <p>Each day, 3 quests are randomly selected from the following pool:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Quest</th>
+                            <th>Category</th>
+                            <th>Target</th>
+                            <th>XP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Flash Flood</td>
+                            <td>Flash</td>
+                            <td>50 images</td>
+                            <td>150 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Spiral Submersion</td>
+                            <td>Spiral</td>
+                            <td>10 minutes</td>
+                            <td>200 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Bubble Brain</td>
+                            <td>Bubbles</td>
+                            <td>30 pops</td>
+                            <td>150 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Pink Vision</td>
+                            <td>Pink Filter</td>
+                            <td>15 minutes</td>
+                            <td>175 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Deep Trance Training</td>
+                            <td>Video</td>
+                            <td>10 minutes</td>
+                            <td>200 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Devotion Display</td>
+                            <td>Session</td>
+                            <td>1 session</td>
+                            <td>250 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Obedience Drill</td>
+                            <td>Lock Card</td>
+                            <td>2 cards</td>
+                            <td>200 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Bimbo Basics</td>
+                            <td>Flash</td>
+                            <td>25 images</td>
+                            <td>100 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Mindless Minutes</td>
+                            <td>Combined</td>
+                            <td>20 min any overlay</td>
+                            <td>175 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Thought Pop</td>
+                            <td>Bubbles</td>
+                            <td>50 pops</td>
+                            <td>175 XP</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box">
+                    <h5>📝 Note</h5>
+                    <p>3 daily quests are randomly selected from this pool each day. XP values shown are base values before level scaling.</p>
+                </div>
+            </section>
+
+            <section id="weekly-quests">
+                <h2>Weekly Quests</h2>
+
+                <p>Weekly quests offer larger rewards for sustained effort over the week:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Quest</th>
+                            <th>Category</th>
+                            <th>Target</th>
+                            <th>XP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Flash Monsoon</td>
+                            <td>Flash</td>
+                            <td>500 images</td>
+                            <td>600 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Spiral Abyss</td>
+                            <td>Spiral</td>
+                            <td>120 minutes</td>
+                            <td>750 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Bubble Tsunami</td>
+                            <td>Bubbles</td>
+                            <td>400 pops</td>
+                            <td>600 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Pink Immersion</td>
+                            <td>Pink Filter</td>
+                            <td>180 minutes</td>
+                            <td>700 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Marathon Trance</td>
+                            <td>Video</td>
+                            <td>90 minutes</td>
+                            <td>800 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Weekly Devotion</td>
+                            <td>Session</td>
+                            <td>7 sessions</td>
+                            <td>1,000 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Phrase Mastery</td>
+                            <td>Lock Card</td>
+                            <td>15 cards</td>
+                            <td>750 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Conditioning Champion</td>
+                            <td>Combined</td>
+                            <td>2,000 XP earned</td>
+                            <td>500 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Streak Keeper</td>
+                            <td>Streak</td>
+                            <td>7-day streak</td>
+                            <td>600 XP</td>
+                        </tr>
+                        <tr>
+                            <td>Total Submission</td>
+                            <td>Bubble Count</td>
+                            <td>15 games</td>
+                            <td>700 XP</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="quest-refresh">
+                <h2>Quest Refresh</h2>
+
+                <ul>
+                    <li><strong>Daily quests</strong> refresh every 24 hours</li>
+                    <li><strong>Weekly quests</strong> refresh once per week</li>
+                    <li>Quest definitions are fetched from the server and cached for 24 hours</li>
+                    <li>If offline, quests use the last cached definitions</li>
+                </ul>
+            </section>
+
+            <section id="rerolls">
+                <h2>Rerolls</h2>
+
+                <p>Rerolls are <strong>NOT</strong> available by default — they require Skill Tree unlocks:</p>
+
+                <ul>
+                    <li><strong>Quest Refresh</strong> skill: 1 free daily reroll</li>
+                    <li><strong>Reroll Addict</strong> skill: +2 additional daily rerolls (3 total)</li>
+                    <li><strong>Better Quests</strong> skill: +25% XP on rerolled quests</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>💡 Tip</h5>
+                    <p>Invest in the Skill Tree's quest branch to maximize your daily XP gains. See the <a href="guide-skill-tree.html">Skill Tree guide</a> for details.</p>
+                </div>
+            </section>
+
+            <section id="streaks">
+                <h2>Streaks</h2>
+
+                <p>Complete at least <strong>1 daily quest per day</strong> to maintain your streak. Streaks reward consistency with increasing bonuses.</p>
+
+                <h3>Streak Multiplier</h3>
+                <p>With the <strong>"Streak Power"</strong> skill, earn +0.5% XP per streak day (max +15% at 30 days).</p>
+
+                <h3>Milestone Rewards</h3>
+                <p>The <strong>"Milestone Rewards"</strong> skill gives a daily XP bonus based on your streak tier:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Streak Days</th>
+                            <th>Daily Bonus</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1-3 days</td>
+                            <td>50 XP</td>
+                        </tr>
+                        <tr>
+                            <td>4-6 days</td>
+                            <td>100 XP</td>
+                        </tr>
+                        <tr>
+                            <td>7-13 days</td>
+                            <td>150 XP</td>
+                        </tr>
+                        <tr>
+                            <td>14-29 days</td>
+                            <td>200 XP</td>
+                        </tr>
+                        <tr>
+                            <td>30+ days</td>
+                            <td>300 XP</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Streak Protection</h3>
+                <ul>
+                    <li><strong>"Good Girl Streak"</strong> skill: 1 free streak shield per week (forgives a missed day)</li>
+                    <li><strong>"Oopsie Insurance"</strong> skill: recover a broken streak for 500 XP (once per season)</li>
+                </ul>
+
+                <div class="info-box warning">
+                    <h5>&#9888;&#65039; Warning</h5>
+                    <p>Your streak resets if you miss a day without a shield! The Oopsie Insurance skill can save you once per season.</p>
+                </div>
+            </section>
+
+            <section id="seasonal">
+                <h2>Seasonal Quests</h2>
+
+                <p>Quests follow the game's seasonal system:</p>
+
+                <ul>
+                    <li>Seasons run on a <strong>monthly basis</strong> (format: YYYY-MM)</li>
+                    <li>Each season has a <strong>fun themed title</strong></li>
+                    <li>Some quests may only be available during <strong>specific date ranges</strong></li>
+                    <li>Quest progress <strong>resets</strong> at the start of each season</li>
+                </ul>
+
+                <div class="info-box">
+                    <h5>📝 Note</h5>
+                    <p>Check the <a href="guide-leaderboard.html">Leaderboard & Seasons guide</a> for more about how seasons work.</p>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-progression.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Progression & Achievements</span>
+                    </div>
+                </a>
+                <a href="guide-skill-tree.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Skill Tree</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>

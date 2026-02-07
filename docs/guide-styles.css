@@ -757,6 +757,30 @@ footer {
     .reference-grid {
         grid-template-columns: 1fr;
     }
+
+    .guide-card.hero-card {
+        padding: 1.5rem;
+    }
+
+    .guide-card.hero-card .guide-card-icon {
+        font-size: 2.5rem;
+    }
+
+    .guide-card.hero-card .guide-card-content h3 {
+        font-size: 1.15rem;
+    }
+
+    .guide-search-wrapper {
+        max-width: 100%;
+    }
+
+    .skill-node-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .guide-category-header h2 {
+        font-size: 1.1rem;
+    }
 }
 
 /* Scrollbar styling */
@@ -776,4 +800,196 @@ footer {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--accent-pink);
+}
+
+/* ===== Guide Hub Enhancements ===== */
+
+/* Category Sections */
+.guide-category {
+    margin-bottom: 3rem;
+}
+
+.guide-category-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255, 105, 180, 0.15);
+}
+
+.guide-category-header .category-icon {
+    font-size: 1.5rem;
+}
+
+.guide-category-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    border: none;
+    padding: 0;
+}
+
+.guide-category-header .category-count {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    margin-left: auto;
+}
+
+/* Hero Card */
+.guide-card.hero-card {
+    grid-column: 1 / -1;
+    padding: 2rem 2.5rem;
+    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(155, 89, 182, 0.15) 100%);
+    border-color: rgba(155, 89, 182, 0.3);
+}
+
+.guide-card.hero-card .guide-card-icon {
+    font-size: 3.5rem;
+}
+
+.guide-card.hero-card .guide-card-content h3 {
+    font-size: 1.4rem;
+}
+
+.guide-card.hero-card .guide-card-content p {
+    font-size: 1rem;
+}
+
+/* NEW Badge */
+.guide-card-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #ff69b4, #ff1493);
+    color: #fff;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+}
+
+.guide-card-badge.premium {
+    background: linear-gradient(135deg, #ff4444, #cc2244);
+}
+
+/* Search Bar */
+.guide-search-wrapper {
+    position: relative;
+    max-width: 500px;
+    margin: 0 auto 2.5rem;
+}
+
+.guide-search-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 1rem;
+    pointer-events: none;
+}
+
+.guide-search {
+    width: 100%;
+    padding: 0.85rem 1rem 0.85rem 2.75rem;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    background: var(--bg-card);
+    border: 1px solid rgba(255, 105, 180, 0.15);
+    border-radius: 50px;
+    outline: none;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.guide-search::placeholder {
+    color: var(--text-muted);
+}
+
+.guide-search:focus {
+    border-color: var(--accent-pink);
+    box-shadow: 0 0 0 3px rgba(255, 105, 180, 0.1);
+}
+
+/* Skill Node Grid */
+.skill-tier {
+    margin: 2rem 0;
+}
+
+.skill-tier h3 {
+    margin-bottom: 1rem;
+}
+
+.skill-node-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+}
+
+.skill-node {
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 1.25rem;
+    border: 1px solid rgba(255, 105, 180, 0.1);
+    transition: border-color 0.3s;
+}
+
+.skill-node:hover {
+    border-color: rgba(255, 105, 180, 0.3);
+}
+
+.skill-node .node-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.skill-node .node-icon {
+    font-size: 1.5rem;
+}
+
+.skill-node .node-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.skill-node .node-cost {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--accent-pink);
+    background: rgba(255, 105, 180, 0.1);
+    padding: 0.15rem 0.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.skill-node .node-effect {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.skill-node .node-prereq {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+.skill-node.secret {
+    border-color: rgba(255, 215, 0, 0.3);
+    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(255, 215, 0, 0.05) 100%);
+}
+
+.skill-node.secret .node-cost {
+    color: #ffd700;
+    background: rgba(255, 215, 0, 0.1);
 }

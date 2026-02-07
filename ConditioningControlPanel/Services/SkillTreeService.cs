@@ -20,7 +20,7 @@ public class SkillTreeService : IDisposable
     /// <summary>
     /// Points awarded per level up
     /// </summary>
-    public const int PointsPerLevel = 5;
+    public const int PointsPerLevel = 1;
 
     /// <summary>
     /// Event fired when a skill is unlocked
