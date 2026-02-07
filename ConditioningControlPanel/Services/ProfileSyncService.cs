@@ -437,6 +437,19 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Information("V2 Sync: User retroactively flagged as Season 0 OG by server");
                         }
 
+                        // Sync highest_level_ever from server (server is authoritative)
+                        if (v2Result?.User?.HighestLevelEver != null)
+                        {
+                            var serverHighest = v2Result.User.HighestLevelEver.Value;
+                            if (serverHighest != settings.HighestLevelEver)
+                            {
+                                App.Logger?.Information("V2 Sync: highest_level_ever server={Server} local={Local} — using server value",
+                                    serverHighest, settings.HighestLevelEver);
+                                settings.HighestLevelEver = serverHighest;
+                                App.Settings?.Save();
+                            }
+                        }
+
                         // Handle level_reset — server admin reset all levels, force client to accept
                         if (v2Result?.LevelReset == true && v2Result.User != null)
                         {
@@ -447,7 +460,8 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Information("V2 Sync: Level reset by admin — forcing Level {Level}, XP {Xp}", serverLevel, serverXp);
                             settings.PlayerLevel = serverLevel;
                             settings.PlayerXP = serverLevelXp;
-                            settings.HighestLevelEver = 0;
+                            // Use server's highest_level_ever (preserved across resets for permanent unlocks)
+                            settings.HighestLevelEver = v2Result.User.HighestLevelEver ?? 0;
                             App.Settings?.Save();
                         }
                     }
@@ -1262,6 +1276,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("xp")]
             public int Xp { get; set; }
+
+            [JsonProperty("highest_level_ever")]
+            public int? HighestLevelEver { get; set; }
         }
 
         private class OopsieSuccessResponse

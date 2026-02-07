@@ -498,6 +498,8 @@ namespace ConditioningControlPanel.Services
                              "professionally assembled conditioning content.",
                 Tips = new List<string>
                 {
+                    "A free Patreon account gives you 10 GB/month — no payment needed!",
+                    "Patreon supporters get 100 GB/month",
                     "Click Install to download a pack (uses bandwidth quota)",
                     "Activate/Deactivate packs to include them in your rotation",
                     "Installed packs show in your asset browser",
@@ -506,8 +508,9 @@ namespace ConditioningControlPanel.Services
                 },
                 HowItWorks = "Packs are downloaded from the community server and extracted to your assets " +
                              "folder. Each pack has a size shown before download. Your monthly bandwidth " +
-                             "quota (shown in the bar) limits total downloads. Deactivating a pack excludes " +
-                             "its files from random selection without deleting them."
+                             "quota (shown in the bar) limits total downloads. A free Patreon login gets " +
+                             "10 GB/month, while Patreon supporters get 100 GB/month. Deactivating a pack " +
+                             "excludes its files from random selection without deleting them."
             },
 
             ["AssetBrowser"] = new HelpContent

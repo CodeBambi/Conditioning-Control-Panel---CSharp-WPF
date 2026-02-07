@@ -304,7 +304,7 @@ namespace ConditioningControlPanel.Services
             // Check if user is authenticated with Patreon
             if (App.Patreon == null || !App.Patreon.IsAuthenticated)
             {
-                AuthenticationRequired?.Invoke(this, "Please log in with Patreon to download content packs.");
+                AuthenticationRequired?.Invoke(this, "Please log in with Patreon to download content packs.\nA free Patreon account gives you 10 GB/month — no payment needed!");
                 throw new UnauthorizedAccessException("Patreon authentication required to download packs");
             }
 

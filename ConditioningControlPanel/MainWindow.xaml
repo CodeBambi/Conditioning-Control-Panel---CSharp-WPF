@@ -1363,8 +1363,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.1 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.1 - Season Reset &amp; Skill Tree Fixes"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.2 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.2 - OG Always Unlocked &amp; Sync Fixes"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">

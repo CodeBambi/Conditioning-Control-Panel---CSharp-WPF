@@ -22,40 +22,28 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.1";
+        public const string AppVersion = "5.5.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.1 - Season Reset & Skill Tree Fixes
+        public const string CurrentPatchNotes = @"v5.5.2 - OG Always Unlocked & Sync Fixes
+
+⭐ OG USERS
+• OG users now have all features permanently unlocked — no toggle needed
+• Removed OG LV UNLOCK toggle (automatic for all Season 0 OGs)
 
 🔧 FIXES
-• Skill tree sparkle points now award 1 per level (was 5)
-• Bouncing text no longer drops framerate when app is minimized
-• Season reset now properly clears levels, XP, skill points, and skills
-• Server-side protection prevents clients from pushing old cached levels back
-• OG users with unlock toggle now properly bypass all skill requirements
-• Bubbles, pink filter, and spiral now work correctly for OG users
-• Tab button sizing fixed to prevent clipping
+• Bubbles now poppable in all session types
+• Profile deletion properly cleans up all data
+• Session unlock warnings display correctly
+• highest_level_ever now syncs from server (preserves permanent unlocks)
+• Season reset preserves highest_level_ever for unlock history
 
-📚 HELP SYSTEM
-• 35 help buttons across all tabs with rich tooltips
-
-🖼️ ASSET PREVIEW PLAYER
-• Right-click thumbnails to preview images, GIFs, and videos
-
-🎵 AUDIO-SYNCED HAPTICS
-• Real-time FFT bass analysis for HypnoTube videos
-
-⚙️ ADDITIONAL
-• Skill tree scrollbar fix, settings live-save
-• Account switching properly clears data
-• V1 migration fixes for legacy users
-• Bimbo Journal with local photo storage
-• Pink Rush bonus XP windows
-• Bubble Count minigame (Level 50+)
-• Brain Drain, Bouncing Text, Mind Wipe effects";
+📦 CONTENT PACKS
+• Free Patreon login now gives 10 GB/month bandwidth — no payment needed
+• Clearer messaging about free vs supporter bandwidth tiers";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
