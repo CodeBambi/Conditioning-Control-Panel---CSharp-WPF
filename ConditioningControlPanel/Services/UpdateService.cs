@@ -22,28 +22,17 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.2";
+        public const string AppVersion = "5.5.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.2 - OG Always Unlocked & Sync Fixes
-
-⭐ OG USERS
-• OG users now have all features permanently unlocked — no toggle needed
-• Removed OG LV UNLOCK toggle (automatic for all Season 0 OGs)
+        public const string CurrentPatchNotes = @"v5.5.3 - Level Display Fix
 
 🔧 FIXES
-• Bubbles now poppable in all session types
-• Profile deletion properly cleans up all data
-• Session unlock warnings display correctly
-• highest_level_ever now syncs from server (preserves permanent unlocks)
-• Season reset preserves highest_level_ever for unlock history
-
-📦 CONTENT PACKS
-• Free Patreon login now gives 10 GB/month bandwidth — no payment needed
-• Clearer messaging about free vs supporter bandwidth tiers";
+• Level display now shows correct level immediately on startup
+• Fixed race condition where level showed as 1 until cloud profile loaded";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

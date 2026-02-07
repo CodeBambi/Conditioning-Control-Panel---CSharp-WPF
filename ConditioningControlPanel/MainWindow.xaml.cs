@@ -305,6 +305,9 @@ namespace ConditioningControlPanel
                 });
             });
             
+            // Show local level/XP immediately (cloud sync may update later via ProfileLoaded)
+            UpdateLevelDisplay();
+
             // Initialize browser when window is loaded
             Loaded += MainWindow_Loaded;
         }
