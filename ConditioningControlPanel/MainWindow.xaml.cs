@@ -2527,6 +2527,7 @@ namespace ConditioningControlPanel
                             RefreshQuestUI();
                             DrawSkillTree();
                             UpdateQuickLoginUI();
+                            UpdateUnlockablesVisibility(App.Settings?.Current?.PlayerLevel ?? 1);
                         });
                     }
                 });
@@ -2625,6 +2626,7 @@ namespace ConditioningControlPanel
             UpdateDiscordUI();
             UpdateBannerWelcomeMessage();
             UpdateAccountLinkingUI();
+            UpdateUnlockablesVisibility(1);
 
             // Clear profile viewer so stale profile card doesn't linger
             ClearProfileViewer();
@@ -9832,11 +9834,6 @@ namespace ConditioningControlPanel
             {
                 ProfilePatreonTierBadge.Visibility = Visibility.Collapsed;
             }
-            // Hide OG level unlock toggle
-            if (OgLevelUnlockToggle != null)
-            {
-                OgLevelUnlockToggle.Visibility = Visibility.Collapsed;
-            }
         }
 
         private void ProfileDiscordHandle_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -10025,44 +10022,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void OgLevelUnlockToggle_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            // Only works for OG users viewing their own profile
-            if (App.Settings?.Current?.IsSeason0Og != true) return;
-
-            // Toggle the setting
-            App.Settings.Current.OgLevelUnlockEnabled = !App.Settings.Current.OgLevelUnlockEnabled;
-            App.Settings.Save();
-
-            // Update the visual indicator
-            UpdateOgLevelUnlockVisual();
-
-            // Refresh all UI components that depend on level unlocks
-            UpdateUnlockablesVisibility(App.Settings.Current.PlayerLevel);
-            RefreshRoadmapUI();
-            SyncCompanionTabUI();
-
-            // Refresh avatar tube companion display if open
-            try
-            {
-                _avatarTubeWindow?.RefreshCompanionDisplay();
-            }
-            catch { /* Avatar window may not be open */ }
-
-            App.Logger?.Information("OG Level Unlock toggled: {Enabled}, refreshing UI", App.Settings.Current.OgLevelUnlockEnabled);
-        }
-
-        private void UpdateOgLevelUnlockVisual()
-        {
-            if (OgLevelUnlockIndicator == null) return;
-
-            var isEnabled = App.Settings?.Current?.OgLevelUnlockEnabled == true;
-            OgLevelUnlockIndicator.Background = new System.Windows.Media.SolidColorBrush(
-                isEnabled
-                    ? (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF4444")
-                    : (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#444444"));
-        }
-
         private void SearchAndDisplayProfile(string? searchName)
         {
             if (string.IsNullOrWhiteSpace(searchName))
@@ -10189,16 +10148,6 @@ namespace ConditioningControlPanel
             if (OgBannerBadge != null)
             {
                 OgBannerBadge.Visibility = isOg ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            // OG LV UNLOCK toggle - only visible for OG users on their own profile
-            if (OgLevelUnlockToggle != null)
-            {
-                OgLevelUnlockToggle.Visibility = isOg ? Visibility.Visible : Visibility.Collapsed;
-                if (isOg)
-                {
-                    UpdateOgLevelUnlockVisual();
-                }
             }
 
             // Avatar - load from Discord only if ShareProfilePicture is enabled
@@ -10498,17 +10447,6 @@ namespace ConditioningControlPanel
             if (BtnDeleteProfile != null)
                 BtnDeleteProfile.Visibility = isOwnProfile && !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId)
                     ? Visibility.Visible : Visibility.Collapsed;
-
-            // OG LV UNLOCK toggle - only visible for OG users on their own profile
-            if (OgLevelUnlockToggle != null)
-            {
-                var showToggle = isOwnProfile && App.Settings?.Current?.IsSeason0Og == true;
-                OgLevelUnlockToggle.Visibility = showToggle ? Visibility.Visible : Visibility.Collapsed;
-                if (showToggle)
-                {
-                    UpdateOgLevelUnlockVisual();
-                }
-            }
 
             int tierToUse;
             bool hasPatreonAccess;
@@ -14749,7 +14687,7 @@ namespace ConditioningControlPanel
                 // Show login prompt
                 var result = MessageBox.Show(
                     $"{message}\n\nWould you like to log in with Patreon now?",
-                    "Login Required",
+                    "Patreon Login Required (Free Account Works!)",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Information);
 

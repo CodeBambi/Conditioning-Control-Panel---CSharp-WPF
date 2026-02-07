@@ -158,13 +158,13 @@ public class SkillTreeService : IDisposable
 
     /// <summary>
     /// Check if a specific skill is unlocked.
-    /// OG users with OgLevelUnlockEnabled bypass all skill requirements.
+    /// OG users (Season 0) always have all skills unlocked.
     /// </summary>
     public bool HasSkill(string skillId)
     {
         var settings = App.Settings?.Current;
         if (settings == null) return false;
-        if (settings.IsSeason0Og && settings.OgLevelUnlockEnabled) return true;
+        if (settings.IsSeason0Og) return true;
         return settings.UnlockedSkills.Contains(skillId);
     }
 

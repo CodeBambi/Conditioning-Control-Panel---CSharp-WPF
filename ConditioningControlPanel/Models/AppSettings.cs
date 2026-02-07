@@ -2323,14 +2323,14 @@ namespace ConditioningControlPanel.Models
         /// <summary>
         /// Check if a feature at the specified level is unlocked for this user.
         /// Features are unlocked if:
-        /// 1. OG user has OgLevelUnlockEnabled toggled on, OR
+        /// 1. OG user (Season 0) — all features always unlocked, OR
         /// 2. User has reached this level in any previous season (HighestLevelEver), OR
         /// 3. User's current level meets the requirement
         /// </summary>
         public bool IsLevelUnlocked(int requiredLevel)
         {
-            // OG users with unlock toggle enabled bypass all level requirements
-            if (IsSeason0Og && OgLevelUnlockEnabled) return true;
+            // OG users always bypass all level requirements
+            if (IsSeason0Og) return true;
 
             // Check against highest level ever reached (permanent unlocks across seasons)
             if (HighestLevelEver >= requiredLevel) return true;
