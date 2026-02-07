@@ -9804,7 +9804,11 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            SearchAndDisplayProfile(displayName);
+            // Try leaderboard search first, fall back to local profile if not found
+            if (!SearchAndDisplayProfile(displayName))
+            {
+                DisplayOwnProfile();
+            }
         }
 
         private void BtnClearProfile_Click(object sender, RoutedEventArgs e)
@@ -10025,11 +10029,15 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void SearchAndDisplayProfile(string? searchName)
+        /// <summary>
+        /// Search leaderboard for a profile by display name and show it.
+        /// Returns true if a match was found and displayed, false otherwise.
+        /// </summary>
+        private bool SearchAndDisplayProfile(string? searchName)
         {
             if (string.IsNullOrWhiteSpace(searchName))
             {
-                return;
+                return false;
             }
 
             App.Logger?.Information("SearchAndDisplayProfile: Searching for '{SearchName}'", searchName);
@@ -10041,7 +10049,7 @@ namespace ConditioningControlPanel
                 App.Logger?.Information("SearchAndDisplayProfile: No entries, refreshing leaderboard...");
                 // Try to refresh leaderboard first
                 _ = RefreshAndSearchAsync(searchName);
-                return;
+                return false;
             }
 
             App.Logger?.Information("SearchAndDisplayProfile: Searching {Count} entries", entries.Count);
@@ -10054,32 +10062,31 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Information("SearchAndDisplayProfile: Found exact match '{Name}'", entry.DisplayName);
                 DisplayProfileEntry(entry);
+                return true;
             }
-            else
-            {
-                // No exact match - try partial match
-                entry = entries.FirstOrDefault(e =>
-                    e.DisplayName?.Contains(searchName, StringComparison.OrdinalIgnoreCase) == true);
 
-                if (entry != null)
-                {
-                    App.Logger?.Information("SearchAndDisplayProfile: Found partial match '{Name}'", entry.DisplayName);
-                    DisplayProfileEntry(entry);
-                }
-                else
-                {
-                    App.Logger?.Information("SearchAndDisplayProfile: No match found for '{SearchName}'", searchName);
-                    // Show not found message
-                    if (NoProfileSelected != null)
-                    {
-                        NoProfileSelected.Visibility = Visibility.Visible;
-                    }
-                    if (ProfileCardContainer != null)
-                    {
-                        ProfileCardContainer.Visibility = Visibility.Collapsed;
-                    }
-                }
+            // No exact match - try partial match
+            entry = entries.FirstOrDefault(e =>
+                e.DisplayName?.Contains(searchName, StringComparison.OrdinalIgnoreCase) == true);
+
+            if (entry != null)
+            {
+                App.Logger?.Information("SearchAndDisplayProfile: Found partial match '{Name}'", entry.DisplayName);
+                DisplayProfileEntry(entry);
+                return true;
             }
+
+            App.Logger?.Information("SearchAndDisplayProfile: No match found for '{SearchName}'", searchName);
+            // Show not found message
+            if (NoProfileSelected != null)
+            {
+                NoProfileSelected.Visibility = Visibility.Visible;
+            }
+            if (ProfileCardContainer != null)
+            {
+                ProfileCardContainer.Visibility = Visibility.Collapsed;
+            }
+            return false;
         }
 
         private async Task RefreshAndSearchAsync(string searchName)

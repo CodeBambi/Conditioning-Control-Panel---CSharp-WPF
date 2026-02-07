@@ -429,12 +429,22 @@ namespace ConditioningControlPanel.Services
                             }
                         }
 
-                        // Sync OG status from server (handles retroactive OG flagging by admin)
-                        if (v2Result?.IsSeason0Og == true && settings.IsSeason0Og != true)
+                        // Sync display name from server (server is authoritative — admin renames, etc.)
+                        if (!string.IsNullOrEmpty(v2Result?.User?.DisplayName) &&
+                            v2Result.User.DisplayName != settings.UserDisplayName)
                         {
-                            settings.IsSeason0Og = true;
+                            App.Logger?.Information("V2 Sync: display name updated from server: \"{Old}\" -> \"{New}\"",
+                                settings.UserDisplayName, v2Result.User.DisplayName);
+                            settings.UserDisplayName = v2Result.User.DisplayName;
                             App.Settings?.Save();
-                            App.Logger?.Information("V2 Sync: User retroactively flagged as Season 0 OG by server");
+                        }
+
+                        // Sync OG status from server (server is authoritative)
+                        if (v2Result?.IsSeason0Og != null && settings.IsSeason0Og != v2Result.IsSeason0Og.Value)
+                        {
+                            settings.IsSeason0Og = v2Result.IsSeason0Og.Value;
+                            App.Settings?.Save();
+                            App.Logger?.Information("V2 Sync: OG status synced from server: {IsOg}", v2Result.IsSeason0Og.Value);
                         }
 
                         // Sync highest_level_ever from server (server is authoritative)
@@ -1271,6 +1281,9 @@ namespace ConditioningControlPanel.Services
 
         private class V2SyncUser
         {
+            [JsonProperty("display_name")]
+            public string? DisplayName { get; set; }
+
             [JsonProperty("level")]
             public int Level { get; set; }
 

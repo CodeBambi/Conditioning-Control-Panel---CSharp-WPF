@@ -22,17 +22,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.3";
+        public const string AppVersion = "5.5.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.3 - Level Display Fix
+        public const string CurrentPatchNotes = @"v5.5.4 - Profile & Sync Fixes
 
 🔧 FIXES
-• Level display now shows correct level immediately on startup
-• Fixed race condition where level showed as 1 until cloud profile loaded";
+• Fixed achievement 'Look, But Don't Touch' not unlocking after completing session
+• Profile viewer now shows your local stats when leaderboard search fails
+• Display name now syncs from server (admin renames take effect automatically)
+• Fixed OG status sync (was only setting true, never clearing)";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
