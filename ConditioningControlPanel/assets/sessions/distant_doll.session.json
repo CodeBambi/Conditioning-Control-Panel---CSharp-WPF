@@ -56,7 +56,7 @@
     "bubblesEnabled": true,
     "bubblesFrequency": 5,
     "bubblesIntermittent": true,
-    "bubblesClickable": false,
+    "bubblesClickable": true,
     "bubblesBurstCount": 5,
     "bubblesPerBurst": 1,
     "bubblesGapMin": 7,
