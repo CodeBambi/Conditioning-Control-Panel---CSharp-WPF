@@ -831,7 +831,7 @@ namespace ConditioningControlPanel.Services
             if (settings.AutonomyCanTriggerBrainDrain && settings.IsLevelUnlocked(70))
                 candidates.Add((AutonomyActionType.BrainDrainPulse, 10));
 
-            if (settings.AutonomyCanTriggerBubbles && App.SkillTree?.HasSkill("pink_hours") == true)
+            if (settings.AutonomyCanTriggerBubbles && settings.IsLevelUnlocked(20))
                 candidates.Add((AutonomyActionType.StartBubbles, 15));
 
             if (settings.AutonomyCanComment)
@@ -846,7 +846,7 @@ namespace ConditioningControlPanel.Services
 
             // Note: SpiralPulse removed from autonomy - can interfere with user experience
 
-            if (settings.AutonomyCanTriggerPinkFilter && App.SkillTree?.HasSkill("pink_hours") == true)
+            if (settings.AutonomyCanTriggerPinkFilter && settings.IsLevelUnlocked(10))
                 candidates.Add((AutonomyActionType.PinkFilterPulse, 20));
 
             if (settings.AutonomyCanTriggerBouncingText && settings.IsLevelUnlocked(60))

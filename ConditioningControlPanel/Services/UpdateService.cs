@@ -22,19 +22,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.4";
+        public const string AppVersion = "5.5.5";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.4 - Profile & Sync Fixes
+        public const string CurrentPatchNotes = @"v5.5.5 - Skill Tree & Feature Fixes
 
 🔧 FIXES
-• Fixed achievement 'Look, But Don't Touch' not unlocking after completing session
-• Profile viewer now shows your local stats when leaderboard search fails
-• Display name now syncs from server (admin renames take effect automatically)
-• Fixed OG status sync (was only setting true, never clearing)";
+• Spiral, pink filter, and bubbles no longer require pink_hours skill — only level unlock needed
+• OG users no longer see entire skill tree as owned (OG only bypasses level gates, not skills)
+• Fixed skill tree showing 'needs login' overlay for users with legacy auth tokens
+• Fixed OG users being able to re-purchase already-owned skills";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

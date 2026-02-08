@@ -2655,7 +2655,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void UpdateQuickLoginUI()
         {
-            var isLoggedIn = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
+            var isLoggedIn = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId) || App.IsLoggedIn;
             var displayName = App.Settings?.Current?.UserDisplayName
                            ?? App.Patreon?.DisplayName
                            ?? App.Discord?.DisplayName
@@ -11031,15 +11031,12 @@ namespace ConditioningControlPanel
             if (settings.SubliminalEnabled)
                 App.Subliminal.Start();
             
-            // Always start overlay service if pink_hours skill unlocked (handles spiral and pink filter)
+            // Always start overlay service (handles spiral and pink filter)
             // This allows toggling overlays on/off while engine is running
-            if (App.SkillTree?.HasSkill("pink_hours") == true)
-            {
-                App.Overlay.Start();
-            }
+            App.Overlay.Start();
 
-            // Start bubble service (requires pink_hours skill)
-            if (App.SkillTree?.HasSkill("pink_hours") == true && settings.BubblesEnabled)
+            // Start bubble service
+            if (settings.BubblesEnabled)
             {
                 App.Bubbles.Start();
             }
@@ -13012,8 +13009,7 @@ namespace ConditioningControlPanel
             // Immediately update bubbles if engine is running
             if (_isRunning)
             {
-                // Check if player has the pink_hours skill (root skill) instead of level check
-                if (isEnabled && App.SkillTree?.HasSkill("pink_hours") == true)
+                if (isEnabled)
                 {
                     App.Bubbles.Start();
                 }

@@ -123,9 +123,8 @@ public class AchievementService : IDisposable
             App.SkillTree?.AddConditioningTime(1.0 / 60.0);
         }
 
-        // Track Pink Filter time - only when overlay is actually running and pink_hours skill unlocked
+        // Track Pink Filter time - only when overlay is actually running
         var isPinkFilterActive = settings.PinkFilterEnabled &&
-                                 App.SkillTree?.HasSkill("pink_hours") == true &&
                                  App.Overlay?.IsRunning == true;
         if (isPinkFilterActive)
         {
@@ -152,9 +151,8 @@ public class AchievementService : IDisposable
             _lastPinkFilterCheck = now;
         }
 
-        // Track Spiral time - only when overlay is actually running and pink_hours skill unlocked
+        // Track Spiral time - only when overlay is actually running
         var isSpiralActive = settings.SpiralEnabled &&
-                             App.SkillTree?.HasSkill("pink_hours") == true &&
                              App.Overlay?.IsRunning == true;
         if (isSpiralActive)
         {

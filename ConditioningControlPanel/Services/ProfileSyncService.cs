@@ -24,6 +24,7 @@ namespace ConditioningControlPanel.Services
         private bool _disposed;
         private bool _syncEnabled = true;
         private bool _pendingQuestResetClear;
+        private bool _pendingSkillsResetAck;
 
         /// <summary>
         /// Whether using Patreon auth (vs Discord)
@@ -349,11 +350,11 @@ namespace ConditioningControlPanel.Services
                         allow_discord_dm = settings.AllowDiscordDm,
                         show_online_status = settings.ShowOnlineStatus,
                         share_profile_picture = settings.ShareProfilePicture,
-                        // Always send false to clear any server-side reset flags
+                        // Send false to clear server-side reset flags only when acknowledging
                         reset_weekly_quest = false,
                         reset_daily_quest = false,
                         force_streak_override = false,
-                        force_skills_reset = false
+                        force_skills_reset = _pendingSkillsResetAck ? (bool?)false : null
                     };
 
                     var v2Request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/sync");
@@ -406,6 +407,12 @@ namespace ConditioningControlPanel.Services
                         {
                             App.Logger?.Information("V2 Sync: Force skills reset - clearing all skills");
                             ApplyForceSkillsReset(v2Result.SkillPoints);
+                            _pendingSkillsResetAck = true; // Acknowledge on next sync to clear server flag
+                        }
+                        else if (_pendingSkillsResetAck)
+                        {
+                            // Server flag was cleared by our acknowledgment
+                            _pendingSkillsResetAck = false;
                         }
                         else if (v2Result?.SkillPoints.HasValue == true && v2Result.SkillPoints.Value != settings.SkillPoints)
                         {
@@ -445,6 +452,16 @@ namespace ConditioningControlPanel.Services
                             settings.IsSeason0Og = v2Result.IsSeason0Og.Value;
                             App.Settings?.Save();
                             App.Logger?.Information("V2 Sync: OG status synced from server: {IsOg}", v2Result.IsSeason0Og.Value);
+                        }
+
+                        // Sync whitelist status from server — enables Patreon features for whitelisted users
+                        // even if they never did Patreon OAuth (e.g. Discord-only users)
+                        if (v2Result?.PatreonIsWhitelisted == true)
+                        {
+                            // Refresh the cached premium access window (25h > sync interval)
+                            settings.PatreonPremiumValidUntil = DateTime.UtcNow.AddHours(25);
+                            App.Settings?.Save();
+                            App.Logger?.Information("V2 Sync: Whitelisted user — premium access granted via sync");
                         }
 
                         // Sync highest_level_ever from server (server is authoritative)
@@ -1271,6 +1288,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("is_season0_og")]
             public bool? IsSeason0Og { get; set; }
+
+            [JsonProperty("patreon_is_whitelisted")]
+            public bool? PatreonIsWhitelisted { get; set; }
 
             [JsonProperty("level_reset")]
             public bool? LevelReset { get; set; }

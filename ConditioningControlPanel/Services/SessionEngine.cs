@@ -335,7 +335,7 @@ namespace ConditioningControlPanel.Services
             var settings = _currentSession.Settings;
             if (settings.FlashEnabled) App.Flash?.Start();
             if (settings.SubliminalEnabled) App.Subliminal?.Start();
-            if (settings.BubblesEnabled && App.SkillTree?.HasSkill("pink_hours") == true) App.Bubbles?.Start();
+            if (settings.BubblesEnabled) App.Bubbles?.Start();
             if (settings.LockCardEnabled && App.Settings.Current.IsLevelUnlocked(35)) App.LockCard?.Start();
             if (settings.BubbleCountEnabled && App.Settings.Current.IsLevelUnlocked(50)) App.BubbleCount?.Start();
             if (settings.BouncingTextEnabled && App.Settings.Current.IsLevelUnlocked(60)) App.BouncingText?.Start();
@@ -345,7 +345,7 @@ namespace ConditioningControlPanel.Services
             // if (_brainDrainActive && App.Settings.Current.IsLevelUnlocked(70)) App.BrainDrain?.Start();
             if (settings.MandatoryVideosEnabled) App.Video?.Start();
             // Re-enable overlays via the overlay service
-            if (App.SkillTree?.HasSkill("pink_hours") == true) App.Overlay?.Start();
+            App.Overlay?.Start();
 
             App.Logger?.Information("Session resumed");
         }
@@ -898,11 +898,8 @@ namespace ConditioningControlPanel.Services
                 App.BubbleCount?.Stop();
             }
 
-            // Start overlay service if pink_hours skill unlocked (handles spiral and pink filter)
-            if (App.SkillTree?.HasSkill("pink_hours") == true)
-            {
-                App.Overlay?.Start();
-            }
+            // Start overlay service (handles spiral and pink filter)
+            App.Overlay?.Start();
 
             // Apply settings to UI
             if (IsMainWindowValid) _mainWindow.ApplySessionSettings();

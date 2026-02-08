@@ -190,7 +190,7 @@ public class OverlayService : IDisposable
         {
             var settings = App.Settings.Current;
 
-            if (settings.PinkFilterEnabled && App.SkillTree?.HasSkill("pink_hours") == true)
+            if (settings.PinkFilterEnabled)
             {
                 if (_pinkFilterWindows.Count == 0)
                     StartPinkFilter();
@@ -203,7 +203,7 @@ public class OverlayService : IDisposable
             }
 
             var spiralPath = GetSpiralPath();
-            if (settings.SpiralEnabled && App.SkillTree?.HasSkill("pink_hours") == true && !string.IsNullOrEmpty(spiralPath))
+            if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath))
             {
                 _spiralPath = spiralPath;
                 if (_spiralWindows.Count == 0)
@@ -237,7 +237,7 @@ public class OverlayService : IDisposable
             var settings = App.Settings.Current;
 
             // Stop and restart pink filter if enabled
-            if (settings.PinkFilterEnabled && App.SkillTree?.HasSkill("pink_hours") == true)
+            if (settings.PinkFilterEnabled)
             {
                 StopPinkFilter();
                 StartPinkFilter();
@@ -245,7 +245,7 @@ public class OverlayService : IDisposable
 
             // Stop and restart spiral if enabled
             var spiralPath = GetSpiralPath();
-            if (settings.SpiralEnabled && App.SkillTree?.HasSkill("pink_hours") == true && !string.IsNullOrEmpty(spiralPath))
+            if (settings.SpiralEnabled && !string.IsNullOrEmpty(spiralPath))
             {
                 StopSpiral();
                 _spiralPath = spiralPath;
