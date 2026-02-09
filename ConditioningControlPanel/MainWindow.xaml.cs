@@ -715,6 +715,8 @@ namespace ConditioningControlPanel
 
         private void ChkContentMode_Changed(object sender, RoutedEventArgs e)
         {
+            if (_isLoading) return;
+
             var isSissyMode = ChkContentMode.IsChecked == true;
             var newMode = isSissyMode ? Models.ContentMode.SissyHypno : Models.ContentMode.BambiSleep;
 
@@ -14256,6 +14258,7 @@ namespace ConditioningControlPanel
             if (dialog.ShowDialog() == true && dialog.ResultData != null)
             {
                 App.Settings.Current.AttentionPool = dialog.ResultData;
+                App.Settings.Save();
                 App.Logger?.Information("Attention pool updated: {Count} items", dialog.ResultData.Count);
             }
         }
@@ -14278,10 +14281,11 @@ namespace ConditioningControlPanel
         {
             var dialog = new TextEditorDialog("Subliminal Messages", App.Settings.Current.SubliminalPool);
             dialog.Owner = this;
-            
+
             if (dialog.ShowDialog() == true && dialog.ResultData != null)
             {
                 App.Settings.Current.SubliminalPool = dialog.ResultData;
+                App.Settings.Save();
                 App.Logger?.Information("Subliminal pool updated: {Count} items", dialog.ResultData.Count);
             }
         }
@@ -14290,10 +14294,11 @@ namespace ConditioningControlPanel
         {
             var dialog = new TextEditorDialog("Lock Card Phrases", App.Settings.Current.LockCardPhrases);
             dialog.Owner = this;
-            
+
             if (dialog.ShowDialog() == true && dialog.ResultData != null)
             {
                 App.Settings.Current.LockCardPhrases = dialog.ResultData;
+                App.Settings.Save();
                 App.Logger?.Information("Lock card phrases updated: {Count} items", dialog.ResultData.Count);
             }
         }
