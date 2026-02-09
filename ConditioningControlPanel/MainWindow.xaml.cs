@@ -719,15 +719,31 @@ namespace ConditioningControlPanel
 
             var isSissyMode = ChkContentMode.IsChecked == true;
             var newMode = isSissyMode ? Models.ContentMode.SissyHypno : Models.ContentMode.BambiSleep;
+            var oldMode = App.Settings.Current.ContentMode;
+
+            // Save current pools for the old mode before switching
+            App.Settings.Current.SubliminalPoolByMode ??= new();
+            App.Settings.Current.AttentionPoolByMode ??= new();
+            App.Settings.Current.LockCardPhrasesByMode ??= new();
+            App.Settings.Current.CustomTriggersByMode ??= new();
+
+            App.Settings.Current.SubliminalPoolByMode[oldMode] = new(App.Settings.Current.SubliminalPool);
+            App.Settings.Current.AttentionPoolByMode[oldMode] = new(App.Settings.Current.AttentionPool);
+            App.Settings.Current.LockCardPhrasesByMode[oldMode] = new(App.Settings.Current.LockCardPhrases);
+            App.Settings.Current.CustomTriggersByMode[oldMode] = new(App.Settings.Current.CustomTriggers);
 
             // Update setting
             App.Settings.Current.ContentMode = newMode;
 
-            // Reset subliminal/attention pools to mode-appropriate defaults
-            App.Settings.Current.SubliminalPool = Models.ContentModeConfig.GetDefaultSubliminalPool(newMode);
-            App.Settings.Current.AttentionPool = Models.ContentModeConfig.GetDefaultSubliminalPool(newMode);
-            App.Settings.Current.LockCardPhrases = Models.ContentModeConfig.GetDefaultLockCardPhrases(newMode);
-            App.Settings.Current.CustomTriggers = Models.ContentModeConfig.GetDefaultCustomTriggers(newMode);
+            // Restore saved pools for new mode, or use defaults if no backup exists
+            App.Settings.Current.SubliminalPool = App.Settings.Current.SubliminalPoolByMode.TryGetValue(newMode, out var savedSub) && savedSub.Count > 0
+                ? savedSub : Models.ContentModeConfig.GetDefaultSubliminalPool(newMode);
+            App.Settings.Current.AttentionPool = App.Settings.Current.AttentionPoolByMode.TryGetValue(newMode, out var savedAtt) && savedAtt.Count > 0
+                ? savedAtt : Models.ContentModeConfig.GetDefaultSubliminalPool(newMode);
+            App.Settings.Current.LockCardPhrases = App.Settings.Current.LockCardPhrasesByMode.TryGetValue(newMode, out var savedLock) && savedLock.Count > 0
+                ? savedLock : Models.ContentModeConfig.GetDefaultLockCardPhrases(newMode);
+            App.Settings.Current.CustomTriggers = App.Settings.Current.CustomTriggersByMode.TryGetValue(newMode, out var savedTrig) && savedTrig.Count > 0
+                ? savedTrig : Models.ContentModeConfig.GetDefaultCustomTriggers(newMode);
 
             App.Settings.Save();
 

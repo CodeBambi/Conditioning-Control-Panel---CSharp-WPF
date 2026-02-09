@@ -726,6 +726,19 @@ namespace ConditioningControlPanel.Models
             set { _contentModeChosen = value; OnPropertyChanged(); }
         }
 
+        /// <summary>
+        /// Per-mode pool backups so custom edits survive mode switching.
+        /// Keyed by ContentMode enum value. Null entries mean "use defaults".
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<ContentMode, Dictionary<string, bool>>? SubliminalPoolByMode { get; set; }
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<ContentMode, Dictionary<string, bool>>? AttentionPoolByMode { get; set; }
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<ContentMode, Dictionary<string, bool>>? LockCardPhrasesByMode { get; set; }
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<ContentMode, List<string>>? CustomTriggersByMode { get; set; }
+
         private string _bambiCloudUrl = "https://bambicloud.com/";
         public string BambiCloudUrl
         {

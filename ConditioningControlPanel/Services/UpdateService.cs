@@ -34,6 +34,7 @@ namespace ConditioningControlPanel.Services
 • Fixed login/auth sync bug that stored total XP as current-level XP, causing phantom level-ups
 • Fixed bubble/attention-check conflicts during mandatory video (z-order fights and click interference)
 • Fixed attention target button flicker on click
+• Fixed custom subliminal messages lost when switching between BS/SH modes
 • Auto-cleanup of stale .NET temp cache folders on startup (~200MB freed per previous update)";
 
         private const string GitHubOwner = "CodeBambi";
