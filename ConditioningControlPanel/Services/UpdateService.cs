@@ -22,19 +22,24 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.5";
+        public const string AppVersion = "5.5.6";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.5 - Skill Tree & Feature Fixes
+        public const string CurrentPatchNotes = @"v5.5.6 - Season Transition & Stability Fixes
 
 🔧 FIXES
-• Spiral, pink filter, and bubbles no longer require pink_hours skill — only level unlock needed
-• OG users no longer see entire skill tree as owned (OG only bypasses level gates, not skills)
-• Fixed skill tree showing 'needs login' overlay for users with legacy auth tokens
-• Fixed OG users being able to re-purchase already-owned skills";
+• Fixed mandatory videos stopping after a failed bubble count game (interaction lock not released)
+• Fixed lock card error blocking all subsequent interactions
+• Fixed Strict Good Girl achievement not triggering
+• Temp files now use the same drive as your assets folder instead of system %TEMP%
+
+🛠 SERVER FIXES
+• Fixed season reset not applying during sync (old levels could push back after reset)
+• Fixed leaderboard entry being removed from wrong season during transition
+• Enhancement trees reset with points redistributed based on level";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

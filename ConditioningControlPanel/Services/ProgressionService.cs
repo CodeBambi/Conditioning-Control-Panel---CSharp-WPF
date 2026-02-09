@@ -84,6 +84,9 @@ namespace ConditioningControlPanel.Services
                 _ = App.Haptics?.LevelUpPatternAsync();
                 App.Logger.Information("Level up! Now level {Level}", settings.PlayerLevel);
 
+                // Check level-based achievements immediately on level up
+                App.Achievements?.CheckLevelAchievements(settings.PlayerLevel);
+
                 // Award skill points for the enhancement tree (5 points per level)
                 App.SkillTree?.OnLevelUp(settings.PlayerLevel);
 

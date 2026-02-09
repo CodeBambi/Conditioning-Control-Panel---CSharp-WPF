@@ -76,6 +76,9 @@ namespace ConditioningControlPanel.Models
         public int SubliminalFrequency { get; set; } = 5;
         public int SubliminalDuration { get; set; } = 2;
         public int SubliminalOpacity { get; set; } = 80;
+        public Dictionary<string, bool>? SubliminalPool { get; set; }
+        public Dictionary<string, bool>? AttentionPool { get; set; }
+        public Dictionary<string, bool>? LockCardPhrases { get; set; }
 
         // Audio Settings
         public bool SubAudioEnabled { get; set; } = false;
@@ -324,6 +327,16 @@ namespace ConditioningControlPanel.Models
             settings.SubliminalFrequency = SubliminalFrequency;
             settings.SubliminalDuration = SubliminalDuration;
             settings.SubliminalOpacity = SubliminalOpacity;
+            if (SubliminalPool != null)
+                settings.SubliminalPool = new Dictionary<string, bool>(SubliminalPool);
+
+            // Attention
+            if (AttentionPool != null)
+                settings.AttentionPool = new Dictionary<string, bool>(AttentionPool);
+
+            // Lock Card Phrases
+            if (LockCardPhrases != null)
+                settings.LockCardPhrases = new Dictionary<string, bool>(LockCardPhrases);
 
             // Audio
             settings.SubAudioEnabled = SubAudioEnabled;
@@ -419,6 +432,9 @@ namespace ConditioningControlPanel.Models
                 SubliminalFrequency = settings.SubliminalFrequency,
                 SubliminalDuration = settings.SubliminalDuration,
                 SubliminalOpacity = settings.SubliminalOpacity,
+                SubliminalPool = new Dictionary<string, bool>(settings.SubliminalPool),
+                AttentionPool = new Dictionary<string, bool>(settings.AttentionPool),
+                LockCardPhrases = new Dictionary<string, bool>(settings.LockCardPhrases),
 
                 // Audio
                 SubAudioEnabled = settings.SubAudioEnabled,

@@ -40,6 +40,10 @@ namespace ConditioningControlPanel.Services
         
         // Saved settings (to restore after session)
         private AppSettings? _savedSettings;
+
+        // Capture achievement-relevant settings at session start (immune to mid-session changes)
+        private bool _sessionStartStrictLock;
+        private bool _sessionStartPanicKey;
         
         // Random for bubble bursts etc.
         private readonly Random _random = new();
@@ -123,6 +127,10 @@ namespace ConditioningControlPanel.Services
             
             // Save current settings to restore later
             SaveCurrentSettings();
+
+            // Capture achievement-relevant settings NOW (before anything can modify them mid-session)
+            _sessionStartStrictLock = App.Settings.Current.StrictLockEnabled;
+            _sessionStartPanicKey = App.Settings.Current.PanicKeyEnabled;
             
             // Randomize delayed start times (±3 minutes from session defaults)
             RandomizeStartTimes(session);
@@ -243,16 +251,17 @@ namespace ConditioningControlPanel.Services
                 double multiplier = App.Progression?.GetSessionXPMultiplier(App.Settings.Current.PlayerLevel) ?? 1.0;
                 int finalXP = (int)Math.Round(baseXP * multiplier);
 
-                // Track achievement BEFORE firing SessionCompleted event (which opens ShowDialog).
-                // If the completion dialog or cloud sync throws, achievement tracking must still run.
-                var appSettings = App.Settings.Current;
+                // Track achievement using settings captured at session START (not current settings).
+                // AutonomyService.TriggerVideoSafely() temporarily sets StrictLockEnabled=false mid-session,
+                // and RestoreSettings()+SessionStopped fire before this point, so reading App.Settings.Current
+                // here would give the wrong value. Use the snapshot taken in StartSessionAsync() instead.
                 App.Logger?.Information("Session achievement check: Session={Name}, NoPanic={NoPanic}, StrictLock={Strict}",
-                    _currentSession.Name, !appSettings.PanicKeyEnabled, appSettings.StrictLockEnabled);
+                    _currentSession.Name, !_sessionStartPanicKey, _sessionStartStrictLock);
                 App.Achievements?.TrackSessionComplete(
                     _currentSession.Name,
                     finalElapsedTime.TotalMinutes,
-                    !appSettings.PanicKeyEnabled, // No panic = panic key disabled
-                    appSettings.StrictLockEnabled
+                    !_sessionStartPanicKey, // No panic = panic key was disabled at session start
+                    _sessionStartStrictLock
                 );
 
                 try

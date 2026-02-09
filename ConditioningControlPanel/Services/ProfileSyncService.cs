@@ -491,6 +491,19 @@ namespace ConditioningControlPanel.Services
                             settings.HighestLevelEver = v2Result.User.HighestLevelEver ?? 0;
                             App.Settings?.Save();
                         }
+                        // Adopt server level/xp if higher than local (e.g. crash lost recent progress)
+                        else if (v2Result?.User != null && v2Result.User.Level > settings.PlayerLevel)
+                        {
+                            var serverLevel = v2Result.User.Level;
+                            var serverXp = v2Result.User.Xp;
+                            var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverXp) ?? 0;
+
+                            App.Logger?.Information("V2 Sync: Server level higher than local — adopting Level {ServerLevel} (local was {LocalLevel})",
+                                serverLevel, settings.PlayerLevel);
+                            settings.PlayerLevel = serverLevel;
+                            settings.PlayerXP = serverLevelXp;
+                            App.Settings?.Save();
+                        }
                     }
                     catch (Exception parseEx)
                     {
