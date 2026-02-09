@@ -1001,7 +1001,7 @@ namespace ConditioningControlPanel.Services
                 if (!File.Exists(encryptedPath)) return null;
 
                 // Create temp file with correct extension (for codec detection)
-                var tempPath = Path.Combine(Path.GetTempPath(), $"ccp_temp_{Guid.NewGuid():N}{file.Extension}");
+                var tempPath = Path.Combine(App.GetMediaTempPath(), $"ccp_temp_{Guid.NewGuid():N}{file.Extension}");
                 var decrypted = PackEncryptionService.DecryptFile(encryptedPath);
                 File.WriteAllBytes(tempPath, decrypted);
 

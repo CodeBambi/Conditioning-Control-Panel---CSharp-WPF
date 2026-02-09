@@ -45,7 +45,7 @@ namespace ConditioningControlPanel.Services.Audio
         /// <returns>Path to the downloaded temp file</returns>
         public async Task<string> DownloadAsync(string videoUrl, CancellationToken ct = default)
         {
-            var tempPath = Path.Combine(Path.GetTempPath(), $"haptic_video_{Guid.NewGuid()}.tmp");
+            var tempPath = Path.Combine(App.GetMediaTempPath(), $"haptic_video_{Guid.NewGuid()}.tmp");
 
             Exception? lastException = null;
 
