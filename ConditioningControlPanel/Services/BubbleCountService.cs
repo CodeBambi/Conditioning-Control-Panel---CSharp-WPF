@@ -164,6 +164,8 @@ public class BubbleCountService : IDisposable
                     {
                         App.Logger?.Warning("BubbleCountService: No videos found");
                         _isBusy = false;
+                        App.Bubbles?.Resume();
+                        App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
                         return;
                     }
                     
@@ -180,6 +182,8 @@ public class BubbleCountService : IDisposable
                 {
                     App.Logger?.Error(ex, "Failed to start bubble count game");
                     _isBusy = false;
+                    App.Bubbles?.Resume();
+                    App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
                 }
             });
         });
@@ -314,6 +318,7 @@ public class BubbleCountService : IDisposable
     public void ResetBusyState()
     {
         _isBusy = false;
+        App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
         App.Logger?.Debug("BubbleCountService: Busy state reset");
     }
 

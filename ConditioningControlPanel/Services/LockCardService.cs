@@ -149,6 +149,7 @@ namespace ConditioningControlPanel.Services
                 catch (Exception ex)
                 {
                     App.Logger?.Error("Failed to show lock card: {Error}", ex.Message);
+                    App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
                 }
             });
         }
