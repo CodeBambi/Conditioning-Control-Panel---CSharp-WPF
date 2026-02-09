@@ -22,24 +22,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.6";
+        public const string AppVersion = "5.5.7";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.6 - Season Transition & Stability Fixes
+        public const string CurrentPatchNotes = @"v5.5.7 - Sync & Cleanup Fixes
 
 🔧 FIXES
-• Fixed mandatory videos stopping after a failed bubble count game (interaction lock not released)
-• Fixed lock card error blocking all subsequent interactions
-• Fixed Strict Good Girl achievement not triggering
-• Temp files now use the same drive as your assets folder instead of system %TEMP%
-
-🛠 SERVER FIXES
-• Fixed season reset not applying during sync (old levels could push back after reset)
-• Fixed leaderboard entry being removed from wrong season during transition
-• Enhancement trees reset with points redistributed based on level";
+• Fixed login/auth sync bug that stored total XP as current-level XP, causing phantom level-ups
+• Fixed bubble/attention-check conflicts during mandatory video (z-order fights and click interference)
+• Fixed attention target button flicker on click
+• Auto-cleanup of stale .NET temp cache folders on startup (~200MB freed per previous update)";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
@@ -1019,6 +1014,11 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
+                // Clean stale .NET single-file extraction cache folders
+                // Each build creates a new hash folder at %TEMP%\.net\ConditioningControlPanel\<hash>=\
+                // (~200MB each), and old ones are never cleaned up automatically
+                CleanupDotNetTempCache(ref deletedCount, ref freedBytes);
+
                 if (deletedCount > 0)
                 {
                     App.Logger?.Information("Cleaned up {Count} old update item(s), freed {Size:F1} MB",
@@ -1227,6 +1227,113 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Debug("Cleanup: Error scanning for old version folders: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Cleans up stale .NET single-file extraction cache folders.
+        /// When running as a self-contained single-file app, .NET extracts native libraries to
+        /// %TEMP%\.net\ConditioningControlPanel\{hash}=\ (~200MB each). Each new build gets a
+        /// different hash, and old folders are never cleaned up automatically.
+        /// </summary>
+        private static void CleanupDotNetTempCache(ref int deletedCount, ref long freedBytes)
+        {
+            try
+            {
+                var dotnetTempBase = Path.Combine(Path.GetTempPath(), ".net", "ConditioningControlPanel");
+                if (!Directory.Exists(dotnetTempBase)) return;
+
+                // Determine which folder the current process is using by checking
+                // if any loaded assembly resides inside one of these hash folders
+                var currentExePath = Process.GetCurrentProcess().MainModule?.FileName ?? "";
+                var currentFolder = "";
+
+                // For single-file apps, native libs are extracted to the hash folder.
+                // The app's own exe is NOT in the temp folder, but loaded native DLLs are.
+                // We can identify the active folder by checking which one was most recently written
+                // and matches the current process start time.
+                var processStart = Process.GetCurrentProcess().StartTime;
+
+                foreach (var dir in Directory.GetDirectories(dotnetTempBase))
+                {
+                    var dirInfo = new DirectoryInfo(dir);
+                    // The active folder's last write time should be very close to process start
+                    if (Math.Abs((dirInfo.LastWriteTime - processStart).TotalMinutes) < 5)
+                    {
+                        currentFolder = dir;
+                        break;
+                    }
+                }
+
+                // Fallback: if we couldn't identify current folder, keep the newest one
+                if (string.IsNullOrEmpty(currentFolder))
+                {
+                    currentFolder = Directory.GetDirectories(dotnetTempBase)
+                        .OrderByDescending(d => new DirectoryInfo(d).LastWriteTime)
+                        .FirstOrDefault() ?? "";
+                }
+
+                var staleCount = 0;
+                foreach (var dir in Directory.GetDirectories(dotnetTempBase))
+                {
+                    if (string.Equals(dir, currentFolder, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    try
+                    {
+                        var dirInfo = new DirectoryInfo(dir);
+                        var dirSize = GetDirectorySize(dirInfo);
+                        Directory.Delete(dir, true);
+                        freedBytes += dirSize;
+                        deletedCount++;
+                        staleCount++;
+                    }
+                    catch
+                    {
+                        // Folder may be in use by another instance — skip silently
+                    }
+                }
+
+                if (staleCount > 0)
+                {
+                    App.Logger?.Information("Cleanup: Deleted {Count} stale .NET cache folder(s) from {Path}",
+                        staleCount, dotnetTempBase);
+                }
+
+                // Also clean up CCPUpdateHelper cache - this is a temp copy of our exe used during updates.
+                // It extracts to its own .NET cache folder that's never cleaned up.
+                // By the time the main app runs, the update helper has exited, so all folders are safe to delete.
+                var helperTempBase = Path.Combine(Path.GetTempPath(), ".net", "CCPUpdateHelper");
+                if (Directory.Exists(helperTempBase))
+                {
+                    var helperCount = 0;
+                    foreach (var dir in Directory.GetDirectories(helperTempBase))
+                    {
+                        try
+                        {
+                            var dirInfo = new DirectoryInfo(dir);
+                            var dirSize = GetDirectorySize(dirInfo);
+                            Directory.Delete(dir, true);
+                            freedBytes += dirSize;
+                            deletedCount++;
+                            helperCount++;
+                        }
+                        catch
+                        {
+                            // May be locked if update helper is still running — skip
+                        }
+                    }
+
+                    if (helperCount > 0)
+                    {
+                        App.Logger?.Information("Cleanup: Deleted {Count} stale CCPUpdateHelper cache folder(s)",
+                            helperCount);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Cleanup: Error cleaning .NET temp cache: {Error}", ex.Message);
             }
         }
 

@@ -879,6 +879,9 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Information("VideoService: Created {Count} video windows (DualMonitor={Enabled})",
                             _windows.Count, App.Settings.Current.DualMonitorEnabled);
 
+                        // Pause bubbles during mandatory video to prevent z-order conflicts and click interference
+                        App.Bubbles?.PauseAndClear();
+
                         if (App.Settings.Current.AttentionChecksEnabled)
                             SetupAttention();
                     }
@@ -2060,6 +2063,9 @@ namespace ConditioningControlPanel.Services
             _strictActive = false;
             _penalties = 0;
 
+            // Resume bubbles now that video is done
+            App.Bubbles?.Resume();
+
             // Trigger deferred Bambi Reset now that video has ended
             App.Subliminal?.TriggerDeferredBambiReset();
 
@@ -2563,7 +2569,7 @@ namespace ConditioningControlPanel.Services
                     {
                         // Ensure topmost via Win32
                         SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                     }
                     App.Logger?.Debug("Attention target window loaded at ({X}, {Y}), hwnd={Hwnd}", _x, _y, _hwnd);
                 };
@@ -2675,7 +2681,7 @@ namespace ConditioningControlPanel.Services
             {
                 // Use Win32 SetWindowPos for reliable z-order without focus stealing
                 bool result = SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 App.Logger?.Information("ATTENTION: BringToFront hwnd={Hwnd}, success={Result}, visible={Visible}",
                     _hwnd, result, _win.IsVisible);
             }

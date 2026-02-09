@@ -426,10 +426,11 @@ namespace ConditioningControlPanel.Services
             settings.PatreonTier = user.PatreonTier;
 
             // Sync level/XP if server has newer data
+            // Server returns TOTAL accumulated XP, but PlayerXP stores current-level XP
             if (user.Level > 0)
             {
                 settings.PlayerLevel = user.Level;
-                settings.PlayerXP = user.Xp;
+                settings.PlayerXP = App.Progression?.GetCurrentLevelXP(user.Level, user.Xp) ?? 0;
             }
 
             App.Settings?.Save();
