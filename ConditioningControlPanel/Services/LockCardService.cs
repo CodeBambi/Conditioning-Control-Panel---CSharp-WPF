@@ -103,7 +103,9 @@ namespace ConditioningControlPanel.Services
 
                 // Check if another fullscreen interaction is active (video, bubble count)
                 // If so, queue this lock card for later
-                if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
+                // Note: If CurrentInteraction is already LockCard, the queue dequeued us — proceed normally
+                var alreadyActive = App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.LockCard;
+                if (!alreadyActive && App.InteractionQueue != null && !App.InteractionQueue.CanStart)
                 {
                     App.InteractionQueue.TryStart(
                         InteractionQueueService.InteractionType.LockCard,
@@ -125,14 +127,18 @@ namespace ConditioningControlPanel.Services
                     if (enabledPhrases.Count == 0)
                     {
                         App.Logger?.Warning("LockCardService: No phrases enabled");
+                        App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
                         return;
                     }
 
-                    // Notify queue we're starting
-                    App.InteractionQueue?.TryStart(
-                        InteractionQueueService.InteractionType.LockCard,
-                        () => { }, // Already executing
-                        queue: false);
+                    // Notify queue we're starting (skip if queue already set us as active)
+                    if (!alreadyActive)
+                    {
+                        App.InteractionQueue?.TryStart(
+                            InteractionQueueService.InteractionType.LockCard,
+                            () => { }, // Already executing
+                            queue: false);
+                    }
 
                     // Pick a random phrase
                     var phrase = enabledPhrases[_random.Next(enabledPhrases.Count)];

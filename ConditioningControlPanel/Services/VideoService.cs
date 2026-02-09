@@ -352,7 +352,9 @@ namespace ConditioningControlPanel.Services
 
             // Check if another fullscreen interaction is active (bubble count, lock card)
             // If so, queue this video for later
-            if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
+            // Note: If CurrentInteraction is already Video, the queue dequeued us — proceed normally
+            var alreadyActive = App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video;
+            if (!alreadyActive && App.InteractionQueue != null && !App.InteractionQueue.CanStart)
             {
                 App.Logger?.Information("VideoService: Queueing video - another interaction is active: {Type}",
                     App.InteractionQueue.CurrentInteraction);
@@ -363,11 +365,14 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            // Notify queue we're starting
-            App.InteractionQueue?.TryStart(
-                InteractionQueueService.InteractionType.Video,
-                () => { }, // Already executing
-                queue: false);
+            // Notify queue we're starting (skip if queue already set us as active)
+            if (!alreadyActive)
+            {
+                App.InteractionQueue?.TryStart(
+                    InteractionQueueService.InteractionType.Video,
+                    () => { }, // Already executing
+                    queue: false);
+            }
 
             // Force close any stuck/existing video windows first
             if (_videoPlaying || _windows.Count > 0)
@@ -469,7 +474,9 @@ namespace ConditioningControlPanel.Services
 
             // Check if another fullscreen interaction is active
             // If so, queue this video for later
-            if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
+            // Note: If CurrentInteraction is already Video, the queue dequeued us — proceed normally
+            var alreadyActive = App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video;
+            if (!alreadyActive && App.InteractionQueue != null && !App.InteractionQueue.CanStart)
             {
                 App.InteractionQueue.TryStart(
                     InteractionQueueService.InteractionType.Video,
@@ -478,11 +485,14 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            // Notify queue we're starting
-            App.InteractionQueue?.TryStart(
-                InteractionQueueService.InteractionType.Video,
-                () => { }, // Already executing
-                queue: false);
+            // Notify queue we're starting (skip if queue already set us as active)
+            if (!alreadyActive)
+            {
+                App.InteractionQueue?.TryStart(
+                    InteractionQueueService.InteractionType.Video,
+                    () => { }, // Already executing
+                    queue: false);
+            }
 
             // Force close any stuck/existing video windows first
             if (_videoPlaying || _windows.Count > 0)

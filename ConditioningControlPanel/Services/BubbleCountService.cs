@@ -122,7 +122,9 @@ public class BubbleCountService : IDisposable
 
         // Check if another fullscreen interaction is active (video, lock card)
         // If so, queue this bubble count for later
-        if (App.InteractionQueue != null && !App.InteractionQueue.CanStart)
+        // Note: If CurrentInteraction is already BubbleCount, the queue dequeued us — proceed normally
+        var alreadyActive = App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.BubbleCount;
+        if (!alreadyActive && App.InteractionQueue != null && !App.InteractionQueue.CanStart)
         {
             App.InteractionQueue.TryStart(
                 InteractionQueueService.InteractionType.BubbleCount,
@@ -131,11 +133,14 @@ public class BubbleCountService : IDisposable
             return;
         }
 
-        // Notify queue we're starting
-        App.InteractionQueue?.TryStart(
-            InteractionQueueService.InteractionType.BubbleCount,
-            () => { }, // Already executing
-            queue: false);
+        // Notify queue we're starting (skip if queue already set us as active)
+        if (!alreadyActive)
+        {
+            App.InteractionQueue?.TryStart(
+                InteractionQueueService.InteractionType.BubbleCount,
+                () => { }, // Already executing
+                queue: false);
+        }
 
         _isBusy = true;
 
