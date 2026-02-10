@@ -22,20 +22,20 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.7";
+        public const string AppVersion = "5.5.8";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.7 - Sync & Cleanup Fixes
+        public const string CurrentPatchNotes = @"v5.5.8 - Profile & Save Stability
 
 🔧 FIXES
-• Fixed login/auth sync bug that stored total XP as current-level XP, causing phantom level-ups
-• Fixed bubble/attention-check conflicts during mandatory video (z-order fights and click interference)
-• Fixed attention target button flicker on click
-• Fixed custom subliminal messages lost when switching between BS/SH modes
-• Auto-cleanup of stale .NET temp cache folders on startup (~200MB freed per previous update)";
+• Fixed blank profile page for non-OG users (profile card was hidden behind OG border)
+• Fixed save state reversion on exit — settings now saved before cloud sync, using atomic writes
+• Fixed progression reset on re-login — orphaned accounts are now recovered automatically
+• Fixed auth overwriting local progress with lower server values (now uses take-higher logic)
+• Fixed missing display_name_set_at on V2 registration (privacy filter improvement)";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

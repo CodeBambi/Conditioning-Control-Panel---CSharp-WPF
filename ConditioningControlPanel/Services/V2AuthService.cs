@@ -425,12 +425,23 @@ namespace ConditioningControlPanel.Services
             settings.HasLinkedPatreon = !string.IsNullOrEmpty(user.PatreonId);
             settings.PatreonTier = user.PatreonTier;
 
-            // Sync level/XP if server has newer data
+            // Sync level/XP using "take higher" logic to prevent progress loss
             // Server returns TOTAL accumulated XP, but PlayerXP stores current-level XP
             if (user.Level > 0)
             {
-                settings.PlayerLevel = user.Level;
-                settings.PlayerXP = App.Progression?.GetCurrentLevelXP(user.Level, user.Xp) ?? 0;
+                var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+                var serverTotalXp = (double)user.Xp;
+
+                if (serverTotalXp >= localTotalXp)
+                {
+                    settings.PlayerLevel = user.Level;
+                    settings.PlayerXP = App.Progression?.GetCurrentLevelXP(user.Level, user.Xp) ?? 0;
+                }
+                else
+                {
+                    Log.Information("[V2Auth] Keeping local progress (higher): Local Level {LocalLevel} ({LocalXP} total) > Server Level {ServerLevel} ({ServerXP} total)",
+                        settings.PlayerLevel, (int)localTotalXp, user.Level, user.Xp);
+                }
             }
 
             App.Settings?.Save();

@@ -1632,6 +1632,10 @@ Application State:
         {
             Logger?.Information("Application shutting down...");
 
+            // Save settings FIRST (before cloud sync) to persist the user's current local state.
+            // This prevents cloud sync from overwriting local values with stale data before save.
+            Settings?.Save();
+
             // Sync profile to cloud on exit (fire and forget, don't block shutdown)
             if (ProfileSync?.IsSyncEnabled == true)
             {
@@ -1673,7 +1677,6 @@ Application State:
             SkillTree?.Dispose();
             QuestDefinitions?.Dispose();
             Audio?.Dispose();
-            Settings?.Save();
 
             // Close and flush the logger
             Log.CloseAndFlush();

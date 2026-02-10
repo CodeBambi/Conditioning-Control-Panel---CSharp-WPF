@@ -54,6 +54,20 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // Recover from interrupted atomic write: if temp file exists but main doesn't,
+                // the app crashed after writing temp but before the rename completed
+                var tempPath = _settingsPath + ".tmp";
+                if (File.Exists(tempPath) && !File.Exists(_settingsPath))
+                {
+                    App.Logger?.Information("Recovering settings from interrupted save (temp file)");
+                    File.Move(tempPath, _settingsPath);
+                }
+                else if (File.Exists(tempPath))
+                {
+                    // Main file exists and temp is stale — clean it up
+                    try { File.Delete(tempPath); } catch { }
+                }
+
                 if (File.Exists(_settingsPath))
                 {
                     var json = File.ReadAllText(_settingsPath);
@@ -187,7 +201,13 @@ namespace ConditioningControlPanel.Services
                     string.Join(", ", Current.ActivePackIds ?? new List<string>()));
 
                 var json = JsonConvert.SerializeObject(Current, Formatting.Indented);
-                File.WriteAllText(_settingsPath, json);
+
+                // Atomic write: write to temp file then replace, so a crash mid-write
+                // can't corrupt the settings file (prevents save state reversion bug)
+                var tempPath = _settingsPath + ".tmp";
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, _settingsPath, overwrite: true);
+
                 App.Logger?.Information("Settings saved to {Path} (Triggers: {TriggerCount}, ActivePacks: {PackCount})",
                     _settingsPath, Current.CustomTriggers?.Count ?? 0, Current.ActivePackIds?.Count ?? 0);
             }

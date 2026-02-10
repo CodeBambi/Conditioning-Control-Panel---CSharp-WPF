@@ -9,13 +9,13 @@ Quick reference for releasing new versions of Conditioning Control Panel.
 ### Code Files
 | File | Location | Example |
 |------|----------|---------|
-| `ConditioningControlPanel.csproj` | Line 11: `<Version>` | `<Version>5.1.1</Version>` |
-| `Services/UpdateService.cs` | Line ~25: `AppVersion` | `public const string AppVersion = "5.1.1";` |
+| `ConditioningControlPanel.csproj` | Line 11: `<Version>` | `<Version>5.5.8</Version>` |
+| `Services/UpdateService.cs` | Line ~25: `AppVersion` | `public const string AppVersion = "5.5.8";` |
 | `Services/UpdateService.cs` | Line ~31: `CurrentPatchNotes` | Update patch notes text |
-| `installer.iss` | Line 17: `MyAppVersion` | `#define MyAppVersion "5.1.1"` |
-| `build-installer.bat` | Line 10: `VERSION` | `set VERSION=5.1.1` |
-| `MainWindow.xaml` | Line ~741: `BtnUpdateAvailable` | `Content="🩷 v5.1.1 IS OUT! 🩷"` |
-| `MainWindow.xaml` | Line ~742: `ToolTip` | `ToolTip="v5.1.1 - [message]"` |
+| `installer.iss` | Line 17: `MyAppVersion` | `#define MyAppVersion "5.5.8"` |
+| `build-installer.bat` | Line 10: `VERSION` | `set VERSION=5.5.8` |
+| `MainWindow.xaml` | Line ~741: `BtnUpdateAvailable` | `Content="🩷 v5.5.8 IS OUT! 🩷"` |
+| `MainWindow.xaml` | Line ~742: `ToolTip` | `ToolTip="v5.5.8 - [message]"` |
 
 ### GitHub Pages (docs/index.html)
 | Line | What to Update |
@@ -38,8 +38,8 @@ Update the server endpoint to return:
 ```json
 {
   "enabled": true,
-  "version": "5.1.1",
-  "message": "UPDATE 5.1.1 is live!"
+  "version": "5.5.8",
+  "message": "UPDATE 5.5.8 is live!"
 }
 ```
 
@@ -57,48 +57,28 @@ build-installer.bat
 ```
 Output: `installer-output/ConditioningControlPanel-X.X.X-Setup.exe`
 
-### 3. Build Velopack Release (for auto-updates)
-```powershell
-cd C:\Projects\Conditioning-Control-Panel---CSharp-WPF
-
-# Clean temp folder first (prevents file lock errors)
-Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Temp\Velopack" -ErrorAction SilentlyContinue
-
-# Build release
-.\build.ps1 -Publish -CreateRelease
-```
-Output in `releases/` folder:
-- `ConditioningControlPanel-X.X.X-full.nupkg` (required)
-- `ConditioningControlPanel-X.X.X-delta.nupkg` (optional, for smaller updates)
-- `releases.win.json` (required for Velopack)
-- `RELEASES` (required for Velopack)
-
-### 4. Update GitHub Pages
+### 3. Update GitHub Pages
 Edit `docs/index.html`:
 - Update version text in download buttons
 - Update download URLs to point to new release tag
 
-### 5. Commit & Push
+### 4. Commit & Push
 ```bash
 git add -A
 git commit -m "Bump to vX.X.X with [summary of changes]"
 git push
 ```
 
-### 6. Create GitHub Release
+### 5. Create GitHub Release
 1. Go to: https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/new
-2. Tag: `vX.X.X` (e.g., `v5.1.1`)
+2. Tag: `vX.X.X` (e.g., `v5.5.8`)
 3. Title: `vX.X.X - [Short Description]`
 4. Upload files:
    - `installer-output/ConditioningControlPanel-X.X.X-Setup.exe`
-   - `releases/ConditioningControlPanel-X.X.X-full.nupkg`
-   - `releases/ConditioningControlPanel-X.X.X-delta.nupkg` (if exists)
-   - `releases/releases.win.json`
-   - `releases/RELEASES`
 5. Write release notes (or copy from `CurrentPatchNotes`)
 6. Publish release
 
-### 7. Update Server Banner
+### 6. Update Server Banner
 Update the proxy server's `/config/update-banner` endpoint with:
 ```json
 {
@@ -107,19 +87,16 @@ Update the proxy server's `/config/update-banner` endpoint with:
   "message": "UPDATE X.X.X is live!"
 }
 ```
-This shows a banner to users on older versions who haven't auto-updated.
+This shows a banner to users on older versions who haven't updated.
 
 ---
 
-## How Auto-Updates Work
+## How Updates Work
 
-1. **UpdateService.cs** checks GitHub releases via Velopack
-2. Velopack reads `releases.win.json` from the latest release
-3. Compares `AppVersion` constant with latest release version
-4. If newer, prompts user to update
-5. Downloads `.nupkg` file and applies update
-
-**Fallback:** If Velopack update fails, the server banner notifies users to update manually.
+1. **UpdateService.cs** checks the server banner at `/config/update-banner`
+2. Compares `AppVersion` constant with the banner version
+3. If newer version available, shows update button in the UI
+4. User clicks the button to download the new installer from GitHub
 
 **Important:** The `AppVersion` constant in UpdateService.cs is what the app uses to determine its current version. Always keep this in sync!
 
@@ -127,21 +104,11 @@ This shows a banner to users on older versions who haven't auto-updated.
 
 ## Troubleshooting
 
-### Velopack build fails with "Access denied"
-```powershell
-Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Temp\Velopack"
-```
-Then retry the build.
-
 ### Users not seeing updates
-- Check that `releases.win.json` is uploaded to the GitHub release
 - Check that `AppVersion` in UpdateService.cs matches the csproj version
 - Verify the GitHub release is published (not draft)
 - Update the server banner as a fallback notification
-
-### Fresh install required (major updates)
-For major version jumps (e.g., 5.0 -> 5.1), the app may require fresh install.
-This is controlled by `FreshInstallVersion` in UpdateService.cs (~line 108).
+- Verify download URLs in docs/index.html point to the correct release
 
 ---
 
@@ -158,11 +125,9 @@ This is controlled by `FreshInstallVersion` in UpdateService.cs (~line 108).
 
 ### Build & Deploy
 - [ ] Installer built (`build-installer.bat`)
-- [ ] Velopack release built (`build.ps1 -Publish -CreateRelease`)
 - [ ] Changes committed and pushed
-- [ ] GitHub release created with all files uploaded
+- [ ] GitHub release created with installer uploaded
 
 ### Post-Release
 - [ ] Server banner updated (`/config/update-banner`)
-- [ ] Test auto-update from previous version
 - [ ] Verify GitHub Pages download links work

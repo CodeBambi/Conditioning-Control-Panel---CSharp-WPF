@@ -1363,8 +1363,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.7 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.7 - Temp Cache Cleanup &amp; XP Sync Fix"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.8 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.8 - Profile &amp; Save Stability"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -6484,28 +6484,32 @@
                                     Padding="12,6" FontSize="11" Cursor="Hand" Click="BtnClearProfile_Click"/>
                         </StackPanel>
 
-                        <!-- Profile Card Container with OG animated border -->
-                        <Border x:Name="OgBorderContainer" Visibility="Collapsed" Padding="8" CornerRadius="18">
-                            <Border.Resources>
-                                <Storyboard x:Key="OgBorderAnimation" RepeatBehavior="Forever">
-                                    <DoubleAnimation Storyboard.TargetName="OgBorderRotation"
-                                                     Storyboard.TargetProperty="Angle"
-                                                     From="0" To="360" Duration="0:0:3"/>
-                                </Storyboard>
-                            </Border.Resources>
-                            <Border.Background>
-                                <LinearGradientBrush x:Name="OgBorderBrush" StartPoint="0,0" EndPoint="1,1">
-                                    <LinearGradientBrush.RelativeTransform>
-                                        <RotateTransform x:Name="OgBorderRotation" CenterX="0.5" CenterY="0.5" Angle="0"/>
-                                    </LinearGradientBrush.RelativeTransform>
-                                    <GradientStop Color="#FFD700" Offset="0"/>
-                                    <GradientStop Color="#FFA500" Offset="0.25"/>
-                                    <GradientStop Color="#FF69B4" Offset="0.5"/>
-                                    <GradientStop Color="#FFA500" Offset="0.75"/>
-                                    <GradientStop Color="#FFD700" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                        <Border x:Name="ProfileCardContainer" Visibility="Collapsed" Background="#1A1A2E" CornerRadius="12">
+                        <!-- Profile Card with optional OG animated border (layered via Grid) -->
+                        <Grid x:Name="ProfileCardWrapper" Visibility="Collapsed">
+                            <!-- OG animated border (behind the card) -->
+                            <Border x:Name="OgBorderContainer" Visibility="Collapsed" Padding="0" CornerRadius="18">
+                                <Border.Resources>
+                                    <Storyboard x:Key="OgBorderAnimation" RepeatBehavior="Forever">
+                                        <DoubleAnimation Storyboard.TargetName="OgBorderRotation"
+                                                         Storyboard.TargetProperty="Angle"
+                                                         From="0" To="360" Duration="0:0:3"/>
+                                    </Storyboard>
+                                </Border.Resources>
+                                <Border.Background>
+                                    <LinearGradientBrush x:Name="OgBorderBrush" StartPoint="0,0" EndPoint="1,1">
+                                        <LinearGradientBrush.RelativeTransform>
+                                            <RotateTransform x:Name="OgBorderRotation" CenterX="0.5" CenterY="0.5" Angle="0"/>
+                                        </LinearGradientBrush.RelativeTransform>
+                                        <GradientStop Color="#FFD700" Offset="0"/>
+                                        <GradientStop Color="#FFA500" Offset="0.25"/>
+                                        <GradientStop Color="#FF69B4" Offset="0.5"/>
+                                        <GradientStop Color="#FFA500" Offset="0.75"/>
+                                        <GradientStop Color="#FFD700" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
+                            <!-- Profile card content (always visible when wrapper is visible) -->
+                            <Border x:Name="ProfileCardContainer" Margin="8" Background="#1A1A2E" CornerRadius="12">
                             <StackPanel>
                                 <!-- Profile Header (Avatar + Name + Status) -->
                                 <Border CornerRadius="12" Padding="15" Margin="0,0,0,10">
@@ -6742,7 +6746,7 @@
                                 </Border>
                             </StackPanel>
                         </Border>
-                        </Border>
+                        </Grid>
 
                         <!-- No profile selected message -->
                         <Border x:Name="NoProfileSelected" Background="#1A1A32" CornerRadius="10" Padding="30">
