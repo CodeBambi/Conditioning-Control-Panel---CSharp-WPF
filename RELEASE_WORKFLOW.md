@@ -34,12 +34,13 @@ https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/do
 |----------|---------|
 | `codebambi-proxy.vercel.app/config/update-banner` | Server-side banner for users who haven't updated |
 
-Update the server endpoint to return:
+Update the server endpoint. **Do NOT include a `url` field** — the update button should follow the normal in-app update flow, not link to GitHub:
 ```json
 {
   "enabled": true,
-  "version": "5.5.8",
-  "message": "UPDATE 5.5.8 is live!"
+  "version": "X.X.X",
+  "message": "UPDATE X.X.X is live! [brief description of changes].",
+  "url": ""
 }
 ```
 
@@ -61,6 +62,7 @@ Output: `installer-output/ConditioningControlPanel-X.X.X-Setup.exe`
 Edit `docs/index.html`:
 - Update version text in download buttons
 - Update download URLs to point to new release tag
+- Update the marquee banner text to briefly describe what's new in this version (not just "update now")
 
 ### 4. Commit & Push
 ```bash
@@ -79,13 +81,11 @@ git push
 6. Publish release
 
 ### 6. Update Server Banner
-Update the proxy server's `/config/update-banner` endpoint with:
-```json
-{
-  "enabled": true,
-  "version": "X.X.X",
-  "message": "UPDATE X.X.X is live!"
-}
+Update the proxy server's `/config/update-banner` endpoint. **Do NOT set a `url`** — keep it empty so the update button follows the normal in-app flow:
+```bash
+curl -X POST "https://codebambi-proxy.vercel.app/config/update-banner" \
+  -H "Content-Type: application/json" \
+  -d '{"admin_token": "...", "enabled": true, "version": "X.X.X", "message": "UPDATE X.X.X is live! [brief changes].", "url": ""}'
 ```
 This shows a banner to users on older versions who haven't updated.
 
@@ -121,7 +121,7 @@ This shows a banner to users on older versions who haven't updated.
 - [ ] `installer.iss` - MyAppVersion
 - [ ] `build-installer.bat` - VERSION
 - [ ] `MainWindow.xaml` - BtnUpdateAvailable Content & ToolTip
-- [ ] `docs/index.html` - Download button text and URLs
+- [ ] `docs/index.html` - Download button text, URLs, and marquee banner description
 
 ### Build & Deploy
 - [ ] Installer built (`build-installer.bat`)
@@ -129,5 +129,5 @@ This shows a banner to users on older versions who haven't updated.
 - [ ] GitHub release created with installer uploaded
 
 ### Post-Release
-- [ ] Server banner updated (`/config/update-banner`)
+- [ ] Server banner updated (`/config/update-banner`) — no URL, empty string
 - [ ] Verify GitHub Pages download links work
