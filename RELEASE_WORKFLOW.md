@@ -80,7 +80,15 @@ git push
 5. Write release notes (or copy from `CurrentPatchNotes`)
 6. Publish release
 
-### 6. Update Server Banner
+### 6. Update Server Marquee
+Update the in-app sliding marquee banner at `/config/marquee` with the new version and a brief description:
+```bash
+curl -X POST "https://codebambi-proxy.vercel.app/config/marquee" \
+  -H "Content-Type: application/json" \
+  -d '{"admin_token": "...", "message": "vX.X.X is here! [brief changes]. Update now from Settings!"}'
+```
+
+### 7. Update Server Update Banner
 Update the proxy server's `/config/update-banner` endpoint. **Do NOT set a `url`** — keep it empty so the update button follows the normal in-app flow:
 ```bash
 curl -X POST "https://codebambi-proxy.vercel.app/config/update-banner" \
@@ -129,5 +137,6 @@ This shows a banner to users on older versions who haven't updated.
 - [ ] GitHub release created with installer uploaded
 
 ### Post-Release
-- [ ] Server banner updated (`/config/update-banner`) — no URL, empty string
+- [ ] Server marquee updated (`/config/marquee`) — version + brief description
+- [ ] Server update banner updated (`/config/update-banner`) — no URL, empty string
 - [ ] Verify GitHub Pages download links work
