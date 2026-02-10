@@ -4284,7 +4284,7 @@ namespace ConditioningControlPanel
                 }
 
                 // Refresh profile viewer to show/hide DM button
-                if (ProfileCardContainer?.Visibility == Visibility.Visible)
+                if (ProfileCardWrapper?.Visibility == Visibility.Visible)
                 {
                     // Update the Discord button visibility based on new setting
                     if (BtnProfileDiscord != null)
@@ -9837,7 +9837,7 @@ namespace ConditioningControlPanel
 
         private void ClearProfileViewer()
         {
-            if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Collapsed;
+            if (ProfileCardWrapper != null) ProfileCardWrapper.Visibility = Visibility.Collapsed;
             if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Visible;
             if (ProfileAchievementGrid != null) ProfileAchievementGrid.ItemsSource = null;
             // Hide OG border and stop animation
@@ -10100,9 +10100,9 @@ namespace ConditioningControlPanel
             {
                 NoProfileSelected.Visibility = Visibility.Visible;
             }
-            if (ProfileCardContainer != null)
+            if (ProfileCardWrapper != null)
             {
-                ProfileCardContainer.Visibility = Visibility.Collapsed;
+                ProfileCardWrapper.Visibility = Visibility.Collapsed;
             }
             return false;
         }
@@ -10138,9 +10138,9 @@ namespace ConditioningControlPanel
                 {
                     NoProfileSelected.Visibility = Visibility.Visible;
                 }
-                if (ProfileCardContainer != null)
+                if (ProfileCardWrapper != null)
                 {
-                    ProfileCardContainer.Visibility = Visibility.Collapsed;
+                    ProfileCardWrapper.Visibility = Visibility.Collapsed;
                 }
             }
         }
@@ -10148,7 +10148,7 @@ namespace ConditioningControlPanel
         private void DisplayOwnProfile()
         {
             // Display local profile when not on leaderboard
-            if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Visible;
+            if (ProfileCardWrapper != null) ProfileCardWrapper.Visibility = Visibility.Visible;
             if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Collapsed;
 
             // OG user animated border for own profile
@@ -10367,7 +10367,7 @@ namespace ConditioningControlPanel
         {
             try
             {
-            if (ProfileCardContainer != null) ProfileCardContainer.Visibility = Visibility.Visible;
+            if (ProfileCardWrapper != null) ProfileCardWrapper.Visibility = Visibility.Visible;
             if (NoProfileSelected != null) NoProfileSelected.Visibility = Visibility.Collapsed;
 
             // OG user animated border
@@ -11145,7 +11145,14 @@ namespace ConditioningControlPanel
             App.BubbleCount.Stop();
             App.MindWipe.Stop();
             App.BrainDrain.Stop();
-            App.Autonomy?.Stop();
+            // Only stop autonomy if it was started by the session engine (i.e., user didn't enable it independently).
+            // If the user has autonomy enabled in settings, let it keep running after session ends.
+            var s = App.Settings?.Current;
+            var hasPatreon = (s?.PatreonTier ?? 0) >= 1 || App.Patreon?.IsWhitelisted == true;
+            if (!(hasPatreon && s != null && s.IsLevelUnlocked(100) && s.AutonomyModeEnabled && s.AutonomyConsentGiven))
+            {
+                App.Autonomy?.Stop();
+            }
             App.SkillTree?.Stop();
             App.Audio.Unduck();
 
@@ -11712,7 +11719,9 @@ namespace ConditioningControlPanel
             SliderLockCardFreq.Value = s.LockCardFrequency;
             SliderLockCardRepeats.Value = s.LockCardRepeats;
             ChkLockCardStrict.IsChecked = s.LockCardStrict;
-            
+            ChkBubbleCountEnabled.IsChecked = s.BubbleCountEnabled;
+            ChkBouncingTextEnabled.IsChecked = s.BouncingTextEnabled;
+
             // Mind Wipe
             ChkMindWipeEnabled.IsChecked = s.MindWipeEnabled;
             SliderMindWipeFreq.Value = s.MindWipeFrequency;

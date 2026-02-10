@@ -81,9 +81,11 @@ namespace ConditioningControlPanel
             }
 
             // Initial small position on target screen (will maximize after show)
+            // Convert physical pixels to WPF DIPs using per-screen DPI
+            var dpiScale = GetDpiForScreen(_screen);
             WindowStartupLocation = WindowStartupLocation.Manual;
-            Left = _screen.Bounds.X + 100;
-            Top = _screen.Bounds.Y + 100;
+            Left = (_screen.Bounds.X + 100) / dpiScale;
+            Top = (_screen.Bounds.Y + 100) / dpiScale;
             Width = 400;
             Height = 300;
 
@@ -691,9 +693,10 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Convert relative position to screen coordinates
-                var screenX = _screen.Bounds.X + (relX * _screen.Bounds.Width) - size / 2;
-                var screenY = _screen.Bounds.Y + (relY * _screen.Bounds.Height) - size / 2;
+                // Convert relative position to screen coordinates, then to WPF DIPs
+                var dpiScale = GetDpiForScreen(_screen);
+                var screenX = (_screen.Bounds.X + (relX * _screen.Bounds.Width) - size / 2) / dpiScale;
+                var screenY = (_screen.Bounds.Y + (relY * _screen.Bounds.Height) - size / 2) / dpiScale;
 
                 if (_isPrimary) PlayPopSound();
 
@@ -901,6 +904,44 @@ namespace ConditioningControlPanel
 
             base.OnClosed(e);
         }
+
+        #region Per-Screen DPI
+
+        private static double GetDpiForScreen(Screen screen)
+        {
+            try
+            {
+                uint dpiX = 96, dpiY = 96;
+                var hMonitor = MonitorFromPoint(new POINT { X = screen.Bounds.X + 1, Y = screen.Bounds.Y + 1 }, 2);
+
+                if (hMonitor != IntPtr.Zero)
+                {
+                    var result = GetDpiForMonitor(hMonitor, 0, out dpiX, out dpiY);
+                    if (result == 0)
+                    {
+                        return dpiX / 96.0;
+                    }
+                }
+
+                using var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero);
+                return g.DpiX / 96.0;
+            }
+            catch
+            {
+                return 1.0;
+            }
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct POINT { public int X; public int Y; }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+        [System.Runtime.InteropServices.DllImport("shcore.dll")]
+        private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+        #endregion
     }
 
     /// <summary>

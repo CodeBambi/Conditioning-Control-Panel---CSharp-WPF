@@ -26,7 +26,7 @@ public class BubbleService : IDisposable
     private bool _isRunning;
     private BitmapImage? _bubbleImage;
     private string _assetsPath = "";
-    internal static double? _cachedDpiScale; // Cache DPI scale (internal for Bubble class access)
+    // Per-screen DPI is now computed on demand via Bubble.GetDpiForScreen()
 
     public bool IsRunning => _isRunning;
     public bool IsPaused => _isPaused;
@@ -452,9 +452,9 @@ internal class Bubble
         _wobbleOffset = random.NextDouble() * 100;
         _angle = random.Next(360);
 
-        // Get cached DPI scale
-        var dpiScale = GetCachedDpiScale();
-        
+        // Get DPI scale for this specific screen
+        var dpiScale = GetDpiForScreen(screen);
+
         // Position - start at bottom of screen
         var area = screen.WorkingArea;
         _startX = (area.X + random.Next(50, Math.Max(100, area.Width - _size - 50))) / dpiScale;
@@ -708,23 +708,39 @@ internal class Bubble
 
     #region Win32
 
-    private static double GetCachedDpiScale()
+    private static double GetDpiForScreen(System.Windows.Forms.Screen screen)
     {
-        if (BubbleService._cachedDpiScale.HasValue)
-            return BubbleService._cachedDpiScale.Value;
-
         try
         {
+            uint dpiX = 96, dpiY = 96;
+            var hMonitor = MonitorFromPoint(new POINT { X = screen.Bounds.X + 1, Y = screen.Bounds.Y + 1 }, 2);
+
+            if (hMonitor != IntPtr.Zero)
+            {
+                var result = GetDpiForMonitor(hMonitor, 0, out dpiX, out dpiY);
+                if (result == 0)
+                {
+                    return dpiX / 96.0;
+                }
+            }
+
             using var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero);
-            BubbleService._cachedDpiScale = g.DpiX / 96.0;
-            return BubbleService._cachedDpiScale.Value;
+            return g.DpiX / 96.0;
         }
         catch
         {
-            BubbleService._cachedDpiScale = 1.0;
             return 1.0;
         }
     }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct POINT { public int X; public int Y; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+    [System.Runtime.InteropServices.DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
     private void HideFromAltTab()
     {

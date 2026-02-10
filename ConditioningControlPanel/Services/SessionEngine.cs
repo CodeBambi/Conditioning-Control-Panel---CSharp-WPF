@@ -149,8 +149,8 @@ namespace ConditioningControlPanel.Services
             _currentPinkOpacity = session.Settings.PinkFilterStartOpacity;
             _currentSpiralOpacity = session.Settings.SpiralOpacity;
             
-            // Setup corner GIF if enabled
-            if (session.Settings.CornerGifEnabled)
+            // Setup corner GIF if enabled (respects start/end minute timers)
+            if (session.Settings.CornerGifEnabled && session.Settings.CornerGifStartMinute == 0)
             {
                 ShowCornerGif(session.Settings);
             }
@@ -548,6 +548,28 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Settings.Current.BubblesEnabled = true;
                     App.Bubbles.Start(bypassLevelCheck: true); // Bypass level check during sessions
+                }
+            }
+
+            // Corner GIF delayed start
+            if (settings.CornerGifEnabled && _cornerGifWindow == null && settings.CornerGifStartMinute > 0)
+            {
+                if (elapsedMinutes >= settings.CornerGifStartMinute)
+                {
+                    ShowCornerGif(settings);
+                    App.Logger?.Information("Corner GIF activated at {Minutes:F1} minutes (target was {Target})",
+                        elapsedMinutes, settings.CornerGifStartMinute);
+                }
+            }
+
+            // Corner GIF delayed end
+            if (settings.CornerGifEnabled && _cornerGifWindow != null && settings.CornerGifEndMinute > 0)
+            {
+                if (elapsedMinutes >= settings.CornerGifEndMinute)
+                {
+                    CloseCornerGif();
+                    App.Logger?.Information("Corner GIF deactivated at {Minutes:F1} minutes (target was {Target})",
+                        elapsedMinutes, settings.CornerGifEndMinute);
                 }
             }
 

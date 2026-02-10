@@ -1080,6 +1080,9 @@ namespace ConditioningControlPanel.Services
             };
 
             win.Show();
+            // Pump the WPF message loop once to let the compositor settle before maximizing —
+            // avoids async rendering artifacts with LibVLC's child HWND
+            win.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
             win.WindowState = WindowState.Maximized;
             if (withAudio) win.Activate();
 
@@ -1252,6 +1255,8 @@ namespace ConditioningControlPanel.Services
             };
 
             win.Show();
+            // Pump the WPF message loop once to let the compositor settle before maximizing
+            win.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
             win.WindowState = WindowState.Maximized;
             win.Activate();
 
@@ -1352,13 +1357,13 @@ namespace ConditioningControlPanel.Services
                         (e.Key == Key.F4 && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)))
                         e.Handled = true;
                 };
-                // Don't reactivate if attention targets are active - they need focus for clicks
+                // In strict mode the window is already Topmost — reactivation causes a
+                // focus-stealing loop that interferes with LibVLC's child HWND rendering
                 win.Deactivated += (s, e) =>
                 {
                     if (_videoPlaying && _strictActive && !App.Settings.Current.AttentionChecksEnabled)
                     {
-                        win.Activate();
-                        win.Focus();
+                        App.Logger?.Debug("VideoService: Strict video window deactivated (Topmost keeps it visible)");
                     }
                 };
             }

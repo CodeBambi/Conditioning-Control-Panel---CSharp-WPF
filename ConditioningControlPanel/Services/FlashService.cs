@@ -49,6 +49,7 @@ namespace ConditioningControlPanel.Services
         private bool _oneShotActive; // For TriggerFlashOnce when service not running
         private DateTime _virtualEndTime = DateTime.MinValue;
         private bool _cleanupInProgress;
+        private bool _noImagesWarningShown;
         
         // Audio - only ONE sound per flash event
         private WaveOutEvent? _currentSound;
@@ -266,7 +267,11 @@ namespace ConditioningControlPanel.Services
 
                 if (images.Count == 0)
                 {
-                    App.Logger.Warning("FlashService: No images found in {Path}", _imagesPath);
+                    if (!_noImagesWarningShown)
+                    {
+                        App.Logger.Warning("FlashService: No images found in {Path}. Add images to this folder to enable flash display.", _imagesPath);
+                        _noImagesWarningShown = true;
+                    }
                     _isBusy = false;
                     return;
                 }
@@ -873,14 +878,14 @@ namespace ConditioningControlPanel.Services
         private List<MonitorInfo> GetMonitors(bool dualMonitor)
         {
             var monitors = new List<MonitorInfo>();
-            
-            // Get DPI scale factor to convert physical pixels to WPF DIPs
-            var dpiScale = GetDpiScale();
-            
+
             try
             {
                 foreach (var screen in App.GetAllScreensCached())
                 {
+                    // Get DPI scale for THIS specific screen (not just primary)
+                    var dpiScale = GetDpiForScreen(screen);
+
                     // Convert from physical pixels to WPF device-independent pixels
                     monitors.Add(new MonitorInfo
                     {
@@ -920,40 +925,39 @@ namespace ConditioningControlPanel.Services
             return monitors;
         }
         
-        private double GetDpiScale()
+        private double GetDpiForScreen(Screen screen)
         {
             try
             {
-                var mainWindow = System.Windows.Application.Current?.MainWindow;
-                if (mainWindow != null)
+                uint dpiX = 96, dpiY = 96;
+                var hMonitor = MonitorFromPoint(new POINT { X = screen.Bounds.X + 1, Y = screen.Bounds.Y + 1 }, 2);
+
+                if (hMonitor != IntPtr.Zero)
                 {
-                    var source = PresentationSource.FromVisual(mainWindow);
-                    if (source?.CompositionTarget != null)
+                    var result = GetDpiForMonitor(hMonitor, 0, out dpiX, out dpiY);
+                    if (result == 0)
                     {
-                        return source.CompositionTarget.TransformToDevice.M11;
+                        return dpiX / 96.0;
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("Could not get DPI scale from MainWindow: {Error}", ex.Message);
-            }
 
-            // Fallback: try to get from system
-            try
-            {
-                using (var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero))
-                {
-                    return g.DpiX / 96.0;
-                }
+                using var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero);
+                return g.DpiX / 96.0;
             }
-            catch (Exception ex)
+            catch
             {
-                App.Logger?.Debug("Could not get DPI scale from system: {Error}", ex.Message);
+                return 1.0;
             }
-
-            return 1.0; // Default to no scaling
         }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct POINT { public int X; public int Y; }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+        [System.Runtime.InteropServices.DllImport("shcore.dll")]
+        private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
         private ImageGeometry CalculateGeometry(int origWidth, int origHeight, MonitorInfo monitor, double scale)
         {
