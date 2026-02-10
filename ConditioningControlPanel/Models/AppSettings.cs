@@ -409,8 +409,8 @@ namespace ConditioningControlPanel.Models
         private bool _strictLockEnabled = false; // DANGEROUS: Cannot close video
         public bool StrictLockEnabled
         {
-            get => _strictLockEnabled;
-            set { _strictLockEnabled = value; OnPropertyChanged(); }
+            get => true; // LOCKDOWN: Always enabled
+            set { /* LOCKDOWN: No-op */ }
         }
 
         private bool _forceVideoOnLaunch = false;
@@ -911,8 +911,8 @@ namespace ConditioningControlPanel.Models
         private bool _panicKeyEnabled = true; // ESC to stop
         public bool PanicKeyEnabled
         {
-            get => _panicKeyEnabled;
-            set { _panicKeyEnabled = value; OnPropertyChanged(); }
+            get => false; // LOCKDOWN: Always disabled
+            set { /* LOCKDOWN: No-op */ }
         }
 
         private string _panicKey = "Escape"; // Default panic key
@@ -1427,8 +1427,8 @@ namespace ConditioningControlPanel.Models
         private bool _bubbleCountStrictLock = false;
         public bool BubbleCountStrictLock
         {
-            get => _bubbleCountStrictLock;
-            set { _bubbleCountStrictLock = value; OnPropertyChanged(); }
+            get => true; // LOCKDOWN: Always enabled
+            set { /* LOCKDOWN: No-op */ }
         }
 
         #endregion

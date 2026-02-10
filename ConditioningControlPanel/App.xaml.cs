@@ -233,6 +233,7 @@ namespace ConditioningControlPanel
         public static PersonalityService Personality { get; private set; } = null!;
         public static RoadmapService Roadmap { get; private set; } = null!;
         public static SkillTreeService SkillTree { get; private set; } = null!;
+        public static GlobalKeyboardHook? KeyboardHook { get; private set; }
 
         /// <summary>
         /// Whether user is logged in with either Patreon or Discord (required for progression tracking)
@@ -520,6 +521,14 @@ namespace ConditioningControlPanel
             Video = new VideoService();
             Video.PreloadLibVLC(); // Pre-load LibVLC in background for faster first video
 
+            // LOCKDOWN: Initialize keyboard hook (but don't enable lockdown yet - VideoService controls that)
+            if (UpdateService.IsLockdownVersion)
+            {
+                KeyboardHook = new GlobalKeyboardHook();
+                KeyboardHook.Start();
+                Logger?.Information("LOCKDOWN: Keyboard hook initialized (lockdown activates during video playback)");
+            }
+
             splash.SetProgress(0.6, "Initializing effects...");
             Progression = new ProgressionService();
 
@@ -623,6 +632,21 @@ namespace ConditioningControlPanel
             Logger.Information("Services initialized");
 
             splash.SetProgress(0.95, "Opening main window...");
+
+            // LOCKDOWN: Show warning dialog - user must consent to lockdown mode
+            if (UpdateService.IsLockdownVersion)
+            {
+                var warningDialog = new LockdownWarningDialog();
+                splash.Hide(); // Hide splash while dialog is shown
+                if (warningDialog.ShowDialog() != true)
+                {
+                    Logger.Warning("LOCKDOWN: User declined lockdown warning - exiting");
+                    Shutdown();
+                    return;
+                }
+                Logger.Warning("LOCKDOWN: User accepted lockdown warning - enabling lockdown mode");
+                splash.Show();
+            }
 
             // Show main window
             var mainWindow = new MainWindow();

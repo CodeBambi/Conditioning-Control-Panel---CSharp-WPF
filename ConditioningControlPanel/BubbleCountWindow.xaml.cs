@@ -195,6 +195,9 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // LOCKDOWN: Enable keyboard lockdown during bubble count game
+            App.KeyboardHook?.EnableLockdown();
+
             var settings = App.Settings.Current;
             var allScreens = App.GetAllScreensCached();
             var screens = settings.DualMonitorEnabled
@@ -360,6 +363,9 @@ namespace ConditioningControlPanel
 
                 // Reset the service busy state
                 App.BubbleCount?.ResetBusyState();
+
+                // LOCKDOWN: Immediately disable keyboard lockdown on force close (panic key)
+                App.KeyboardHook?.DisableLockdown();
 
                 App.Logger?.Information("BubbleCountWindow.ForceCloseAll: Complete");
             }
@@ -876,6 +882,23 @@ namespace ConditioningControlPanel
                         }
                     });
                 }
+
+                // LOCKDOWN: Disable keyboard lockdown after bubble count ends
+                // Schedule with delay to handle potential video transitions
+                Application.Current?.Dispatcher.BeginInvoke(() =>
+                {
+                    Task.Delay(3000).ContinueWith(_ =>
+                    {
+                        Application.Current?.Dispatcher.BeginInvoke(() =>
+                        {
+                            // Only disable if no other video/game is playing
+                            if (App.Video?.IsPlaying != true)
+                            {
+                                App.KeyboardHook?.DisableLockdown();
+                            }
+                        });
+                    });
+                });
 
                 // Invoke completion callback
                 _onComplete?.Invoke(success);
