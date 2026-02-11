@@ -92,14 +92,17 @@ namespace ConditioningControlPanel.Services
                     session.Source = SessionSource.Imported;
                     session.SourceFilePath = filePath;
 
-                    // Use file name as session name (removes .session.json or .json extension)
-                    var fileName = Path.GetFileNameWithoutExtension(filePath);
-                    if (fileName.EndsWith(".session", StringComparison.OrdinalIgnoreCase))
+                    // Use file name as session name only if the JSON didn't provide one
+                    if (string.IsNullOrWhiteSpace(session.Name))
                     {
-                        fileName = fileName[..^8]; // Remove ".session"
-                    }
+                        var fileName = Path.GetFileNameWithoutExtension(filePath);
+                        if (fileName.EndsWith(".session", StringComparison.OrdinalIgnoreCase))
+                        {
+                            fileName = fileName[..^8]; // Remove ".session"
+                        }
 
-                    session.Name = fileName;
+                        session.Name = fileName;
+                    }
                 }
                 return session;
             }
