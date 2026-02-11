@@ -1277,7 +1277,7 @@ namespace ConditioningControlPanel
                         break;
                     case WindowState.Normal:
                     case WindowState.Maximized:
-                        if (_parentWindow.IsVisible)
+                        if (_parentWindow.IsVisible && App.Settings?.Current?.AvatarEnabled == true)
                         {
                             Show();
                             if (_isAttached)
@@ -1298,7 +1298,8 @@ namespace ConditioningControlPanel
             if (_parentWindow == null) return;
             try
             {
-                if ((bool)e.NewValue && _parentWindow.WindowState != WindowState.Minimized)
+                if ((bool)e.NewValue && _parentWindow.WindowState != WindowState.Minimized
+                    && App.Settings?.Current?.AvatarEnabled == true)
                 {
                     Show();
                     if (_isAttached)
