@@ -23,6 +23,8 @@ namespace ConditioningControlPanel.Services
         private readonly Random _random = new();
         private readonly List<Window> _activeWindows = new();
         private readonly string _audioPath;
+        private string[]? _audioFilesCache;
+        private DateTime _audioFilesCacheTime;
 
         private WaveOutEvent? _audioPlayer;
         private AudioFileReader? _audioFile;
@@ -237,7 +239,7 @@ namespace ConditioningControlPanel.Services
             var delay = _random.Next(1000, 2000);
             Task.Delay(delay).ContinueWith(_ =>
             {
-                Application.Current.Dispatcher.Invoke(() => PlayBambiReset());
+                Application.Current?.Dispatcher?.Invoke(() => PlayBambiReset());
             });
         }
 
@@ -257,7 +259,7 @@ namespace ConditioningControlPanel.Services
             var delay = _random.Next(4000, 8000);
             Task.Delay(delay).ContinueWith(_ =>
             {
-                Application.Current.Dispatcher.Invoke(() => PlayBambiReset());
+                Application.Current?.Dispatcher?.Invoke(() => PlayBambiReset());
             });
         }
 
@@ -341,12 +343,18 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Fallback: case-insensitive directory search
+            // Fallback: case-insensitive directory search (cached to avoid per-subliminal disk scan)
             try
             {
                 if (Directory.Exists(_audioPath))
                 {
-                    var files = Directory.GetFiles(_audioPath);
+                    // Cache directory listing for 60 seconds
+                    if (_audioFilesCache == null || (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
+                    {
+                        _audioFilesCache = Directory.GetFiles(_audioPath);
+                        _audioFilesCacheTime = DateTime.UtcNow;
+                    }
+                    var files = _audioFilesCache;
                     var normalizedText = cleanText.ToUpperInvariant().Replace("'", "'");
 
                     foreach (var file in files)

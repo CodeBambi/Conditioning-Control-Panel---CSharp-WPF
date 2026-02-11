@@ -4567,16 +4567,7 @@
                     <TextBlock Text="Complete challenges to unlock achievements! Locked achievements are blurred until earned." 
                                Foreground="#888888" FontSize="12" Margin="0,0,0,15"/>
                     
-                    <!-- Achievement Grid - 7 columns -->
-                    <ItemsControl x:Name="AchievementsGrid">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid Columns="7"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                    
-                    <!-- Dynamic Achievement Grid (populated in code-behind) -->
+                    <!-- Achievement Grid (populated in code-behind) -->
                     <UniformGrid x:Name="AchievementGrid" Columns="7" Margin="0,5">
                     </UniformGrid>
                     
@@ -6840,6 +6831,9 @@
                     <ListView x:Name="LstLeaderboard" Grid.Row="1" Background="Transparent"
                               BorderThickness="0" Margin="10,5,10,10" Foreground="#FF69B4"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              VirtualizingStackPanel.IsVirtualizing="True"
+                              VirtualizingStackPanel.VirtualizationMode="Recycling"
+                              ScrollViewer.IsDeferredScrollingEnabled="True"
                               FontSize="18" FontFamily="Segoe Print" FontWeight="ExtraBold"
                               GridViewColumnHeader.Click="LeaderboardColumnHeader_Click"
                               MouseDoubleClick="LstLeaderboard_MouseDoubleClick">
@@ -6898,7 +6892,7 @@
                                         <DataTemplate>
                                             <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
                                                 <!-- Tier 1 Badge (also fallback for IsPatreon with tier 0) -->
-                                                <Image Source="/Resources/Patreon tier1.png" Height="42">
+                                                <Image Source="/Resources/Patreon tier1.png" Height="42" RenderOptions.BitmapScalingMode="HighQuality">
                                                     <Image.Style>
                                                         <Style TargetType="Image">
                                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -6919,7 +6913,7 @@
                                                     </Image.Style>
                                                 </Image>
                                                 <!-- Tier 2 Badge -->
-                                                <Image Source="/Resources/Patreon tier2.png" Height="42">
+                                                <Image Source="/Resources/Patreon tier2.png" Height="42" RenderOptions.BitmapScalingMode="HighQuality">
                                                     <Image.Style>
                                                         <Style TargetType="Image">
                                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -6932,7 +6926,7 @@
                                                     </Image.Style>
                                                 </Image>
                                                 <!-- Tier 3 Badge -->
-                                                <Image Source="/Resources/Patreon tier3.png" Height="42">
+                                                <Image Source="/Resources/Patreon tier3.png" Height="42" RenderOptions.BitmapScalingMode="HighQuality">
                                                     <Image.Style>
                                                         <Style TargetType="Image">
                                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -6964,7 +6958,7 @@
                                                         </Style.Triggers>
                                                     </Style>
                                                 </Button.Style>
-                                                <Image Source="/Resources/discord.png" Height="36" VerticalAlignment="Center"/>
+                                                <Image Source="/Resources/discord.png" Height="36" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"/>
                                             </Button>
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>

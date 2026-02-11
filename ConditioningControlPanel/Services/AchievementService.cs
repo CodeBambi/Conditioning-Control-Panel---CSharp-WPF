@@ -47,14 +47,29 @@ public class AchievementService : IDisposable
         _progress.SyncCurrentStreak();
         _isDirty = true;
         
-        // Auto-save every 30 seconds if dirty
+        // Auto-save every 30 seconds if dirty (off UI thread)
         _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _saveTimer.Tick += (s, e) =>
         {
             if (_isDirty)
             {
-                Save();
                 _isDirty = false;
+                var json = JsonSerializer.Serialize(_progress, new JsonSerializerOptions { WriteIndented = true });
+                var path = _progressPath;
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        var dir = Path.GetDirectoryName(path);
+                        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                            Directory.CreateDirectory(dir);
+                        File.WriteAllText(path, json);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Error(ex, "Failed to save achievement progress");
+                    }
+                });
             }
         };
         _saveTimer.Start();

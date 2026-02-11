@@ -1000,10 +1000,10 @@ namespace ConditioningControlPanel
                 StartEngine();
             }
 
-            // Handle force video on launch (after a short delay to let things initialize)
+            // Handle force video on launch (after a brief delay to let things initialize)
             if (App.Settings.Current.ForceVideoOnLaunch)
             {
-                await Task.Delay(1500); // Let engine and services initialize
+                await Task.Delay(200);
                 TriggerStartupVideo();
             }
 
@@ -1012,7 +1012,7 @@ namespace ConditioningControlPanel
             {
                 _ = Task.Run(async () =>
                 {
-                    await Task.Delay(2000); // Let other services finish initializing
+                    await Task.Delay(500);
                     await App.Leaderboard.RefreshAsync();
 
                     // Update UI after leaderboard loads

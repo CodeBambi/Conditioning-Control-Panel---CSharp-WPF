@@ -88,10 +88,11 @@ public class BubbleService : IDisposable
     {
         if (!_isRunning) return;
 
-        // Animate all bubbles in a single pass
-        foreach (var bubble in _bubbles.ToArray())
+        // Animate all bubbles in a single pass - iterate by index to avoid allocation
+        for (int i = _bubbles.Count - 1; i >= 0; i--)
         {
-            bubble.AnimateFrame();
+            if (i < _bubbles.Count)
+                _bubbles[i].AnimateFrame();
         }
     }
 

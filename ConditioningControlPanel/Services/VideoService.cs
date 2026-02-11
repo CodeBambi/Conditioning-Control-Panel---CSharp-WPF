@@ -60,6 +60,7 @@ namespace ConditioningControlPanel.Services
         private static readonly object _libVLCLock = new();
         private static bool _libVLCInitialized;
         private static bool _libVLCInitializing;
+        private static readonly TaskCompletionSource<bool> _libVLCReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly List<LibVLCSharp.Shared.MediaPlayer> _mediaPlayers = new();
         private readonly object _mediaPlayersLock = new();  // Thread-safe access to _mediaPlayers
 
@@ -85,15 +86,15 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static bool WaitForLibVLC(int timeoutMs = 5000)
         {
-            var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalMilliseconds < timeoutMs)
+            if (_libVLCInitialized) return _libVLC != null;
+
+            try
             {
-                if (_libVLCInitialized)
-                {
+                if (_libVLCReady.Task.Wait(timeoutMs))
                     return _libVLC != null;
-                }
-                Thread.Sleep(50);
             }
+            catch { }
+
             App.Logger?.Warning("VideoService: Timed out waiting for LibVLC initialization");
             return _libVLC != null;
         }
@@ -142,6 +143,7 @@ namespace ConditioningControlPanel.Services
                 {
                     _libVLCInitialized = true;
                     _libVLCInitializing = false;
+                    _libVLCReady.TrySetResult(true);
                     return;
                 }
 
@@ -207,6 +209,7 @@ namespace ConditioningControlPanel.Services
                 {
                     _libVLCInitialized = true;
                     _libVLCInitializing = false;
+                    _libVLCReady.TrySetResult(_libVLC != null);
                 }
             }
         }
@@ -1524,7 +1527,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 try
                                 {
-                                    Application.Current?.Dispatcher.BeginInvoke(() =>
+                                    Application.Current?.Dispatcher?.BeginInvoke(() =>
                                     {
                                         foreach (var t in remainingTargets)
                                         {
@@ -1601,7 +1604,7 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    Application.Current?.Dispatcher.BeginInvoke(() =>
+                    Application.Current?.Dispatcher?.BeginInvoke(() =>
                     {
                         lock (_targets)
                         {

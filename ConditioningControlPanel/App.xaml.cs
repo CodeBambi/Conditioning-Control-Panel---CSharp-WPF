@@ -499,8 +499,8 @@ namespace ConditioningControlPanel
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "videos"));
             Directory.CreateDirectory(Path.Combine(UserDataPath, "Spirals"));
 
-            // Migrate assets from old location (install dir) to new location (user data)
-            MigrateAssetsToUserFolder();
+            // Migrate assets from old location (install dir) to new location (user data) in background
+            _ = Task.Run(MigrateAssetsToUserFolder);
 
             // Create Resources directories (these are bundled with app, not user content)
             var resourcesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
@@ -732,8 +732,8 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Delay update check to let app fully load
-                await Task.Delay(3000);
+                // Brief delay to let app load before checking updates
+                await Task.Delay(500);
 
                 Logger?.Information("Background update check starting...");
                 var updateInfo = await Update.CheckForUpdatesAsync();
@@ -1643,13 +1643,13 @@ Application State:
             // This prevents cloud sync from overwriting local values with stale data before save.
             Settings?.Save();
 
-            // Sync profile to cloud on exit (fire and forget, don't block shutdown)
+            // Sync profile to cloud on exit (short timeout to avoid blocking shutdown)
             if (ProfileSync?.IsSyncEnabled == true)
             {
                 try
                 {
                     Logger?.Information("Syncing profile to cloud before exit...");
-                    ProfileSync.SyncProfileAsync().Wait(TimeSpan.FromSeconds(5));
+                    ProfileSync.SyncProfileAsync().Wait(TimeSpan.FromSeconds(2));
                 }
                 catch (Exception ex)
                 {

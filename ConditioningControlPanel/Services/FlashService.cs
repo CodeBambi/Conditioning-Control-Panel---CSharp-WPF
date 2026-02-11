@@ -34,6 +34,7 @@ namespace ConditioningControlPanel.Services
         private Queue<string> _soundQueue = new();  // Performance: Changed to Queue for O(1) dequeue
         private readonly List<string> _tempPackFiles = new();  // Track temp files for cleanup
         private readonly object _lockObj = new();
+        private FlashWindow[] _windowsSnapshot = Array.Empty<FlashWindow>(); // Reusable snapshot for heartbeat
 
         // Performance: Cache for directory file listings to avoid repeated disk scans
         private static readonly Dictionary<string, (List<string> files, DateTime lastScan)> _fileListCache = new();
@@ -533,10 +534,14 @@ namespace ConditioningControlPanel.Services
                         var unduckDelay = (int)(duration * 1000) + 1500;
                         Task.Delay(unduckDelay).ContinueWith(_ =>
                         {
-                            System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
+                            try
                             {
-                                App.Audio.Unduck();
-                            });
+                                System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
+                                {
+                                    App.Audio.Unduck();
+                                });
+                            }
+                            catch { }
                         });
                     }
                 }
@@ -555,10 +560,14 @@ namespace ConditioningControlPanel.Services
                 var cleanupDelay = (int)(duration * 1000) + 1000;
                 Task.Delay(cleanupDelay).ContinueWith(_ =>
                 {
-                    System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
+                    try
                     {
-                        ForceFlashCleanup();
-                    });
+                        System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
+                        {
+                            ForceFlashCleanup();
+                        });
+                    }
+                    catch { }
                 });
             }
 
@@ -577,11 +586,15 @@ namespace ConditioningControlPanel.Services
                     var capturedData = imageData;
                     Task.Delay(delayMs).ContinueWith(_ =>
                     {
-                        System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
+                        try
                         {
-                            if (_isRunning || _oneShotActive)
-                                SpawnFlashWindow(capturedData, settings);
-                        });
+                            System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
+                            {
+                                if (_isRunning || _oneShotActive)
+                                    SpawnFlashWindow(capturedData, settings);
+                            });
+                        }
+                        catch { }
                     });
                 }
             }
@@ -769,10 +782,14 @@ namespace ConditioningControlPanel.Services
             var showImages = DateTime.Now < _virtualEndTime;
             var targetAlpha = showImages ? maxAlpha : 0.0;
 
-            List<FlashWindow> windowsCopy;
+            FlashWindow[] windowsCopy;
             lock (_lockObj)
             {
-                windowsCopy = _activeWindows.ToList();
+                // Reuse snapshot array when size matches to avoid per-frame allocation
+                if (_windowsSnapshot.Length != _activeWindows.Count)
+                    _windowsSnapshot = new FlashWindow[_activeWindows.Count];
+                _activeWindows.CopyTo(_windowsSnapshot);
+                windowsCopy = _windowsSnapshot;
             }
 
             var toRemove = new List<FlashWindow>();

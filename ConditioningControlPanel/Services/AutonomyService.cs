@@ -783,7 +783,7 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Warning("AutonomyService: Cannot execute action - Dispatcher is null after delay");
                             return;
                         }
-                        Application.Current.Dispatcher.BeginInvoke(() =>
+                        Application.Current?.Dispatcher?.BeginInvoke(() =>
                         {
                             PerformAction(capturedAction, source, context);
                         });
@@ -1005,7 +1005,7 @@ namespace ConditioningControlPanel.Services
                                 Task.Delay(30000).ContinueWith(_ =>
                                 {
                                     if (Application.Current?.Dispatcher == null) return;
-                                    Application.Current.Dispatcher.BeginInvoke(() =>
+                                    Application.Current?.Dispatcher?.BeginInvoke(() =>
                                     {
                                         if (_bubblesPulseActive)
                                         {
@@ -1049,7 +1049,7 @@ namespace ConditioningControlPanel.Services
                                 Task.Delay(30000).ContinueWith(_ =>
                                 {
                                     if (Application.Current?.Dispatcher == null) return;
-                                    Application.Current.Dispatcher.BeginInvoke(() =>
+                                    Application.Current?.Dispatcher?.BeginInvoke(() =>
                                     {
                                         if (_bouncingTextPulseActive)
                                         {
@@ -1108,7 +1108,7 @@ namespace ConditioningControlPanel.Services
             Task.Delay(3000).ContinueWith(_ =>
             {
                 if (Application.Current?.Dispatcher == null) return;
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                Application.Current?.Dispatcher?.BeginInvoke(() =>
                 {
                     if (App.Settings?.Current != null)
                     {
@@ -1215,7 +1215,7 @@ namespace ConditioningControlPanel.Services
             Task.Delay(5000).ContinueWith(_ =>
             {
                 if (Application.Current?.Dispatcher == null) return;
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                Application.Current?.Dispatcher?.BeginInvoke(() =>
                 {
                     App.Overlay?.UpdateBrainDrainBlurOpacity(baseIntensity);
                 });
@@ -1291,7 +1291,7 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                Application.Current?.Dispatcher?.BeginInvoke(() =>
                 {
                     // Check if Stop() was called (global generation changed)
                     if (_globalPulseGeneration != capturedGlobalGen)
@@ -1409,7 +1409,7 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                Application.Current?.Dispatcher?.BeginInvoke(() =>
                 {
                     // Check if Stop() was called (global generation changed)
                     if (_globalPulseGeneration != globalGen)
