@@ -78,7 +78,7 @@ public class LeaderboardService : IDisposable
 
             // Use V2 leaderboard (monthly seasons system)
             var season = DateTime.UtcNow.ToString("yyyy-MM");
-            var response = await _httpClient.GetAsync($"{ProxyBaseUrl}/v3/leaderboard?season={season}&limit=1000");
+            var response = await _httpClient.GetAsync($"{ProxyBaseUrl}/v3/leaderboard?season={season}&limit=10000");
 
             if (!response.IsSuccessStatusCode)
             {
