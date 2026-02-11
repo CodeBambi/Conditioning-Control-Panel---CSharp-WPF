@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Threading;
@@ -124,10 +125,16 @@ namespace ConditioningControlPanel.Services
                 var unifiedId = App.Settings?.Current?.UnifiedId;
                 if (!string.IsNullOrEmpty(unifiedId))
                 {
-                    // V2 heartbeat - uses unified_id
+                    // V2 heartbeat - uses unified_id with enriched activity data
                     var v2Request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/heartbeat");
                     v2Request.Content = new StringContent(
-                        Newtonsoft.Json.JsonConvert.SerializeObject(new { unified_id = unifiedId }),
+                        Newtonsoft.Json.JsonConvert.SerializeObject(new
+                        {
+                            unified_id = unifiedId,
+                            is_active = App.ActivityTracker?.IsIdle != true,
+                            in_session = App.IsSessionRunning,
+                            app_version = UpdateService.AppVersion
+                        }),
                         Encoding.UTF8, "application/json");
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
@@ -358,11 +365,9 @@ namespace ConditioningControlPanel.Services
                     };
 
                     var v2Request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/sync");
-                    v2Request.Content = new StringContent(
-                        JsonConvert.SerializeObject(v2SyncData),
-                        Encoding.UTF8,
-                        "application/json"
-                    );
+                    var v2Body = JsonConvert.SerializeObject(v2SyncData);
+                    v2Request.Content = new StringContent(v2Body, Encoding.UTF8, "application/json");
+                    SignRequest(v2Request, v2Body);
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
 
@@ -1141,6 +1146,31 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Error(ex, "Delete account request failed");
                 return (false, "Account deletion requires an internet connection");
             }
+        }
+
+        /// <summary>
+        /// Signs an HTTP request with HMAC-SHA256 for anti-cheat verification.
+        /// Adds X-CCP-Timestamp and X-CCP-Signature headers.
+        /// </summary>
+        private static void SignRequest(HttpRequestMessage request, string body)
+        {
+            var unifiedId = App.Settings?.Current?.UnifiedId;
+            if (string.IsNullOrEmpty(unifiedId)) return;
+
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+            var payload = $"{timestamp}:{body}";
+
+            // Key derived from unified_id + embedded app key
+            const string appKey = "ccp-anticheat-2026";
+            var keyMaterial = $"{unifiedId}:{appKey}";
+            var keyBytes = Encoding.UTF8.GetBytes(keyMaterial);
+
+            using var hmac = new HMACSHA256(keyBytes);
+            var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
+            var signature = Convert.ToHexString(hash).ToLowerInvariant();
+
+            request.Headers.Add("X-CCP-Timestamp", timestamp);
+            request.Headers.Add("X-CCP-Signature", signature);
         }
 
         public void Dispose()

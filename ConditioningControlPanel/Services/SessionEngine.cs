@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -71,6 +72,9 @@ namespace ConditioningControlPanel.Services
         private double _cornerGifWidth;  // Cached original GIF dimensions
         private double _cornerGifHeight;
 
+        // Anti-cheat: Stopwatch for wall-clock cross-check (immune to system clock manipulation)
+        private readonly Stopwatch _wallClockStopwatch = new();
+
         // Reference to main window for service access
         private readonly MainWindow _mainWindow;
         private bool _mainWindowClosed = false;
@@ -91,7 +95,21 @@ namespace ConditioningControlPanel.Services
             {
                 if (!_isRunning) return TimeSpan.Zero;
                 if (_isPaused) return _pausedElapsedTime;
-                return _pausedElapsedTime + (DateTime.Now - _startTime);
+
+                var dateTimeElapsed = _pausedElapsedTime + (DateTime.Now - _startTime);
+                var stopwatchElapsed = _wallClockStopwatch.Elapsed;
+
+                // Anti-cheat: if DateTime-based elapsed diverges from Stopwatch by > 30s,
+                // use the shorter time (conservative against speed hacking)
+                var divergence = dateTimeElapsed - stopwatchElapsed;
+                if (divergence.TotalSeconds > 30)
+                {
+                    App.Logger?.Warning("Timer integrity: DateTime elapsed {DateTimeElapsed} vs Stopwatch {StopwatchElapsed} — divergence {Divergence}s, using shorter",
+                        dateTimeElapsed, stopwatchElapsed, divergence.TotalSeconds);
+                    return stopwatchElapsed;
+                }
+
+                return dateTimeElapsed;
             }
         }
         public TimeSpan RemainingTime => _currentSession != null
@@ -122,6 +140,7 @@ namespace ConditioningControlPanel.Services
             _pauseCount = 0;
             _pausedElapsedTime = TimeSpan.Zero;
             _startTime = DateTime.Now;
+            _wallClockStopwatch.Restart();
             _currentPhaseIndex = 0;
             _cancellationToken = new CancellationTokenSource();
             
@@ -200,8 +219,9 @@ namespace ConditioningControlPanel.Services
             var finalElapsedTime = ElapsedTime;
 
             _isRunning = false;
+            _wallClockStopwatch.Stop();
             _cancellationToken?.Cancel();
-            
+
             // Stop timers
             _mainTimer?.Stop();
             _mainTimer = null;
@@ -305,6 +325,7 @@ namespace ConditioningControlPanel.Services
             _isPaused = true;
             _pauseCount++;
             _pauseStartTime = DateTime.Now;
+            _wallClockStopwatch.Stop();
 
             // Stop timers but keep session state
             _mainTimer?.Stop();
@@ -335,6 +356,7 @@ namespace ConditioningControlPanel.Services
 
             _isPaused = false;
             _startTime = DateTime.Now; // Reset start time, elapsed time is tracked in _pausedElapsedTime
+            _wallClockStopwatch.Start();
 
             // Restart timers
             _mainTimer?.Start();

@@ -34,6 +34,17 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
+            // Anti-cheat: Suppress passive XP sources when user is idle (AFK farming prevention)
+            if (App.ActivityTracker?.IsIdle == true)
+            {
+                // Only suppress passive (non-interaction) sources
+                if (source == XPSource.Flash || source == XPSource.Subliminal || source == XPSource.BouncingText)
+                {
+                    App.Logger?.Debug("XP suppressed (idle): +{Amount} from {Source}", amount, source);
+                    return;
+                }
+            }
+
             // Track whether we're in offline mode for skipping cloud features
             var inOfflineMode = isOfflineMode && hasOfflineUsername;
 
