@@ -463,7 +463,7 @@ internal class Bubble
         _posY = (area.Y + area.Height) / dpiScale;
         _screenTop = area.Y / dpiScale - _size - 50;
 
-        // Create bubble image
+        // Create bubble image (hit-testing disabled — the Ellipse behind handles clicks)
         _bubbleImage = new Image
         {
             Width = _size,
@@ -471,7 +471,7 @@ internal class Bubble
             Stretch = Stretch.Uniform,
             RenderTransformOrigin = new Point(0.5, 0.5),
             Cursor = _isClickable ? Cursors.Hand : Cursors.Arrow,
-            IsHitTestVisible = _isClickable
+            IsHitTestVisible = false
         };
 
         if (image != null)
@@ -498,16 +498,6 @@ internal class Bubble
         transformGroup.Children.Add(new ScaleTransform(1, 1));
         transformGroup.Children.Add(new RotateTransform(0));
         _bubbleImage.RenderTransform = transformGroup;
-
-        // Make bubble image clickable only if enabled
-        if (_isClickable)
-        {
-            _bubbleImage.MouseLeftButtonDown += (s, e) =>
-            {
-                Pop();
-                e.Handled = true;
-            };
-        }
 
         // Create invisible hit area ellipse that covers the full bubble
         // This ensures clicks anywhere in the circular bubble area register
