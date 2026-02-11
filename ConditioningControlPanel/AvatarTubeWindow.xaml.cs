@@ -887,7 +887,8 @@ namespace ConditioningControlPanel
                     {
                         // Fullscreen app closed - restore the avatar
                         _hiddenForFullscreen = false;
-                        if (_parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized)
+                        if (_parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized
+                            && App.Settings?.Current?.AvatarEnabled == true)
                         {
                             Show();
                             if (_wasAttachedBeforeFullscreen && _isAttached)
@@ -902,7 +903,7 @@ namespace ConditioningControlPanel
                 {
                     // DETACHED mode - periodically reassert topmost to stay visible as widget
                     // This handles cases where other topmost windows or focus changes demote us
-                    if (_hiddenForFullscreen)
+                    if (_hiddenForFullscreen && App.Settings?.Current?.AvatarEnabled == true)
                     {
                         _hiddenForFullscreen = false;
                         Show();
@@ -1334,7 +1335,8 @@ namespace ConditioningControlPanel
                 if (parentHandle == IntPtr.Zero || foreground != parentHandle)
                     return;
 
-                if (_parentWindow.WindowState != WindowState.Minimized && _parentWindow.IsVisible)
+                if (_parentWindow.WindowState != WindowState.Minimized && _parentWindow.IsVisible
+                    && App.Settings?.Current?.AvatarEnabled == true)
                 {
                     Show();
                     UpdatePosition();
@@ -2761,7 +2763,7 @@ namespace ConditioningControlPanel
         {
             Application.Current.Dispatcher.BeginInvoke(() =>
             {
-                if (_isMuted) return;
+                if (_isMuted || !IsAvatarVisibleOnScreen) return;
 
                 var text = System.IO.Path.GetFileNameWithoutExtension(filePath);
                 if (string.IsNullOrWhiteSpace(text)) return;
@@ -4047,6 +4049,10 @@ namespace ConditioningControlPanel
         {
             get
             {
+                // If avatar is disabled, it's never visible
+                if (App.Settings?.Current?.AvatarEnabled != true)
+                    return false;
+
                 // Detached mode - avatar is always visible as independent widget
                 if (!_isAttached)
                     return true;

@@ -1309,6 +1309,8 @@ namespace ConditioningControlPanel
 
         public void ShowAvatarTube()
         {
+            if (!App.Settings.Current.AvatarEnabled) return;
+
             // Recreate if closed
             if (_avatarTubeWindow == null)
             {
@@ -1325,8 +1327,9 @@ namespace ConditioningControlPanel
         {
             if (_avatarTubeWindow != null)
             {
-                // Don't hide or close if the tube is detached - let it float independently
-                if (_avatarTubeWindow.IsDetached)
+                // Don't hide detached tube when main window minimizes — let it float independently
+                // But if user disabled avatar entirely, always hide regardless of detach state
+                if (_avatarTubeWindow.IsDetached && App.Settings.Current.AvatarEnabled)
                 {
                     return;
                 }
