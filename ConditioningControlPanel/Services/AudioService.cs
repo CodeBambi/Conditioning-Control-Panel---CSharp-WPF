@@ -25,6 +25,7 @@ namespace ConditioningControlPanel.Services
         private AudioFileReader? _soundFile;
 
         private MMDeviceEnumerator? _deviceEnumerator;
+        private int _duckCount; // Reference count — unduck only when all duckers release
         private bool _isDucked;
         private float _duckAmount = 0.8f; // Default: reduce to 20%
 
@@ -222,11 +223,12 @@ namespace ConditioningControlPanel.Services
             // Don't duck if master volume is 0% - nothing to play anyway
             if ((App.Settings?.Current?.MasterVolume ?? 100) == 0) return;
 
-            if (_isDucked || _deviceEnumerator == null) return;
+            if (_deviceEnumerator == null) return;
 
             lock (_lockObj)
             {
-                if (_isDucked) return;
+                _duckCount++;
+                if (_isDucked) return; // Already ducked — just bump the ref count
                 
                 _duckAmount = Math.Clamp(strength, 0, 100) / 100.0f;
                 
@@ -309,7 +311,10 @@ namespace ConditioningControlPanel.Services
             lock (_lockObj)
             {
                 if (!_isDucked) return;
-                
+
+                _duckCount = Math.Max(0, _duckCount - 1);
+                if (_duckCount > 0) return; // Other consumers still need ducking
+
                 try
                 {
                     var device = _deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
@@ -348,9 +353,22 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Debug("Audio unducking failed: {Error}", ex.Message);
                     _originalVolumes.Clear();
                     _isDucked = false;
+                    _duckCount = 0;
                     ClearDuckingState();
                 }
             }
+        }
+
+        /// <summary>
+        /// Force-unduck regardless of reference count. Used for panic key / app exit.
+        /// </summary>
+        public void ForceUnduck()
+        {
+            lock (_lockObj)
+            {
+                _duckCount = 1; // Force next Unduck() to actually restore
+            }
+            Unduck();
         }
 
         #endregion
@@ -362,10 +380,10 @@ namespace ConditioningControlPanel.Services
             if (_disposed) return;
             _disposed = true;
 
-            // Restore audio levels
+            // Restore audio levels — force unduck regardless of ref count
             if (_isDucked)
             {
-                Unduck();
+                ForceUnduck();
             }
 
             StopSound();

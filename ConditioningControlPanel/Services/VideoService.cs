@@ -559,7 +559,7 @@ namespace ConditioningControlPanel.Services
             _videoPlaying = false;
             _strictActive = false;
             CloseAll(synchronous);
-            App.Audio?.Unduck();
+            App.Audio?.ForceUnduck();
             _penalties = 0;
             App.Logger?.Information("VideoService: Force cleanup completed (synchronous={Sync})", synchronous);
         }

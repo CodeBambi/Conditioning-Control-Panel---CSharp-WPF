@@ -233,11 +233,17 @@ namespace ConditioningControlPanel
         public static PersonalityService Personality { get; private set; } = null!;
         public static RoadmapService Roadmap { get; private set; } = null!;
         public static SkillTreeService SkillTree { get; private set; } = null!;
+        public static ActivityTracker ActivityTracker { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with either Patreon or Discord (required for progression tracking)
         /// </summary>
         public static bool IsLoggedIn => (Patreon?.IsAuthenticated == true) || (Discord?.IsAuthenticated == true);
+
+        /// <summary>
+        /// Whether a conditioning session is currently running. Set by MainWindow.
+        /// </summary>
+        public static bool IsSessionRunning { get; set; }
 
         /// <summary>
         /// Unified user ID that links Patreon and Discord accounts together
@@ -374,7 +380,7 @@ namespace ConditioningControlPanel
                 Autonomy?.Stop();
 
                 // Reset audio ducking - CRITICAL for clean exit
-                Audio?.Unduck();
+                Audio?.ForceUnduck();
 
                 Logger?.Debug("KillAllAudio: All audio and effects stopped");
             }
@@ -522,6 +528,7 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.6, "Initializing effects...");
             Progression = new ProgressionService();
+            ActivityTracker = new ActivityTracker();
 
             // Initialize companion leveling system (v5.3) - migrate existing users if needed
             CompanionService.MigrateFromLegacy(Settings.Current);

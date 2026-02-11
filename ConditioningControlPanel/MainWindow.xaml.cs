@@ -457,7 +457,7 @@ namespace ConditioningControlPanel
             // Handle panic key capture mode
             if (_isCapturingPanicKey)
             {
-                Dispatcher.Invoke(() =>
+                Dispatcher.BeginInvoke(() =>
                 {
                     App.Settings.Current.PanicKey = key.ToString();
                     _isCapturingPanicKey = false;
@@ -474,7 +474,7 @@ namespace ConditioningControlPanel
                 var panicKey = settings.PanicKey;
                 if (key.ToString() == panicKey)
                 {
-                    Dispatcher.Invoke(() => HandlePanicKeyPress());
+                    Dispatcher.BeginInvoke(() => HandlePanicKeyPress());
                 }
             }
         }
@@ -7768,6 +7768,7 @@ namespace ConditioningControlPanel
         
         private void OnSessionCompleted(object? sender, SessionCompletedEventArgs e)
         {
+            App.IsSessionRunning = false;
             Dispatcher.Invoke(() =>
             {
                 // Award XP
@@ -7821,6 +7822,7 @@ namespace ConditioningControlPanel
 
         private void OnSessionStarted(object? sender, EventArgs e)
         {
+            App.IsSessionRunning = true;
             Dispatcher.Invoke(() =>
             {
                 BtnStartSession.Content = "STOP SESSION";
@@ -7853,6 +7855,7 @@ namespace ConditioningControlPanel
 
         private void OnSessionStopped(object? sender, EventArgs e)
         {
+            App.IsSessionRunning = false;
             Dispatcher.Invoke(() =>
             {
                 // Stop the engine when session stops
@@ -11154,7 +11157,7 @@ namespace ConditioningControlPanel
                 App.Autonomy?.Stop();
             }
             App.SkillTree?.Stop();
-            App.Audio.Unduck();
+            App.Audio.ForceUnduck();
 
             // Force close any open lock card windows (panic button should close them immediately)
             LockCardWindow.ForceCloseAll();
@@ -12952,7 +12955,7 @@ namespace ConditioningControlPanel
             // If ducking was just disabled, immediately restore audio for any ducked sessions
             if (ChkAudioDuck.IsChecked == false)
             {
-                App.Audio?.Unduck();
+                App.Audio?.ForceUnduck();
             }
 
             ApplySettingsLive();
