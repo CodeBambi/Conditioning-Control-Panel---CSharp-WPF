@@ -22,18 +22,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.10";
+        public const string AppVersion = "5.5.11";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.10 - Video Fixes
+        public const string CurrentPatchNotes = @"v5.5.11 - Temp File Cleanup
 
 🔧 FIXES
-• Fixed multiple videos displaying at the same time
-• Fixed videos chaining back-to-back with zero gap
-• Fixed being able to pause mandatory videos by clicking";
+• Fixed temp folder filling up with GIF and video files from content packs
+• Fixed old installer downloads piling up across updates (several GB over time)
+• Added startup cleanup of stale temp files from previous sessions/crashes";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

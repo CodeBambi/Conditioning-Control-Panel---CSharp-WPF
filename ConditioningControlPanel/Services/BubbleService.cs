@@ -199,7 +199,7 @@ public class BubbleService : IDisposable
                 
                 var screen = screens[_random.Next(screens.Length)];
                 // Outside sessions, bubbles are always clickable (no UI toggle exists for this setting)
-                var isClickable = App.Session?.IsRunning == true ? settings.BubblesClickable : true;
+                var isClickable = App.IsSessionRunning ? settings.BubblesClickable : true;
                 var bubble = new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable);
                 _bubbles.Add(bubble);
                 
