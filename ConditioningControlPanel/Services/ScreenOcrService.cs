@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Windows;
@@ -16,7 +18,7 @@ namespace ConditioningControlPanel.Services
         private Timer? _timer;
         private bool _disposed;
         private bool _isRunning;
-        private uint _lastTextHash;
+        private HashSet<string> _previousLines = new();
         private OcrEngine? _ocrEngine;
         private readonly object _lock = new();
 
@@ -43,7 +45,7 @@ namespace ConditioningControlPanel.Services
                 var intervalMs = App.Settings?.Current?.ScreenOcrIntervalMs ?? 3000;
                 _timer = new Timer(OnTimerTick, null, intervalMs, intervalMs);
                 _isRunning = true;
-                _lastTextHash = 0;
+                _previousLines = new HashSet<string>();
                 App.Logger?.Information("ScreenOcrService started (interval: {Interval}ms)", intervalMs);
             }
         }
@@ -56,7 +58,7 @@ namespace ConditioningControlPanel.Services
                 _timer?.Dispose();
                 _timer = null;
                 _isRunning = false;
-                _lastTextHash = 0;
+                _previousLines = new HashSet<string>();
                 App.Logger?.Information("ScreenOcrService stopped");
             }
         }
@@ -89,15 +91,21 @@ namespace ConditioningControlPanel.Services
                 var fullText = allText.ToString();
                 if (string.IsNullOrWhiteSpace(fullText)) return;
 
-                // Hash-based change detection — skip if screen text unchanged
-                var hash = (uint)fullText.GetHashCode();
-                if (hash == _lastTextHash) return;
-                _lastTextHash = hash;
+                // Line-level diffing — only forward lines not seen in previous scan
+                var currentLines = new HashSet<string>(
+                    fullText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+                var newLines = currentLines.Where(l => !_previousLines.Contains(l)).ToList();
+                _previousLines = currentLines;
+
+                if (newLines.Count == 0) return;
+
+                var newText = string.Join("\n", newLines);
 
                 // Dispatch to keyword trigger service on UI thread
                 Application.Current?.Dispatcher?.Invoke(() =>
                 {
-                    App.KeywordTriggers?.CheckTextForMatches(fullText);
+                    App.KeywordTriggers?.CheckTextForMatches(newText);
                 });
             }
             catch (Exception ex)
