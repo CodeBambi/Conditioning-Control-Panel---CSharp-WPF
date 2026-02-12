@@ -241,8 +241,20 @@ namespace ConditioningControlPanel
                 catch { }
             }
 
+            // Clean up old installer downloads (each version has a different filename so they pile up)
+            try
+            {
+                var updateDir = Path.Combine(Path.GetTempPath(), "ConditioningControlPanel_Update");
+                if (Directory.Exists(updateDir))
+                {
+                    Directory.Delete(updateDir, true);
+                    deleted++;
+                }
+            }
+            catch { }
+
             if (deleted > 0)
-                Logger?.Information("Cleaned up {Count} stale temp files from previous session", deleted);
+                Logger?.Information("Cleaned up {Count} stale temp files/folders from previous session", deleted);
         }
 
         // Static service references

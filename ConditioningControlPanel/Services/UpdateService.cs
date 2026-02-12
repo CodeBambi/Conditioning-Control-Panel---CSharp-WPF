@@ -553,16 +553,16 @@ namespace ConditioningControlPanel.Services
                     throw new InvalidOperationException($"Could not find Setup.exe installer in GitHub release {version}");
                 }
 
-                // Download to temp directory
+                // Download to temp directory — wipe old installers from previous updates first
                 var tempDir = Path.Combine(Path.GetTempPath(), "ConditioningControlPanel_Update");
+                try
+                {
+                    if (Directory.Exists(tempDir))
+                        Directory.Delete(tempDir, true);
+                }
+                catch { }
                 Directory.CreateDirectory(tempDir);
                 var installerPath = Path.Combine(tempDir, assetName ?? "Setup.exe");
-
-                // Delete old installer if exists
-                if (File.Exists(installerPath))
-                {
-                    File.Delete(installerPath);
-                }
 
                 App.Logger?.Information("Downloading installer from {Url} to {Path}", downloadUrl, installerPath);
 
