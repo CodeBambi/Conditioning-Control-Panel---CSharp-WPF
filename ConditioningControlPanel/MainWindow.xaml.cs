@@ -184,7 +184,11 @@ namespace ConditioningControlPanel
             // Initialize global keyboard hook (only if panic key is enabled)
             _keyboardHook = new GlobalKeyboardHook();
             _keyboardHook.KeyPressed += OnGlobalKeyPressed;
-            if (App.Settings.Current.PanicKeyEnabled)
+            _keyboardHook.KeyPressedWithVkCode += (key, vkCode) => App.KeywordTriggers?.OnKeyPressed(key, vkCode);
+            App.KeywordTriggers?.SetSessionActiveCallback(() => _sessionEngine?.IsRunning == true);
+            if (App.Settings.Current.KeywordTriggersEnabled && KeywordTriggerService.HasAccess())
+                App.KeywordTriggers?.Start();
+            if (App.Settings.Current.PanicKeyEnabled || App.Settings.Current.KeywordTriggersEnabled)
             {
                 _keyboardHook.Start();
             }
@@ -5109,6 +5113,502 @@ namespace ConditioningControlPanel
                     haptics.BouncingTextMode = mode;
                     break;
             }
+        }
+
+        #endregion
+
+        #region Keyword Triggers Handlers
+
+        private void ChkKeywordTriggersEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var isEnabled = ChkKeywordTriggersEnabled.IsChecked == true;
+
+            // Check Patreon access (T2 required)
+            if (isEnabled && !KeywordTriggerService.HasAccess())
+            {
+                ChkKeywordTriggersEnabled.IsChecked = false;
+                MessageBox.Show(
+                    "Keyword Triggers are available for Tier 2 Patreon supporters.",
+                    "Patreon Feature",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            App.Settings.Current.KeywordTriggersEnabled = isEnabled;
+
+            if (isEnabled)
+            {
+                App.KeywordTriggers?.Start();
+                _keyboardHook?.Start(); // Ensure hook is running
+            }
+            else
+            {
+                App.KeywordTriggers?.Stop();
+                // Only stop hook if panic key also disabled
+                if (App.Settings.Current.PanicKeyEnabled != true)
+                    _keyboardHook?.Stop();
+            }
+
+            // Toggle settings panel visibility
+            if (KeywordTriggersSettingsPanel != null)
+                KeywordTriggersSettingsPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+            App.Settings.Save();
+        }
+
+        private void SliderKeywordBufferTimeout_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtKeywordBufferTimeout == null) return;
+            var value = (int)SliderKeywordBufferTimeout.Value;
+            TxtKeywordBufferTimeout.Text = $"{value / 1000.0:F1}s";
+            App.Settings.Current.KeywordBufferTimeoutMs = value;
+        }
+
+        private void SliderKeywordGlobalCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtKeywordGlobalCooldown == null) return;
+            var value = (int)SliderKeywordGlobalCooldown.Value;
+            TxtKeywordGlobalCooldown.Text = $"{value}s";
+            App.Settings.Current.KeywordGlobalCooldownSeconds = value;
+        }
+
+        private void SliderKeywordSessionMultiplier_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtKeywordSessionMultiplier == null) return;
+            var value = SliderKeywordSessionMultiplier.Value;
+            TxtKeywordSessionMultiplier.Text = $"{value:F1}x";
+            App.Settings.Current.KeywordSessionMultiplier = value;
+        }
+
+        private void ChkScreenOcrEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var isEnabled = ChkScreenOcrEnabled.IsChecked == true;
+
+            if (isEnabled && !KeywordTriggerService.HasAccess())
+            {
+                ChkScreenOcrEnabled.IsChecked = false;
+                MessageBox.Show(
+                    "Screen OCR requires Tier 2 Patreon access.",
+                    "Patreon Feature",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            App.Settings.Current.ScreenOcrEnabled = isEnabled;
+
+            if (isEnabled)
+                App.ScreenOcr?.Start();
+            else
+                App.ScreenOcr?.Stop();
+
+            if (ScreenOcrIntervalPanel != null)
+                ScreenOcrIntervalPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+            App.Settings.Save();
+        }
+
+        private void SliderScreenOcrInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtScreenOcrInterval == null) return;
+            var value = (int)SliderScreenOcrInterval.Value;
+            TxtScreenOcrInterval.Text = $"{value}s";
+            App.Settings.Current.ScreenOcrIntervalMs = value * 1000;
+            App.ScreenOcr?.UpdateInterval(value * 1000);
+        }
+
+        private void BtnAddKeywordTrigger_Click(object sender, RoutedEventArgs e)
+        {
+            var triggers = App.Settings.Current.KeywordTriggers;
+
+            var newTrigger = new KeywordTrigger
+            {
+                Keyword = "",
+                MatchType = KeywordMatchType.PlainText,
+                Enabled = true,
+                CooldownSeconds = 30,
+                AudioVolume = 80,
+                VisualEffect = KeywordVisualEffect.SubliminalFlash,
+                HapticEnabled = true,
+                HapticIntensity = 0.5,
+                DuckAudio = true,
+                XPAward = 10
+            };
+
+            triggers.Add(newTrigger);
+            App.Settings.Save();
+            RefreshKeywordTriggerList();
+        }
+
+        private void BtnImportFromCustomTriggers_Click(object sender, RoutedEventArgs e)
+        {
+            var imported = App.KeywordTriggers?.ImportFromCustomTriggers();
+            if (imported == null || imported.Count == 0)
+            {
+                MessageBox.Show("No new triggers to import. All existing trigger phrases are already in your keyword triggers list.",
+                    "Import Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var triggers = App.Settings.Current.KeywordTriggers;
+            triggers.AddRange(imported);
+            App.Settings.Save();
+            RefreshKeywordTriggerList();
+
+            MessageBox.Show($"Imported {imported.Count} trigger(s) from your Trigger Mode list.",
+                "Import Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void BtnDeleteKeywordTrigger_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn) return;
+            var triggerId = btn.Tag?.ToString();
+            if (string.IsNullOrEmpty(triggerId)) return;
+
+            var triggers = App.Settings.Current.KeywordTriggers;
+            var trigger = triggers.FirstOrDefault(t => t.Id == triggerId);
+            if (trigger != null)
+            {
+                triggers.Remove(trigger);
+                App.Settings.Save();
+                RefreshKeywordTriggerList();
+            }
+        }
+
+        private void ChkKeywordTriggerEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (sender is not CheckBox chk) return;
+            var triggerId = chk.Tag?.ToString();
+            if (string.IsNullOrEmpty(triggerId)) return;
+
+            var trigger = App.Settings.Current.KeywordTriggers.FirstOrDefault(t => t.Id == triggerId);
+            if (trigger != null)
+            {
+                trigger.Enabled = chk.IsChecked == true;
+                App.Settings.Save();
+            }
+        }
+
+        private void TxtKeywordTriggerKeyword_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (sender is not TextBox txt) return;
+            var triggerId = txt.Tag?.ToString();
+            if (string.IsNullOrEmpty(triggerId)) return;
+
+            var trigger = App.Settings.Current.KeywordTriggers.FirstOrDefault(t => t.Id == triggerId);
+            if (trigger != null)
+            {
+                trigger.Keyword = txt.Text;
+
+                // Auto-match audio file if none set
+                if (string.IsNullOrEmpty(trigger.AudioFilePath))
+                {
+                    trigger.AudioFilePath = App.KeywordTriggers?.FindLinkedAudio(txt.Text);
+                }
+
+                App.Settings.Save();
+            }
+        }
+
+        private void BtnKeywordTriggerBrowseAudio_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn) return;
+            var triggerId = btn.Tag?.ToString();
+            if (string.IsNullOrEmpty(triggerId)) return;
+
+            var trigger = App.Settings.Current.KeywordTriggers.FirstOrDefault(t => t.Id == triggerId);
+            if (trigger == null) return;
+
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Audio Files|*.mp3;*.wav;*.ogg|All Files|*.*",
+                Title = "Select Trigger Audio File"
+            };
+
+            if (dlg.ShowDialog() == true)
+            {
+                trigger.AudioFilePath = dlg.FileName;
+                App.Settings.Save();
+                RefreshKeywordTriggerList();
+            }
+        }
+
+        private void CmbKeywordVisualEffect_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (sender is not ComboBox cmb) return;
+            var triggerId = cmb.Tag?.ToString();
+            if (string.IsNullOrEmpty(triggerId)) return;
+
+            var trigger = App.Settings.Current.KeywordTriggers.FirstOrDefault(t => t.Id == triggerId);
+            if (trigger != null)
+            {
+                trigger.VisualEffect = (KeywordVisualEffect)cmb.SelectedIndex;
+                App.Settings.Save();
+            }
+        }
+
+        private void SliderKeywordTriggerCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            if (sender is not Slider slider) return;
+            var triggerId = slider.Tag?.ToString();
+            if (string.IsNullOrEmpty(triggerId)) return;
+
+            var trigger = App.Settings.Current.KeywordTriggers.FirstOrDefault(t => t.Id == triggerId);
+            if (trigger != null)
+            {
+                trigger.CooldownSeconds = (int)slider.Value;
+                App.Settings.Save();
+            }
+        }
+
+        private void SliderKeywordTriggerVolume_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            if (sender is not Slider slider) return;
+            var triggerId = slider.Tag?.ToString();
+            if (string.IsNullOrEmpty(triggerId)) return;
+
+            var trigger = App.Settings.Current.KeywordTriggers.FirstOrDefault(t => t.Id == triggerId);
+            if (trigger != null)
+            {
+                trigger.AudioVolume = (int)slider.Value;
+                App.Settings.Save();
+            }
+        }
+
+        private void ChkKeywordTriggerHaptic_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (sender is not CheckBox chk) return;
+            var triggerId = chk.Tag?.ToString();
+            if (string.IsNullOrEmpty(triggerId)) return;
+
+            var trigger = App.Settings.Current.KeywordTriggers.FirstOrDefault(t => t.Id == triggerId);
+            if (trigger != null)
+            {
+                trigger.HapticEnabled = chk.IsChecked == true;
+                App.Settings.Save();
+            }
+        }
+
+        private void ChkKeywordTriggerDuckAudio_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (sender is not CheckBox chk) return;
+            var triggerId = chk.Tag?.ToString();
+            if (string.IsNullOrEmpty(triggerId)) return;
+
+            var trigger = App.Settings.Current.KeywordTriggers.FirstOrDefault(t => t.Id == triggerId);
+            if (trigger != null)
+            {
+                trigger.DuckAudio = chk.IsChecked == true;
+                App.Settings.Save();
+            }
+        }
+
+        private void RefreshKeywordTriggerList()
+        {
+            if (KeywordTriggerListPanel == null) return;
+            KeywordTriggerListPanel.Children.Clear();
+
+            var triggers = App.Settings?.Current?.KeywordTriggers;
+            if (triggers == null) return;
+
+            foreach (var trigger in triggers)
+            {
+                var row = CreateKeywordTriggerRow(trigger);
+                KeywordTriggerListPanel.Children.Add(row);
+            }
+        }
+
+        private Border CreateKeywordTriggerRow(KeywordTrigger trigger)
+        {
+            var border = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x3A)),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(10),
+                Margin = new Thickness(0, 0, 0, 6),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x35, 0x35, 0x50)),
+                BorderThickness = new Thickness(1)
+            };
+
+            var mainStack = new StackPanel();
+
+            // Row 1: Enable toggle + Keyword + Delete button
+            var topRow = new Grid();
+            topRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            topRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            topRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var enableChk = new CheckBox
+            {
+                IsChecked = trigger.Enabled,
+                Tag = trigger.Id,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            enableChk.Checked += ChkKeywordTriggerEnabled_Changed;
+            enableChk.Unchecked += ChkKeywordTriggerEnabled_Changed;
+            Grid.SetColumn(enableChk, 0);
+            topRow.Children.Add(enableChk);
+
+            var keywordTxt = new TextBox
+            {
+                Text = trigger.Keyword,
+                Tag = trigger.Id,
+                Background = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x42)),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x50, 0x50, 0x70)),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(6, 4, 6, 4),
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            keywordTxt.LostFocus += TxtKeywordTriggerKeyword_LostFocus;
+            Grid.SetColumn(keywordTxt, 1);
+            topRow.Children.Add(keywordTxt);
+
+            var deleteBtn = new Button
+            {
+                Content = "\u2716",
+                Tag = trigger.Id,
+                Background = new SolidColorBrush(Colors.Transparent),
+                Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)),
+                BorderThickness = new Thickness(0),
+                FontSize = 14,
+                Padding = new Thickness(6, 2, 6, 2),
+                Margin = new Thickness(6, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Cursor = Cursors.Hand
+            };
+            deleteBtn.Click += BtnDeleteKeywordTrigger_Click;
+            Grid.SetColumn(deleteBtn, 2);
+            topRow.Children.Add(deleteBtn);
+
+            mainStack.Children.Add(topRow);
+
+            // Row 2: Audio file + Browse + Visual effect
+            var settingsRow = new Grid { Margin = new Thickness(0, 6, 0, 0) };
+            settingsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            settingsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            settingsRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var audioLabel = new TextBlock
+            {
+                Text = string.IsNullOrEmpty(trigger.AudioFilePath) ? "No audio" : Path.GetFileName(trigger.AudioFilePath),
+                Foreground = new SolidColorBrush(string.IsNullOrEmpty(trigger.AudioFilePath) ? Color.FromRgb(0x80, 0x80, 0x80) : Color.FromRgb(0xFF, 0x69, 0xB4)),
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            Grid.SetColumn(audioLabel, 0);
+            settingsRow.Children.Add(audioLabel);
+
+            var browseBtn = new Button
+            {
+                Content = "Browse",
+                Tag = trigger.Id,
+                Background = new SolidColorBrush(Color.FromRgb(0x35, 0x35, 0x50)),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderThickness = new Thickness(0),
+                FontSize = 10,
+                Padding = new Thickness(8, 3, 8, 3),
+                Margin = new Thickness(6, 0, 0, 0),
+                Cursor = Cursors.Hand
+            };
+            browseBtn.Click += BtnKeywordTriggerBrowseAudio_Click;
+            Grid.SetColumn(browseBtn, 1);
+            settingsRow.Children.Add(browseBtn);
+
+            var visualCombo = new ComboBox
+            {
+                Tag = trigger.Id,
+                SelectedIndex = (int)trigger.VisualEffect,
+                Background = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x42)),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderThickness = new Thickness(0),
+                FontSize = 10,
+                Margin = new Thickness(6, 0, 0, 0),
+                MinWidth = 100
+            };
+            visualCombo.Items.Add("None");
+            visualCombo.Items.Add("Subliminal");
+            visualCombo.Items.Add("Image Flash");
+            visualCombo.Items.Add("Overlay Pulse");
+            visualCombo.SelectionChanged += CmbKeywordVisualEffect_SelectionChanged;
+            Grid.SetColumn(visualCombo, 2);
+            settingsRow.Children.Add(visualCombo);
+
+            mainStack.Children.Add(settingsRow);
+
+            // Row 3: Cooldown + Volume + Haptic + Duck
+            var optionsRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+
+            optionsRow.Children.Add(new TextBlock { Text = "CD:", Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)), FontSize = 10, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) });
+            var cooldownSlider = new Slider
+            {
+                Tag = trigger.Id,
+                Minimum = 1, Maximum = 300,
+                Value = trigger.CooldownSeconds,
+                Width = 60,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            cooldownSlider.ValueChanged += SliderKeywordTriggerCooldown_ValueChanged;
+            optionsRow.Children.Add(cooldownSlider);
+            optionsRow.Children.Add(new TextBlock { Text = $"{trigger.CooldownSeconds}s", Foreground = new SolidColorBrush(Color.FromRgb(0xA0, 0xA0, 0xA0)), FontSize = 10, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 10, 0) });
+
+            optionsRow.Children.Add(new TextBlock { Text = "Vol:", Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)), FontSize = 10, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) });
+            var volumeSlider = new Slider
+            {
+                Tag = trigger.Id,
+                Minimum = 0, Maximum = 100,
+                Value = trigger.AudioVolume,
+                Width = 50,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            volumeSlider.ValueChanged += SliderKeywordTriggerVolume_ValueChanged;
+            optionsRow.Children.Add(volumeSlider);
+
+            var hapticChk = new CheckBox
+            {
+                Content = "Haptic",
+                IsChecked = trigger.HapticEnabled,
+                Tag = trigger.Id,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xA0, 0xA0, 0xA0)),
+                FontSize = 10,
+                Margin = new Thickness(10, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            hapticChk.Checked += ChkKeywordTriggerHaptic_Changed;
+            hapticChk.Unchecked += ChkKeywordTriggerHaptic_Changed;
+            optionsRow.Children.Add(hapticChk);
+
+            var duckChk = new CheckBox
+            {
+                Content = "Duck",
+                IsChecked = trigger.DuckAudio,
+                Tag = trigger.Id,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xA0, 0xA0, 0xA0)),
+                FontSize = 10,
+                Margin = new Thickness(10, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            duckChk.Checked += ChkKeywordTriggerDuckAudio_Changed;
+            duckChk.Unchecked += ChkKeywordTriggerDuckAudio_Changed;
+            optionsRow.Children.Add(duckChk);
+
+            mainStack.Children.Add(optionsRow);
+
+            border.Child = mainStack;
+            return border;
         }
 
         #endregion
@@ -11882,6 +12382,35 @@ namespace ConditioningControlPanel
             CmbHapticAchievementMode.SelectedIndex = (int)s.Haptics.AchievementMode;
             CmbHapticBouncingTextMode.SelectedIndex = (int)s.Haptics.BouncingTextMode;
 
+            // Keyword Triggers
+            if (ChkKeywordTriggersEnabled != null)
+            {
+                ChkKeywordTriggersEnabled.IsChecked = s.KeywordTriggersEnabled;
+                SliderKeywordBufferTimeout.Value = s.KeywordBufferTimeoutMs;
+                SliderKeywordGlobalCooldown.Value = s.KeywordGlobalCooldownSeconds;
+                SliderKeywordSessionMultiplier.Value = s.KeywordSessionMultiplier;
+
+                var hasT2 = KeywordTriggerService.HasAccess();
+                KeywordTriggersSettingsPanel.Visibility = s.KeywordTriggersEnabled && hasT2 ? Visibility.Visible : Visibility.Collapsed;
+
+                // Show/hide lock indicator
+                if (TxtKeywordTriggersLocked != null)
+                    TxtKeywordTriggersLocked.Visibility = hasT2 ? Visibility.Collapsed : Visibility.Visible;
+                if (ChkKeywordTriggersEnabled != null)
+                    ChkKeywordTriggersEnabled.IsEnabled = hasT2;
+
+                RefreshKeywordTriggerList();
+
+                // Screen OCR
+                if (ChkScreenOcrEnabled != null)
+                {
+                    ChkScreenOcrEnabled.IsChecked = s.ScreenOcrEnabled;
+                    ChkScreenOcrEnabled.IsEnabled = hasT2;
+                    SliderScreenOcrInterval.Value = s.ScreenOcrIntervalMs / 1000.0;
+                    ScreenOcrIntervalPanel.Visibility = s.ScreenOcrEnabled && hasT2 ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+
             // Discord Sharing Settings
             ChkShareAchievements.IsChecked = s.DiscordShareAchievements;
             ChkShareLevelUps.IsChecked = s.DiscordShareLevelUps;
@@ -16543,7 +17072,9 @@ namespace ConditioningControlPanel
             else
             {
                 // Stop keyboard hook when panic key is disabled (privacy improvement)
-                _keyboardHook?.Stop();
+                // But keep it running if keyword triggers need it
+                if (App.Settings.Current.KeywordTriggersEnabled != true)
+                    _keyboardHook?.Stop();
                 App.Settings.Current.PanicKeyEnabled = false;
                 App.Settings?.Save();
                 App.Logger?.Information("Keyboard hook stopped - panic key disabled");

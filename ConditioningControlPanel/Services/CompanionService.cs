@@ -18,6 +18,7 @@ namespace ConditioningControlPanel.Services
         BubbleCount,
         BouncingText,
         AvatarInteraction,
+        KeywordTrigger,
         Other
     }
 

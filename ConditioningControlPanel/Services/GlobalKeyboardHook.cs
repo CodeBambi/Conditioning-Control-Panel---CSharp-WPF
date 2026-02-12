@@ -19,6 +19,7 @@ public class GlobalKeyboardHook : IDisposable
     private bool _isDisposed;
 
     public event Action<Key>? KeyPressed;
+    public event Action<Key, int>? KeyPressedWithVkCode;
 
     public GlobalKeyboardHook()
     {
@@ -58,6 +59,7 @@ public class GlobalKeyboardHook : IDisposable
             try
             {
                 KeyPressed?.Invoke(key);
+                KeyPressedWithVkCode?.Invoke(key, vkCode);
             }
             catch (Exception ex)
             {

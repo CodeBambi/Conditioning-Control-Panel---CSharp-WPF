@@ -296,6 +296,8 @@ namespace ConditioningControlPanel
         public static PersonalityService Personality { get; private set; } = null!;
         public static RoadmapService Roadmap { get; private set; } = null!;
         public static SkillTreeService SkillTree { get; private set; } = null!;
+        public static KeywordTriggerService KeywordTriggers { get; private set; } = null!;
+        public static ScreenOcrService ScreenOcr { get; private set; } = null!;
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
 
         /// <summary>
@@ -641,6 +643,8 @@ namespace ConditioningControlPanel
             Leaderboard = new LeaderboardService();
             Haptics = new HapticService(Settings.Current.Haptics);
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
+            KeywordTriggers = new KeywordTriggerService();
+            ScreenOcr = new ScreenOcrService();
 
             // Auto-connect haptics if enabled (runs in background)
             if (Settings.Current.Haptics.AutoConnect && Settings.Current.Haptics.Provider != Services.Haptics.HapticProviderType.Mock)
@@ -1749,6 +1753,8 @@ Application State:
             Roadmap?.Dispose();
             SkillTree?.Dispose();
             QuestDefinitions?.Dispose();
+            ScreenOcr?.Dispose();
+            KeywordTriggers?.Dispose();
             Audio?.Dispose();
 
             // Close and flush the logger

@@ -2420,6 +2420,76 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Keyword Triggers (Patreon T2)
+
+        private bool _keywordTriggersEnabled = false;
+        /// <summary>
+        /// Enable keyword trigger system — intercepts typed text and fires multi-modal responses.
+        /// Requires Patreon Tier 2 or whitelist.
+        /// </summary>
+        public bool KeywordTriggersEnabled
+        {
+            get => _keywordTriggersEnabled;
+            set { _keywordTriggersEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _keywordBufferTimeoutMs = 3000;
+        /// <summary>
+        /// Time in ms before the typed text buffer resets (1000-10000)
+        /// </summary>
+        public int KeywordBufferTimeoutMs
+        {
+            get => _keywordBufferTimeoutMs;
+            set { _keywordBufferTimeoutMs = Math.Clamp(value, 1000, 10000); OnPropertyChanged(); }
+        }
+
+        private int _keywordGlobalCooldownSeconds = 5;
+        /// <summary>
+        /// Global cooldown between any trigger firing (1-300)
+        /// </summary>
+        public int KeywordGlobalCooldownSeconds
+        {
+            get => _keywordGlobalCooldownSeconds;
+            set { _keywordGlobalCooldownSeconds = Math.Clamp(value, 1, 300); OnPropertyChanged(); }
+        }
+
+        private double _keywordSessionMultiplier = 1.5;
+        /// <summary>
+        /// XP multiplier when a session is active (1.0-3.0)
+        /// </summary>
+        public double KeywordSessionMultiplier
+        {
+            get => _keywordSessionMultiplier;
+            set { _keywordSessionMultiplier = Math.Clamp(value, 1.0, 3.0); OnPropertyChanged(); }
+        }
+
+        private bool _screenOcrEnabled = false;
+        public bool ScreenOcrEnabled
+        {
+            get => _screenOcrEnabled;
+            set { _screenOcrEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _screenOcrIntervalMs = 3000;
+        public int ScreenOcrIntervalMs
+        {
+            get => _screenOcrIntervalMs;
+            set { _screenOcrIntervalMs = Math.Clamp(value, 2000, 10000); OnPropertyChanged(); }
+        }
+
+        private List<KeywordTrigger> _keywordTriggers = new();
+        /// <summary>
+        /// Configured keyword triggers
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<KeywordTrigger> KeywordTriggers
+        {
+            get => _keywordTriggers;
+            set { _keywordTriggers = value ?? new List<KeywordTrigger>(); OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Validation
 
         /// <summary>

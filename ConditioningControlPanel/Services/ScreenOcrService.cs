@@ -1,0 +1,162 @@
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.Windows;
+using Windows.Graphics.Imaging;
+using Windows.Media.Ocr;
+using WinForms = System.Windows.Forms;
+
+namespace ConditioningControlPanel.Services
+{
+    public class ScreenOcrService : IDisposable
+    {
+        private Timer? _timer;
+        private bool _disposed;
+        private bool _isRunning;
+        private uint _lastTextHash;
+        private OcrEngine? _ocrEngine;
+        private readonly object _lock = new();
+
+        public ScreenOcrService()
+        {
+            try
+            {
+                _ocrEngine = OcrEngine.TryCreateFromUserProfileLanguages();
+                if (_ocrEngine == null)
+                    App.Logger?.Warning("ScreenOcrService: No OCR language pack available");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error("ScreenOcrService: Failed to create OCR engine: {Error}", ex.Message);
+            }
+        }
+
+        public void Start()
+        {
+            lock (_lock)
+            {
+                if (_isRunning || _ocrEngine == null) return;
+
+                var intervalMs = App.Settings?.Current?.ScreenOcrIntervalMs ?? 3000;
+                _timer = new Timer(OnTimerTick, null, intervalMs, intervalMs);
+                _isRunning = true;
+                _lastTextHash = 0;
+                App.Logger?.Information("ScreenOcrService started (interval: {Interval}ms)", intervalMs);
+            }
+        }
+
+        public void Stop()
+        {
+            lock (_lock)
+            {
+                if (!_isRunning) return;
+                _timer?.Dispose();
+                _timer = null;
+                _isRunning = false;
+                _lastTextHash = 0;
+                App.Logger?.Information("ScreenOcrService stopped");
+            }
+        }
+
+        public void UpdateInterval(int intervalMs)
+        {
+            lock (_lock)
+            {
+                if (!_isRunning || _timer == null) return;
+                _timer.Change(intervalMs, intervalMs);
+            }
+        }
+
+        private async void OnTimerTick(object? state)
+        {
+            if (_disposed || !_isRunning || _ocrEngine == null) return;
+
+            try
+            {
+                var allText = new StringBuilder();
+                var screens = App.GetAllScreensCached();
+
+                foreach (var screen in screens)
+                {
+                    var text = await CaptureAndRecognizeAsync(screen);
+                    if (!string.IsNullOrEmpty(text))
+                        allText.AppendLine(text);
+                }
+
+                var fullText = allText.ToString();
+                if (string.IsNullOrWhiteSpace(fullText)) return;
+
+                // Hash-based change detection — skip if screen text unchanged
+                var hash = (uint)fullText.GetHashCode();
+                if (hash == _lastTextHash) return;
+                _lastTextHash = hash;
+
+                // Dispatch to keyword trigger service on UI thread
+                Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    App.KeywordTriggers?.CheckTextForMatches(fullText);
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ScreenOcrService: Scan error: {Error}", ex.Message);
+            }
+        }
+
+        private async System.Threading.Tasks.Task<string?> CaptureAndRecognizeAsync(WinForms.Screen screen)
+        {
+            Bitmap? bitmap = null;
+            try
+            {
+                var bounds = screen.Bounds;
+                bitmap = new Bitmap(bounds.Width, bounds.Height, PixelFormat.Format32bppArgb);
+
+                using (var g = Graphics.FromImage(bitmap))
+                {
+                    g.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bounds.Size);
+                }
+
+                // Convert System.Drawing.Bitmap → WinRT SoftwareBitmap via MemoryStream
+                using var ms = new MemoryStream();
+                bitmap.Save(ms, ImageFormat.Bmp);
+                ms.Position = 0;
+
+                var rasStream = ms.AsRandomAccessStream();
+                var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(rasStream);
+                var softwareBitmap = await decoder.GetSoftwareBitmapAsync(
+                    BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+
+                try
+                {
+                    var result = await _ocrEngine!.RecognizeAsync(softwareBitmap);
+                    return result?.Text;
+                }
+                finally
+                {
+                    softwareBitmap.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Fails when desktop locked, DRM content visible, UAC prompt, etc.
+                App.Logger?.Debug("ScreenOcrService: Capture failed for {Screen}: {Error}",
+                    screen.DeviceName, ex.Message);
+                return null;
+            }
+            finally
+            {
+                bitmap?.Dispose();
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            Stop();
+        }
+    }
+}
