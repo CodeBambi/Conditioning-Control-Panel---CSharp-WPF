@@ -258,9 +258,118 @@ namespace ConditioningControlPanel.Services
 
         #endregion
 
+        #region OCR Word Matching
+
+        // Two layers of tracking:
+        //   _pendingOcrPositions  — position keys seen last scan, for two-scan stability check (anti-scroll)
+        //   _highlightedOcrTexts  — keyword texts already highlighted; won't re-highlight until ALL
+        //                           instances leave the screen, even if positions shift from scrolling
+        private HashSet<string> _pendingOcrPositions = new();
+        private HashSet<string> _highlightedOcrTexts = new();
+
         /// <summary>
-        /// Check externally-provided text (e.g. from OCR) for keyword matches.
-        /// Reuses the same matching, cooldown, and dispatch logic as the keyboard buffer path.
+        /// Process all OCR word hits from a single scan. Matches trigger keywords,
+        /// confirms positions are stable across two scans (scroll-proof), and only
+        /// highlights keywords whose text hasn't been highlighted yet.
+        /// </summary>
+        public void CheckOcrWords(List<OcrWordHit> allWords)
+        {
+            if (!_isActive || _disposed) return;
+            if (allWords == null || allWords.Count == 0)
+            {
+                _pendingOcrPositions.Clear();
+                _highlightedOcrTexts.Clear();
+                return;
+            }
+
+            var settings = App.Settings?.Current;
+            if (settings == null || !settings.KeywordTriggersEnabled) return;
+
+            var triggers = settings.KeywordTriggers;
+            if (triggers == null || triggers.Count == 0) return;
+
+            // 1. Find all words matching any enabled trigger
+            var matchedWords = new List<OcrWordHit>();
+            KeywordTrigger? effectTrigger = null;
+
+            foreach (var trigger in triggers)
+            {
+                if (!trigger.Enabled || string.IsNullOrEmpty(trigger.Keyword)) continue;
+                if (trigger.MatchType == KeywordMatchType.Regex) continue;
+
+                var words = FindMatchedWords(trigger.Keyword, allWords);
+                if (words != null && words.Count > 0)
+                {
+                    effectTrigger ??= trigger;
+                    matchedWords.AddRange(words);
+                }
+            }
+
+            if (matchedWords.Count == 0 || effectTrigger == null)
+            {
+                _pendingOcrPositions.Clear();
+                _highlightedOcrTexts.Clear();
+                return;
+            }
+
+            // 2. Build position set + word lookup (deduplicated)
+            var currentPositions = new HashSet<string>();
+            var wordsByKey = new Dictionary<string, OcrWordHit>();
+
+            foreach (var word in matchedWords)
+            {
+                var key = $"{word.Text.ToLowerInvariant()}_{word.ScreenRect.X / 30}_{word.ScreenRect.Y / 30}";
+                if (currentPositions.Add(key))
+                    wordsByKey[key] = word;
+            }
+
+            // 3. Which keyword texts are currently visible anywhere on screen?
+            var visibleTexts = new HashSet<string>(
+                matchedWords.Select(w => w.Text.ToLowerInvariant()));
+
+            // Forget highlighted texts that are no longer on screen at all
+            _highlightedOcrTexts.IntersectWith(visibleTexts);
+
+            // 4. Two-scan position stability: stable = present in both current and previous scan
+            var stableKeys = new HashSet<string>(currentPositions);
+            stableKeys.IntersectWith(_pendingOcrPositions);
+
+            // 5. From stable words, keep only those whose TEXT hasn't been highlighted yet
+            var newWords = new List<OcrWordHit>();
+            var newTexts = new HashSet<string>();
+
+            foreach (var key in stableKeys)
+            {
+                if (wordsByKey.TryGetValue(key, out var word))
+                {
+                    var text = word.Text.ToLowerInvariant();
+                    if (!_highlightedOcrTexts.Contains(text))
+                    {
+                        newWords.Add(word);
+                        newTexts.Add(text);
+                    }
+                }
+            }
+
+            // 6. Update tracking
+            _pendingOcrPositions = currentPositions;       // current positions become next scan's pending
+            _highlightedOcrTexts.UnionWith(newTexts);      // mark newly highlighted texts
+
+            if (newWords.Count == 0 || effectTrigger == null) return;
+
+            App.Logger?.Information("OCR keyword confirmed: '{Keyword}' — {Count} new words",
+                effectTrigger.Keyword, newWords.Count);
+
+            // 7. Highlight new words + fire effects once
+            effectTrigger.LastTriggeredAt = DateTime.Now;
+            _lastGlobalTriggerTime = DateTime.Now;
+            _ = DispatchResponseAsync(effectTrigger, newWords);
+            TriggerFired?.Invoke(this, effectTrigger);
+        }
+
+        /// <summary>
+        /// Check externally-provided text (e.g. from clipboard, other sources) for keyword matches.
+        /// No word-position data — uses simple text matching with cooldowns.
         /// </summary>
         public void CheckTextForMatches(string text)
         {
@@ -273,7 +382,6 @@ namespace ConditioningControlPanel.Services
             var triggers = settings.KeywordTriggers;
             if (triggers == null || triggers.Count == 0) return;
 
-            // Check global cooldown
             var now = DateTime.Now;
             if ((now - _lastGlobalTriggerTime).TotalSeconds < settings.KeywordGlobalCooldownSeconds)
                 return;
@@ -283,30 +391,66 @@ namespace ConditioningControlPanel.Services
                 if (!trigger.Enabled || string.IsNullOrEmpty(trigger.Keyword)) continue;
                 if (trigger.IsOnCooldown) continue;
 
-                bool matched = false;
-
-                if (trigger.MatchType == KeywordMatchType.Regex)
-                {
-                    matched = TryRegexMatch(text, trigger.Keyword);
-                }
-                else
-                {
-                    matched = text.Contains(trigger.Keyword, StringComparison.OrdinalIgnoreCase);
-                }
+                bool matched = trigger.MatchType == KeywordMatchType.Regex
+                    ? TryRegexMatch(text, trigger.Keyword)
+                    : text.Contains(trigger.Keyword, StringComparison.OrdinalIgnoreCase);
 
                 if (matched)
                 {
                     trigger.LastTriggeredAt = now;
                     _lastGlobalTriggerTime = now;
 
-                    App.Logger?.Information("Keyword trigger fired (OCR): '{Keyword}'", trigger.Keyword);
-
+                    App.Logger?.Information("Keyword trigger fired (text): '{Keyword}'", trigger.Keyword);
                     _ = DispatchResponseAsync(trigger);
                     TriggerFired?.Invoke(this, trigger);
                     break;
                 }
             }
         }
+
+        /// <summary>
+        /// Find OCR words that correspond to a matched keyword.
+        /// </summary>
+        private static List<OcrWordHit>? FindMatchedWords(string keyword, List<OcrWordHit> wordHits)
+        {
+            if (wordHits.Count == 0) return null;
+
+            var keywordParts = keyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            if (keywordParts.Length == 1)
+            {
+                var matches = wordHits.FindAll(w =>
+                    w.Text.Contains(keywordParts[0], StringComparison.OrdinalIgnoreCase));
+                return matches.Count > 0 ? matches : null;
+            }
+
+            // Multi-word — find ALL consecutive word sequences
+            var results = new List<OcrWordHit>();
+            for (int i = 0; i <= wordHits.Count - keywordParts.Length; i++)
+            {
+                bool sequenceMatch = true;
+                for (int j = 0; j < keywordParts.Length; j++)
+                {
+                    if (!wordHits[i + j].Text.Equals(keywordParts[j], StringComparison.OrdinalIgnoreCase))
+                    {
+                        sequenceMatch = false;
+                        break;
+                    }
+                }
+
+                if (sequenceMatch)
+                    results.AddRange(wordHits.GetRange(i, keywordParts.Length));
+            }
+
+            if (results.Count > 0) return results;
+
+            // Fallback: find any single word containing the full keyword
+            var fallback = wordHits.FindAll(w =>
+                w.Text.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+            return fallback.Count > 0 ? fallback : null;
+        }
+
+        #endregion
 
         #region Matching
 
@@ -379,10 +523,12 @@ namespace ConditioningControlPanel.Services
 
         #region Response Dispatch
 
-        private async Task DispatchResponseAsync(KeywordTrigger trigger)
+        private async Task DispatchResponseAsync(KeywordTrigger trigger, List<OcrWordHit>? matchedWords = null)
         {
             try
             {
+                if (_disposed) return;
+
                 // 1. Duck audio (if enabled)
                 if (trigger.DuckAudio && App.Settings?.Current?.AudioDuckingEnabled == true)
                 {
@@ -395,6 +541,7 @@ namespace ConditioningControlPanel.Services
                 {
                     for (int i = 0; i < trigger.AudioPlayCount; i++)
                     {
+                        if (_disposed) break;
                         if (i > 0 && trigger.AudioDelayBetweenMs > 0)
                             await Task.Delay(trigger.AudioDelayBetweenMs);
 
@@ -402,8 +549,18 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
+                if (_disposed) return;
+
                 // 3. Fire visual effect (on UI thread)
                 Application.Current?.Dispatcher?.Invoke(() => FireVisualEffect(trigger));
+
+                // 3.5. Show keyword highlight overlay
+                if (matchedWords != null && matchedWords.Count > 0
+                    && App.Settings?.Current?.KeywordHighlightEnabled == true)
+                {
+                    Application.Current?.Dispatcher?.Invoke(() =>
+                        App.KeywordHighlight?.ShowHighlight(matchedWords));
+                }
 
                 // 4. Fire haptic pattern
                 if (trigger.HapticEnabled)
@@ -428,6 +585,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // 6. Wait for audio to finish, then unduck
+                if (_disposed) return;
                 if (trigger.DuckAudio && audioDuration > 0)
                 {
                     await Task.Delay(TimeSpan.FromSeconds(audioDuration + 0.5));

@@ -777,6 +777,52 @@ namespace ConditioningControlPanel.Services
                              "when users are online and logged in."
             },
 
+            // ==================== LAB TAB ====================
+
+            ["KeywordTriggers"] = new HelpContent
+            {
+                SectionId = "KeywordTriggers",
+                Icon = "\u2328",
+                Title = "Keyword Triggers",
+                WhatItDoes = "Monitors your keyboard input and detects when you type specific keywords anywhere on your computer. " +
+                             "When a keyword is matched, it fires configured actions like audio cues, visual flashes, or haptic feedback. " +
+                             "Works globally across all applications.",
+                Tips = new List<string>
+                {
+                    "Add short, common words for more frequent triggers",
+                    "Use the Buffer Timeout to control how quickly keywords are detected after typing stops",
+                    "Increase the Global Cooldown if triggers are firing too often",
+                    "Session XP Boost rewards you extra XP when triggers fire during an active session",
+                    "Import existing triggers from Trigger Mode to get started quickly"
+                },
+                HowItWorks = "A low-level keyboard hook captures keystrokes system-wide and buffers them. " +
+                             "After the buffer timeout expires (no new keystrokes), the buffered text is checked " +
+                             "against your configured keyword list. If a match is found and the global cooldown " +
+                             "has elapsed, the associated action fires. Each trigger can have its own action type " +
+                             "and individual cooldown."
+            },
+
+            ["ScreenOcr"] = new HelpContent
+            {
+                SectionId = "ScreenOcr",
+                Icon = "\uD83D\uDC41",
+                Title = "Screen Text Detection (OCR)",
+                WhatItDoes = "Periodically captures your screen and uses Windows OCR to read any visible text. " +
+                             "If trigger keywords appear on screen (in any application, website, or document), " +
+                             "the associated trigger action fires automatically.",
+                Tips = new List<string>
+                {
+                    "Higher scan intervals (5-10s) use less CPU but react slower to on-screen text",
+                    "Lower scan intervals (2-3s) are more responsive but increase CPU usage",
+                    "OCR works best with clear, readable text - small or stylized fonts may not be detected",
+                    "The feature uses Windows built-in OCR, so no data leaves your computer"
+                },
+                HowItWorks = "At each scan interval, a screenshot is captured and processed by the Windows.Media.Ocr " +
+                             "engine locally on your machine. The extracted text is compared against your keyword trigger " +
+                             "list. Matches respect the same global cooldown as keyboard triggers. All processing happens " +
+                             "entirely on your device - no images or text are sent anywhere."
+            },
+
             ["Leaderboard"] = new HelpContent
             {
                 SectionId = "Leaderboard",

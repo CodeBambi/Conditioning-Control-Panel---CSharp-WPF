@@ -2477,6 +2477,14 @@ namespace ConditioningControlPanel.Models
             set { _screenOcrIntervalMs = Math.Clamp(value, 2000, 10000); OnPropertyChanged(); }
         }
 
+        private bool _keywordHighlightEnabled = true;
+        [JsonProperty]
+        public bool KeywordHighlightEnabled
+        {
+            get => _keywordHighlightEnabled;
+            set { _keywordHighlightEnabled = value; OnPropertyChanged(); }
+        }
+
         private List<KeywordTrigger> _keywordTriggers = new();
         /// <summary>
         /// Configured keyword triggers

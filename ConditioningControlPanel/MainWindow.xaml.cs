@@ -3048,6 +3048,7 @@ namespace ConditioningControlPanel
             AssetsTab.Visibility = Visibility.Collapsed;
             DiscordTab.Visibility = Visibility.Collapsed;
             EnhancementsTab.Visibility = Visibility.Collapsed;
+            LabTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive
             var inactiveStyle = FindResource("TabButton") as Style;
@@ -3061,6 +3062,7 @@ namespace ConditioningControlPanel
             BtnCompanion.Style = inactiveStyle;
             BtnLeaderboard.Style = inactiveStyle;
             BtnOpenAssetsTop.Style = inactiveStyle;
+            BtnLab.Style = inactiveStyle;
             // BtnPatreonExclusives keeps its inline Patreon red style defined in XAML
 
             switch (tab)
@@ -3139,6 +3141,11 @@ namespace ConditioningControlPanel
                     DiscordTab.Visibility = Visibility.Visible;
                     // BtnDiscordTab keeps its inline Discord blue style defined in XAML
                     UpdateDiscordTabUI();
+                    break;
+
+                case "lab":
+                    LabTab.Visibility = Visibility.Visible;
+                    BtnLab.Style = activeStyle;
                     break;
             }
         }
@@ -5119,43 +5126,59 @@ namespace ConditioningControlPanel
 
         #region Keyword Triggers Handlers
 
-        private void ChkKeywordTriggersEnabled_Changed(object sender, RoutedEventArgs e)
+        private void BtnKeywordTriggersStartStop_Click(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            var isEnabled = ChkKeywordTriggersEnabled.IsChecked == true;
 
-            // Check Patreon access (T2 required)
-            if (isEnabled && !KeywordTriggerService.HasAccess())
+            var isRunning = App.Settings.Current.KeywordTriggersEnabled;
+
+            if (!isRunning)
             {
-                ChkKeywordTriggersEnabled.IsChecked = false;
-                MessageBox.Show(
-                    "Keyword Triggers are available for Tier 2 Patreon supporters.",
-                    "Patreon Feature",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-                return;
-            }
+                // Starting — check Patreon access
+                if (!KeywordTriggerService.HasAccess())
+                {
+                    MessageBox.Show(
+                        "Keyword Triggers are available for Tier 2 Patreon supporters.",
+                        "Patreon Feature",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
 
-            App.Settings.Current.KeywordTriggersEnabled = isEnabled;
-
-            if (isEnabled)
-            {
+                App.Settings.Current.KeywordTriggersEnabled = true;
                 App.KeywordTriggers?.Start();
-                _keyboardHook?.Start(); // Ensure hook is running
+                _keyboardHook?.Start();
+
+                if (App.Settings.Current.ScreenOcrEnabled)
+                    App.ScreenOcr?.Start();
             }
             else
             {
+                // Stopping
+                App.Settings.Current.KeywordTriggersEnabled = false;
                 App.KeywordTriggers?.Stop();
+                App.ScreenOcr?.Stop();
+
                 // Only stop hook if panic key also disabled
                 if (App.Settings.Current.PanicKeyEnabled != true)
                     _keyboardHook?.Stop();
             }
 
-            // Toggle settings panel visibility
-            if (KeywordTriggersSettingsPanel != null)
-                KeywordTriggersSettingsPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
-
+            UpdateKeywordTriggersButtonState();
             App.Settings.Save();
+        }
+
+        private void UpdateKeywordTriggersButtonState()
+        {
+            if (BtnKeywordTriggersStartStop == null) return;
+            var running = App.Settings?.Current?.KeywordTriggersEnabled == true;
+
+            BtnKeywordTriggersStartStop.Content = running ? "Stop" : "Start";
+            BtnKeywordTriggersStartStop.Background = running
+                ? new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#555555"))
+                : new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF69B4"));
         }
 
         private void SliderKeywordBufferTimeout_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -5218,6 +5241,12 @@ namespace ConditioningControlPanel
             TxtScreenOcrInterval.Text = $"{value}s";
             App.Settings.Current.ScreenOcrIntervalMs = value * 1000;
             App.ScreenOcr?.UpdateInterval(value * 1000);
+        }
+
+        private void ChkKeywordHighlightEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.KeywordHighlightEnabled = ChkKeywordHighlightEnabled.IsChecked == true;
         }
 
         private void BtnAddKeywordTrigger_Click(object sender, RoutedEventArgs e)
@@ -7572,6 +7601,10 @@ namespace ConditioningControlPanel
             SetHelpContent(HelpBtnAssets, "Assets");
             SetHelpContent(HelpBtnPacks, "ContentPacks");
             SetHelpContent(HelpBtnAssetBrowser, "AssetBrowser");
+
+            // Lab tab
+            SetHelpContent(HelpBtnKeywordTriggers, "KeywordTriggers");
+            SetHelpContent(HelpBtnScreenOcr, "ScreenOcr");
 
             // Side panels
             SetHelpContent(HelpBtnAchievements, "Achievements");
@@ -12383,22 +12416,20 @@ namespace ConditioningControlPanel
             CmbHapticBouncingTextMode.SelectedIndex = (int)s.Haptics.BouncingTextMode;
 
             // Keyword Triggers
-            if (ChkKeywordTriggersEnabled != null)
             {
-                ChkKeywordTriggersEnabled.IsChecked = s.KeywordTriggersEnabled;
                 SliderKeywordBufferTimeout.Value = s.KeywordBufferTimeoutMs;
                 SliderKeywordGlobalCooldown.Value = s.KeywordGlobalCooldownSeconds;
                 SliderKeywordSessionMultiplier.Value = s.KeywordSessionMultiplier;
 
                 var hasT2 = KeywordTriggerService.HasAccess();
-                KeywordTriggersSettingsPanel.Visibility = s.KeywordTriggersEnabled && hasT2 ? Visibility.Visible : Visibility.Collapsed;
 
                 // Show/hide lock indicator
                 if (TxtKeywordTriggersLocked != null)
                     TxtKeywordTriggersLocked.Visibility = hasT2 ? Visibility.Collapsed : Visibility.Visible;
-                if (ChkKeywordTriggersEnabled != null)
-                    ChkKeywordTriggersEnabled.IsEnabled = hasT2;
+                if (BtnKeywordTriggersStartStop != null)
+                    BtnKeywordTriggersStartStop.IsEnabled = hasT2;
 
+                UpdateKeywordTriggersButtonState();
                 RefreshKeywordTriggerList();
 
                 // Screen OCR
@@ -12409,6 +12440,8 @@ namespace ConditioningControlPanel
                     SliderScreenOcrInterval.Value = s.ScreenOcrIntervalMs / 1000.0;
                     ScreenOcrIntervalPanel.Visibility = s.ScreenOcrEnabled && hasT2 ? Visibility.Visible : Visibility.Collapsed;
                 }
+                if (ChkKeywordHighlightEnabled != null)
+                    ChkKeywordHighlightEnabled.IsChecked = s.KeywordHighlightEnabled;
             }
 
             // Discord Sharing Settings
@@ -14992,6 +15025,7 @@ namespace ConditioningControlPanel
         private AssetTreeItem? _selectedFolder;
 
         private void BtnAssets_Click(object sender, RoutedEventArgs e) => ShowTab("assets");
+        private void BtnLab_Click(object sender, RoutedEventArgs e) => ShowTab("lab");
 
         private void BtnOpenAssetsFolder_Click(object sender, RoutedEventArgs e)
         {
@@ -17437,9 +17471,12 @@ namespace ConditioningControlPanel
                 }
                 catch { }
 
-                // Explicitly dispose overlay service
+                // Explicitly dispose overlay services (their windows prevent WPF shutdown)
                 try
                 {
+                    App.ScreenOcr?.Dispose();
+                    App.KeywordTriggers?.Dispose();
+                    App.KeywordHighlight?.Dispose();
                     App.Overlay?.Dispose();
                 }
                 catch { }

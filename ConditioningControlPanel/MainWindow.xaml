@@ -1264,6 +1264,13 @@
                             <TextBlock Text="Assets" FontSize="12"/>
                         </StackPanel>
                     </Button>
+                    <Button x:Name="BtnLab" Tag="Lab" Style="{StaticResource TabButton}"
+                            Margin="6,0" Click="BtnLab_Click" ToolTip="The Lab — Experimental Features">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🧪" FontSize="14" Margin="0,0,6,0"/>
+                            <TextBlock Text="The Lab" FontSize="12"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
                 <!-- Right side: Latest Version Button -->
@@ -5151,6 +5158,170 @@
             </Border>
         </ContentControl>
 
+        <!-- The Lab Tab -->
+        <ContentControl x:Name="LabTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed"
+                        Template="{StaticResource AnimatedTabBackground}">
+            <Border Style="{StaticResource SectionPanel}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="15">
+                        <!-- Tab Header -->
+                        <Grid Margin="0,0,0,15">
+                            <StackPanel>
+                                <TextBlock Text="🧪 The Lab" FontSize="20" FontWeight="Bold" Foreground="White"/>
+                                <TextBlock Text="Experimental features currently in testing. These may change or be moved in future updates."
+                                           Foreground="#808080" FontSize="12" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- KEYWORD TRIGGERS (moved from Settings) -->
+                        <Border CornerRadius="10" Padding="15" Margin="0,5,0,0" BorderThickness="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1E1E3A" Offset="0"/>
+                                    <GradientStop Color="#252548" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#9B59B6" Offset="0"/>
+                                    <GradientStop Color="#FF69B4" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#9B59B6" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                            </Border.Effect>
+                            <StackPanel>
+                                <!-- Header row -->
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Keyword Triggers" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
+                                        <TextBlock Text=" (Tier 2)" Foreground="#9B59B6" FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtKeywordTriggersLocked" Text="  In Beta Testing for Prime Bimbo Subjects"
+                                                   Foreground="#DAA520" FontSize="10" FontStyle="Italic" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                   Visibility="Collapsed"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                        <Button x:Name="HelpBtnKeywordTriggers" Style="{StaticResource HelpButtonStyle}"
+                                                VerticalAlignment="Center" Margin="0,0,8,0" Tag="KeywordTriggers" Panel.ZIndex="1"/>
+                                        <Button x:Name="BtnKeywordTriggersStartStop" Content="Start"
+                                                Background="#FF69B4" Foreground="White" FontWeight="Bold" FontSize="11"
+                                                Padding="14,4" BorderThickness="0" Cursor="Hand"
+                                                Click="BtnKeywordTriggersStartStop_Click"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="Type keywords anywhere on your computer to trigger audio, visuals, and haptics"
+                                           Foreground="#808080" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+
+                                <!-- Settings panel -->
+                                <StackPanel x:Name="KeywordTriggersSettingsPanel" Margin="0,10,0,0">
+
+                                    <!-- Global settings row -->
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Buffer timeout -->
+                                        <StackPanel Grid.Column="0" Margin="0,0,6,0"
+                                                    ToolTip="How long to wait after a keystroke before checking for keyword matches">
+                                            <TextBlock Text="Buffer Timeout" Foreground="#A0A0A0" FontSize="10"/>
+                                            <Grid>
+                                                <Slider x:Name="SliderKeywordBufferTimeout" Minimum="1000" Maximum="10000"
+                                                        TickFrequency="500" IsSnapToTickEnabled="True"
+                                                        ValueChanged="SliderKeywordBufferTimeout_ValueChanged"/>
+                                                <TextBlock x:Name="TxtKeywordBufferTimeout" Text="3.0s"
+                                                           Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <!-- Global cooldown -->
+                                        <StackPanel Grid.Column="1" Margin="6,0,6,0"
+                                                    ToolTip="Minimum time between any two trigger activations">
+                                            <TextBlock Text="Global Cooldown" Foreground="#A0A0A0" FontSize="10"/>
+                                            <Grid>
+                                                <Slider x:Name="SliderKeywordGlobalCooldown" Minimum="1" Maximum="120"
+                                                        TickFrequency="1" IsSnapToTickEnabled="True"
+                                                        ValueChanged="SliderKeywordGlobalCooldown_ValueChanged"/>
+                                                <TextBlock x:Name="TxtKeywordGlobalCooldown" Text="5s"
+                                                           Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <!-- Session XP boost -->
+                                        <StackPanel Grid.Column="2" Margin="6,0,0,0"
+                                                    ToolTip="XP multiplier bonus when triggers fire during an active session">
+                                            <TextBlock Text="Session XP Boost" Foreground="#A0A0A0" FontSize="10"/>
+                                            <Grid>
+                                                <Slider x:Name="SliderKeywordSessionMultiplier" Minimum="1.0" Maximum="3.0"
+                                                        TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                        ValueChanged="SliderKeywordSessionMultiplier_ValueChanged"/>
+                                                <TextBlock x:Name="TxtKeywordSessionMultiplier" Text="1.5x"
+                                                           Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Screen OCR -->
+                                    <Border CornerRadius="6" Padding="8" Margin="0,0,0,8"
+                                            Background="#1A1A2E" BorderBrush="#353550" BorderThickness="1">
+                                        <StackPanel>
+                                            <Grid>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="Screen Text Detection (OCR)" Foreground="#C0C0C0" FontSize="12" FontWeight="SemiBold"/>
+                                                    <Button x:Name="HelpBtnScreenOcr" Style="{StaticResource HelpButtonStyle}"
+                                                            VerticalAlignment="Center" Margin="6,0,0,0" Tag="ScreenOcr" Panel.ZIndex="1"/>
+                                                </StackPanel>
+                                                <CheckBox x:Name="ChkScreenOcrEnabled" Style="{StaticResource ToggleStyle}"
+                                                          HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                          Checked="ChkScreenOcrEnabled_Changed" Unchecked="ChkScreenOcrEnabled_Changed"/>
+                                            </Grid>
+                                            <TextBlock Text="Scans your screen for trigger keywords using Windows OCR"
+                                                       Foreground="#808080" FontSize="10" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                            <CheckBox x:Name="ChkKeywordHighlightEnabled" Content="Highlight matched keywords on screen"
+                                                      Foreground="#A0A0A0" FontSize="10" Margin="0,4,0,0"
+                                                      IsChecked="True"
+                                                      Checked="ChkKeywordHighlightEnabled_Changed"
+                                                      Unchecked="ChkKeywordHighlightEnabled_Changed"
+                                                      ToolTip="Show a glowing overlay over the word when OCR detects a keyword match"/>
+                                            <StackPanel x:Name="ScreenOcrIntervalPanel" Visibility="Collapsed" Margin="0,6,0,0">
+                                                <TextBlock Text="Scan Interval" Foreground="#A0A0A0" FontSize="10"/>
+                                                <Grid ToolTip="How often to scan your screen for trigger keywords (lower = more responsive but uses more CPU)">
+                                                    <Slider x:Name="SliderScreenOcrInterval" Minimum="2" Maximum="10"
+                                                            TickFrequency="1" IsSnapToTickEnabled="True"
+                                                            ValueChanged="SliderScreenOcrInterval_ValueChanged"/>
+                                                    <TextBlock x:Name="TxtScreenOcrInterval" Text="3s"
+                                                               Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Trigger list -->
+                                    <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
+                                        <StackPanel x:Name="KeywordTriggerListPanel"/>
+                                    </ScrollViewer>
+
+                                    <!-- Action buttons -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <Button Content="+ Add Trigger" Background="#FF69B4" Foreground="White" FontWeight="Bold"
+                                                FontSize="11" Padding="12,6" BorderThickness="0" Cursor="Hand"
+                                                Click="BtnAddKeywordTrigger_Click"/>
+                                        <Button Content="Import from Trigger Mode" Background="#353550" Foreground="#A0A0A0"
+                                                FontSize="11" Padding="12,6" Margin="8,0,0,0" BorderThickness="0" Cursor="Hand"
+                                                Click="BtnImportFromCustomTriggers_Click"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </ContentControl>
+
         <!-- Patreon Exclusives Tab -->
         <ContentControl x:Name="PatreonTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
             <Border Style="{StaticResource SectionPanel}">
@@ -6094,145 +6265,6 @@
                                 </StackPanel>
                             </Border>
                         </Grid>
-
-                        <!-- Divider -->
-                        <Border Height="1" Margin="20,15" CornerRadius="1">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                    <GradientStop Color="Transparent" Offset="0"/>
-                                    <GradientStop Color="#FF69B4" Offset="0.5"/>
-                                    <GradientStop Color="Transparent" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                        </Border>
-
-                        <!-- KEYWORD TRIGGERS (Patreon T2) -->
-                        <Border CornerRadius="10" Padding="15" Margin="0,5,0,0" BorderThickness="1">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="#1E1E3A" Offset="0"/>
-                                    <GradientStop Color="#252548" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                            <Border.BorderBrush>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="#9B59B6" Offset="0"/>
-                                    <GradientStop Color="#FF69B4" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.BorderBrush>
-                            <Border.Effect>
-                                <DropShadowEffect Color="#9B59B6" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
-                            </Border.Effect>
-                            <StackPanel>
-                                <!-- Header row -->
-                                <Grid>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="Keyword Triggers" Foreground="#FF69B4" FontSize="14" FontWeight="Bold"/>
-                                        <TextBlock Text=" (Tier 2)" Foreground="#9B59B6" FontSize="12" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="TxtKeywordTriggersLocked" Text="  In Beta Testing for Prime Bimbo Subjects"
-                                                   Foreground="#DAA520" FontSize="10" FontStyle="Italic" VerticalAlignment="Center" Margin="8,0,0,0"
-                                                   Visibility="Collapsed"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkKeywordTriggersEnabled" Style="{StaticResource ToggleStyle}"
-                                              HorizontalAlignment="Right" VerticalAlignment="Center"
-                                              Checked="ChkKeywordTriggersEnabled_Changed" Unchecked="ChkKeywordTriggersEnabled_Changed"/>
-                                </Grid>
-
-                                <TextBlock Text="Type keywords anywhere on your computer to trigger audio, visuals, and haptics"
-                                           Foreground="#808080" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
-
-                                <!-- Settings panel (visible when enabled) -->
-                                <StackPanel x:Name="KeywordTriggersSettingsPanel" Visibility="Collapsed" Margin="0,10,0,0">
-
-                                    <!-- Global settings row -->
-                                    <Grid Margin="0,0,0,8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <!-- Buffer timeout -->
-                                        <StackPanel Grid.Column="0" Margin="0,0,6,0">
-                                            <TextBlock Text="Buffer Timeout" Foreground="#A0A0A0" FontSize="10"/>
-                                            <Grid>
-                                                <Slider x:Name="SliderKeywordBufferTimeout" Minimum="1000" Maximum="10000"
-                                                        TickFrequency="500" IsSnapToTickEnabled="True"
-                                                        ValueChanged="SliderKeywordBufferTimeout_ValueChanged"/>
-                                                <TextBlock x:Name="TxtKeywordBufferTimeout" Text="3.0s"
-                                                           Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                            </Grid>
-                                        </StackPanel>
-
-                                        <!-- Global cooldown -->
-                                        <StackPanel Grid.Column="1" Margin="6,0,6,0">
-                                            <TextBlock Text="Global Cooldown" Foreground="#A0A0A0" FontSize="10"/>
-                                            <Grid>
-                                                <Slider x:Name="SliderKeywordGlobalCooldown" Minimum="1" Maximum="120"
-                                                        TickFrequency="1" IsSnapToTickEnabled="True"
-                                                        ValueChanged="SliderKeywordGlobalCooldown_ValueChanged"/>
-                                                <TextBlock x:Name="TxtKeywordGlobalCooldown" Text="5s"
-                                                           Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                            </Grid>
-                                        </StackPanel>
-
-                                        <!-- Session XP boost -->
-                                        <StackPanel Grid.Column="2" Margin="6,0,0,0">
-                                            <TextBlock Text="Session XP Boost" Foreground="#A0A0A0" FontSize="10"/>
-                                            <Grid>
-                                                <Slider x:Name="SliderKeywordSessionMultiplier" Minimum="1.0" Maximum="3.0"
-                                                        TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                                        ValueChanged="SliderKeywordSessionMultiplier_ValueChanged"/>
-                                                <TextBlock x:Name="TxtKeywordSessionMultiplier" Text="1.5x"
-                                                           Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                            </Grid>
-                                        </StackPanel>
-                                    </Grid>
-
-                                    <!-- Screen OCR -->
-                                    <Border CornerRadius="6" Padding="8" Margin="0,0,0,8"
-                                            Background="#1A1A2E" BorderBrush="#353550" BorderThickness="1">
-                                        <StackPanel>
-                                            <Grid>
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="Screen Text Detection (OCR)" Foreground="#C0C0C0" FontSize="12" FontWeight="SemiBold"/>
-                                                </StackPanel>
-                                                <CheckBox x:Name="ChkScreenOcrEnabled" Style="{StaticResource ToggleStyle}"
-                                                          HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                          Checked="ChkScreenOcrEnabled_Changed" Unchecked="ChkScreenOcrEnabled_Changed"/>
-                                            </Grid>
-                                            <TextBlock Text="Scans your screen for trigger keywords using Windows OCR"
-                                                       Foreground="#808080" FontSize="10" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                                            <StackPanel x:Name="ScreenOcrIntervalPanel" Visibility="Collapsed" Margin="0,6,0,0">
-                                                <TextBlock Text="Scan Interval" Foreground="#A0A0A0" FontSize="10"/>
-                                                <Grid>
-                                                    <Slider x:Name="SliderScreenOcrInterval" Minimum="2" Maximum="10"
-                                                            TickFrequency="1" IsSnapToTickEnabled="True"
-                                                            ValueChanged="SliderScreenOcrInterval_ValueChanged"/>
-                                                    <TextBlock x:Name="TxtScreenOcrInterval" Text="3s"
-                                                               Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                                </Grid>
-                                            </StackPanel>
-                                        </StackPanel>
-                                    </Border>
-
-                                    <!-- Trigger list -->
-                                    <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
-                                        <StackPanel x:Name="KeywordTriggerListPanel"/>
-                                    </ScrollViewer>
-
-                                    <!-- Action buttons -->
-                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                        <Button Content="+ Add Trigger" Background="#FF69B4" Foreground="White" FontWeight="Bold"
-                                                FontSize="11" Padding="12,6" BorderThickness="0" Cursor="Hand"
-                                                Click="BtnAddKeywordTrigger_Click"/>
-                                        <Button Content="Import from Trigger Mode" Background="#353550" Foreground="#A0A0A0"
-                                                FontSize="11" Padding="12,6" Margin="8,0,0,0" BorderThickness="0" Cursor="Hand"
-                                                Click="BtnImportFromCustomTriggers_Click"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
 
                         <!-- Divider -->
                         <Border Height="1" Margin="20,15" CornerRadius="1">

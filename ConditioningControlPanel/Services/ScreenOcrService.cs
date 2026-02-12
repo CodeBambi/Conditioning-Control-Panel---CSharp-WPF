@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Windows;
 using Windows.Graphics.Imaging;
@@ -18,7 +16,6 @@ namespace ConditioningControlPanel.Services
         private Timer? _timer;
         private bool _disposed;
         private bool _isRunning;
-        private HashSet<string> _previousLines = new();
         private OcrEngine? _ocrEngine;
         private readonly object _lock = new();
 
@@ -45,7 +42,6 @@ namespace ConditioningControlPanel.Services
                 var intervalMs = App.Settings?.Current?.ScreenOcrIntervalMs ?? 3000;
                 _timer = new Timer(OnTimerTick, null, intervalMs, intervalMs);
                 _isRunning = true;
-                _previousLines = new HashSet<string>();
                 App.Logger?.Information("ScreenOcrService started (interval: {Interval}ms)", intervalMs);
             }
         }
@@ -58,7 +54,6 @@ namespace ConditioningControlPanel.Services
                 _timer?.Dispose();
                 _timer = null;
                 _isRunning = false;
-                _previousLines = new HashSet<string>();
                 App.Logger?.Information("ScreenOcrService stopped");
             }
         }
@@ -78,34 +73,23 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var allText = new StringBuilder();
+                var allWords = new List<OcrWordHit>();
                 var screens = App.GetAllScreensCached();
 
                 foreach (var screen in screens)
                 {
-                    var text = await CaptureAndRecognizeAsync(screen);
-                    if (!string.IsNullOrEmpty(text))
-                        allText.AppendLine(text);
+                    var (_, words) = await CaptureAndRecognizeAsync(screen);
+                    if (words != null)
+                        allWords.AddRange(words);
                 }
 
-                var fullText = allText.ToString();
-                if (string.IsNullOrWhiteSpace(fullText)) return;
+                if (_disposed || allWords.Count == 0) return;
 
-                // Line-level diffing — only forward lines not seen in previous scan
-                var currentLines = new HashSet<string>(
-                    fullText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-
-                var newLines = currentLines.Where(l => !_previousLines.Contains(l)).ToList();
-                _previousLines = currentLines;
-
-                if (newLines.Count == 0) return;
-
-                var newText = string.Join("\n", newLines);
-
-                // Dispatch to keyword trigger service on UI thread
-                Application.Current?.Dispatcher?.Invoke(() =>
+                // BeginInvoke (async) to avoid deadlocking with UI thread during shutdown
+                Application.Current?.Dispatcher?.BeginInvoke(() =>
                 {
-                    App.KeywordTriggers?.CheckTextForMatches(newText);
+                    if (_disposed) return;
+                    App.KeywordTriggers?.CheckOcrWords(allWords);
                 });
             }
             catch (Exception ex)
@@ -114,7 +98,7 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private async System.Threading.Tasks.Task<string?> CaptureAndRecognizeAsync(WinForms.Screen screen)
+        private async System.Threading.Tasks.Task<(string? text, List<OcrWordHit>? words)> CaptureAndRecognizeAsync(WinForms.Screen screen)
         {
             Bitmap? bitmap = null;
             try
@@ -140,7 +124,30 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     var result = await _ocrEngine!.RecognizeAsync(softwareBitmap);
-                    return result?.Text;
+                    if (result == null)
+                        return (null, null);
+
+                    // Extract word-level bounding rects
+                    var words = new List<OcrWordHit>();
+                    foreach (var line in result.Lines)
+                    {
+                        foreach (var word in line.Words)
+                        {
+                            var br = word.BoundingRect;
+                            words.Add(new OcrWordHit
+                            {
+                                Text = word.Text,
+                                ScreenRect = new Rectangle(
+                                    bounds.Left + (int)br.X,
+                                    bounds.Top + (int)br.Y,
+                                    (int)br.Width,
+                                    (int)br.Height),
+                                Screen = screen
+                            });
+                        }
+                    }
+
+                    return (result.Text, words);
                 }
                 finally
                 {
@@ -152,7 +159,7 @@ namespace ConditioningControlPanel.Services
                 // Fails when desktop locked, DRM content visible, UAC prompt, etc.
                 App.Logger?.Debug("ScreenOcrService: Capture failed for {Screen}: {Error}",
                     screen.DeviceName, ex.Message);
-                return null;
+                return (null, null);
             }
             finally
             {
