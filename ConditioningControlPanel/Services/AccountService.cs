@@ -497,12 +497,12 @@ public static class AccountService
 
             return new LookupResult
             {
-                Exists = data["exists"]?.Value<bool>() ?? false,
+                Exists = (bool?)data["exists"] ?? false,
                 UnifiedId = data["unified_id"]?.Value<string>(),
                 DisplayName = data["display_name"]?.Value<string>(),
-                HasDisplayName = data["has_display_name"]?.Value<bool>() ?? false,
-                NeedsRegistration = data["needs_registration"]?.Value<bool>() ?? true,
-                CanAutoLink = data["can_auto_link"]?.Value<bool>() ?? false,
+                HasDisplayName = (bool?)data["has_display_name"] ?? false,
+                NeedsRegistration = (bool?)data["needs_registration"] ?? true,
+                CanAutoLink = (bool?)data["can_auto_link"] ?? false,
                 AutoLinkUnifiedId = data["auto_link_unified_id"]?.Value<string>(),
                 AutoLinkDisplayName = data["auto_link_display_name"]?.Value<string>(),
                 ProviderData = data["provider_data"] as JObject
@@ -535,7 +535,7 @@ public static class AccountService
             var json = await response.Content.ReadAsStringAsync();
             var data = JObject.Parse(json);
 
-            if (response.IsSuccessStatusCode && data["success"]?.Value<bool>() == true)
+            if (response.IsSuccessStatusCode && (bool?)data["success"] == true)
             {
                 return new RegisterResult
                 {
@@ -549,7 +549,7 @@ public static class AccountService
             {
                 Success = false,
                 Error = data["error"]?.Value<string>() ?? "Registration failed",
-                CanClaim = data["can_claim"]?.Value<bool>() ?? false,
+                CanClaim = (bool?)data["can_claim"] ?? false,
                 ExistingUnifiedId = data["existing_unified_id"]?.Value<string>()
             };
         }
@@ -580,7 +580,7 @@ public static class AccountService
             var json = await response.Content.ReadAsStringAsync();
             var data = JObject.Parse(json);
 
-            if (response.IsSuccessStatusCode && data["success"]?.Value<bool>() == true)
+            if (response.IsSuccessStatusCode && (bool?)data["success"] == true)
             {
                 return new LinkResult
                 {
@@ -622,7 +622,7 @@ public static class AccountService
             var json = await response.Content.ReadAsStringAsync();
             var data = JObject.Parse(json);
 
-            if (response.IsSuccessStatusCode && data["success"]?.Value<bool>() == true)
+            if (response.IsSuccessStatusCode && (bool?)data["success"] == true)
             {
                 return new LinkResult
                 {

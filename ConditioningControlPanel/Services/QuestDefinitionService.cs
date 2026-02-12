@@ -240,7 +240,7 @@ public class QuestDefinitionService : IDisposable
                     Icon = q["icon"]?.ToString() ?? "⭐",
                     ImageUrl = q["imageUrl"]?.ToString(),
                     ImagePath = GetFallbackImagePath(q["category"]?.ToString()),
-                    IsSeasonal = q["seasonal"]?.Value<bool>() ?? false,
+                    IsSeasonal = (bool?)q["seasonal"] ?? false,
                     ActiveFrom = q["activeFrom"]?.ToString(),
                     ActiveUntil = q["activeUntil"]?.ToString()
                 };

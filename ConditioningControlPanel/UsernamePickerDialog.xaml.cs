@@ -149,7 +149,7 @@ namespace ConditioningControlPanel
                 {
                     var json = await response.Content.ReadAsStringAsync();
                     var result = JObject.Parse(json);
-                    return result["available"]?.Value<bool>() ?? false;
+                    return (bool?)result["available"] ?? false;
                 }
                 return false;
             }
