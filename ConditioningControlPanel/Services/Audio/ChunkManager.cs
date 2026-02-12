@@ -135,6 +135,17 @@ namespace ConditioningControlPanel.Services.Audio
             {
                 Stop();
 
+                // Clean up previous cached video file before losing the reference
+                if (!string.IsNullOrEmpty(_cachedVideoPath))
+                {
+                    try
+                    {
+                        if (File.Exists(_cachedVideoPath))
+                            File.Delete(_cachedVideoPath);
+                    }
+                    catch { }
+                }
+
                 _videoUrl = videoUrl;
                 _videoDuration = estimatedDuration ?? TimeSpan.FromMinutes(30);
                 _chunks.Clear();

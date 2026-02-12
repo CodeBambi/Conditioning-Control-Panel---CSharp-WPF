@@ -2305,7 +2305,11 @@ namespace ConditioningControlPanel.Services
             _tempPackFiles.Clear();
         }
 
-        public void Dispose() => Stop();
+        public void Dispose()
+        {
+            Stop();
+            CleanupTempPackFiles();
+        }
     }
 
     /// <summary>

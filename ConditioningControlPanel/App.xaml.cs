@@ -194,6 +194,57 @@ namespace ConditioningControlPanel
             return Path.GetTempPath();
         }
 
+        /// <summary>
+        /// Cleans up stale temp files from previous sessions (crash recovery).
+        /// Deletes ccp_temp_* and haptic_video_* files from both the assets temp dir and system temp.
+        /// </summary>
+        public static void CleanupStaleTempFiles()
+        {
+            var dirsToClean = new List<string>();
+
+            // Assets temp dir
+            try
+            {
+                var assetsPath = EffectiveAssetsPath;
+                if (!string.IsNullOrEmpty(assetsPath))
+                {
+                    var tempDir = Path.Combine(assetsPath, ".temp");
+                    if (Directory.Exists(tempDir))
+                        dirsToClean.Add(tempDir);
+                }
+            }
+            catch { }
+
+            // System temp (fallback path)
+            try
+            {
+                dirsToClean.Add(Path.GetTempPath());
+            }
+            catch { }
+
+            int deleted = 0;
+            foreach (var dir in dirsToClean)
+            {
+                try
+                {
+                    foreach (var file in Directory.GetFiles(dir, "ccp_temp_*"))
+                    {
+                        try { File.Delete(file); deleted++; }
+                        catch { }
+                    }
+                    foreach (var file in Directory.GetFiles(dir, "haptic_video_*"))
+                    {
+                        try { File.Delete(file); deleted++; }
+                        catch { }
+                    }
+                }
+                catch { }
+            }
+
+            if (deleted > 0)
+                Logger?.Information("Cleaned up {Count} stale temp files from previous session", deleted);
+        }
+
         // Static service references
         public static ILogger Logger { get; private set; } = null!;
         public static SettingsService Settings { get; private set; } = null!;
@@ -515,6 +566,9 @@ namespace ConditioningControlPanel
 
             // Check if installer set an assets path in registry
             ApplyInstallerAssetsPath();
+
+            // Clean up stale temp files from previous sessions (crash recovery, leaked files)
+            CleanupStaleTempFiles();
 
             splash.SetProgress(0.3, "Initializing audio...");
             Audio = new AudioService();
