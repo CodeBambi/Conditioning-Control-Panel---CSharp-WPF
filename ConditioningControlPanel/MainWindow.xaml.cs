@@ -77,6 +77,7 @@ namespace ConditioningControlPanel
         
         // Avatar Tube Window
         private AvatarTubeWindow? _avatarTubeWindow;
+        private System.Windows.Media.MediaPlayer? _levelUpSoundPlayer;
         private bool _avatarWasAttachedBeforeMaximize = false;
         private bool _avatarWasAttachedBeforeBrowserFullscreen = false;
 
@@ -426,9 +427,20 @@ namespace ConditioningControlPanel
                 {
                     if (File.Exists(path))
                     {
+                        // Stop any previous level up sound still playing
+                        _levelUpSoundPlayer?.Close();
+
                         var player = new System.Windows.Media.MediaPlayer();
                         player.Open(new Uri(path, UriKind.Absolute));
                         player.Volume = (App.Settings.Current.MasterVolume / 100.0) * 0.5; // 50% of master volume
+                        player.MediaEnded += (s, e) =>
+                        {
+                            player.Close();
+                            if (_levelUpSoundPlayer == player)
+                                _levelUpSoundPlayer = null;
+                        };
+                        // Hold reference to prevent GC from killing playback
+                        _levelUpSoundPlayer = player;
                         player.Play();
                         App.Logger?.Debug("Level up sound played from: {Path}", path);
                         return;
