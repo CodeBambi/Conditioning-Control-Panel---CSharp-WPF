@@ -507,7 +507,7 @@ namespace ConditioningControlPanel
             
             if (_isRunning)
             {
-                // First press while running: stop engine, show UI
+                // First press while running: stop engine, pause session if active
                 App.Logger?.Information("Panic key pressed! Stopping engine...");
 
                 // IMMEDIATELY kill ALL audio before anything else
@@ -519,10 +519,12 @@ namespace ConditioningControlPanel
                 // Track panic press for Relapse achievement (must be before stopping session)
                 App.Achievements?.TrackPanicPressed();
 
-                // Stop session if one is running (this also tracks panic for relapse)
-                if (_sessionEngine != null && _sessionEngine.IsRunning)
+                // Pause session if one is running (instead of stopping it)
+                bool sessionWasPaused = false;
+                if (_sessionEngine != null && _sessionEngine.IsRunning && !_sessionEngine.IsPaused)
                 {
-                    _sessionEngine.StopSession(completed: false);
+                    _sessionEngine.PauseSession();
+                    sessionWasPaused = true;
                 }
 
                 StopEngine();
@@ -537,8 +539,18 @@ namespace ConditioningControlPanel
                 Topmost = true;  // Temporarily topmost to ensure it's visible
                 Topmost = false; // Then disable topmost
                 ShowAvatarTube();
-                
-                _trayIcon?.ShowNotification("Stopped", "Press panic key again within 2 seconds to exit completely.", System.Windows.Forms.ToolTipIcon.Info);
+
+                if (sessionWasPaused)
+                {
+                    // Update pause button to show resume icon
+                    if (TxtPauseIcon != null) TxtPauseIcon.Text = "▶";
+                    if (BtnPauseSession != null) BtnPauseSession.ToolTip = "Resume session";
+                    _trayIcon?.ShowNotification("Session Paused", "Press panic key again within 2 seconds to exit completely.", System.Windows.Forms.ToolTipIcon.Info);
+                }
+                else
+                {
+                    _trayIcon?.ShowNotification("Stopped", "Press panic key again within 2 seconds to exit completely.", System.Windows.Forms.ToolTipIcon.Info);
+                }
             }
             else if (_panicPressCount >= 2)
             {
@@ -547,6 +559,12 @@ namespace ConditioningControlPanel
 
                 // IMMEDIATELY kill ALL audio before anything else
                 App.KillAllAudio();
+
+                // Stop session if one is paused before exiting
+                if (_sessionEngine != null && _sessionEngine.IsRunning)
+                {
+                    _sessionEngine.StopSession(completed: false);
+                }
 
                 // CRITICAL: Force close all video windows SYNCHRONOUSLY before exit
                 // LibVLC windows become orphaned if we exit without proper cleanup
