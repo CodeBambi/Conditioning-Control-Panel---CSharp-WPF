@@ -22,32 +22,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.9";
+        public const string AppVersion = "5.5.10";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.9 - Performance & Stability
-
-⚡ PERFORMANCE
-• Leaderboard now virtualized — smooth scrolling with 1000+ entries, much less memory
-• Startup ~5 seconds faster (reduced unnecessary delays)
-• Flash & bubble animations no longer allocate memory every frame
-• Auto-save writes moved off UI thread (no more micro-freezes every 30s)
-• Faster app exit
+        public const string CurrentPatchNotes = @"v5.5.10 - Video Fixes
 
 🔧 FIXES
-• Fixed companion reappearing and playing audio after being toggled off
-• Fixed companion reappearing on window restore
-• Fixed audio ducking dropping out during mandatory videos
-• Fixed all session-specific achievements never triggering
-• Fixed bubble click-through dead spots
-• Fixed 14 potential shutdown crashes from unsafe dispatcher callbacks
-
-🛡️ ANTI-CHEAT
-• Added idle detection, timer integrity checks, and HMAC signing
-• Removed 1000-user cap on leaderboard";
+• Fixed multiple videos displaying at the same time
+• Fixed videos chaining back-to-back with zero gap
+• Fixed being able to pause mandatory videos by clicking";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
