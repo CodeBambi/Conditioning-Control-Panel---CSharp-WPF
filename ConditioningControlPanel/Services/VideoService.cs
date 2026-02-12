@@ -36,6 +36,7 @@ namespace ConditioningControlPanel.Services
 
         private bool _isRunning;
         private bool _videoPlaying;
+        private bool _triggerInProgress; // Guards the 800ms freeze delay window in TriggerVideo
         private bool _strictActive;
         private string? _retryPath;
         private DateTime _startTime;
@@ -195,6 +196,8 @@ namespace ConditioningControlPanel.Services
                         "--directx-volume=1.0",   // Full volume for DirectX audio
                         "--gain=1.0",             // Audio gain
                         "--no-disable-screensaver", // Don't interfere with screensaver
+                        "--no-mouse-events",      // Prevent click-to-pause on video surface
+                        "--no-keyboard-events",   // Prevent keyboard input to video surface
                         "--verbose=-1"            // Reduce logging
                     );
 
@@ -353,6 +356,13 @@ namespace ConditioningControlPanel.Services
         {
             App.Logger?.Information("VideoService: TriggerVideo called");
 
+            // Prevent overlapping triggers (e.g. during 800ms freeze delay)
+            if (_triggerInProgress)
+            {
+                App.Logger?.Information("VideoService: TriggerVideo skipped - trigger already in progress");
+                return;
+            }
+
             // Check if another fullscreen interaction is active (bubble count, lock card)
             // If so, queue this video for later
             // Note: If CurrentInteraction is already Video, the queue dequeued us — proceed normally
@@ -384,11 +394,14 @@ namespace ConditioningControlPanel.Services
                 ForceCleanup();
             }
 
+            _triggerInProgress = true;
+
             var path = GetNextVideo();
             App.Logger?.Information("VideoService: GetNextVideo returned: {Path}", path ?? "(null)");
 
             if (string.IsNullOrEmpty(path))
             {
+                _triggerInProgress = false;
                 // No video to play - release the queue lock
                 App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
 
@@ -433,6 +446,7 @@ namespace ConditioningControlPanel.Services
                         if (Application.Current?.Dispatcher == null)
                         {
                             App.Logger?.Warning("VideoService: Dispatcher is null after freeze delay, cannot play video");
+                            _triggerInProgress = false;
                             App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
                             return;
                         }
@@ -440,6 +454,7 @@ namespace ConditioningControlPanel.Services
                         if (Application.Current.Dispatcher.HasShutdownStarted)
                         {
                             App.Logger?.Warning("VideoService: Dispatcher is shutting down, cannot play video");
+                            _triggerInProgress = false;
                             return;
                         }
 
@@ -452,6 +467,7 @@ namespace ConditioningControlPanel.Services
                     catch (Exception ex)
                     {
                         App.Logger?.Error(ex, "VideoService: Delayed video play failed");
+                        _triggerInProgress = false;
                         App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
                     }
                 });
@@ -560,6 +576,7 @@ namespace ConditioningControlPanel.Services
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
             _videoPlaying = false;
+            _triggerInProgress = false;
             _strictActive = false;
             CloseAll(synchronous);
             App.Audio?.ForceUnduck();
@@ -757,12 +774,11 @@ namespace ConditioningControlPanel.Services
             _scheduler.Tick += (s, e) =>
             {
                 _scheduler?.Stop();
-                if (_isRunning && !_videoPlaying)
+                if (_isRunning && !_videoPlaying && !_triggerInProgress)
                 {
                     TriggerVideo();
-                    ScheduleNext();
                 }
-                // If video is playing, don't reschedule here - Cleanup() will call ScheduleNext() when video ends
+                // Cleanup() will call ScheduleNext() when video ends
             };
             _scheduler.Start();
         }
@@ -770,6 +786,14 @@ namespace ConditioningControlPanel.Services
         private void PlayVideo(string path, bool strict)
         {
             App.Logger?.Information("VideoService: PlayVideo called for {File}", Path.GetFileName(path));
+
+            _triggerInProgress = false;
+
+            if (_videoPlaying)
+            {
+                App.Logger?.Warning("VideoService: PlayVideo skipped - video already playing");
+                return;
+            }
 
             _videoPlaying = true;
             _strictActive = strict;
@@ -2064,6 +2088,7 @@ namespace ConditioningControlPanel.Services
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
             _videoPlaying = false;
+            _triggerInProgress = false;
             CloseAll();
 
             App.Logger?.Information("VideoService: Cleanup() - CloseAll completed, _windows now={WinCount}", _windows.Count);
