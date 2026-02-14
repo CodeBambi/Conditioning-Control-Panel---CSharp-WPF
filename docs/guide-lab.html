@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Lab | CCP Guide</title>
+    <meta name="description" content="Experimental features in Conditioning Control Panel — remote control, keyword triggers, and more.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html" class="active">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <a href="guide.html">Guide</a>
+                <span>/</span>
+                <span>The Lab</span>
+            </div>
+            <h1>The Lab</h1>
+            <p>Experimental features — remote control, keyword triggers, and more</p>
+        </div>
+
+        <div class="guide-content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#what-is-the-lab">What is The Lab?</a></li>
+                    <li><a href="#current-status">Current Status</a></li>
+                    <li><a href="#remote-control">Remote Control</a></li>
+                    <li><a href="#keyword-triggers">Keyword Triggers</a></li>
+                    <li><a href="#whats-coming">What's Coming</a></li>
+                </ul>
+            </div>
+
+            <section id="what-is-the-lab">
+                <h2>What is The Lab?</h2>
+
+                <p>The Lab is the experimental features tab in the app. It houses features that are currently in development and testing — think of it as a playground for new ideas before they graduate to the main tabs.</p>
+
+                <div class="feature-highlight">
+                    <div class="feature-item">
+                        <span>🧪</span>
+                        <h5>Experimental</h5>
+                        <p>New features in active development</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>📡</span>
+                        <h5>Remote Control</h5>
+                        <p>Let someone else drive</p>
+                    </div>
+                    <div class="feature-item">
+                        <span>🔑</span>
+                        <h5>Keyword Triggers</h5>
+                        <p>System-wide keyword responses</p>
+                    </div>
+                </div>
+
+                <ul>
+                    <li>Features may evolve, change, or move to main tabs in future updates</li>
+                    <li>Expect rough edges — these are works in progress</li>
+                    <li>Your feedback helps shape these features before they're finalized</li>
+                </ul>
+            </section>
+
+            <section id="current-status">
+                <h2>Current Status</h2>
+
+                <div class="info-box warning">
+                    <h5>🧪 Testing Phase</h5>
+                    <p>Lab features are currently being tested with a select group of prime bimbo subjects. Once testing is complete and features are stable, they'll be available to all Patreon supporters as a Patreon exclusive.</p>
+                </div>
+            </section>
+
+            <section id="remote-control">
+                <h2>Remote Control</h2>
+
+                <p>Remote Control allows another person to remotely control your app's effects from their phone or browser. Hand over the reins and let someone else run the show.</p>
+
+                <h3>How It Works</h3>
+                <ol>
+                    <li>Enable Remote Control in <strong>The Lab</strong> tab</li>
+                    <li>A unique session code is generated</li>
+                    <li>Share the code with your controller</li>
+                    <li>They connect via the web-based remote control page</li>
+                    <li>They can now trigger effects on your app in real time</li>
+                </ol>
+
+                <h3>Permission Tiers</h3>
+                <p>You choose how much control to give. Each tier includes everything from the tier below it:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Tier</th>
+                            <th>What They Can Control</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Light</strong></td>
+                            <td>Flashes, overlays</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Standard</strong></td>
+                            <td>+ Videos, haptics</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Full</strong></td>
+                            <td>+ Autonomy, sessions, strict lock</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Safety</h3>
+                <div class="info-box">
+                    <h5>🛑 Panic Button</h5>
+                    <p>The panic button is <strong>always available</strong> regardless of permission tier. You can stop everything instantly at any time — the controller cannot disable this.</p>
+                </div>
+
+                <a href="remote/index.html" target="_blank" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #FF69B4, #9B59B6); color: white; text-decoration: none; border-radius: 50px; font-weight: 600; margin-top: 1rem; transition: all 0.3s;">
+                    📡 Open Remote Control Page
+                </a>
+            </section>
+
+            <section id="keyword-triggers">
+                <h2>Keyword Triggers</h2>
+
+                <p>Keyword Triggers provide system-wide keyboard monitoring that fires multi-modal responses when you type configured keywords — anywhere on your computer.</p>
+
+                <h3>Matching</h3>
+                <ul>
+                    <li><strong>Plain text</strong> — simple word or phrase matching</li>
+                    <li><strong>Regex patterns</strong> — advanced pattern matching for flexible triggers</li>
+                </ul>
+
+                <h3>Responses</h3>
+                <p>When a keyword is detected, multiple response types can fire simultaneously:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Response Type</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Audio Playback</strong></td>
+                            <td>Play a sound file when triggered</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Subliminal Flash</strong></td>
+                            <td>Brief subliminal text overlay</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Image Flash</strong></td>
+                            <td>Flash an image on screen</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Overlay Pulse</strong></td>
+                            <td>Screen overlay visual effect</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Haptic Feedback</strong></td>
+                            <td>Vibration via connected devices</td>
+                        </tr>
+                        <tr>
+                            <td><strong>XP Reward</strong></td>
+                            <td>Earn XP when triggers fire</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Configuration</h3>
+                <ul>
+                    <li><strong>Per-trigger cooldowns</strong> — prevent the same trigger from firing too rapidly</li>
+                    <li><strong>Global cooldown</strong> — minimum time between any trigger firing</li>
+                    <li><strong>Volume control</strong> — adjust audio response volume</li>
+                    <li><strong>Session XP multiplier</strong> — bonus XP during active sessions</li>
+                </ul>
+
+                <h3>Screen OCR</h3>
+                <p>Optional on-screen text scanning that detects keywords visible on your screen, with keyword highlighting when matches are found.</p>
+
+                <h3>Trigger Management</h3>
+                <ul>
+                    <li>Add, edit, and delete individual triggers</li>
+                    <li>Import triggers from legacy Trigger Mode for easy migration</li>
+                </ul>
+            </section>
+
+            <section id="whats-coming">
+                <h2>What's Coming</h2>
+
+                <p>More experimental features will land in The Lab over time. The Lab is where new ideas are born, tested, and refined before they become full features.</p>
+
+                <!-- Support CTA -->
+                <div style="text-align: center; margin-top: 2rem; padding: 2rem; background: linear-gradient(135deg, rgba(255, 66, 77, 0.1) 0%, rgba(255, 105, 180, 0.1) 100%); border-radius: 20px; border: 1px solid rgba(255, 66, 77, 0.3);">
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Support development on Patreon for early access to Lab features!</p>
+                    <a href="https://www.patreon.com/CodeBambi" target="_blank" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 1rem 2rem; background: #FF424D; color: white; text-decoration: none; border-radius: 50px; font-weight: 600; transition: all 0.3s;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M14.82 2.41c3.96 0 7.18 3.24 7.18 7.21 0 3.96-3.22 7.18-7.18 7.18-3.97 0-7.21-3.22-7.21-7.18 0-3.97 3.24-7.21 7.21-7.21M2 21.6h3.5V2.41H2V21.6z"/>
+                        </svg>
+                        Support on Patreon
+                    </a>
+                </div>
+            </section>
+
+            <!-- Navigation -->
+            <div class="guide-nav">
+                <a href="guide-content-packs.html" class="prev">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <div>
+                        <span class="nav-label">Previous</span>
+                        <span class="nav-title">Content Packs</span>
+                    </div>
+                </a>
+                <a href="guide-advanced.html" class="next">
+                    <div>
+                        <span class="nav-label">Next</span>
+                        <span class="nav-title">Advanced & FAQ</span>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>
