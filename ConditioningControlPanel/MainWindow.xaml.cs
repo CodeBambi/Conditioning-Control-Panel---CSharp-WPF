@@ -5777,6 +5777,10 @@ namespace ConditioningControlPanel
                 if (!ShowRemoteControlWaiver(newTier))
                     return;
 
+                // Unsubscribe before stopping so OnRemoteSessionEnded doesn't collapse the panel
+                App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
+                App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
+
                 await App.RemoteControl.StopSessionAsync();
                 var code = await App.RemoteControl.StartSessionAsync(newTier);
                 if (code != null)
@@ -5784,6 +5788,10 @@ namespace ConditioningControlPanel
                     TxtRemoteCode.Text = string.Join(" ", code.ToCharArray());
                     UpdateRemoteStatus(false);
                 }
+
+                // Re-subscribe after restart
+                App.RemoteControl.ControllerConnectedChanged += OnRemoteControllerChanged;
+                App.RemoteControl.SessionEnded += OnRemoteSessionEnded;
             }
         }
 
