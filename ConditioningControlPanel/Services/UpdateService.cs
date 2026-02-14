@@ -22,18 +22,46 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.11";
+        public const string AppVersion = "5.5.12";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.11 - Temp File Cleanup
+        public const string CurrentPatchNotes = @"v5.5.12 - Remote Control, The Lab & Companion Phrases
 
-🔧 FIXES
-• Fixed temp folder filling up with GIF and video files from content packs
-• Fixed old installer downloads piling up across updates (several GB over time)
-• Added startup cleanup of stale temp files from previous sessions/crashes";
+📡 NEW: REMOTE CONTROL
+• Let someone else control your app from their phone or browser
+• Share a session code or link — they connect and trigger effects in real time
+• Permission tiers (Light, Standard, Full) control how much access they have
+• Panic button always available for instant safety stop
+• Engine auto-starts when a controller connects
+
+🧪 NEW: THE LAB
+• A new tab for experimental features currently in beta testing
+• Keyword Triggers, Screen OCR, and Remote Control live here
+• Guide button links to the full web documentation
+• Help tooltips (?) on each feature explain how they work
+• Beta access for Tier 2 supporters and whitelisted users
+
+🤖 COMPANION PHRASES
+• New Phrase Editor — customize which phrases your companion says
+• Enable or disable individual phrases per category
+• Add custom audio files to any phrase
+• Voice line filtering — control which voice lines can play
+• Refactored phrase system for better mode-aware selection
+
+🔍 SCREEN OCR
+• Quick confirmation scan — keywords detected ~2x faster with 200ms re-scan
+
+🫧 BUBBLE COUNT
+• Mercy system in strict mode — after 3 wrong retries, mercy grants escape
+• Fixed pop sound not playing on secondary monitors
+
+🎨 UI FIXES
+• Fixed WarningDialog clipping on long content
+• Fixed ComboBox dropdowns being unreadable on light system themes
+• Compact tab bar styling for smaller window sizes";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

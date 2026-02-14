@@ -428,6 +428,25 @@ namespace ConditioningControlPanel.Services
                             App.Settings?.Save();
                         }
 
+                        // Merge unlocked skills from server (union — never lose skills)
+                        if (v2Result?.UnlockedSkills != null && v2Result.UnlockedSkills.Count > 0)
+                        {
+                            var localSkills = settings.UnlockedSkills ?? new List<string>();
+                            var skillsToAdd = v2Result.UnlockedSkills.Except(localSkills).ToList();
+                            if (skillsToAdd.Count > 0)
+                            {
+                                App.Logger?.Information("V2 Sync: Adding {Count} unlocked skills from server: {Skills}",
+                                    skillsToAdd.Count, string.Join(", ", skillsToAdd));
+                                foreach (var skill in skillsToAdd)
+                                {
+                                    if (!localSkills.Contains(skill))
+                                        localSkills.Add(skill);
+                                }
+                                settings.UnlockedSkills = localSkills;
+                                App.Settings?.Save();
+                            }
+                        }
+
                         // Sync oopsie insurance season usage from server
                         if (v2Result?.OopsieUsedSeason != null)
                         {
@@ -1325,6 +1344,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("skill_points")]
             public int? SkillPoints { get; set; }
+
+            [JsonProperty("unlocked_skills")]
+            public List<string>? UnlockedSkills { get; set; }
 
             [JsonProperty("oopsie_used_season")]
             public string? OopsieUsedSeason { get; set; }

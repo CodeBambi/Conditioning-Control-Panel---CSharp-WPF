@@ -300,6 +300,8 @@ namespace ConditioningControlPanel
         public static ScreenOcrService ScreenOcr { get; private set; } = null!;
         public static KeywordHighlightService? KeywordHighlight { get; private set; }
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
+        public static RemoteControlService RemoteControl { get; private set; } = null!;
+        public static CompanionPhraseService CompanionPhrases { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with either Patreon or Discord (required for progression tracking)
@@ -647,6 +649,8 @@ namespace ConditioningControlPanel
             KeywordTriggers = new KeywordTriggerService();
             ScreenOcr = new ScreenOcrService();
             KeywordHighlight = new KeywordHighlightService();
+            RemoteControl = new RemoteControlService();
+            CompanionPhrases = new CompanionPhraseService();
 
             // Auto-connect haptics if enabled (runs in background)
             if (Settings.Current.Haptics.AutoConnect && Settings.Current.Haptics.Provider != Services.Haptics.HapticProviderType.Mock)
@@ -1730,6 +1734,7 @@ Application State:
             }
 
             // Dispose trigger sources FIRST so no new effects get queued during shutdown
+            RemoteControl?.Dispose();
             ScreenOcr?.Dispose();
             KeywordTriggers?.Dispose();
             KeywordHighlight?.Dispose();

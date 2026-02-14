@@ -912,5 +912,257 @@ namespace ConditioningControlPanel.Models
             ContentMode.SissyHypno => "Bimbo takes over~ *giggles*",
             _ => "Bambi takes over~ *giggles*"
         };
+
+        #region Phrases moved from AvatarTubeWindow (single-mode, not mode-aware)
+
+        /// <summary>
+        /// Generic companion phrases (mixed in with random floating).
+        /// </summary>
+        public static string[] GetGenericPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Do I look cute in here?",
+                "Thinking pink thoughts...",
+                "*giggles*"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Do I look cute in here?",
+                "Thinking pretty thoughts...",
+                "*giggles*"
+            },
+            _ => GetGenericPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Phrases when shopping detected.
+        /// </summary>
+        public static string[] GetShoppingPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Shopping for pink things on {0}? Good girl~",
+                "Ooh! Find something pretty and girly!",
+                "Treat yourself~ you deserve it, cutie!",
+                "{0} shopping? Get something pink!",
+                "*teehee* Spending on cute stuff~",
+                "Good girls deserve pretty things!",
+                "Buy something bimbo-worthy~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Shopping for pretty things on {0}? Good girl~",
+                "Ooh! Find something pretty and girly!",
+                "Treat yourself~ you deserve it, cutie!",
+                "{0} shopping? Get something cute!",
+                "*teehee* Spending on cute stuff~",
+                "Good girls deserve pretty things!",
+                "Buy something girly~"
+            },
+            _ => GetShoppingPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Phrases when social media detected.
+        /// </summary>
+        public static string[] GetSocialPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Chatting on {0} instead of listening to files~",
+                "Social butterfly! Don't forget conditioning~",
+                "*pokes* {0} is nice but so is trance!",
+                "Talking to friends when you could drop deep~",
+                "Being social! Good girls need sessions too~",
+                "{0}? Tell them how good empty feels~",
+                "*giggles* Chatty! Session time soon?"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Chatting on {0} instead of watching hypno~",
+                "Social butterfly! Don't forget conditioning~",
+                "*pokes* {0} is nice but so is trance!",
+                "Talking to friends when you could drop deep~",
+                "Being social! Good girls need sessions too~",
+                "{0}? Tell them how good empty feels~",
+                "*giggles* Chatty! Session time soon?"
+            },
+            _ => GetSocialPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Phrases when a bubble is popped.
+        /// </summary>
+        public static string[] GetBubblePopPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Pop! *giggles*",
+                "Wheee pop!",
+                "Bubble go bye~",
+                "*teehee* Popped it!",
+                "Pop pop pop!",
+                "Bubbles are fun~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Pop! *giggles*",
+                "Wheee pop!",
+                "Bubble go bye~",
+                "*teehee* Popped it!",
+                "Pop pop pop!",
+                "Bubbles are fun~"
+            },
+            _ => GetBubblePopPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Phrases when a bubble count game is failed.
+        /// </summary>
+        public static string[] GetGameFailedPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Aww, you missed it~ Try again!",
+                "*giggles* Bimbos don't need to count~",
+                "Oopsie! Numbers are hard~",
+                "That's okay, pretty girls try again~",
+                "Don't think, just pop bubbles~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Aww, you missed it~ Try again!",
+                "*giggles* Bimbos don't need to count~",
+                "Oopsie! Numbers are hard~",
+                "That's okay, pretty girls try again~",
+                "Don't think, just pop bubbles~"
+            },
+            _ => GetGameFailedPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Phrases when a bubble is missed during bubble pop game.
+        /// </summary>
+        public static string[] GetBubbleMissedPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Oops! Missed one~",
+                "Pop faster, silly!",
+                "*pouts* Catch the bubbles~",
+                "Focus on the pretty bubbles~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Oops! Missed one~",
+                "Pop faster, silly!",
+                "*pouts* Catch the bubbles~",
+                "Focus on the pretty bubbles~"
+            },
+            _ => GetBubbleMissedPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Phrases when a flash image is clicked.
+        /// </summary>
+        public static string[] GetFlashClickedPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "*giggles* You clicked it~",
+                "Good girl, looking at pretties~",
+                "So shiny, had to touch~",
+                "Pretty pictures deserve clicks~",
+                "Can't resist, can you?~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "*giggles* You clicked it~",
+                "Good girl, looking at pretties~",
+                "So shiny, had to touch~",
+                "Pretty pictures deserve clicks~",
+                "Can't resist, can you?~"
+            },
+            _ => GetFlashClickedPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Phrases when the user levels up.
+        /// </summary>
+        public static string[] GetLevelUpPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "LEVEL UP! Good girl!~",
+                "*bounces* You leveled up!",
+                "Yay! Getting so conditioned~",
+                "More levels = more bimbo~",
+                "So proud of you, bestie!~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "LEVEL UP! Good girl!~",
+                "*bounces* You leveled up!",
+                "Yay! Getting so conditioned~",
+                "More levels = more girly~",
+                "So proud of you, bestie!~"
+            },
+            _ => GetLevelUpPhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Phrases when mind wipe audio plays.
+        /// </summary>
+        public static string[] GetMindWipePhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Mmmm mind wipe~",
+                "*drools* Thoughts draining...",
+                "Wiping away those pesky thoughts~",
+                "Empty empty empty~",
+                "Bye bye brain cells!",
+                "*giggles* Mind go blank~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Mmmm mind wipe~",
+                "*drools* Thoughts draining...",
+                "Wiping away those pesky thoughts~",
+                "Empty empty empty~",
+                "Bye bye brain cells!",
+                "*giggles* Mind go blank~"
+            },
+            _ => GetMindWipePhrases(ContentMode.BambiSleep)
+        };
+
+        /// <summary>
+        /// Phrases when brain drain audio plays.
+        /// </summary>
+        public static string[] GetBrainDrainPhrases(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => new[]
+            {
+                "Brain drain feels so good~",
+                "*blinks* What was I thinking?",
+                "Drip drip drip goes Bambi's brain~",
+                "Drain it all away!",
+                "So empty and happy~",
+                "*giggles* Brain melting~"
+            },
+            ContentMode.SissyHypno => new[]
+            {
+                "Brain drain feels so good~",
+                "*blinks* What was I thinking?",
+                "Drip drip drip goes your brain~",
+                "Drain it all away!",
+                "So empty and happy~",
+                "*giggles* Brain melting~"
+            },
+            _ => GetBrainDrainPhrases(ContentMode.BambiSleep)
+        };
+
+        #endregion
     }
 }

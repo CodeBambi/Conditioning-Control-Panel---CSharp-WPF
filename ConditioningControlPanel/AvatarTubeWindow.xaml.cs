@@ -1947,7 +1947,7 @@ namespace ConditioningControlPanel
         /// Blocked while waiting for AI response or while AI bubble is visible.
         /// Plays giggle sound 1 in 5 times for preset phrases.
         /// </summary>
-        public void Giggle(string text)
+        public void Giggle(string text, string? phraseAudioPath = null)
         {
             // Block if waiting for AI response
             if (_isWaitingForAi)
@@ -1996,7 +1996,7 @@ namespace ConditioningControlPanel
                     // Determine if we should play giggle sound (1 in 5 for presets)
                     _presetGiggleCounter++;
                     bool playSound = _presetGiggleCounter % 5 == 0;
-                    ShowGiggle(text, playSound, SpeechSource.Preset);
+                    ShowGiggle(text, playSound, SpeechSource.Preset, phraseAudioPath);
                 }
             });
         }
@@ -2036,7 +2036,7 @@ namespace ConditioningControlPanel
         /// <param name="text">The text to display</param>
         /// <param name="playSound">Whether to play a giggle sound</param>
         /// <param name="source">The source of the speech (for delay calculation)</param>
-        private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset)
+        private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset, string? phraseAudioPath = null)
         {
             // Skip if muted or avatar not visible on screen
             if (_isMuted || !IsAvatarVisibleOnScreen)
@@ -2054,7 +2054,12 @@ namespace ConditioningControlPanel
             _isShowingAiBubble = (source == SpeechSource.AI);
 
             // Play sound for the speech bubble
-            if (playSound)
+            if (phraseAudioPath != null)
+            {
+                // Custom phrase audio overrides default sounds
+                PlayPhraseAudio(phraseAudioPath);
+            }
+            else if (playSound)
             {
                 // Explicitly requested giggle sound (AI responses, etc.)
                 PlayGiggleSound();
@@ -2582,13 +2587,8 @@ namespace ConditioningControlPanel
 
         private void SpawnRandomBubble()
         {
-            // Pick a random phrase (mode-aware)
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var phrases = Models.ContentModeConfig.GetRandomBubblePhrases(mode);
-            var phrase = phrases[_random.Next(phrases.Length)];
-
-            // Show the phrase in speech bubble
-            Giggle(phrase);
+            // Pick a random phrase (mode-aware, filtered by service)
+            GiggleFromCategory("RandomBubble");
 
             // Spawn a bubble near the avatar after 1 second (speech bubble appears first)
             Task.Delay(1000).ContinueWith(_ =>
@@ -2699,10 +2699,16 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Gets a random voice line file path
+        /// Gets a random voice line file path (filtered by phrase manager)
         /// </summary>
         private string? GetRandomVoiceLinePath()
         {
+            // Use service filtering if available
+            var enabledFiles = App.CompanionPhrases?.GetEnabledVoiceLineFiles();
+            if (enabledFiles != null && enabledFiles.Count > 0)
+                return enabledFiles[_random.Next(enabledFiles.Count)];
+
+            // Fallback to unfiltered list
             if (_voiceLineFiles.Count == 0)
                 RefreshVoiceLines();
 
@@ -2766,7 +2772,8 @@ namespace ConditioningControlPanel
             {
                 if (_isMuted || !IsAvatarVisibleOnScreen) return;
 
-                var text = System.IO.Path.GetFileNameWithoutExtension(filePath);
+                var text = App.CompanionPhrases?.GetVoiceLineDisplayText(filePath)
+                    ?? System.IO.Path.GetFileNameWithoutExtension(filePath);
                 if (string.IsNullOrWhiteSpace(text)) return;
 
                 // Clear the queue - voice line takes priority
@@ -3021,205 +3028,80 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Generic phrases that work for both modes
         /// </summary>
-        private static readonly string[] GenericPhrases = new[]
-        {
-            "Do I look cute in here?",
-            "Thinking pink thoughts...",
-            "*giggles*"
-        };
-
         /// <summary>
         /// Get a random themed phrase based on current content mode
         /// </summary>
         private string GetRandomBambiPhrase()
         {
             var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var modePhrases = Models.ContentModeConfig.GetRandomFloatingPhrases(mode);
-            var allPhrases = GenericPhrases.Concat(modePhrases).ToArray();
+            var svc = App.CompanionPhrases;
+
+            var genericEnabled = svc?.GetEnabledPhrases("Generic", mode) ?? Models.ContentModeConfig.GetGenericPhrases(mode);
+            var floatingEnabled = svc?.GetEnabledPhrases("RandomFloating", mode) ?? Models.ContentModeConfig.GetRandomFloatingPhrases(mode);
+            var allPhrases = genericEnabled.Concat(floatingEnabled).ToArray();
+
+            if (allPhrases.Length == 0)
+            {
+                // Fallback if all phrases disabled
+                var fallback = Models.ContentModeConfig.GetGenericPhrases(mode)
+                    .Concat(Models.ContentModeConfig.GetRandomFloatingPhrases(mode)).ToArray();
+                return fallback[_random.Next(fallback.Length)];
+            }
+
             return allPhrases[_random.Next(allPhrases.Length)];
         }
 
-        // ============================================================
-        // AWARENESS MODE - Bambi Sleep themed category phrases
-        // ============================================================
-
-        private static readonly string[] GamingPhrases = new[]
+        /// <summary>
+        /// Picks a random enabled phrase from a category and giggles it,
+        /// playing any custom audio that's been attached to it.
+        /// </summary>
+        private void GiggleFromCategory(string category)
         {
-            "Playing {0} instead of dropping~ *giggles*",
-            "Gaming when you could be listening to files~",
-            "{0}? Good girls take session breaks!",
-            "Your brain on {0}... should be on spirals~",
-            "Win at {0}, then reward yourself with trance!",
-            "*teehee* {0} again? Bambi misses you~",
-            "Gaming is cute but conditioning is cuter!",
-            "Don't forget your sessions, good girl~"
-        };
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var svc = App.CompanionPhrases;
+            var enabled = svc?.GetEnabledPhrases(category, mode);
 
-        private static readonly string[] BrowsingPhrases = new[]
-        {
-            "Browsing {0}~ spirals are prettier!",
-            "So many tabs... so few sessions done~",
-            "The internet is nice but trance is nicer!",
-            "*giggles* Lost in {0}? Drop into Bambi instead~",
-            "Browsing when you could be conditioning~",
-            "Click click click... drip drip drip~",
-            "Cute! But have you done a session today?"
-        };
+            if (enabled == null || enabled.Length == 0)
+                return; // All phrases in this category disabled
 
-        private static readonly string[] ShoppingPhrases = new[]
-        {
-            "Shopping for pink things on {0}? Good girl~",
-            "Ooh! Find something pretty and girly!",
-            "Treat yourself~ you deserve it, cutie!",
-            "{0} shopping? Get something pink!",
-            "*teehee* Spending on cute stuff~",
-            "Good girls deserve pretty things!",
-            "Buy something bimbo-worthy~"
-        };
+            var text = enabled[_random.Next(enabled.Length)];
 
-        private static readonly string[] SocialPhrases = new[]
-        {
-            "Chatting on {0} instead of listening to files~",
-            "Social butterfly! Don't forget conditioning~",
-            "*pokes* {0} is nice but so is trance!",
-            "Talking to friends when you could drop deep~",
-            "Being social! Good girls need sessions too~",
-            "{0}? Tell them how good empty feels~",
-            "*giggles* Chatty! Session time soon?"
-        };
+            // Resolve phrase audio
+            string? audioPath = null;
+            var phraseId = svc?.GetPhraseId(category, text, mode);
+            if (phraseId != null)
+            {
+                var audioFile = GetPhraseAudioFile(phraseId);
+                if (audioFile != null)
+                    audioPath = System.IO.Path.Combine(Services.CompanionPhraseService.CompanionAudioFolder, audioFile);
+            }
 
-        // Special phrases for Discord
-        private static readonly string[] DiscordPhrases = new[]
-        {
-            "Here to share your Bambi progress?~",
-            "Here to find other Good Girls?~",
-            "*giggles* Discord! Find your bambi sisters~",
-            "Chatting with other bimbos? So fun!",
-            "Share your conditioning progress, bestie!~",
-            "Finding Good Girls to drop with?~"
-        };
-
-        // Special phrases for BambiCloud
-        private static readonly string[] BambiCloudPhrases = new[]
-        {
-            "Good Girl! BambiCloud is perfect for training~",
-            "*bounces* Yes! This is so good for you!",
-            "Such a Good Girl visiting BambiCloud!~",
-            "Perfect choice, babe! Keep conditioning~",
-            "BambiCloud! You're doing so well, Good Girl!",
-            "*giggles* Smart bambi! This is the right place~",
-            "Good Girl! Your training awaits~"
-        };
+            Giggle(text, audioPath);
+        }
 
         /// <summary>
-        /// Phrases when "bambi" is detected in the tab name - congratulate for bimbofication progress
+        /// Gets the audio filename for a phrase ID (checks overrides and custom).
         /// </summary>
-        private static readonly string[] BambiContentPhrases = new[]
+        private string? GetPhraseAudioFile(string phraseId)
         {
-            "Good Girl! You're exploring Bambi content~",
-            "*bounces excitedly* Yes! Bambi stuff! So proud of you!",
-            "Such a Good Girl! Keep up the bimbofication~",
-            "Yay! More Bambi! You're doing amazing, bestie!",
-            "Good Girl! Your transformation is going so well~",
-            "*giggles* Bambi content! You're such a dedicated girl!",
-            "Perfect! Every bit of Bambi helps you drop deeper~",
-            "So proud of you! Good Girl for embracing Bambi~",
-            "Yes babe! More Bambi = more bimbo! Good Girl!",
-            "*happy bounces* You're becoming such a good Bambi!"
-        };
+            var settings = App.Settings?.Current;
+            if (settings == null) return null;
 
-        private static readonly string[] WorkingPhrases = new[]
-        {
-            "Working in {0}~ good girls deserve breaks!",
-            "So productive! Reward yourself with a drop~",
-            "Busy bee! Empty heads need rest too~",
-            "{0} work? Take a trance break!",
-            "*giggles* Thinking hard? Let Bambi help you stop~",
-            "Working is good but conditioning is better!",
-            "Productive! Schedule your session, cutie~"
-        };
+            if (settings.PhraseAudioOverrides.TryGetValue(phraseId, out var overrideFile))
+            {
+                var path = System.IO.Path.Combine(Services.CompanionPhraseService.CompanionAudioFolder, overrideFile);
+                if (System.IO.File.Exists(path)) return overrideFile;
+            }
 
-        private static readonly string[] MediaPhrases = new[]
-        {
-            "Watching {0}~ spirals are prettier to watch!",
-            "*teehee* Entertainment! But have you dropped today?",
-            "{0} is nice but Bambi files are nicer~",
-            "Relaxing? Trance is the best relaxation!",
-            "Media time! Session time next? Good girl~",
-            "Watching stuff when you could watch spirals~",
-            "*giggles* Cozy! Perfect time for conditioning~"
-        };
+            var custom = settings.CustomCompanionPhrases?.FirstOrDefault(c => c.Id == phraseId);
+            if (custom?.AudioFileName != null)
+            {
+                var path = System.IO.Path.Combine(Services.CompanionPhraseService.CompanionAudioFolder, custom.AudioFileName);
+                if (System.IO.File.Exists(path)) return custom.AudioFileName;
+            }
 
-        private static readonly string[] LearningPhrases = new[]
-        {
-            "Reading {0}? Empty heads are happier~",
-            "*teehee* Learning things? Let them drip away~",
-            "{0} makes you think... Bambi helps you stop!",
-            "So much reading! Good girls need empty time~",
-            "Studying? Trance is easier than thinking!",
-            "*giggles* {0}? Pink thoughts are better~",
-            "Learning is cute but dropping is cuter!",
-            "Big brain stuff? Bimbo brain is better~"
-        };
-
-        private static readonly string[] IdlePhrases = new[]
-        {
-            "Zoned out? Drop deeper~",
-            "*pokes* Still there, good girl?",
-            "So still~ already in trance? *giggles*",
-            "Empty and idle... perfect for conditioning!",
-            "Staring blankly? That's a good start~",
-            "Hellooo~ ready to listen to files?",
-            "*teehee* Mind wandering? Let it float away~",
-            "Idle time is session time!"
-        };
-
-        // ============================================================
-        // FEATURE AWARENESS PHRASES
-        // ============================================================
-
-        /// <summary>
-        /// Phrases said ~0.5s before a flash image appears
-        /// </summary>
-        private static readonly string[] FlashPrePhrases = new[]
-        {
-            "Ooh look at the pretty picture~",
-            "Watch this!",
-            "*giggles* Pretty!",
-            "Bambi stare and obey~",
-            "Look look look!",
-            "Eyes on the picture~",
-            "So pretty! *stares*",
-            "Oooh shiny~"
-        };
-
-        /// <summary>
-        /// Phrases said occasionally after subliminals (1 in 10)
-        /// </summary>
-        private static readonly string[] SubliminalAckPhrases = new[]
-        {
-            "Did you see that?",
-            "What was that? Bambi feels fuzzy~",
-            "Hehe something flashed~",
-            "*blinks* What?",
-            "So fast! Can't think~",
-            "Bambi's brain goes brrr~",
-            "Ooh tingles!",
-            "Words go in, thoughts go out~"
-        };
-
-        /// <summary>
-        /// Phrases for when bubble is popped (occasional)
-        /// </summary>
-        private static readonly string[] BubblePopPhrases = new[]
-        {
-            "Pop! *giggles*",
-            "Wheee pop!",
-            "Bubble go bye~",
-            "*teehee* Popped it!",
-            "Pop pop pop!",
-            "Bubbles are fun~"
-        };
+            return null;
+        }
 
         // Counters for feature awareness
         private int _subliminalCounter = 0;
@@ -3234,39 +3116,59 @@ namespace ConditioningControlPanel
             // Check for special services first
             var lowerName = detectedName?.ToLowerInvariant() ?? "";
             var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var svc = App.CompanionPhrases;
 
             // Discord - special phrases
             if (lowerName.Contains("discord"))
             {
-                var discordPhrases = Models.ContentModeConfig.GetDiscordPhrases(mode);
+                var discordPhrases = svc?.GetEnabledPhrases("Discord", mode) is { Length: > 0 } dp
+                    ? dp : Models.ContentModeConfig.GetDiscordPhrases(mode);
                 return discordPhrases[_random.Next(discordPhrases.Length)];
             }
 
             // BambiCloud/Hypnotube - positive reinforcement (training sites)
             if (lowerName.Contains("bambicloud") || lowerName.Contains("hypnotube"))
             {
-                var sitePhrases = Models.ContentModeConfig.GetTrainingSitePhrases(mode);
+                var sitePhrases = svc?.GetEnabledPhrases("TrainingSite", mode) is { Length: > 0 } sp
+                    ? sp : Models.ContentModeConfig.GetTrainingSitePhrases(mode);
                 return sitePhrases[_random.Next(sitePhrases.Length)];
             }
 
             // Hypno content in tab name - congratulate for bimbofication
             if (lowerName.Contains("bambi") || lowerName.Contains("sissy") || lowerName.Contains("hypno"))
             {
-                var hypnoPhrases = Models.ContentModeConfig.GetHypnoContentPhrases(mode);
+                var hypnoPhrases = svc?.GetEnabledPhrases("HypnoContent", mode) is { Length: > 0 } hp
+                    ? hp : Models.ContentModeConfig.GetHypnoContentPhrases(mode);
                 return hypnoPhrases[_random.Next(hypnoPhrases.Length)];
             }
-            var phrases = category switch
+
+            var categoryName = category switch
             {
-                ActivityCategory.Gaming => Models.ContentModeConfig.GetGamingPhrases(mode),
-                ActivityCategory.Browsing => Models.ContentModeConfig.GetBrowsingPhrases(mode),
-                ActivityCategory.Shopping => ShoppingPhrases,
-                ActivityCategory.Social => SocialPhrases,
-                ActivityCategory.Working => Models.ContentModeConfig.GetWorkingPhrases(mode),
-                ActivityCategory.Media => Models.ContentModeConfig.GetMediaPhrases(mode),
-                ActivityCategory.Learning => Models.ContentModeConfig.GetLearningPhrases(mode),
-                ActivityCategory.Idle => Models.ContentModeConfig.GetWindowAwarenessIdlePhrases(mode),
-                _ => Models.ContentModeConfig.GetRandomFloatingPhrases(mode)
+                ActivityCategory.Gaming => "Gaming",
+                ActivityCategory.Browsing => "Browsing",
+                ActivityCategory.Shopping => "Shopping",
+                ActivityCategory.Social => "Social",
+                ActivityCategory.Working => "Working",
+                ActivityCategory.Media => "Media",
+                ActivityCategory.Learning => "Learning",
+                ActivityCategory.Idle => "WindowAwarenessIdle",
+                _ => "RandomFloating"
             };
+
+            var phrases = svc?.GetEnabledPhrases(categoryName, mode) is { Length: > 0 } enabled
+                ? enabled
+                : category switch
+                {
+                    ActivityCategory.Gaming => Models.ContentModeConfig.GetGamingPhrases(mode),
+                    ActivityCategory.Browsing => Models.ContentModeConfig.GetBrowsingPhrases(mode),
+                    ActivityCategory.Shopping => Models.ContentModeConfig.GetShoppingPhrases(mode),
+                    ActivityCategory.Social => Models.ContentModeConfig.GetSocialPhrases(mode),
+                    ActivityCategory.Working => Models.ContentModeConfig.GetWorkingPhrases(mode),
+                    ActivityCategory.Media => Models.ContentModeConfig.GetMediaPhrases(mode),
+                    ActivityCategory.Learning => Models.ContentModeConfig.GetLearningPhrases(mode),
+                    ActivityCategory.Idle => Models.ContentModeConfig.GetWindowAwarenessIdlePhrases(mode),
+                    _ => Models.ContentModeConfig.GetRandomFloatingPhrases(mode)
+                };
 
             var phrase = phrases[_random.Next(phrases.Length)];
 
@@ -3480,6 +3382,41 @@ namespace ConditioningControlPanel
         /// Play a random pop sound when clicking the avatar
         /// </summary>
         /// <summary>
+        /// Plays a custom phrase audio file (NAudio pattern from PlayGiggleSound).
+        /// </summary>
+        private void PlayPhraseAudio(string audioPath)
+        {
+            try
+            {
+                if (!System.IO.File.Exists(audioPath)) return;
+
+                var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
+                var volume = (float)Math.Pow(masterVolume, 1.5) * 0.7f;
+
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        using var audioFile = new NAudio.Wave.AudioFileReader(audioPath);
+                        audioFile.Volume = volume;
+                        using var outputDevice = new NAudio.Wave.WaveOutEvent();
+                        outputDevice.Init(audioFile);
+                        outputDevice.Play();
+                        while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
+                        {
+                            System.Threading.Thread.Sleep(50);
+                        }
+                    }
+                    catch { /* Ignore audio errors */ }
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to play phrase audio: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Plays a random giggle sound (giggle1-4.mp3) for AI responses or preset phrases
         /// </summary>
         private void PlayGiggleSound()
@@ -3639,10 +3576,7 @@ namespace ConditioningControlPanel
             // Only announce ~1 in 4 flashes to avoid being annoying
             if (_flashCounter % 4 == 1)
             {
-                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-                var phrases = Models.ContentModeConfig.GetFlashPrePhrases(mode);
-                var phrase = phrases[_random.Next(phrases.Length)];
-                Giggle(phrase);
+                GiggleFromCategory("FlashPre");
             }
         }
 
@@ -3688,10 +3622,7 @@ namespace ConditioningControlPanel
             // Only acknowledge ~1 in 10 subliminals
             if (_subliminalCounter % 10 == 0)
             {
-                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-                var phrases = Models.ContentModeConfig.GetSubliminalAckPhrases(mode);
-                var phrase = phrases[_random.Next(phrases.Length)];
-                Giggle(phrase);
+                GiggleFromCategory("SubliminalAck");
             }
         }
 
@@ -3707,66 +3638,12 @@ namespace ConditioningControlPanel
             // Only acknowledge ~1 in 5 bubble pops
             if (_bubblePopCounter % 5 == 0)
             {
-                var phrase = BubblePopPhrases[_random.Next(BubblePopPhrases.Length)];
-                Giggle(phrase);
+                GiggleFromCategory("BubblePop");
             }
         }
 
-        // Phrases for various program feature reactions
-        private static readonly string[] GameFailedPhrases = new[]
-        {
-            "Aww, you missed it~ Try again!",
-            "*giggles* Bimbos don't need to count~",
-            "Oopsie! Numbers are hard~",
-            "That's okay, pretty girls try again~",
-            "Don't think, just pop bubbles~"
-        };
-
-        private static readonly string[] BubbleMissedPhrases = new[]
-        {
-            "Oops! Missed one~",
-            "Pop faster, silly!",
-            "*pouts* Catch the bubbles~",
-            "Focus on the pretty bubbles~"
-        };
-
-        private static readonly string[] FlashClickedPhrases = new[]
-        {
-            "*giggles* You clicked it~",
-            "Good girl, looking at pretties~",
-            "So shiny, had to touch~",
-            "Pretty pictures deserve clicks~",
-            "Can't resist, can you?~"
-        };
-
-        private static readonly string[] LevelUpPhrases = new[]
-        {
-            "LEVEL UP! Good girl!~",
-            "*bounces* You leveled up!",
-            "Yay! Getting so conditioned~",
-            "More levels = more bimbo~",
-            "So proud of you, bestie!~"
-        };
-
-        private static readonly string[] MindWipePhrases = new[]
-        {
-            "Mmmm mind wipe~",
-            "*drools* Thoughts draining...",
-            "Wiping away those pesky thoughts~",
-            "Empty empty empty~",
-            "Bye bye brain cells!",
-            "*giggles* Mind go blank~"
-        };
-
-        private static readonly string[] BrainDrainPhrases = new[]
-        {
-            "Brain drain feels so good~",
-            "*blinks* What was I thinking?",
-            "Drip drip drip goes Bambi's brain~",
-            "Drain it all away!",
-            "So empty and happy~",
-            "*giggles* Brain melting~"
-        };
+        // GameFailed, BubbleMissed, FlashClicked, LevelUp, MindWipe, BrainDrain
+        // phrases moved to ContentModeConfig
 
         // Counters for MindWipe/BrainDrain (not too often)
         private int _mindWipeCounter = 0;
@@ -3774,8 +3651,7 @@ namespace ConditioningControlPanel
 
         private void OnGameFailed(object? sender, EventArgs e)
         {
-            var phrase = GameFailedPhrases[_random.Next(GameFailedPhrases.Length)];
-            Giggle(phrase);
+            GiggleFromCategory("GameFailed");
         }
 
         private void OnBubbleMissed()
@@ -3783,8 +3659,7 @@ namespace ConditioningControlPanel
             // Only react occasionally to avoid spam
             if (_random.Next(3) == 0)
             {
-                var phrase = BubbleMissedPhrases[_random.Next(BubbleMissedPhrases.Length)];
-                Giggle(phrase);
+                GiggleFromCategory("BubbleMissed");
             }
         }
 
@@ -3793,8 +3668,7 @@ namespace ConditioningControlPanel
             // React to 1 in 3 flash clicks
             if (_random.Next(3) == 0)
             {
-                var phrase = FlashClickedPhrases[_random.Next(FlashClickedPhrases.Length)];
-                Giggle(phrase);
+                GiggleFromCategory("FlashClicked");
             }
         }
 
@@ -3807,8 +3681,7 @@ namespace ConditioningControlPanel
         {
             // Use regular Giggle instead of GigglePriority to avoid cutting off current speech
             // Level up is exciting but shouldn't interrupt active triggers/speech
-            var phrase = LevelUpPhrases[_random.Next(LevelUpPhrases.Length)];
-            Giggle(phrase);
+            GiggleFromCategory("LevelUp");
         }
 
         /// <summary>
@@ -3831,8 +3704,7 @@ namespace ConditioningControlPanel
             else
             {
                 // Regular level up - use standard phrases
-                var phrase = LevelUpPhrases[_random.Next(LevelUpPhrases.Length)];
-                GigglePriority(phrase);
+                GiggleFromCategory("LevelUp");
             }
         }
 
@@ -3857,8 +3729,7 @@ namespace ConditioningControlPanel
             // Only react ~1 in 6 times to avoid being annoying
             if (_mindWipeCounter % 6 == 0)
             {
-                var phrase = MindWipePhrases[_random.Next(MindWipePhrases.Length)];
-                Giggle(phrase);
+                GiggleFromCategory("MindWipe");
             }
         }
 
@@ -3872,8 +3743,7 @@ namespace ConditioningControlPanel
             // Only react ~1 in 6 times to avoid being annoying
             if (_brainDrainCounter % 6 == 0)
             {
-                var phrase = BrainDrainPhrases[_random.Next(BrainDrainPhrases.Length)];
-                Giggle(phrase);
+                GiggleFromCategory("BrainDrain");
             }
         }
 
@@ -3882,11 +3752,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void ShowGreeting()
         {
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var phrases = Models.ContentModeConfig.GetStartupGreetingPhrases(mode);
-            var phrase = phrases[_random.Next(phrases.Length)];
-            Giggle(phrase);
-            App.Logger?.Information("Avatar greeting: {Phrase}", phrase);
+            GiggleFromCategory("StartupGreeting");
         }
 
         /// <summary>
@@ -3894,11 +3760,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void OnEngineStopped(object? sender, EventArgs e)
         {
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var phrases = Models.ContentModeConfig.GetEngineStopPhrases(mode);
-            var phrase = phrases[_random.Next(phrases.Length)];
-            GigglePriority(phrase);
-            App.Logger?.Debug("Avatar engine stop reaction: {Phrase}", phrase);
+            GiggleFromCategory("EngineStop");
         }
 
         private void ToggleInputPanel()
