@@ -5579,10 +5579,7 @@ namespace ConditioningControlPanel
             {
                 Tag = trigger.Id,
                 SelectedIndex = (int)trigger.VisualEffect,
-                Background = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x42)),
-                Foreground = new SolidColorBrush(Colors.White),
-                BorderThickness = new Thickness(0),
-                FontSize = 10,
+                Style = (Style)FindResource("DarkComboBoxStyle"),
                 Margin = new Thickness(6, 0, 0, 0),
                 MinWidth = 100
             };
@@ -5704,6 +5701,7 @@ namespace ConditioningControlPanel
                 }
 
                 TxtRemoteCode.Text = string.Join(" ", code.ToCharArray());
+                RemoteLinkPanel.Visibility = System.Windows.Visibility.Visible;
                 RemoteCodePanel.Visibility = System.Windows.Visibility.Visible;
                 RemoteStatusPanel.Visibility = System.Windows.Visibility.Visible;
                 BtnStopRemote.Visibility = System.Windows.Visibility.Visible;
@@ -5802,6 +5800,15 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnCopyRemoteLink_Click(object sender, RoutedEventArgs e)
+        {
+            System.Windows.Clipboard.SetText("https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/remote/");
+            BtnCopyRemoteLink.Content = "Copied!";
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            timer.Tick += (s, _) => { BtnCopyRemoteLink.Content = "Copy Link"; timer.Stop(); };
+            timer.Start();
+        }
+
         private async void BtnStopRemote_Click(object sender, RoutedEventArgs e)
         {
             await StopRemoteControl();
@@ -5820,6 +5827,7 @@ namespace ConditioningControlPanel
             }
 
             RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
+            RemoteLinkPanel.Visibility = System.Windows.Visibility.Collapsed;
             RemoteCodePanel.Visibility = System.Windows.Visibility.Collapsed;
             RemoteStatusPanel.Visibility = System.Windows.Visibility.Collapsed;
             BtnStopRemote.Visibility = System.Windows.Visibility.Collapsed;
