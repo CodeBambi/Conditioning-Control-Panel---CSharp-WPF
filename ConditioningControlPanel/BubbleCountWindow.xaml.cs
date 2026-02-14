@@ -698,11 +698,11 @@ namespace ConditioningControlPanel
                 var screenX = (_screen.Bounds.X + (relX * _screen.Bounds.Width) - size / 2) / dpiScale;
                 var screenY = (_screen.Bounds.Y + (relY * _screen.Bounds.Height) - size / 2) / dpiScale;
 
-                if (_isPrimary) PlayPopSound();
+                PlayPopSound();
 
                 // Bubble is now a separate window (doesn't block video rendering)
                 var bubble = new CountBubble(_bubbleImage, size, screenX, screenY, _random,
-                    _isPrimary ? PlayPopSound : null, OnBubblePopped);
+                    PlayPopSound, OnBubblePopped);
                 _activeBubbles.Add(bubble);
             }
             catch (Exception ex)
