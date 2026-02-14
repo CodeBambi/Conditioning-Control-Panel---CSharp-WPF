@@ -485,7 +485,12 @@ namespace ConditioningControlPanel.Services
                             // Refresh the cached premium access window (25h > sync interval)
                             settings.PatreonPremiumValidUntil = DateTime.UtcNow.AddHours(25);
                             App.Settings?.Save();
-                            App.Logger?.Information("V2 Sync: Whitelisted user — premium access granted via sync");
+
+                            // Set whitelist + tier on PatreonService so Lab access works
+                            // even if Patreon OAuth validation failed
+                            App.Patreon?.SetWhitelistStatus(true);
+
+                            App.Logger?.Information("V2 Sync: Whitelisted user — premium access + tier 2 granted via sync");
                         }
 
                         // Sync highest_level_ever from server (server is authoritative)

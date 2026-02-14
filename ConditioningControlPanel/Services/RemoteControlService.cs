@@ -122,6 +122,16 @@ namespace ConditioningControlPanel.Services
             SessionCode = null;
             Tier = null;
 
+            // Stop all effects that were triggered by the remote controller
+            if (System.Windows.Application.Current?.Dispatcher != null)
+            {
+                System.Windows.Application.Current.Dispatcher.Invoke(() => StopAllRemoteEffects());
+            }
+
+            // Reset overlay level bypass when remote session ends
+            if (App.Overlay != null)
+                App.Overlay.BypassLevelCheck = false;
+
             if (ControllerConnected)
             {
                 ControllerConnected = false;
@@ -164,10 +174,27 @@ namespace ConditioningControlPanel.Services
                 if (connected != ControllerConnected)
                 {
                     ControllerConnected = connected;
+                    if (connected)
+                    {
+                        // Stop the engine so only the controller triggers effects
+                        var mw = System.Windows.Application.Current?.MainWindow as MainWindow;
+                        if (mw?.IsEngineRunning == true)
+                            mw.StopEngine();
+
+                        // Ensure overlay service is ready for remote commands
+                        EnsureOverlayRunning();
+                    }
+                    else
+                    {
+                        // Controller disconnected — stop all effects they triggered
+                        StopAllRemoteEffects();
+                    }
                     ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
                 }
 
                 // Execute commands
+                string? lastCmdId = null;
+                string? lastAction = null;
                 var commands = result["commands"] as JArray;
                 if (commands != null)
                 {
@@ -180,16 +207,14 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Information("[RemoteControl] Executing: {Action} (id: {Id})", action, id);
                             ExecuteCommand(action, cmd["params"] as JObject);
                             CommandReceived?.Invoke(this, action);
+                            lastCmdId = id;
+                            lastAction = action;
                         }
                     }
-
-                    // Send status update if we executed commands
-                    if (commands.Count > 0)
-                    {
-                        var lastCmd = commands[commands.Count - 1];
-                        await SendStatusAsync(lastCmd["id"]?.ToString(), lastCmd["action"]?.ToString());
-                    }
                 }
+
+                // Always send status so the remote controller sees current CCP state
+                await SendStatusAsync(lastCmdId, lastAction);
             }
             catch (TaskCanceledException)
             {
@@ -257,6 +282,72 @@ namespace ConditioningControlPanel.Services
             return services;
         }
 
+        private void StopAllRemoteEffects()
+        {
+            try
+            {
+                App.Logger?.Information("[RemoteControl] Stopping all remote effects");
+
+                App.KillAllAudio();
+                App.Autonomy?.CancelActivePulses();
+                App.Autonomy?.Stop();
+
+                App.Video?.Stop();
+                App.Flash?.Stop();
+                App.Subliminal?.Stop();
+                App.Bubbles?.Stop();
+                App.BouncingText?.Stop();
+                App.BubbleCount?.Stop();
+                App.MindWipe?.Stop();
+                App.BrainDrain?.Stop();
+                App.LockCard?.Stop();
+
+                // Turn off overlays
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.PinkFilterEnabled = false;
+                    App.Settings.Current.SpiralEnabled = false;
+                    App.Settings.Current.StrictLockEnabled = false;
+                    App.Settings.Current.PanicKeyEnabled = true;
+                }
+                App.Overlay?.RefreshOverlays();
+
+                App.InteractionQueue?.ForceReset();
+
+                // Sync checkbox state and bring window to front
+                var mw = System.Windows.Application.Current?.MainWindow as MainWindow;
+                if (mw != null)
+                {
+                    mw.EnablePinkFilter(false);
+                    mw.EnableSpiral(false);
+                    mw.Show();
+                    mw.WindowState = System.Windows.WindowState.Normal;
+                    mw.Activate();
+                    mw.Topmost = true;
+                    mw.Topmost = false;
+                    mw.ShowAvatarTube();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "[RemoteControl] Failed to stop remote effects");
+            }
+        }
+
+        private void EnsureOverlayRunning()
+        {
+            if (App.Overlay == null) return;
+            if (!App.Overlay.IsRunning)
+            {
+                App.Overlay.BypassLevelCheck = true;
+                App.Overlay.Start();
+            }
+            else if (!App.Overlay.BypassLevelCheck)
+            {
+                App.Overlay.BypassLevelCheck = true;
+            }
+        }
+
         private void ExecuteCommand(string action, JObject? parameters)
         {
             if (System.Windows.Application.Current?.Dispatcher == null) return;
@@ -279,9 +370,9 @@ namespace ConditioningControlPanel.Services
                         case "show_pink_filter":
                             if (App.Settings?.Current != null)
                             {
-                                var mwPinkOn = System.Windows.Application.Current.MainWindow as MainWindow;
-                                mwPinkOn?.EnablePinkFilter(true);
-                                if (App.Overlay != null && !App.Overlay.IsRunning) App.Overlay.Start();
+                                App.Settings.Current.PinkFilterEnabled = true;
+                                (System.Windows.Application.Current.MainWindow as MainWindow)?.EnablePinkFilter(true);
+                                EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
                             }
@@ -290,9 +381,9 @@ namespace ConditioningControlPanel.Services
                         case "stop_pink_filter":
                             if (App.Settings?.Current != null)
                             {
-                                var mwPinkOff = System.Windows.Application.Current.MainWindow as MainWindow;
-                                mwPinkOff?.EnablePinkFilter(false);
-                                if (App.Overlay != null && !App.Overlay.IsRunning) App.Overlay.Start();
+                                App.Settings.Current.PinkFilterEnabled = false;
+                                (System.Windows.Application.Current.MainWindow as MainWindow)?.EnablePinkFilter(false);
+                                EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
                             }
@@ -301,9 +392,9 @@ namespace ConditioningControlPanel.Services
                         case "show_spiral":
                             if (App.Settings?.Current != null)
                             {
-                                var mwSpiralOn = System.Windows.Application.Current.MainWindow as MainWindow;
-                                mwSpiralOn?.EnableSpiral(true);
-                                if (App.Overlay != null && !App.Overlay.IsRunning) App.Overlay.Start();
+                                App.Settings.Current.SpiralEnabled = true;
+                                (System.Windows.Application.Current.MainWindow as MainWindow)?.EnableSpiral(true);
+                                EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
                             }
@@ -312,9 +403,9 @@ namespace ConditioningControlPanel.Services
                         case "stop_spiral":
                             if (App.Settings?.Current != null)
                             {
-                                var mwSpiralOff = System.Windows.Application.Current.MainWindow as MainWindow;
-                                mwSpiralOff?.EnableSpiral(false);
-                                if (App.Overlay != null && !App.Overlay.IsRunning) App.Overlay.Start();
+                                App.Settings.Current.SpiralEnabled = false;
+                                (System.Windows.Application.Current.MainWindow as MainWindow)?.EnableSpiral(false);
+                                EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
                             }
@@ -325,7 +416,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 var pinkVal = parameters["value"]?.Value<int>() ?? 25;
                                 App.Settings.Current.PinkFilterOpacity = Math.Clamp(pinkVal, 0, 50);
-                                if (App.Overlay != null && !App.Overlay.IsRunning) App.Overlay.Start();
+                                EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
                             }
@@ -336,7 +427,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 var spiralVal = parameters["value"]?.Value<int>() ?? 25;
                                 App.Settings.Current.SpiralOpacity = Math.Clamp(spiralVal, 0, 50);
-                                if (App.Overlay != null && !App.Overlay.IsRunning) App.Overlay.Start();
+                                EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
                             }
@@ -446,8 +537,7 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "trigger_panic":
-                            (System.Windows.Application.Current.MainWindow as MainWindow)
-                                ?.TriggerPanicFromRemote();
+                            StopAllRemoteEffects();
                             break;
 
                         default:

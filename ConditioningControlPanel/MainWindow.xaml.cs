@@ -61,6 +61,38 @@ namespace ConditioningControlPanel
         private bool _exitRequested = false;
         private int _panicPressCount = 0;
         private bool _isStreakFixMode = false;
+        private DispatcherTimer? _remoteNotificationTimer;
+
+        private static readonly Dictionary<string, string> CommandLabels = new()
+        {
+            ["show_pink_filter"] = "Pink Filter enabled",
+            ["stop_pink_filter"] = "Pink Filter disabled",
+            ["show_spiral"] = "Spiral enabled",
+            ["stop_spiral"] = "Spiral disabled",
+            ["start_bubbles"] = "Bubbles started",
+            ["stop_bubbles"] = "Bubbles stopped",
+            ["trigger_video"] = "Video triggered",
+            ["trigger_haptic"] = "Haptic triggered",
+            ["trigger_bubble_count"] = "Bubble Count triggered",
+            ["start_autonomy"] = "Autonomy enabled",
+            ["stop_autonomy"] = "Autonomy disabled",
+            ["start_session"] = "Session started",
+            ["pause_session"] = "Session paused",
+            ["resume_session"] = "Session resumed",
+            ["stop_session"] = "Session stopped",
+            ["enable_strict_lock"] = "Strict Lock enabled",
+            ["disable_strict_lock"] = "Strict Lock disabled",
+            ["disable_panic"] = "Panic key disabled",
+            ["enable_panic"] = "Panic key enabled",
+            ["trigger_panic"] = "All effects stopped",
+        };
+
+        private static readonly HashSet<string> SuppressedCommands = new()
+        {
+            "trigger_flash", "trigger_subliminal",
+            "set_pink_opacity", "set_spiral_opacity",
+            "duck_audio", "unduck_audio",
+        };
 
         /// <summary>
         /// Fires when the engine is stopped (for avatar reactions)
@@ -5729,6 +5761,7 @@ namespace ConditioningControlPanel
 
                 // Listen for controller connection changes
                 App.RemoteControl.ControllerConnectedChanged += OnRemoteControllerChanged;
+                App.RemoteControl.CommandReceived += OnRemoteCommandReceived;
                 App.RemoteControl.SessionEnded += OnRemoteSessionEnded;
             }
             else
@@ -5799,6 +5832,7 @@ namespace ConditioningControlPanel
 
                 // Unsubscribe before stopping so OnRemoteSessionEnded doesn't collapse the panel
                 App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
+                App.RemoteControl.CommandReceived -= OnRemoteCommandReceived;
                 App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
 
                 await App.RemoteControl.StopSessionAsync();
@@ -5811,6 +5845,7 @@ namespace ConditioningControlPanel
 
                 // Re-subscribe after restart
                 App.RemoteControl.ControllerConnectedChanged += OnRemoteControllerChanged;
+                App.RemoteControl.CommandReceived += OnRemoteCommandReceived;
                 App.RemoteControl.SessionEnded += OnRemoteSessionEnded;
             }
         }
@@ -5850,10 +5885,12 @@ namespace ConditioningControlPanel
             if (App.RemoteControl != null)
             {
                 App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
+                App.RemoteControl.CommandReceived -= OnRemoteCommandReceived;
                 App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
                 await App.RemoteControl.StopSessionAsync();
             }
 
+            HideRemoteControlOverlay();
             UpdateStartButtonForRemoteControl(false);
             RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
             RemoteLinkPanel.Visibility = System.Windows.Visibility.Collapsed;
@@ -5869,6 +5906,11 @@ namespace ConditioningControlPanel
                 var connected = App.RemoteControl?.ControllerConnected ?? false;
                 UpdateRemoteStatus(connected);
                 UpdateStartButtonForRemoteControl(connected);
+
+                if (connected)
+                    ShowRemoteControlOverlay();
+                else
+                    HideRemoteControlOverlay();
             });
         }
 
@@ -5876,6 +5918,7 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                HideRemoteControlOverlay();
                 UpdateStartButtonForRemoteControl(false);
                 _isLoading = true;
                 ChkRemoteControlEnabled.IsChecked = false;
@@ -5905,6 +5948,70 @@ namespace ConditioningControlPanel
                 TxtRemoteStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(0xA0, 0xA0, 0xA0));
             }
+        }
+
+        private void ShowRemoteControlOverlay()
+        {
+            var code = App.RemoteControl?.SessionCode;
+            TxtOverlaySessionCode.Text = !string.IsNullOrEmpty(code)
+                ? $"Session: {string.Join(" ", code.ToCharArray())}"
+                : "";
+            RemoteControlOverlay.Visibility = System.Windows.Visibility.Visible;
+
+            var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300));
+            RemoteControlOverlay.BeginAnimation(OpacityProperty, fadeIn);
+        }
+
+        private void HideRemoteControlOverlay()
+        {
+            if (RemoteControlOverlay.Visibility != System.Windows.Visibility.Visible) return;
+
+            var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(200));
+            fadeOut.Completed += (s, _) =>
+            {
+                RemoteControlOverlay.Visibility = System.Windows.Visibility.Collapsed;
+            };
+            RemoteControlOverlay.BeginAnimation(OpacityProperty, fadeOut);
+            _remoteNotificationTimer?.Stop();
+        }
+
+        private void OnRemoteCommandReceived(object? sender, string action)
+        {
+            if (SuppressedCommands.Contains(action)) return;
+
+            Dispatcher.Invoke(() => ShowCommandNotification(action));
+        }
+
+        private void ShowCommandNotification(string action)
+        {
+            var label = CommandLabels.TryGetValue(action, out var l) ? l : action.Replace("_", " ");
+            TxtRemoteCommand.Text = label;
+
+            var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200));
+            RemoteCommandNotification.BeginAnimation(OpacityProperty, fadeIn);
+
+            _remoteNotificationTimer?.Stop();
+            _remoteNotificationTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _remoteNotificationTimer.Tick += (s, _) =>
+            {
+                _remoteNotificationTimer.Stop();
+                HideCommandNotification();
+            };
+            _remoteNotificationTimer.Start();
+        }
+
+        private void HideCommandNotification()
+        {
+            var fadeOut = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300));
+            RemoteCommandNotification.BeginAnimation(OpacityProperty, fadeOut);
+        }
+
+        private async void BtnEndRemoteSession_Click(object sender, RoutedEventArgs e)
+        {
+            await StopRemoteControl();
+            _isLoading = true;
+            ChkRemoteControlEnabled.IsChecked = false;
+            _isLoading = false;
         }
 
         // Methods called by RemoteControlService for session commands
@@ -5978,6 +6085,7 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Information("[RemoteControl] Panic triggered from remote");
 
+                // Kill all audio immediately
                 App.KillAllAudio();
                 App.Autonomy?.CancelActivePulses();
 
@@ -5986,11 +6094,24 @@ namespace ConditioningControlPanel
                     _sessionEngine.PauseSession();
                 }
 
-                // Reset overlay settings so effects truly stop and controller sees them as off
+                // Stop video explicitly (closes all video windows)
+                App.Video?.Stop();
+
+                // Stop other active effects
+                App.Flash?.Stop();
+                App.Subliminal?.Stop();
+                App.Bubbles?.Stop();
+                App.BouncingText?.Stop();
+                App.BubbleCount?.Stop();
+                App.MindWipe?.Stop();
+                App.BrainDrain?.Stop();
+                App.LockCard?.Stop();
+
+                // Turn off overlays but keep the overlay service alive
+                // so the controller can turn them back on
                 EnablePinkFilter(false);
                 EnableSpiral(false);
-
-                StopEngine();
+                App.Overlay?.RefreshOverlays();
 
                 App.InteractionQueue?.ForceReset();
 

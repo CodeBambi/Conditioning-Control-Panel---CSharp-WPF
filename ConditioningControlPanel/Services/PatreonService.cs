@@ -108,6 +108,19 @@ namespace ConditioningControlPanel.Services
         public bool IsWhitelisted => _isWhitelisted;
 
         /// <summary>
+        /// Set whitelist status from external source (e.g. V2 sync response)
+        /// </summary>
+        public void SetWhitelistStatus(bool whitelisted, PatreonTier minTier = PatreonTier.Level2)
+        {
+            _isWhitelisted = whitelisted;
+            if (whitelisted && CurrentTier < minTier)
+            {
+                CurrentTier = minTier;
+                IsActivePatron = true;
+            }
+        }
+
+        /// <summary>
         /// Whether the user has AI access (Tier 1+ OR whitelisted)
         /// All features are currently Tier 1. Also grants access during 2-week grace period.
         /// </summary>
@@ -400,7 +413,7 @@ namespace ConditioningControlPanel.Services
 
                         // If whitelisted, ensure they get Level1 access even if cached tier is None
                         var cachedEffectiveTier = cachedState.IsWhitelisted && cachedState.Tier == PatreonTier.None
-                            ? PatreonTier.Level1
+                            ? PatreonTier.Level2
                             : cachedState.Tier;
                         var cachedEffectivelyActive = cachedState.IsActive || cachedState.IsWhitelisted;
 
@@ -504,10 +517,10 @@ namespace ConditioningControlPanel.Services
 
                 // Update state and cache
                 // If active but tier is 0, default to Level1 (proxy may not return tier correctly)
-                // Also treat whitelisted users as active with Level1
+                // Whitelisted users get Level2 access
                 var effectivelyActive = subscription.IsActive || userIsWhitelisted;
                 var newTier = effectivelyActive
-                    ? (subscription.Tier > PatreonTier.None ? subscription.Tier : PatreonTier.Level1)
+                    ? (subscription.Tier > PatreonTier.None ? subscription.Tier : (userIsWhitelisted ? PatreonTier.Level2 : PatreonTier.Level1))
                     : PatreonTier.None;
                 UpdateTier(newTier, effectivelyActive, subscription.PatronName, subscription.PatronEmail);
 
@@ -813,10 +826,10 @@ namespace ConditioningControlPanel.Services
                     // Load whitelist status from cache
                     _isWhitelisted = cachedState.IsWhitelisted;
 
-                    // If active or whitelisted but tier is 0, default to Level1
+                    // If active or whitelisted but tier is 0, default to Level2 for whitelisted, Level1 for active
                     var effectivelyActive = cachedState.IsActive || cachedState.IsWhitelisted;
                     CurrentTier = effectivelyActive && cachedState.Tier == PatreonTier.None
-                        ? PatreonTier.Level1
+                        ? (cachedState.IsWhitelisted ? PatreonTier.Level2 : PatreonTier.Level1)
                         : cachedState.Tier;
                     IsActivePatron = effectivelyActive;
                     PatronName = cachedState.PatronName;

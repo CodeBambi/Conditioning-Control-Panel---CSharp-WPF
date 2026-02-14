@@ -47,6 +47,11 @@ public class OverlayService : IDisposable
 
     public bool IsRunning => _isRunning;
 
+    /// <summary>
+    /// When true, overlay level checks are bypassed (e.g. for remote control commands).
+    /// </summary>
+    public bool BypassLevelCheck { get; set; }
+
     // Legacy P/Invoke declarations (kept for compatibility)
     private const int SRCCOPY = 0x00CC0020;
     
@@ -130,7 +135,7 @@ public class OverlayService : IDisposable
         {
             var settings = App.Settings.Current;
 
-            if (!settings.IsLevelUnlocked(10))
+            if (!BypassLevelCheck && !settings.IsLevelUnlocked(10))
             {
                 App.Logger?.Information("OverlayService: Level {Level} is below 10, overlays not available", settings.PlayerLevel);
                 return;
@@ -268,7 +273,7 @@ public class OverlayService : IDisposable
     {
         var settings = App.Settings.Current;
 
-        if (!settings.IsLevelUnlocked(10))
+        if (!BypassLevelCheck && !settings.IsLevelUnlocked(10))
         {
             StopPinkFilter();
             StopSpiral();

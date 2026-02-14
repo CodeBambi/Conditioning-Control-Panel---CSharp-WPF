@@ -8081,6 +8081,50 @@
             </Grid>
         </Border>
 
+        <!-- Remote Control Overlay (shown when controller is connected) -->
+        <Border x:Name="RemoteControlOverlay" Grid.RowSpan="6" Panel.ZIndex="999" Visibility="Collapsed" Background="#E0000000" Opacity="0">
+            <Grid>
+                <!-- Command notification banner at top -->
+                <Border x:Name="RemoteCommandNotification" VerticalAlignment="Top" HorizontalAlignment="Center"
+                        Background="#2200FF88" CornerRadius="0,0,10,10" Padding="24,10" Margin="0,0,0,0" Opacity="0">
+                    <TextBlock x:Name="TxtRemoteCommand" Text="" Foreground="#00FF88" FontSize="16" FontWeight="SemiBold"
+                               HorizontalAlignment="Center"/>
+                </Border>
+
+                <!-- Center content -->
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="🎮" FontSize="56" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock Text="REMOTE CONTROLLED" Foreground="#00FF88" FontSize="28" FontWeight="Bold"
+                               HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                    <TextBlock x:Name="TxtOverlaySessionCode" Text="" Foreground="#808080" FontSize="18"
+                               FontFamily="Consolas" HorizontalAlignment="Center" Margin="0,0,0,30"/>
+                    <TextBlock Text="Someone else is controlling your app" Foreground="#A0A0A0" FontSize="14"
+                               HorizontalAlignment="Center" Margin="0,0,0,40"/>
+
+                    <!-- End Session button -->
+                    <Button Content="End Session" Click="BtnEndRemoteSession_Click" Cursor="Hand"
+                            Foreground="White" FontSize="15" FontWeight="SemiBold" Padding="32,12"
+                            HorizontalAlignment="Center">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="BtnBorder" Background="#CC3333" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="BtnBorder" Property="Background" Value="#FF4444"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="BtnBorder" Property="Background" Value="#AA2222"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!-- Global Drop Overlay (shown when dragging files anywhere) -->
         <Border x:Name="GlobalDropOverlay" Grid.RowSpan="5" Visibility="Collapsed" Background="#D0000000" IsHitTestVisible="False">
             <Border Background="#1E1E3A" CornerRadius="16" BorderBrush="#FF69B4" BorderThickness="3"
