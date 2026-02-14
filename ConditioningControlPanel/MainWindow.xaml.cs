@@ -5848,27 +5848,7 @@ namespace ConditioningControlPanel
             {
                 var connected = App.RemoteControl?.ControllerConnected ?? false;
                 UpdateRemoteStatus(connected);
-
-                if (connected)
-                {
-                    // Auto-start engine when controller connects
-                    if (!_isRunning)
-                    {
-                        try { StartEngine(); }
-                        catch (Exception ex) { App.Logger?.Error(ex, "[RemoteControl] Failed to auto-start engine"); }
-                    }
-                    UpdateStartButtonForRemoteControl(true);
-                }
-                else
-                {
-                    // Auto-stop engine when controller disconnects
-                    if (_isRunning)
-                    {
-                        try { StopEngine(); }
-                        catch (Exception ex) { App.Logger?.Error(ex, "[RemoteControl] Failed to auto-stop engine"); }
-                    }
-                    UpdateStartButtonForRemoteControl(false);
-                }
+                UpdateStartButtonForRemoteControl(connected);
             });
         }
 
@@ -5986,7 +5966,11 @@ namespace ConditioningControlPanel
                     _sessionEngine.PauseSession();
                 }
 
-                if (_isRunning) StopEngine();
+                // Reset overlay settings so effects truly stop and controller sees them as off
+                EnablePinkFilter(false);
+                EnableSpiral(false);
+
+                StopEngine();
 
                 App.InteractionQueue?.ForceReset();
 
@@ -12570,7 +12554,38 @@ namespace ConditioningControlPanel
             else
             {
                 BtnStart.IsEnabled = true;
-                UpdateStartButton();
+                // Directly set button state — don't delegate to UpdateStartButton() which has a
+                // ControllerConnected guard that can prevent restoration due to event timing
+                if (_isRunning)
+                {
+                    BtnStart.Background = new SolidColorBrush(Color.FromRgb(255, 107, 107)); // Red
+                    BtnStart.Content = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Height = 24,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Children =
+                        {
+                            new TextBlock { Text = "■", FontSize = 16, Width = 20, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center },
+                            new TextBlock { Text = "STOP", FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
+                        }
+                    };
+                }
+                else
+                {
+                    BtnStart.Background = FindResource("PinkBrush") as SolidColorBrush;
+                    BtnStart.Content = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Height = 24,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Children =
+                        {
+                            new TextBlock { Text = "▶", FontSize = 16, Width = 20, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center },
+                            new TextBlock { Text = "START", FontSize = 18, Width = 60, VerticalAlignment = VerticalAlignment.Center }
+                        }
+                    };
+                }
             }
         }
 

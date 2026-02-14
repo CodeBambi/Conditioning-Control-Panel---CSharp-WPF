@@ -12,7 +12,7 @@ namespace ConditioningControlPanel.Services
     public class RemoteControlService : IDisposable
     {
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
-        private const double PollIntervalSeconds = 2.5;
+        private const double PollIntervalSeconds = 3.0;
 
         private readonly HttpClient _httpClient;
         private DispatcherTimer? _pollTimer;
@@ -279,7 +279,8 @@ namespace ConditioningControlPanel.Services
                         case "show_pink_filter":
                             if (App.Settings?.Current != null)
                             {
-                                App.Settings.Current.PinkFilterEnabled = true;
+                                var mwPinkOn = System.Windows.Application.Current.MainWindow as MainWindow;
+                                mwPinkOn?.EnablePinkFilter(true);
                                 if (App.Overlay != null && !App.Overlay.IsRunning) App.Overlay.Start();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
@@ -289,7 +290,8 @@ namespace ConditioningControlPanel.Services
                         case "stop_pink_filter":
                             if (App.Settings?.Current != null)
                             {
-                                App.Settings.Current.PinkFilterEnabled = false;
+                                var mwPinkOff = System.Windows.Application.Current.MainWindow as MainWindow;
+                                mwPinkOff?.EnablePinkFilter(false);
                                 if (App.Overlay != null && !App.Overlay.IsRunning) App.Overlay.Start();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
@@ -299,7 +301,8 @@ namespace ConditioningControlPanel.Services
                         case "show_spiral":
                             if (App.Settings?.Current != null)
                             {
-                                App.Settings.Current.SpiralEnabled = true;
+                                var mwSpiralOn = System.Windows.Application.Current.MainWindow as MainWindow;
+                                mwSpiralOn?.EnableSpiral(true);
                                 if (App.Overlay != null && !App.Overlay.IsRunning) App.Overlay.Start();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
@@ -309,7 +312,8 @@ namespace ConditioningControlPanel.Services
                         case "stop_spiral":
                             if (App.Settings?.Current != null)
                             {
-                                App.Settings.Current.SpiralEnabled = false;
+                                var mwSpiralOff = System.Windows.Application.Current.MainWindow as MainWindow;
+                                mwSpiralOff?.EnableSpiral(false);
                                 if (App.Overlay != null && !App.Overlay.IsRunning) App.Overlay.Start();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
