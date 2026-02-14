@@ -13865,7 +13865,8 @@ namespace ConditioningControlPanel
                     "Strict Bubble Count",
                     "• You will NOT be able to skip the bubble count challenge\n" +
                     "• You MUST answer correctly to dismiss\n" +
-                    "• After 3 wrong attempts, a mercy lock card appears\n" +
+                    "• Wrong answers force you to REWATCH the video\n" +
+                    "• Mercy system grants escape after 3 retries (if enabled)\n" +
                     "• This can be very restrictive!");
 
                 if (!confirmed)

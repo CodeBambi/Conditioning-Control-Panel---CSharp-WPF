@@ -486,6 +486,16 @@ namespace ConditioningControlPanel.Models
         };
 
         /// <summary>
+        /// Get bubble count retry message (shown between replays in strict mode).
+        /// </summary>
+        public static string GetBubbleCountRetryMessage(ContentMode mode) => mode switch
+        {
+            ContentMode.BambiSleep => "WRONG!\nWATCH AGAIN",
+            ContentMode.SissyHypno => "WRONG!\nWATCH AGAIN",
+            _ => "WRONG!\nWATCH AGAIN"
+        };
+
+        /// <summary>
         /// Get video attention check failure message.
         /// </summary>
         public static string GetAttentionCheckFailMessage(ContentMode mode) => mode switch

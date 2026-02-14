@@ -5,8 +5,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using NAudio.Wave;
+using Screen = System.Windows.Forms.Screen;
 
 namespace ConditioningControlPanel.Services;
 
@@ -28,6 +31,10 @@ public class BubbleCountService : IDisposable
     private List<string> _regularVideos = new();
     private List<(string PackId, PackFileEntry File)> _packVideos = new();
     private readonly List<string> _tempPackFiles = new();  // Track temp files for cleanup
+
+    // Mercy/retry system (strict mode)
+    private int _retryCount = 0;
+    private readonly List<Window> _messageWindows = new();
     
     public bool IsRunning => _isRunning;
     public bool IsBusy => _isBusy;
@@ -67,8 +74,10 @@ public class BubbleCountService : IDisposable
     public void Stop()
     {
         _isRunning = false;
+        _retryCount = 0;
         _schedulerTimer?.Stop();
         _schedulerTimer = null;
+        CloseMessageWindows();
         CleanupTempPackFiles();
 
         App.Logger?.Information("BubbleCountService stopped");
@@ -143,6 +152,7 @@ public class BubbleCountService : IDisposable
         }
 
         _isBusy = true;
+        _retryCount = 0;
 
         // Ensure videos path is set (needed when testing without engine running)
         if (string.IsNullOrEmpty(_videosPath))
@@ -196,16 +206,12 @@ public class BubbleCountService : IDisposable
 
     private void OnGameComplete(bool success)
     {
-        _isBusy = false;
-
-        // Resume bubble popping challenge
-        App.Bubbles?.Resume();
-
-        // Notify InteractionQueue that bubble count is complete (triggers queued items)
-        App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
-
         if (success)
         {
+            _retryCount = 0;
+            _isBusy = false;
+            App.Bubbles?.Resume();
+            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
             App.Progression?.AddXP(100, XPSource.BubbleCount);
             App.Quests?.TrackBubbleCountCompleted();
             GameCompleted?.Invoke(this, EventArgs.Empty);
@@ -213,9 +219,172 @@ public class BubbleCountService : IDisposable
         }
         else
         {
-            GameFailed?.Invoke(this, EventArgs.Empty);
-            App.Logger?.Information("Bubble count game failed");
+            var settings = App.Settings.Current;
+
+            // Strict mode: retry the video (rewatch) with mercy escape
+            if (settings.BubbleCountStrictLock)
+            {
+                _retryCount++;
+
+                if (_retryCount >= 3 && settings.MercySystemEnabled)
+                {
+                    // Mercy after 3 retries - let them go
+                    App.Logger?.Information("Bubble count mercy after {Retries} retries", _retryCount);
+                    var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+                    ShowFullscreenMessage(
+                        Models.ContentModeConfig.GetAttentionCheckMercyMessage(mode),
+                        2500,
+                        () =>
+                        {
+                            _retryCount = 0;
+                            _isBusy = false;
+                            App.Bubbles?.Resume();
+                            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+                            GameFailed?.Invoke(this, EventArgs.Empty);
+                        });
+                }
+                else
+                {
+                    // Replay - show message then start new video
+                    App.Logger?.Information("Bubble count retry {Count} (mercy at 3)", _retryCount);
+                    var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+                    ShowFullscreenMessage(
+                        Models.ContentModeConfig.GetBubbleCountRetryMessage(mode),
+                        2000,
+                        RetryGame);
+                }
+            }
+            else
+            {
+                // Non-strict: just end the game
+                _retryCount = 0;
+                _isBusy = false;
+                App.Bubbles?.Resume();
+                App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+                GameFailed?.Invoke(this, EventArgs.Empty);
+                App.Logger?.Information("Bubble count game failed");
+            }
         }
+    }
+
+    private void RetryGame()
+    {
+        // Check if panic button was pressed during message
+        if (!_isBusy) return;
+
+        try
+        {
+            var settings = App.Settings.Current;
+            var videoPath = GetRandomVideo();
+            if (string.IsNullOrEmpty(videoPath))
+            {
+                App.Logger?.Warning("BubbleCountService: No videos for retry, granting mercy");
+                _retryCount = 0;
+                _isBusy = false;
+                App.Bubbles?.Resume();
+                App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+                GameFailed?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
+            var difficulty = (Difficulty)settings.BubbleCountDifficulty;
+
+            App.Achievements?.TrackBubbleCountGameStarted();
+
+            BubbleCountWindow.ShowOnAllMonitors(videoPath, difficulty, true, OnGameComplete);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error(ex, "BubbleCountService: Failed to retry game");
+            _retryCount = 0;
+            _isBusy = false;
+            App.Bubbles?.Resume();
+            App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
+            GameFailed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void ShowFullscreenMessage(string text, int durationMs, Action then)
+    {
+        try
+        {
+            var settings = App.Settings.Current;
+            var screens = settings.DualMonitorEnabled
+                ? App.GetAllScreensCached()
+                : new[] { Screen.PrimaryScreen };
+
+            if (screens == null || screens.Length == 0 || screens[0] == null)
+            {
+                App.Logger?.Warning("BubbleCountService.ShowMessage: No screens, executing callback");
+                then();
+                return;
+            }
+
+            foreach (var screen in screens)
+            {
+                var win = new Window
+                {
+                    WindowStyle = WindowStyle.None,
+                    Background = Brushes.Black,
+                    Topmost = true,
+                    ShowInTaskbar = false,
+                    WindowStartupLocation = WindowStartupLocation.Manual,
+                    Left = screen.Bounds.X + 100,
+                    Top = screen.Bounds.Y + 100,
+                    Width = 400,
+                    Height = 300,
+                    Content = new TextBlock
+                    {
+                        Text = text,
+                        Foreground = Brushes.Magenta,
+                        FontSize = 64,
+                        FontWeight = FontWeights.Bold,
+                        FontFamily = new FontFamily("Impact"),
+                        TextAlignment = TextAlignment.Center,
+                        HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                };
+                win.Show();
+                win.WindowState = WindowState.Maximized;
+                _messageWindows.Add(win);
+            }
+
+            Task.Delay(durationMs).ContinueWith(_ =>
+            {
+                try
+                {
+                    if (Application.Current?.Dispatcher == null) return;
+                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    {
+                        CloseMessageWindows();
+                        then();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning("BubbleCountService.ShowMessage callback failed: {Error}", ex.Message);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Error(ex, "BubbleCountService: Failed to show fullscreen message");
+            then();
+        }
+    }
+
+    private void CloseMessageWindows()
+    {
+        foreach (var w in _messageWindows.ToList())
+        {
+            try { w.Close(); }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BubbleCountService: Failed to close message window: {Error}", ex.Message);
+            }
+        }
+        _messageWindows.Clear();
     }
 
     private string? GetRandomVideo()
@@ -323,6 +492,8 @@ public class BubbleCountService : IDisposable
     public void ResetBusyState()
     {
         _isBusy = false;
+        _retryCount = 0;
+        CloseMessageWindows();
         App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
         App.Logger?.Debug("BubbleCountService: Busy state reset");
     }

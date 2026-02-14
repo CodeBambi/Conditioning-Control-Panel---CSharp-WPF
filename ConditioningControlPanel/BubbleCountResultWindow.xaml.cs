@@ -208,8 +208,16 @@ namespace ConditioningControlPanel
                 
                 if (_attemptsRemaining <= 0)
                 {
-                    // Out of attempts - show mercy card
-                    ShowMercyCard();
+                    if (_strictMode)
+                    {
+                        // Strict mode: signal failure - service handles retry/mercy
+                        CompleteAll(false);
+                    }
+                    else
+                    {
+                        // Non-strict: show mercy lock card
+                        ShowMercyCard();
+                    }
                 }
                 else
                 {
