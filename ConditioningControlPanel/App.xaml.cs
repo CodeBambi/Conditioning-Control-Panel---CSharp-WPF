@@ -319,6 +319,15 @@ namespace ConditioningControlPanel
         public static string? UnifiedUserId { get; set; }
 
         /// <summary>
+        /// Best available user identifier — UnifiedUserId, falling back to Patreon email or Discord ID
+        /// </summary>
+        public static string? EffectiveUserId =>
+            !string.IsNullOrEmpty(UnifiedUserId) ? UnifiedUserId :
+            !string.IsNullOrEmpty(Patreon?.PatronEmail) ? $"patreon:{Patreon.PatronEmail}" :
+            !string.IsNullOrEmpty(Discord?.UserId) ? $"discord:{Discord.UserId}" :
+            null;
+
+        /// <summary>
         /// Get the user's display name. In offline mode, returns the offline username.
         /// Otherwise returns Patreon or Discord display name.
         /// </summary>

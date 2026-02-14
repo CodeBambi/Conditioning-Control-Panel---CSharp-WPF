@@ -41,7 +41,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task<string?> StartSessionAsync(string tier)
         {
-            var unifiedId = App.UnifiedUserId;
+            var unifiedId = App.EffectiveUserId;
             if (string.IsNullOrEmpty(unifiedId))
             {
                 App.Logger?.Warning("[RemoteControl] Cannot start: no unified ID");
@@ -94,7 +94,7 @@ namespace ConditioningControlPanel.Services
         {
             if (!IsActive) return;
 
-            var unifiedId = App.UnifiedUserId;
+            var unifiedId = App.EffectiveUserId;
             if (!string.IsNullOrEmpty(unifiedId))
             {
                 try
@@ -135,7 +135,7 @@ namespace ConditioningControlPanel.Services
         {
             if (!IsActive) return;
 
-            var unifiedId = App.UnifiedUserId;
+            var unifiedId = App.EffectiveUserId;
             if (string.IsNullOrEmpty(unifiedId)) return;
 
             try
@@ -203,7 +203,7 @@ namespace ConditioningControlPanel.Services
 
         private async Task SendStatusAsync(string? lastCmdId = null, string? lastAction = null)
         {
-            var unifiedId = App.UnifiedUserId;
+            var unifiedId = App.EffectiveUserId;
             if (string.IsNullOrEmpty(unifiedId)) return;
 
             try

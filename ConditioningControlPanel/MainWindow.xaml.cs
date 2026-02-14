@@ -5687,7 +5687,7 @@ namespace ConditioningControlPanel
             if (isEnabled)
             {
                 // Must be logged in
-                if (!App.IsLoggedIn || string.IsNullOrEmpty(App.UnifiedUserId))
+                if (!App.IsLoggedIn || string.IsNullOrEmpty(App.EffectiveUserId))
                 {
                     _isLoading = true;
                     ChkRemoteControlEnabled.IsChecked = false;
