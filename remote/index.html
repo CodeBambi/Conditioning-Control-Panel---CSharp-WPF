@@ -657,18 +657,10 @@
                 <button class="btn-disconnect" id="btn-disconnect">Disconnect</button>
             </div>
 
-            <!-- Engine -->
+            <!-- Emergency -->
             <div class="category">
-                <div class="category-title">Engine</div>
+                <div class="category-title">Emergency</div>
                 <div class="btn-grid">
-                    <button class="cmd-btn" data-action="start_engine" data-action-off="stop_engine" data-toggle="engine" data-tier="light">
-                        <span class="icon">&#x2699;&#xFE0F;</span>
-                        <span class="label">Engine</span>
-                    </button>
-                    <button class="cmd-btn" data-action="enable_videos" data-action-off="disable_videos" data-toggle="videos" data-tier="standard">
-                        <span class="icon">&#x1F4F9;</span>
-                        <span class="label">Videos</span>
-                    </button>
                     <button class="cmd-btn panic-btn" data-action="trigger_panic" data-tier="light">
                         <span class="icon">&#x1F6D1;</span>
                         <span class="label">Panic</span>
@@ -793,15 +785,7 @@
                     <summary>Guide</summary>
                     <div class="guide-content">
                         <div class="guide-category">
-                            <div class="guide-category-title">Engine</div>
-                            <div class="guide-item">
-                                <span class="guide-item-name">Engine</span>
-                                <span class="guide-item-desc">&mdash; Start or stop the conditioning engine</span>
-                            </div>
-                            <div class="guide-item">
-                                <span class="guide-item-name">Videos</span>
-                                <span class="guide-item-desc">&mdash; Enable or disable mandatory videos</span>
-                            </div>
+                            <div class="guide-category-title">Emergency</div>
                             <div class="guide-item">
                                 <span class="guide-item-name">Panic</span>
                                 <span class="guide-item-desc">&mdash; Emergency stop: kills audio, stops engine, restores window</span>
@@ -1263,9 +1247,7 @@
                 'spiral': 'spiral',
                 'strict_lock': 'strict_lock',
                 'no_panic': 'no_panic',
-                'autonomy': 'autonomy',
-                'engine': 'engine',
-                'videos': 'videos'
+                'autonomy': 'autonomy'
             };
 
             document.querySelectorAll('.cmd-btn[data-toggle]').forEach(btn => {
