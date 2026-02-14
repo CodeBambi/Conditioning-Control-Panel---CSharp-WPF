@@ -246,13 +246,10 @@ namespace ConditioningControlPanel.Services
             var services = new List<string>();
             try
             {
-                var mainWindow = System.Windows.Application.Current?.MainWindow as MainWindow;
-                if (mainWindow?.IsEngineRunning == true) services.Add("engine");
                 if (App.Settings?.Current?.PinkFilterEnabled == true) services.Add("pink_filter");
                 if (App.Settings?.Current?.SpiralEnabled == true) services.Add("spiral");
                 if (App.Settings?.Current?.StrictLockEnabled == true) services.Add("strict_lock");
                 if (App.Settings?.Current?.PanicKeyEnabled == false) services.Add("no_panic");
-                if (App.Settings?.Current?.MandatoryVideosEnabled == true) services.Add("videos");
                 if (App.Autonomy?.IsEnabled == true) services.Add("autonomy");
                 if (App.IsSessionRunning) services.Add("session");
             }
@@ -376,7 +373,7 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "trigger_bubble_count":
-                            App.BubbleCount?.TriggerGame();
+                            App.BubbleCount?.TriggerGame(forceTest: true);
                             break;
 
                         case "start_session":
@@ -447,34 +444,6 @@ namespace ConditioningControlPanel.Services
                         case "trigger_panic":
                             (System.Windows.Application.Current.MainWindow as MainWindow)
                                 ?.TriggerPanicFromRemote();
-                            break;
-
-                        case "start_engine":
-                            (System.Windows.Application.Current.MainWindow as MainWindow)
-                                ?.StartEngineFromRemote();
-                            break;
-
-                        case "stop_engine":
-                            (System.Windows.Application.Current.MainWindow as MainWindow)
-                                ?.StopEngineFromRemote();
-                            break;
-
-                        case "enable_videos":
-                            if (App.Settings?.Current != null)
-                            {
-                                App.Settings.Current.MandatoryVideosEnabled = true;
-                                App.Video?.Start();
-                                App.Settings.Save();
-                            }
-                            break;
-
-                        case "disable_videos":
-                            if (App.Settings?.Current != null)
-                            {
-                                App.Settings.Current.MandatoryVideosEnabled = false;
-                                App.Video?.Stop();
-                                App.Settings.Save();
-                            }
                             break;
 
                         default:

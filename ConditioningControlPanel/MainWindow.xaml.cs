@@ -5834,6 +5834,7 @@ namespace ConditioningControlPanel
                 await App.RemoteControl.StopSessionAsync();
             }
 
+            UpdateStartButtonForRemoteControl(false);
             RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
             RemoteLinkPanel.Visibility = System.Windows.Visibility.Collapsed;
             RemoteCodePanel.Visibility = System.Windows.Visibility.Collapsed;
@@ -5847,6 +5848,27 @@ namespace ConditioningControlPanel
             {
                 var connected = App.RemoteControl?.ControllerConnected ?? false;
                 UpdateRemoteStatus(connected);
+
+                if (connected)
+                {
+                    // Auto-start engine when controller connects
+                    if (!_isRunning)
+                    {
+                        try { StartEngine(); }
+                        catch (Exception ex) { App.Logger?.Error(ex, "[RemoteControl] Failed to auto-start engine"); }
+                    }
+                    UpdateStartButtonForRemoteControl(true);
+                }
+                else
+                {
+                    // Auto-stop engine when controller disconnects
+                    if (_isRunning)
+                    {
+                        try { StopEngine(); }
+                        catch (Exception ex) { App.Logger?.Error(ex, "[RemoteControl] Failed to auto-stop engine"); }
+                    }
+                    UpdateStartButtonForRemoteControl(false);
+                }
             });
         }
 
@@ -5854,6 +5876,7 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                UpdateStartButtonForRemoteControl(false);
                 _isLoading = true;
                 ChkRemoteControlEnabled.IsChecked = false;
                 _isLoading = false;
@@ -5946,30 +5969,6 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "[RemoteControl] Failed to stop session from remote");
-            }
-        }
-
-        internal void StartEngineFromRemote()
-        {
-            try
-            {
-                if (!_isRunning) StartEngine();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "[RemoteControl] Failed to start engine from remote");
-            }
-        }
-
-        internal void StopEngineFromRemote()
-        {
-            try
-            {
-                if (_isRunning) StopEngine();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "[RemoteControl] Failed to stop engine from remote");
             }
         }
 
@@ -11906,6 +11905,9 @@ namespace ConditioningControlPanel
 
         private void BtnStart_Click(object sender, RoutedEventArgs e)
         {
+            // Don't allow manual start/stop while remote controller is connected
+            if (App.RemoteControl?.ControllerConnected == true) return;
+
             if (_isRunning)
             {
                 // Check if a session is running
@@ -12500,6 +12502,9 @@ namespace ConditioningControlPanel
 
         private void UpdateStartButton()
         {
+            // Don't overwrite the remote control label while controller is connected
+            if (App.RemoteControl?.ControllerConnected == true) return;
+
             if (_isRunning)
             {
                 BtnStart.Background = new SolidColorBrush(Color.FromRgb(255, 107, 107)); // Red
@@ -12543,7 +12548,32 @@ namespace ConditioningControlPanel
                 }
             }
         }
-        
+
+        private void UpdateStartButtonForRemoteControl(bool connected)
+        {
+            if (connected)
+            {
+                BtnStart.IsEnabled = false;
+                BtnStart.Background = new SolidColorBrush(Color.FromRgb(0x00, 0xFF, 0x88)); // Green
+                BtnStart.Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Height = 24,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Children =
+                    {
+                        new TextBlock { Text = "\U0001F3AE", FontSize = 16, Width = 24, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center },
+                        new TextBlock { Text = "REMOTE CONNECTED", FontSize = 14, VerticalAlignment = VerticalAlignment.Center }
+                    }
+                };
+            }
+            else
+            {
+                BtnStart.IsEnabled = true;
+                UpdateStartButton();
+            }
+        }
+
         /// <summary>
         /// Find a visual child by name in the visual tree
         /// </summary>
