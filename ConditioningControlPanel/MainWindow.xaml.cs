@@ -5761,7 +5761,7 @@ namespace ConditioningControlPanel
                           $"The session code expires after 4 hours automatically.";
 
             var confirmed = WarningDialog.ShowDoubleWarning(this,
-                "Remote Control — Consent & Responsibility",
+                "Remote Control",
                 message);
 
             return confirmed;
