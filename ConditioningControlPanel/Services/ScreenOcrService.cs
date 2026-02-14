@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
@@ -13,9 +14,12 @@ namespace ConditioningControlPanel.Services
 {
     public class ScreenOcrService : IDisposable
     {
+        private const int ConfirmationDelayMs = 200;
+
         private Timer? _timer;
         private bool _disposed;
         private bool _isRunning;
+        private bool _scanInProgress;
         private OcrEngine? _ocrEngine;
         private readonly object _lock = new();
 
@@ -70,32 +74,66 @@ namespace ConditioningControlPanel.Services
         private async void OnTimerTick(object? state)
         {
             if (_disposed || !_isRunning || _ocrEngine == null) return;
+            if (_scanInProgress) return;
+            _scanInProgress = true;
 
             try
             {
-                var allWords = new List<OcrWordHit>();
-                var screens = App.GetAllScreensCached();
+                // Discovery scan — runs at the regular interval
+                var allWords = await ScanAllScreensAsync();
+                if (_disposed) return;
 
-                foreach (var screen in screens)
+                await DispatchOcrResultsAsync(allWords);
+
+                // Quick confirmation scan: if the discovery scan found unconfirmed keyword
+                // matches (first sighting), re-scan after a short delay to confirm stability
+                // instead of waiting for the next full interval tick
+                if (!_disposed && App.KeywordTriggers?.NeedsOcrConfirmation == true)
                 {
-                    var (_, words) = await CaptureAndRecognizeAsync(screen);
-                    if (words != null)
-                        allWords.AddRange(words);
-                }
-
-                if (_disposed || allWords.Count == 0) return;
-
-                // BeginInvoke (async) to avoid deadlocking with UI thread during shutdown
-                Application.Current?.Dispatcher?.BeginInvoke(() =>
-                {
+                    await Task.Delay(ConfirmationDelayMs);
                     if (_disposed) return;
-                    App.KeywordTriggers?.CheckOcrWords(allWords);
-                });
+
+                    var confirmWords = await ScanAllScreensAsync();
+                    if (_disposed) return;
+
+                    await DispatchOcrResultsAsync(confirmWords);
+                }
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("ScreenOcrService: Scan error: {Error}", ex.Message);
             }
+            finally
+            {
+                _scanInProgress = false;
+            }
+        }
+
+        private async Task<List<OcrWordHit>> ScanAllScreensAsync()
+        {
+            var allWords = new List<OcrWordHit>();
+            var screens = App.GetAllScreensCached();
+
+            foreach (var screen in screens)
+            {
+                var (_, words) = await CaptureAndRecognizeAsync(screen);
+                if (words != null)
+                    allWords.AddRange(words);
+            }
+
+            return allWords;
+        }
+
+        private async Task DispatchOcrResultsAsync(List<OcrWordHit> words)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+            await dispatcher.InvokeAsync(() =>
+            {
+                if (_disposed) return;
+                App.KeywordTriggers?.CheckOcrWords(words);
+            });
         }
 
         private async System.Threading.Tasks.Task<(string? text, List<OcrWordHit>? words)> CaptureAndRecognizeAsync(WinForms.Screen screen)

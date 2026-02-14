@@ -41,6 +41,12 @@ namespace ConditioningControlPanel.Services
         // Session awareness callback
         private Func<bool>? _isSessionActive;
 
+        /// <summary>
+        /// True when the last OCR scan found keyword matches awaiting a quick confirmation scan.
+        /// ScreenOcrService checks this after each scan to decide whether to re-scan immediately.
+        /// </summary>
+        public bool NeedsOcrConfirmation { get; private set; }
+
         /// <summary>Fired when a keyword trigger activates</summary>
         public event EventHandler<KeywordTrigger>? TriggerFired;
 
@@ -274,6 +280,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void CheckOcrWords(List<OcrWordHit> allWords)
         {
+            NeedsOcrConfirmation = false;
+
             if (!_isActive || _disposed) return;
             if (allWords == null || allWords.Count == 0)
             {
@@ -349,6 +357,18 @@ namespace ConditioningControlPanel.Services
                         newTexts.Add(text);
                     }
                 }
+            }
+
+            // 5.5 Check if any new positions have unhighlighted text needing confirmation
+            //     (positions in current scan NOT in previous scan, with text not yet handled)
+            foreach (var key in currentPositions)
+            {
+                if (_pendingOcrPositions.Contains(key)) continue;
+                if (!wordsByKey.TryGetValue(key, out var w)) continue;
+                var t = w.Text.ToLowerInvariant();
+                if (_highlightedOcrTexts.Contains(t) || newTexts.Contains(t)) continue;
+                NeedsOcrConfirmation = true;
+                break;
             }
 
             // 6. Update tracking
