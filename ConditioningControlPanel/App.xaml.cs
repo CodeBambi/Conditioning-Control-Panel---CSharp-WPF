@@ -802,6 +802,14 @@ namespace ConditioningControlPanel
                 if (Discord.IsAuthenticated)
                 {
                     Logger?.Information("Discord authenticated: {Username} ({Id})", Discord.Username, Discord.UserId);
+
+                    // If not already syncing via Patreon, load cloud profile and start heartbeat for Discord-only users
+                    if (Patreon?.IsAuthenticated != true && ProfileSync != null)
+                    {
+                        Logger?.Information("Discord-only user, loading cloud profile...");
+                        await ProfileSync.LoadProfileAsync();
+                        ProfileSync.StartHeartbeat();
+                    }
                 }
             }
             catch (Exception ex)
