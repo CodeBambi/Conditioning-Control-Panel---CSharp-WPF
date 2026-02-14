@@ -1116,6 +1116,11 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Default ComboBoxItem style: black text on dropdown so items are readable -->
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="Black"/>
+        </Style>
+
     </Window.Resources>
 
     <!-- Viewbox scales all content proportionally with window size -->
@@ -5024,6 +5029,17 @@
                                             <TextBlock x:Name="TxtCustomizePromptName" Text="Default" Foreground="#9370DB" FontWeight="SemiBold"/>
                                         </StackPanel>
                                     </Button>
+
+                                    <!-- Manage Phrases Button -->
+                                    <Button x:Name="BtnManagePhrases"
+                                            Background="#1A1A32" Foreground="White" BorderBrush="#FF69B4" BorderThickness="1"
+                                            Padding="10,10" FontSize="13" Cursor="Hand" Margin="0,8,0,0"
+                                            Click="BtnManagePhrases_Click">
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <TextBlock Text="Manage Phrases · " Foreground="White"/>
+                                            <TextBlock x:Name="TxtPhraseCount" Text="0 active" Foreground="#FF69B4" FontWeight="SemiBold"/>
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </Border>
 
@@ -5313,6 +5329,88 @@
                                                 FontSize="11" Padding="12,6" Margin="8,0,0,0" BorderThickness="0" Cursor="Hand"
                                                 Click="BtnImportFromCustomTriggers_Click"/>
                                     </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- REMOTE CONTROL -->
+                        <Border CornerRadius="10" Padding="15" Margin="0,15,0,0" BorderThickness="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1E1E3A" Offset="0"/>
+                                    <GradientStop Color="#252548" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#FF69B4" Offset="0"/>
+                                    <GradientStop Color="#9B59B6" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.2"/>
+                            </Border.Effect>
+                            <StackPanel>
+                                <!-- Header row with toggle -->
+                                <Grid Margin="0,0,0,10">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="Remote Control" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkRemoteControlEnabled" Style="{StaticResource ToggleStyle}"
+                                              HorizontalAlignment="Right" VerticalAlignment="Center"
+                                              Checked="ChkRemoteControlEnabled_Changed" Unchecked="ChkRemoteControlEnabled_Changed"/>
+                                </Grid>
+                                <TextBlock Text="Allow another person to remotely trigger actions on your app via a mobile-friendly webpage."
+                                           Foreground="#808080" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                                <!-- Settings (visible when active) -->
+                                <StackPanel x:Name="RemoteControlPanel" Visibility="Collapsed">
+                                    <!-- Tier selection -->
+                                    <Grid Margin="0,0,0,10">
+                                        <TextBlock Text="Permission Tier:" Foreground="#C0C0C0" FontSize="12" VerticalAlignment="Center"/>
+                                        <ComboBox x:Name="CmbRemoteTier" HorizontalAlignment="Right" Width="130"
+                                                  Background="#1A1A2E" Foreground="White" FontSize="12"
+                                                  SelectionChanged="CmbRemoteTier_SelectionChanged">
+                                            <ComboBoxItem Content="Light" IsSelected="True"/>
+                                            <ComboBoxItem Content="Standard"/>
+                                            <ComboBoxItem Content="Full"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <!-- Session Code Display -->
+                                    <Border x:Name="RemoteCodePanel" Background="#0D0D1A" CornerRadius="8" Padding="15,12" Margin="0,0,0,10"
+                                            BorderBrush="#353550" BorderThickness="1" Visibility="Collapsed">
+                                        <Grid>
+                                            <StackPanel HorizontalAlignment="Center">
+                                                <TextBlock Text="S E S S I O N   C O D E" Foreground="#808080" FontSize="10" FontWeight="Bold"
+                                                           HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                                                <TextBlock x:Name="TxtRemoteCode" Text="- - - - - -" Foreground="#FF69B4"
+                                                           FontSize="32" FontWeight="Bold" FontFamily="Consolas"
+                                                           HorizontalAlignment="Center"/>
+                                            </StackPanel>
+                                            <Button x:Name="BtnCopyRemoteCode" Content="Copy" Background="#353550" Foreground="White"
+                                                    FontSize="11" Padding="10,4" BorderThickness="0" Cursor="Hand"
+                                                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                    Click="BtnCopyRemoteCode_Click"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Connection Status -->
+                                    <StackPanel x:Name="RemoteStatusPanel" Orientation="Horizontal" Margin="0,0,0,10" Visibility="Collapsed">
+                                        <Ellipse x:Name="RemoteStatusDot" Width="8" Height="8" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtRemoteStatus" Text="Waiting for controller..." Foreground="#A0A0A0" FontSize="12"/>
+                                    </StackPanel>
+
+                                    <!-- Stop button -->
+                                    <Button x:Name="BtnStopRemote" Content="Stop Session" Background="#FF4444" Foreground="White"
+                                            FontWeight="Bold" FontSize="12" Padding="15,8" BorderThickness="0" Cursor="Hand"
+                                            Margin="0,0,0,10" Visibility="Collapsed"
+                                            Click="BtnStopRemote_Click"/>
+
+                                    <!-- Info notice -->
+                                    <TextBlock TextWrapping="Wrap" Foreground="#666680" FontSize="10" Margin="0,4,0,0">
+                                        <Run Text="All triggers use YOUR local media files. The controller can only trigger actions — they cannot see your screen or files."/>
+                                    </TextBlock>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
