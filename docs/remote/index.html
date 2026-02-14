@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Remote Control - Conditioning Control Panel</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0d0d1a;
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #252542;
+            --bg-card: #1e1e3a;
+            --accent-pink: #ff69b4;
+            --accent-purple: #9b59b6;
+            --accent-gradient: linear-gradient(135deg, #ff69b4 0%, #9b59b6 100%);
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0c0;
+            --text-muted: #707090;
+            --green: #00ff88;
+            --red: #ff4444;
+            --orange: #ffa500;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Background */
+        body::before {
+            content: '';
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
+            background:
+                radial-gradient(ellipse at 20% 20%, rgba(155,89,182,0.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(255,105,180,0.08) 0%, transparent 50%);
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 20px 16px;
+            min-height: 100vh;
+        }
+
+        /* ═══════ Connection Screen ═══════ */
+        #connect-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 80vh;
+            text-align: center;
+        }
+
+        .app-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 6px;
+        }
+
+        .app-subtitle {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-bottom: 40px;
+        }
+
+        .code-label {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .code-input-group {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+
+        .code-char {
+            width: 48px;
+            height: 58px;
+            background: var(--bg-primary);
+            border: 2px solid var(--bg-secondary);
+            border-radius: 10px;
+            color: var(--accent-pink);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.6rem;
+            font-weight: 700;
+            text-align: center;
+            text-transform: uppercase;
+            transition: border-color 0.2s;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .code-char:focus {
+            border-color: var(--accent-pink);
+            box-shadow: 0 0 12px rgba(255,105,180,0.3);
+        }
+
+        .btn-connect {
+            width: 100%;
+            max-width: 320px;
+            padding: 14px 24px;
+            background: var(--accent-gradient);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+
+        .btn-connect:active {
+            transform: scale(0.97);
+        }
+
+        .btn-connect:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .connect-error {
+            color: var(--red);
+            font-size: 0.85rem;
+            margin-top: 12px;
+            min-height: 20px;
+        }
+
+        .last-code-hint {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+
+        .last-code-hint:hover {
+            color: var(--text-secondary);
+        }
+
+        /* ═══════ Control Panel ═══════ */
+        #control-panel {
+            display: none;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid rgba(255,105,180,0.15);
+        }
+
+        .sub-info h2 {
+            font-size: 1.15rem;
+            font-weight: 600;
+        }
+
+        .sub-info .level-badge {
+            display: inline-block;
+            background: var(--bg-secondary);
+            color: var(--accent-pink);
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 6px;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            flex-shrink: 0;
+        }
+
+        .status-dot.offline { background: var(--red); }
+
+        .status-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .btn-disconnect {
+            background: transparent;
+            border: 1px solid var(--red);
+            color: var(--red);
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-disconnect:hover {
+            background: rgba(255,68,68,0.15);
+        }
+
+        /* Category sections */
+        .category {
+            margin-bottom: 16px;
+        }
+
+        .category-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 8px;
+            padding-left: 4px;
+        }
+
+        .btn-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .btn-grid.two-col {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .cmd-btn {
+            position: relative;
+            padding: 14px 8px;
+            background: var(--bg-primary);
+            border: 1px solid var(--bg-secondary);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-align: center;
+            min-height: 52px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        .cmd-btn .icon {
+            font-size: 1.1rem;
+        }
+
+        .cmd-btn .label {
+            font-size: 0.7rem;
+            line-height: 1.1;
+        }
+
+        .cmd-btn:active:not(.disabled):not(.maintenance) {
+            transform: scale(0.95);
+        }
+
+        .cmd-btn:not(.disabled):not(.maintenance):hover {
+            border-color: var(--accent-pink);
+            box-shadow: 0 0 10px rgba(255,105,180,0.15);
+        }
+
+        .cmd-btn.active {
+            background: rgba(255,105,180,0.15);
+            border-color: var(--accent-pink);
+            color: var(--accent-pink);
+        }
+
+        .cmd-btn.disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .cmd-btn.maintenance {
+            opacity: 0.25;
+            cursor: not-allowed;
+        }
+
+        .cmd-btn.maintenance::after {
+            content: 'Maintenance';
+            position: absolute;
+            bottom: 2px;
+            font-size: 0.5rem;
+            color: var(--orange);
+        }
+
+        /* Ripple effect */
+        .cmd-btn .ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255,105,180,0.3);
+            transform: scale(0);
+            animation: ripple-anim 0.5s ease-out;
+            pointer-events: none;
+        }
+
+        @keyframes ripple-anim {
+            to { transform: scale(3); opacity: 0; }
+        }
+
+        /* Tier lock tooltip */
+        .cmd-btn.disabled .lock-hint {
+            display: none;
+            position: absolute;
+            bottom: -28px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            font-size: 0.6rem;
+            padding: 3px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            z-index: 10;
+        }
+
+        /* ═══════ Feedback Log ═══════ */
+        .feedback-section {
+            margin-top: 20px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(255,105,180,0.1);
+        }
+
+        .feedback-title {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .feedback-log {
+            max-height: 150px;
+            overflow-y: auto;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 8px 12px;
+        }
+
+        .feedback-log::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .feedback-log::-webkit-scrollbar-thumb {
+            background: var(--bg-secondary);
+            border-radius: 2px;
+        }
+
+        .log-entry {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+            font-size: 0.72rem;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-action {
+            color: var(--text-secondary);
+        }
+
+        .log-status {
+            font-size: 0.65rem;
+            padding: 1px 6px;
+            border-radius: 4px;
+        }
+
+        .log-status.sent {
+            background: rgba(255,165,0,0.15);
+            color: var(--orange);
+        }
+
+        .log-status.ok {
+            background: rgba(0,255,136,0.1);
+            color: var(--green);
+        }
+
+        .log-status.fail {
+            background: rgba(255,68,68,0.15);
+            color: var(--red);
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            font-size: 0.6rem;
+        }
+
+        .empty-log {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            text-align: center;
+            padding: 10px;
+        }
+
+        /* ═══════ Loading spinner ═══════ */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top-color: var(--accent-pink);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ═══════ Range Sliders ═══════ */
+        .slider-group {
+            margin-top: 8px;
+            padding: 10px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--bg-secondary);
+            border-radius: 10px;
+        }
+
+        .slider-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+
+        .slider-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .slider-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            min-width: 50px;
+            flex-shrink: 0;
+        }
+
+        .slider-value {
+            font-size: 0.7rem;
+            color: var(--accent-pink);
+            font-weight: 600;
+            min-width: 28px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            flex: 1;
+            height: 4px;
+            background: var(--bg-secondary);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--accent-pink);
+            cursor: pointer;
+            border: 2px solid var(--bg-dark);
+            box-shadow: 0 0 6px rgba(255,105,180,0.4);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--accent-pink);
+            cursor: pointer;
+            border: 2px solid var(--bg-dark);
+            box-shadow: 0 0 6px rgba(255,105,180,0.4);
+        }
+
+        .slider-group.disabled {
+            opacity: 0.35;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- ═══════ Connection Screen ═══════ -->
+        <div id="connect-screen">
+            <div class="app-title">Remote Control</div>
+            <div class="app-subtitle">Conditioning Control Panel</div>
+
+            <div class="code-label">Enter Session Code</div>
+            <div class="code-input-group" id="code-inputs">
+                <input class="code-char" type="text" maxlength="1" inputmode="text" autocomplete="off" autocapitalize="characters">
+                <input class="code-char" type="text" maxlength="1" inputmode="text" autocomplete="off" autocapitalize="characters">
+                <input class="code-char" type="text" maxlength="1" inputmode="text" autocomplete="off" autocapitalize="characters">
+                <input class="code-char" type="text" maxlength="1" inputmode="text" autocomplete="off" autocapitalize="characters">
+                <input class="code-char" type="text" maxlength="1" inputmode="text" autocomplete="off" autocapitalize="characters">
+                <input class="code-char" type="text" maxlength="1" inputmode="text" autocomplete="off" autocapitalize="characters">
+            </div>
+
+            <button class="btn-connect" id="btn-connect" disabled>Connect</button>
+            <div class="connect-error" id="connect-error"></div>
+            <div class="last-code-hint" id="last-code-hint" style="display:none"></div>
+        </div>
+
+        <!-- ═══════ Control Panel ═══════ -->
+        <div id="control-panel">
+            <div class="panel-header">
+                <div class="sub-info">
+                    <h2>Controlling <span id="sub-name">...</span><span class="level-badge" id="sub-level">Lv. 1</span></h2>
+                    <div class="status-row">
+                        <div class="status-dot" id="sub-status-dot"></div>
+                        <span class="status-text" id="sub-status-text">Online</span>
+                    </div>
+                </div>
+                <button class="btn-disconnect" id="btn-disconnect">Disconnect</button>
+            </div>
+
+            <!-- Engine -->
+            <div class="category">
+                <div class="category-title">Engine</div>
+                <div class="btn-grid two-col">
+                    <button class="cmd-btn" data-action="start_engine" data-action-off="stop_engine" data-toggle="engine" data-tier="light">
+                        <span class="icon">&#x2699;&#xFE0F;</span>
+                        <span class="label">Engine</span>
+                    </button>
+                    <button class="cmd-btn" data-action="enable_videos" data-action-off="disable_videos" data-toggle="videos" data-tier="standard">
+                        <span class="icon">&#x1F4F9;</span>
+                        <span class="label">Videos</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Triggers -->
+            <div class="category">
+                <div class="category-title">Triggers</div>
+                <div class="btn-grid">
+                    <button class="cmd-btn" data-action="trigger_flash" data-tier="light">
+                        <span class="icon">&#x26A1;</span>
+                        <span class="label">Flash</span>
+                    </button>
+                    <button class="cmd-btn" data-action="trigger_video" data-tier="standard">
+                        <span class="icon">&#x1F4F9;</span>
+                        <span class="label">Video</span>
+                    </button>
+                    <button class="cmd-btn" data-action="trigger_subliminal" data-tier="light">
+                        <span class="icon">&#x1F4AC;</span>
+                        <span class="label">Subliminal</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Overlays -->
+            <div class="category">
+                <div class="category-title">Overlays</div>
+                <div class="btn-grid">
+                    <button class="cmd-btn" data-action="show_pink_filter" data-action-off="stop_pink_filter" data-toggle="pink_filter" data-tier="light">
+                        <span class="icon">&#x1F338;</span>
+                        <span class="label">Pink Filter</span>
+                    </button>
+                    <button class="cmd-btn" data-action="show_spiral" data-action-off="stop_spiral" data-toggle="spiral" data-tier="light">
+                        <span class="icon">&#x1F300;</span>
+                        <span class="label">Spiral</span>
+                    </button>
+                    <button class="cmd-btn maintenance" data-action="brain_drain" data-tier="none">
+                        <span class="icon">&#x1F9E0;</span>
+                        <span class="label">Brain Drain</span>
+                    </button>
+                </div>
+                <div class="slider-group" id="overlay-sliders" data-tier="light">
+                    <div class="slider-row">
+                        <span class="slider-label">Pink</span>
+                        <input type="range" id="slider-pink" min="0" max="50" step="1" value="25">
+                        <span class="slider-value" id="slider-pink-val">25</span>
+                    </div>
+                    <div class="slider-row">
+                        <span class="slider-label">Spiral</span>
+                        <input type="range" id="slider-spiral" min="0" max="50" step="1" value="25">
+                        <span class="slider-value" id="slider-spiral-val">25</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Games -->
+            <div class="category">
+                <div class="category-title">Games</div>
+                <div class="btn-grid two-col">
+                    <button class="cmd-btn" data-action="start_bubbles" data-action-off="stop_bubbles" data-toggle="bubbles" data-tier="light">
+                        <span class="icon">&#x1FAE7;</span>
+                        <span class="label">Bubbles</span>
+                    </button>
+                    <button class="cmd-btn" data-action="trigger_bubble_count" data-tier="full">
+                        <span class="icon">&#x1F9EE;</span>
+                        <span class="label">Bubble Count</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Haptics -->
+            <div class="category">
+                <div class="category-title">Haptics</div>
+                <div class="btn-grid">
+                    <button class="cmd-btn" data-action="trigger_haptic" data-tier="standard">
+                        <span class="icon">&#x1F4F3;</span>
+                        <span class="label">Trigger</span>
+                    </button>
+                    <button class="cmd-btn" data-action="duck_audio" data-tier="standard">
+                        <span class="icon">&#x1F509;</span>
+                        <span class="label">Duck Audio</span>
+                    </button>
+                    <button class="cmd-btn" data-action="unduck_audio" data-tier="standard">
+                        <span class="icon">&#x1F50A;</span>
+                        <span class="label">Unduck</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Control -->
+            <div class="category">
+                <div class="category-title">Control</div>
+                <div class="btn-grid">
+                    <button class="cmd-btn" data-action="start_autonomy" data-action-off="stop_autonomy" data-toggle="autonomy" data-tier="full">
+                        <span class="icon">&#x1F916;</span>
+                        <span class="label">Autonomy</span>
+                    </button>
+                    <button class="cmd-btn" data-action="enable_strict_lock" data-action-off="disable_strict_lock" data-toggle="strict_lock" data-tier="full">
+                        <span class="icon">&#x1F512;</span>
+                        <span class="label">Strict Lock</span>
+                    </button>
+                    <button class="cmd-btn" data-action="disable_panic" data-action-off="enable_panic" data-toggle="no_panic" data-tier="full">
+                        <span class="icon">&#x1F6AB;</span>
+                        <span class="label">No Panic</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Session -->
+            <div class="category">
+                <div class="category-title">Session</div>
+                <div class="btn-grid two-col">
+                    <button class="cmd-btn" data-action="start_session" data-tier="full">
+                        <span class="icon">&#x25B6;&#xFE0F;</span>
+                        <span class="label">Start</span>
+                    </button>
+                    <button class="cmd-btn" data-action="pause_session" data-tier="full">
+                        <span class="icon">&#x23F8;&#xFE0F;</span>
+                        <span class="label">Pause</span>
+                    </button>
+                    <button class="cmd-btn" data-action="resume_session" data-tier="full">
+                        <span class="icon">&#x23EF;&#xFE0F;</span>
+                        <span class="label">Resume</span>
+                    </button>
+                    <button class="cmd-btn" data-action="stop_session" data-tier="full">
+                        <span class="icon">&#x23F9;&#xFE0F;</span>
+                        <span class="label">Stop</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Feedback Log -->
+            <div class="feedback-section">
+                <div class="feedback-title">Activity Log</div>
+                <div class="feedback-log" id="feedback-log">
+                    <div class="empty-log">No commands sent yet</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        'use strict';
+
+        const API_BASE = 'https://codebambi-proxy.vercel.app';
+        const POLL_INTERVAL = 2500;
+
+        // State
+        let sessionCode = '';
+        let controllerId = '';
+        let sessionTier = 'light';
+        let pollTimer = null;
+        let toggleStates = {};
+        let toggleClickTimes = {}; // track when each toggle was last clicked
+        let logEntries = [];
+
+        // Tier hierarchy
+        const TIER_LEVELS = { light: 0, standard: 1, full: 2 };
+
+        // ═══════ DOM References ═══════
+        const $ = id => document.getElementById(id);
+        const connectScreen = $('connect-screen');
+        const controlPanel = $('control-panel');
+        const codeInputs = document.querySelectorAll('.code-char');
+        const btnConnect = $('btn-connect');
+        const connectError = $('connect-error');
+        const lastCodeHint = $('last-code-hint');
+        const btnDisconnect = $('btn-disconnect');
+        const subName = $('sub-name');
+        const subLevel = $('sub-level');
+        const subStatusDot = $('sub-status-dot');
+        const subStatusText = $('sub-status-text');
+        const feedbackLog = $('feedback-log');
+
+        // ═══════ Code Input Handling ═══════
+        codeInputs.forEach((input, i) => {
+            input.addEventListener('input', (e) => {
+                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                e.target.value = val;
+                if (val && i < 5) codeInputs[i + 1].focus();
+                updateConnectButton();
+            });
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace' && !e.target.value && i > 0) {
+                    codeInputs[i - 1].focus();
+                    codeInputs[i - 1].value = '';
+                    updateConnectButton();
+                }
+                if (e.key === 'Enter') {
+                    btnConnect.click();
+                }
+            });
+
+            input.addEventListener('paste', (e) => {
+                e.preventDefault();
+                const text = (e.clipboardData.getData('text') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+                for (let j = 0; j < 6 && j < text.length; j++) {
+                    codeInputs[j].value = text[j];
+                }
+                if (text.length >= 6) codeInputs[5].focus();
+                updateConnectButton();
+            });
+
+            input.addEventListener('focus', () => input.select());
+        });
+
+        function getCode() {
+            return Array.from(codeInputs).map(i => i.value).join('');
+        }
+
+        function updateConnectButton() {
+            const code = getCode();
+            btnConnect.disabled = code.length < 6;
+        }
+
+        // ═══════ Last Used Code ═══════
+        const lastUsedCode = localStorage.getItem('rc_last_code');
+        if (lastUsedCode) {
+            lastCodeHint.style.display = 'block';
+            lastCodeHint.textContent = `Last used: ${lastUsedCode}`;
+            lastCodeHint.addEventListener('click', () => {
+                for (let i = 0; i < 6 && i < lastUsedCode.length; i++) {
+                    codeInputs[i].value = lastUsedCode[i];
+                }
+                updateConnectButton();
+            });
+        }
+
+        // ═══════ Connect ═══════
+        btnConnect.addEventListener('click', async () => {
+            const code = getCode();
+            if (code.length < 6) return;
+
+            btnConnect.disabled = true;
+            btnConnect.innerHTML = '<span class="spinner"></span>Connecting...';
+            connectError.textContent = '';
+
+            try {
+                const res = await fetch(`${API_BASE}/remote/connect`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    connectError.textContent = data.error || 'Connection failed';
+                    btnConnect.innerHTML = 'Connect';
+                    btnConnect.disabled = false;
+                    return;
+                }
+
+                // Success
+                sessionCode = code;
+                controllerId = data.controller_id;
+                sessionTier = data.tier;
+
+                localStorage.setItem('rc_last_code', code);
+
+                subName.textContent = data.display_name;
+                subLevel.textContent = `Lv. ${data.level}`;
+
+                applyTierRestrictions();
+                applySliderTierRestrictions();
+                showControlPanel();
+                startPolling();
+            } catch (err) {
+                connectError.textContent = 'Network error. Check your connection.';
+                btnConnect.innerHTML = 'Connect';
+                btnConnect.disabled = false;
+            }
+        });
+
+        // ═══════ Disconnect ═══════
+        btnDisconnect.addEventListener('click', async () => {
+            try {
+                await fetch(`${API_BASE}/remote/disconnect`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: sessionCode, controller_id: controllerId })
+                });
+            } catch (e) { }
+
+            stopPolling();
+            showConnectScreen();
+        });
+
+        // ═══════ Screen Transitions ═══════
+        function showControlPanel() {
+            connectScreen.style.display = 'none';
+            controlPanel.style.display = 'block';
+        }
+
+        function showConnectScreen() {
+            controlPanel.style.display = 'none';
+            connectScreen.style.display = 'flex';
+            btnConnect.innerHTML = 'Connect';
+            btnConnect.disabled = false;
+            codeInputs.forEach(i => i.value = '');
+            toggleStates = {};
+            logEntries = [];
+            renderLog();
+            sessionCode = '';
+            controllerId = '';
+        }
+
+        // ═══════ Tier Restrictions ═══════
+        function applyTierRestrictions() {
+            const myLevel = TIER_LEVELS[sessionTier] || 0;
+            document.querySelectorAll('.cmd-btn').forEach(btn => {
+                const requiredTier = btn.dataset.tier;
+                if (requiredTier === 'none') return; // maintenance items
+                const reqLevel = TIER_LEVELS[requiredTier] || 0;
+                if (reqLevel > myLevel) {
+                    btn.classList.add('disabled');
+                } else {
+                    btn.classList.remove('disabled');
+                }
+            });
+        }
+
+        // ═══════ Opacity Sliders ═══════
+        const sliderPink = document.getElementById('slider-pink');
+        const sliderPinkVal = document.getElementById('slider-pink-val');
+        const sliderSpiral = document.getElementById('slider-spiral');
+        const sliderSpiralVal = document.getElementById('slider-spiral-val');
+        const overlaySliders = document.getElementById('overlay-sliders');
+
+        let sliderDebounceTimers = {};
+
+        function setupSlider(slider, valEl, action) {
+            slider.addEventListener('input', () => {
+                valEl.textContent = slider.value;
+                clearTimeout(sliderDebounceTimers[action]);
+                sliderDebounceTimers[action] = setTimeout(() => {
+                    sendCommand(action, { value: parseInt(slider.value) });
+                }, 300);
+            });
+        }
+
+        setupSlider(sliderPink, sliderPinkVal, 'set_pink_opacity');
+        setupSlider(sliderSpiral, sliderSpiralVal, 'set_spiral_opacity');
+
+        function applySliderTierRestrictions() {
+            const myLevel = TIER_LEVELS[sessionTier] || 0;
+            const reqLevel = TIER_LEVELS[overlaySliders.dataset.tier] || 0;
+            if (reqLevel > myLevel) {
+                overlaySliders.classList.add('disabled');
+            } else {
+                overlaySliders.classList.remove('disabled');
+            }
+        }
+
+        // ═══════ Command Buttons ═══════
+        document.querySelectorAll('.cmd-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                if (btn.classList.contains('disabled') || btn.classList.contains('maintenance')) return;
+
+                // Ripple effect
+                const ripple = document.createElement('span');
+                ripple.className = 'ripple';
+                const rect = btn.getBoundingClientRect();
+                const x = (e.clientX || rect.left + rect.width / 2) - rect.left;
+                const y = (e.clientY || rect.top + rect.height / 2) - rect.top;
+                ripple.style.left = x + 'px';
+                ripple.style.top = y + 'px';
+                ripple.style.width = ripple.style.height = Math.max(rect.width, rect.height) + 'px';
+                btn.appendChild(ripple);
+                setTimeout(() => ripple.remove(), 500);
+
+                // Determine action (handle toggle)
+                const toggleKey = btn.dataset.toggle;
+                let action;
+
+                if (toggleKey) {
+                    const isActive = toggleStates[toggleKey] || false;
+                    toggleClickTimes[toggleKey] = Date.now();
+                    if (isActive) {
+                        action = btn.dataset.actionOff;
+                        toggleStates[toggleKey] = false;
+                        btn.classList.remove('active');
+                    } else {
+                        action = btn.dataset.action;
+                        toggleStates[toggleKey] = true;
+                        btn.classList.add('active');
+                    }
+                } else {
+                    action = btn.dataset.action;
+                }
+
+                if (!action) return;
+                await sendCommand(action);
+            });
+        });
+
+        // ═══════ Send Command ═══════
+        async function sendCommand(action, params) {
+            const entry = { action, status: 'sent', time: new Date() };
+            logEntries.unshift(entry);
+            if (logEntries.length > 30) logEntries.pop();
+            renderLog();
+
+            try {
+                const res = await fetch(`${API_BASE}/remote/command`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        code: sessionCode,
+                        controller_id: controllerId,
+                        action,
+                        params: params || {}
+                    })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    entry.status = 'ok';
+                    entry.commandId = data.command_id;
+                } else {
+                    entry.status = 'fail';
+                    entry.error = data.error;
+
+                    // If session expired or controller invalid, disconnect
+                    if (res.status === 404 || res.status === 403) {
+                        stopPolling();
+                        showConnectScreen();
+                    }
+                }
+            } catch (err) {
+                entry.status = 'fail';
+                entry.error = 'Network error';
+            }
+
+            renderLog();
+        }
+
+        // ═══════ Status Polling ═══════
+        function startPolling() {
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = setInterval(pollStatus, POLL_INTERVAL);
+            pollStatus();
+        }
+
+        function stopPolling() {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        }
+
+        async function pollStatus() {
+            if (!sessionCode || !controllerId) return;
+
+            try {
+                const res = await fetch(
+                    `${API_BASE}/remote/status/${sessionCode}?controller_id=${controllerId}`
+                );
+
+                if (!res.ok) {
+                    if (res.status === 404 || res.status === 403) {
+                        stopPolling();
+                        showConnectScreen();
+                        return;
+                    }
+                    return;
+                }
+
+                const data = await res.json();
+
+                // Update online status
+                if (data.online) {
+                    subStatusDot.className = 'status-dot';
+                    subStatusText.textContent = 'Online';
+                } else {
+                    subStatusDot.className = 'status-dot offline';
+                    subStatusText.textContent = 'Offline';
+                }
+
+                // Update level
+                if (data.level) {
+                    subLevel.textContent = `Lv. ${data.level}`;
+                }
+
+                // Sync toggle states from active services
+                if (data.active_services) {
+                    syncToggleStates(data.active_services);
+                }
+
+                // Update log if last_executed changed
+                if (data.last_executed && data.last_executed.id) {
+                    const existing = logEntries.find(e => e.commandId === data.last_executed.id);
+                    if (existing && existing.status !== 'ok') {
+                        existing.status = data.last_executed.status || 'ok';
+                        renderLog();
+                    }
+                }
+            } catch (err) {
+                // Network error, show as offline
+                subStatusDot.className = 'status-dot offline';
+                subStatusText.textContent = 'Connection lost';
+            }
+        }
+
+        function syncToggleStates(activeServices) {
+            const GRACE_PERIOD_MS = 5000; // don't override user clicks for 5 seconds
+            const now = Date.now();
+
+            const toggleMap = {
+                'pink_filter': 'pink_filter',
+                'spiral': 'spiral',
+                'strict_lock': 'strict_lock',
+                'no_panic': 'no_panic',
+                'autonomy': 'autonomy',
+                'engine': 'engine',
+                'videos': 'videos'
+            };
+
+            document.querySelectorAll('.cmd-btn[data-toggle]').forEach(btn => {
+                const key = btn.dataset.toggle;
+                const svcKey = toggleMap[key];
+                if (!svcKey) return;
+
+                // Skip if user clicked this toggle recently
+                const lastClick = toggleClickTimes[key] || 0;
+                if (now - lastClick < GRACE_PERIOD_MS) return;
+
+                const isActive = activeServices.includes(svcKey);
+                toggleStates[key] = isActive;
+                if (isActive) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+
+        // ═══════ Feedback Log ═══════
+        function renderLog() {
+            if (logEntries.length === 0) {
+                feedbackLog.innerHTML = '<div class="empty-log">No commands sent yet</div>';
+                return;
+            }
+
+            feedbackLog.innerHTML = logEntries.map(entry => {
+                const actionLabel = entry.action.replace(/_/g, ' ');
+                const statusClass = entry.status;
+                const statusLabel = entry.status === 'ok' ? 'Done' :
+                                   entry.status === 'fail' ? 'Failed' : 'Sent';
+                const time = entry.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                return `<div class="log-entry">
+                    <span class="log-action">${actionLabel}</span>
+                    <span class="log-status ${statusClass}">${statusLabel}</span>
+                    <span class="log-time">${time}</span>
+                </div>`;
+            }).join('');
+        }
+
+        // ═══════ Disconnect on page close/refresh ═══════
+        window.addEventListener('beforeunload', () => {
+            if (sessionCode && controllerId) {
+                navigator.sendBeacon(
+                    `${API_BASE}/remote/disconnect`,
+                    new Blob([JSON.stringify({ code: sessionCode, controller_id: controllerId })],
+                        { type: 'application/json' })
+                );
+            }
+        });
+
+        // ═══════ Auto-focus first input ═══════
+        codeInputs[0].focus();
+    })();
+    </script>
+</body>
+</html>

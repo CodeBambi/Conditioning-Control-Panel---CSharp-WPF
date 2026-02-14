@@ -47,6 +47,7 @@ namespace ConditioningControlPanel
         private const int SW_SHOW = 5;
 
         private bool _isRunning = false;
+        public bool IsEngineRunning => _isRunning;
         private bool _isLoading = true;
         private BrowserService? _browser;
         private bool _browserInitialized = false;
@@ -218,6 +219,9 @@ namespace ConditioningControlPanel
             StartupManager.SyncWithSettings(App.Settings.Current.RunOnStartup);
 
             _isLoading = false;
+
+            // Initialize phrase count display
+            UpdatePhraseCountDisplay();
 
             // Initialize achievement grid and subscribe to unlock events
             PopulateAchievementGrid();
@@ -4506,6 +4510,20 @@ namespace ConditioningControlPanel
             UpdateCommunityPromptsUI();
         }
 
+        private void BtnManagePhrases_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new CompanionPhraseEditorDialog { Owner = this };
+            dialog.ShowDialog();
+            UpdatePhraseCountDisplay();
+        }
+
+        private void UpdatePhraseCountDisplay()
+        {
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var count = App.CompanionPhrases?.GetActivePhraseCount(mode) ?? 0;
+            TxtPhraseCount.Text = $"{count} active";
+        }
+
         private void ChkAiChat_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
@@ -5638,6 +5656,305 @@ namespace ConditioningControlPanel
 
             border.Child = mainStack;
             return border;
+        }
+
+        #endregion
+
+        #region Remote Control Handlers
+
+        private async void ChkRemoteControlEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var isEnabled = ChkRemoteControlEnabled.IsChecked ?? false;
+
+            if (isEnabled)
+            {
+                // Must be logged in
+                if (!App.IsLoggedIn || string.IsNullOrEmpty(App.UnifiedUserId))
+                {
+                    _isLoading = true;
+                    ChkRemoteControlEnabled.IsChecked = false;
+                    _isLoading = false;
+                    ShowStyledDialog("Login Required", "You must be logged in to use Remote Control.", "OK", "");
+                    return;
+                }
+
+                var tier = GetSelectedRemoteTier();
+
+                // Show consent waiver
+                if (!ShowRemoteControlWaiver(tier))
+                {
+                    _isLoading = true;
+                    ChkRemoteControlEnabled.IsChecked = false;
+                    _isLoading = false;
+                    return;
+                }
+
+                // Start session
+                RemoteControlPanel.Visibility = System.Windows.Visibility.Visible;
+                var code = await App.RemoteControl.StartSessionAsync(tier);
+                if (code == null)
+                {
+                    _isLoading = true;
+                    ChkRemoteControlEnabled.IsChecked = false;
+                    _isLoading = false;
+                    RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
+                    ShowStyledDialog("Error", "Failed to start remote control session. Check your connection.", "OK", "");
+                    return;
+                }
+
+                TxtRemoteCode.Text = string.Join(" ", code.ToCharArray());
+                RemoteCodePanel.Visibility = System.Windows.Visibility.Visible;
+                RemoteStatusPanel.Visibility = System.Windows.Visibility.Visible;
+                BtnStopRemote.Visibility = System.Windows.Visibility.Visible;
+                UpdateRemoteStatus(false);
+
+                // Listen for controller connection changes
+                App.RemoteControl.ControllerConnectedChanged += OnRemoteControllerChanged;
+                App.RemoteControl.SessionEnded += OnRemoteSessionEnded;
+            }
+            else
+            {
+                await StopRemoteControl();
+            }
+        }
+
+        private string GetSelectedRemoteTier()
+        {
+            return (CmbRemoteTier.SelectedIndex) switch
+            {
+                0 => "light",
+                1 => "standard",
+                2 => "full",
+                _ => "light"
+            };
+        }
+
+        private bool ShowRemoteControlWaiver(string tier)
+        {
+            var actions = new System.Text.StringBuilder();
+            actions.AppendLine("  - Trigger flash images (from YOUR image folder)");
+            actions.AppendLine("  - Trigger subliminal messages (from YOUR subliminal pool)");
+            actions.AppendLine("  - Toggle overlays (pink filter, spiral)");
+            actions.AppendLine("  - Start/stop bubbles");
+
+            if (tier is "standard" or "full")
+            {
+                actions.AppendLine("  - Trigger mandatory videos (from YOUR video folder)");
+                actions.AppendLine("  - Trigger haptic device patterns");
+                actions.AppendLine("  - Duck/unduck audio");
+            }
+
+            if (tier == "full")
+            {
+                actions.AppendLine("  - Start/stop autonomy mode");
+                actions.AppendLine("  - Start/pause/stop sessions");
+                actions.AppendLine("  - Enable strict lock (videos cannot be skipped)");
+                actions.AppendLine("  - Disable panic button (ESC key won't work)");
+            }
+
+            var message = $"You are about to allow another person to remotely control parts of your app.\n\n" +
+                          $"The Controller will be able to:\n{actions}\n" +
+                          $"All media content shown comes from YOUR local files and settings.\n" +
+                          $"You assume full responsibility for this interaction.\n" +
+                          $"You can stop the session at ANY time by clicking \"Stop Session\" or closing the app.\n" +
+                          $"The session code expires after 4 hours automatically.";
+
+            var confirmed = WarningDialog.ShowDoubleWarning(this,
+                "Remote Control — Consent & Responsibility",
+                message);
+
+            return confirmed;
+        }
+
+        private async void CmbRemoteTier_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (!App.RemoteControl?.IsActive == true) return;
+
+            // If session is active and tier changed, restart with new tier
+            var newTier = GetSelectedRemoteTier();
+            if (newTier != App.RemoteControl.Tier)
+            {
+                if (!ShowRemoteControlWaiver(newTier))
+                    return;
+
+                await App.RemoteControl.StopSessionAsync();
+                var code = await App.RemoteControl.StartSessionAsync(newTier);
+                if (code != null)
+                {
+                    TxtRemoteCode.Text = string.Join(" ", code.ToCharArray());
+                    UpdateRemoteStatus(false);
+                }
+            }
+        }
+
+        private void BtnCopyRemoteCode_Click(object sender, RoutedEventArgs e)
+        {
+            var code = App.RemoteControl?.SessionCode;
+            if (!string.IsNullOrEmpty(code))
+            {
+                System.Windows.Clipboard.SetText(code);
+                BtnCopyRemoteCode.Content = "Copied!";
+                var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                timer.Tick += (s, _) => { BtnCopyRemoteCode.Content = "Copy"; timer.Stop(); };
+                timer.Start();
+            }
+        }
+
+        private async void BtnStopRemote_Click(object sender, RoutedEventArgs e)
+        {
+            await StopRemoteControl();
+            _isLoading = true;
+            ChkRemoteControlEnabled.IsChecked = false;
+            _isLoading = false;
+        }
+
+        private async Task StopRemoteControl()
+        {
+            if (App.RemoteControl != null)
+            {
+                App.RemoteControl.ControllerConnectedChanged -= OnRemoteControllerChanged;
+                App.RemoteControl.SessionEnded -= OnRemoteSessionEnded;
+                await App.RemoteControl.StopSessionAsync();
+            }
+
+            RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
+            RemoteCodePanel.Visibility = System.Windows.Visibility.Collapsed;
+            RemoteStatusPanel.Visibility = System.Windows.Visibility.Collapsed;
+            BtnStopRemote.Visibility = System.Windows.Visibility.Collapsed;
+        }
+
+        private void OnRemoteControllerChanged(object? sender, EventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                var connected = App.RemoteControl?.ControllerConnected ?? false;
+                UpdateRemoteStatus(connected);
+            });
+        }
+
+        private void OnRemoteSessionEnded(object? sender, EventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                _isLoading = true;
+                ChkRemoteControlEnabled.IsChecked = false;
+                _isLoading = false;
+                RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
+                RemoteCodePanel.Visibility = System.Windows.Visibility.Collapsed;
+                RemoteStatusPanel.Visibility = System.Windows.Visibility.Collapsed;
+                BtnStopRemote.Visibility = System.Windows.Visibility.Collapsed;
+            });
+        }
+
+        private void UpdateRemoteStatus(bool controllerConnected)
+        {
+            if (controllerConnected)
+            {
+                RemoteStatusDot.Fill = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0x00, 0xFF, 0x88));
+                TxtRemoteStatus.Text = "Controller connected";
+                TxtRemoteStatus.Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0x00, 0xFF, 0x88));
+            }
+            else
+            {
+                RemoteStatusDot.Fill = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0xFF, 0xA5, 0x00));
+                TxtRemoteStatus.Text = "Waiting for controller...";
+                TxtRemoteStatus.Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0xA0, 0xA0, 0xA0));
+            }
+        }
+
+        // Methods called by RemoteControlService for session commands
+        internal async void StartSessionFromRemote(Models.Session session)
+        {
+            try
+            {
+                if (_sessionEngine == null)
+                {
+                    _sessionEngine = new Services.SessionEngine(this);
+                    _sessionEngine.SessionCompleted += OnSessionCompleted;
+                    _sessionEngine.SessionStopped += OnSessionStopped;
+                }
+
+                if (!_isRunning)
+                {
+                    BtnStart_Click(this, new RoutedEventArgs());
+                }
+
+                App.IsSessionRunning = true;
+                await _sessionEngine.StartSessionAsync(session);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "[RemoteControl] Failed to start session from remote");
+            }
+        }
+
+        internal void PauseSessionFromRemote()
+        {
+            try
+            {
+                if (_sessionEngine?.IsRunning == true && !_sessionEngine.IsPaused)
+                    _sessionEngine.PauseSession();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "[RemoteControl] Failed to pause session from remote");
+            }
+        }
+
+        internal void ResumeSessionFromRemote()
+        {
+            try
+            {
+                if (_sessionEngine?.IsRunning == true && _sessionEngine.IsPaused)
+                    _sessionEngine.ResumeSession();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "[RemoteControl] Failed to resume session from remote");
+            }
+        }
+
+        internal void StopSessionFromRemote()
+        {
+            try
+            {
+                if (_sessionEngine?.IsRunning == true)
+                    _sessionEngine.StopSession();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "[RemoteControl] Failed to stop session from remote");
+            }
+        }
+
+        internal void StartEngineFromRemote()
+        {
+            try
+            {
+                if (!_isRunning) StartEngine();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "[RemoteControl] Failed to start engine from remote");
+            }
+        }
+
+        internal void StopEngineFromRemote()
+        {
+            try
+            {
+                if (_isRunning) StopEngine();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "[RemoteControl] Failed to stop engine from remote");
+            }
         }
 
         #endregion
