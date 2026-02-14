@@ -302,6 +302,10 @@ namespace ConditioningControlPanel.Services
                 App.BrainDrain?.Stop();
                 App.LockCard?.Stop();
 
+                // Force close any open game/lock windows
+                LockCardWindow.ForceCloseAll();
+                BubbleCountWindow.ForceCloseAll();
+
                 // Turn off overlays
                 if (App.Settings?.Current != null)
                 {

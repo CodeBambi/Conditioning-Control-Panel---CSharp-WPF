@@ -557,10 +557,10 @@ namespace ConditioningControlPanel
         {
             double baseRate = _difficulty switch
             {
-                BubbleCountService.Difficulty.Easy => 6,
-                BubbleCountService.Difficulty.Medium => 10,
-                BubbleCountService.Difficulty.Hard => 16,
-                _ => 10
+                BubbleCountService.Difficulty.Easy => 3,
+                BubbleCountService.Difficulty.Medium => 5,
+                BubbleCountService.Difficulty.Hard => 8,
+                _ => 5
             };
 
             var scaledCount = (baseRate / 30.0) * _videoDurationSeconds;
