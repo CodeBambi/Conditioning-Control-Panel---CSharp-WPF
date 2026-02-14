@@ -444,6 +444,11 @@ namespace ConditioningControlPanel.Services
                             }
                             break;
 
+                        case "trigger_panic":
+                            (System.Windows.Application.Current.MainWindow as MainWindow)
+                                ?.TriggerPanicFromRemote();
+                            break;
+
                         case "start_engine":
                             (System.Windows.Application.Current.MainWindow as MainWindow)
                                 ?.StartEngineFromRemote();

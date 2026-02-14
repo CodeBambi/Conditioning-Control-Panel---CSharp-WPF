@@ -518,6 +518,108 @@
             opacity: 0.35;
             pointer-events: none;
         }
+
+        /* Panic button */
+        .cmd-btn.panic-btn {
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        .cmd-btn.panic-btn:not(.disabled):hover {
+            border-color: var(--red);
+            box-shadow: 0 0 12px rgba(255,68,68,0.3);
+            background: rgba(255,68,68,0.1);
+        }
+
+        .cmd-btn.panic-btn:active:not(.disabled) {
+            background: rgba(255,68,68,0.2);
+        }
+
+        .cmd-btn.panic-btn .ripple {
+            background: rgba(255,68,68,0.3);
+        }
+
+        /* Guide section */
+        .guide-section {
+            margin-top: 20px;
+            padding-top: 14px;
+            border-top: 1px solid rgba(255,105,180,0.1);
+        }
+
+        .guide-section details {
+            background: var(--bg-primary);
+            border: 1px solid var(--bg-secondary);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .guide-section summary {
+            padding: 12px 16px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .guide-section summary::-webkit-details-marker { display: none; }
+        .guide-section summary::marker { display: none; content: ''; }
+
+        .guide-section summary::after {
+            content: '\25B6';
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            transition: transform 0.2s;
+        }
+
+        .guide-section details[open] summary::after {
+            transform: rotate(90deg);
+        }
+
+        .guide-content {
+            padding: 0 16px 16px;
+        }
+
+        .guide-category {
+            margin-bottom: 14px;
+        }
+
+        .guide-category:last-child {
+            margin-bottom: 0;
+        }
+
+        .guide-category-title {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--accent-pink);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .guide-item {
+            display: flex;
+            gap: 8px;
+            padding: 4px 0;
+            font-size: 0.72rem;
+            line-height: 1.4;
+        }
+
+        .guide-item-name {
+            color: var(--text-primary);
+            font-weight: 500;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .guide-item-desc {
+            color: var(--text-muted);
+        }
     </style>
 </head>
 <body>
@@ -558,7 +660,7 @@
             <!-- Engine -->
             <div class="category">
                 <div class="category-title">Engine</div>
-                <div class="btn-grid two-col">
+                <div class="btn-grid">
                     <button class="cmd-btn" data-action="start_engine" data-action-off="stop_engine" data-toggle="engine" data-tier="light">
                         <span class="icon">&#x2699;&#xFE0F;</span>
                         <span class="label">Engine</span>
@@ -566,6 +668,10 @@
                     <button class="cmd-btn" data-action="enable_videos" data-action-off="disable_videos" data-toggle="videos" data-tier="standard">
                         <span class="icon">&#x1F4F9;</span>
                         <span class="label">Videos</span>
+                    </button>
+                    <button class="cmd-btn panic-btn" data-action="trigger_panic" data-tier="light">
+                        <span class="icon">&#x1F6D1;</span>
+                        <span class="label">Panic</span>
                     </button>
                 </div>
             </div>
@@ -673,35 +779,111 @@
                 </div>
             </div>
 
-            <!-- Session -->
-            <div class="category">
-                <div class="category-title">Session</div>
-                <div class="btn-grid two-col">
-                    <button class="cmd-btn" data-action="start_session" data-tier="full">
-                        <span class="icon">&#x25B6;&#xFE0F;</span>
-                        <span class="label">Start</span>
-                    </button>
-                    <button class="cmd-btn" data-action="pause_session" data-tier="full">
-                        <span class="icon">&#x23F8;&#xFE0F;</span>
-                        <span class="label">Pause</span>
-                    </button>
-                    <button class="cmd-btn" data-action="resume_session" data-tier="full">
-                        <span class="icon">&#x23EF;&#xFE0F;</span>
-                        <span class="label">Resume</span>
-                    </button>
-                    <button class="cmd-btn" data-action="stop_session" data-tier="full">
-                        <span class="icon">&#x23F9;&#xFE0F;</span>
-                        <span class="label">Stop</span>
-                    </button>
-                </div>
-            </div>
-
             <!-- Feedback Log -->
             <div class="feedback-section">
                 <div class="feedback-title">Activity Log</div>
                 <div class="feedback-log" id="feedback-log">
                     <div class="empty-log">No commands sent yet</div>
                 </div>
+            </div>
+
+            <!-- Guide -->
+            <div class="guide-section">
+                <details>
+                    <summary>Guide</summary>
+                    <div class="guide-content">
+                        <div class="guide-category">
+                            <div class="guide-category-title">Engine</div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Engine</span>
+                                <span class="guide-item-desc">&mdash; Start or stop the conditioning engine</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Videos</span>
+                                <span class="guide-item-desc">&mdash; Enable or disable mandatory videos</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Panic</span>
+                                <span class="guide-item-desc">&mdash; Emergency stop: kills audio, stops engine, restores window</span>
+                            </div>
+                        </div>
+                        <div class="guide-category">
+                            <div class="guide-category-title">Triggers</div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Flash</span>
+                                <span class="guide-item-desc">&mdash; Show a flash image</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Video</span>
+                                <span class="guide-item-desc">&mdash; Trigger a mandatory video</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Subliminal</span>
+                                <span class="guide-item-desc">&mdash; Flash a subliminal message</span>
+                            </div>
+                        </div>
+                        <div class="guide-category">
+                            <div class="guide-category-title">Overlays</div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Pink Filter</span>
+                                <span class="guide-item-desc">&mdash; Tinted pink screen overlay</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Spiral</span>
+                                <span class="guide-item-desc">&mdash; Animated spiral overlay</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Sliders</span>
+                                <span class="guide-item-desc">&mdash; Adjust pink filter and spiral opacity</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Brain Drain</span>
+                                <span class="guide-item-desc">&mdash; Coming soon</span>
+                            </div>
+                        </div>
+                        <div class="guide-category">
+                            <div class="guide-category-title">Games</div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Bubbles</span>
+                                <span class="guide-item-desc">&mdash; Floating bubble popping game</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Bubble Count</span>
+                                <span class="guide-item-desc">&mdash; Video counting minigame</span>
+                            </div>
+                        </div>
+                        <div class="guide-category">
+                            <div class="guide-category-title">Haptics</div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Trigger</span>
+                                <span class="guide-item-desc">&mdash; Vibrate connected device</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Duck Audio</span>
+                                <span class="guide-item-desc">&mdash; Lower system volume</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Unduck</span>
+                                <span class="guide-item-desc">&mdash; Restore system volume</span>
+                            </div>
+                        </div>
+                        <div class="guide-category">
+                            <div class="guide-category-title">Control</div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Autonomy</span>
+                                <span class="guide-item-desc">&mdash; AI takes control of the app</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Strict Lock</span>
+                                <span class="guide-item-desc">&mdash; Prevents skipping mandatory videos</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">No Panic</span>
+                                <span class="guide-item-desc">&mdash; Disables the ESC panic key</span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
             </div>
         </div>
     </div>

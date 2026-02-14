@@ -5965,6 +5965,37 @@ namespace ConditioningControlPanel
             }
         }
 
+        internal void TriggerPanicFromRemote()
+        {
+            try
+            {
+                App.Logger?.Information("[RemoteControl] Panic triggered from remote");
+
+                App.KillAllAudio();
+                App.Autonomy?.CancelActivePulses();
+
+                if (_sessionEngine != null && _sessionEngine.IsRunning && !_sessionEngine.IsPaused)
+                {
+                    _sessionEngine.PauseSession();
+                }
+
+                if (_isRunning) StopEngine();
+
+                App.InteractionQueue?.ForceReset();
+
+                Show();
+                WindowState = WindowState.Normal;
+                Activate();
+                Topmost = true;
+                Topmost = false;
+                ShowAvatarTube();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "[RemoteControl] Failed to trigger panic from remote");
+            }
+        }
+
         #endregion
 
         private void ChkMuteAvatar_Changed(object sender, RoutedEventArgs e)
