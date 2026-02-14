@@ -2915,6 +2915,22 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnLabGuide_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/guide-lab.html",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open Lab guide link");
+            }
+        }
+
         private void ChkDiscordRichPresence_Changed(object sender, RoutedEventArgs e)
         {
             // Get the state from whichever checkbox was clicked
@@ -3150,6 +3166,10 @@ namespace ConditioningControlPanel
                 case "lab":
                     LabTab.Visibility = Visibility.Visible;
                     BtnLab.Style = activeStyle;
+                    var hasLabAccess = App.Patreon?.CurrentTier >= PatreonTier.Level2 || App.Patreon?.IsWhitelisted == true;
+                    LabLockedOverlay.Visibility = hasLabAccess ? Visibility.Collapsed : Visibility.Visible;
+                    LabContentBorder.Opacity = hasLabAccess ? 1.0 : 0.15;
+                    LabContentBorder.IsHitTestVisible = hasLabAccess;
                     break;
             }
         }
@@ -7952,6 +7972,7 @@ namespace ConditioningControlPanel
             // Lab tab
             SetHelpContent(HelpBtnKeywordTriggers, "KeywordTriggers");
             SetHelpContent(HelpBtnScreenOcr, "ScreenOcr");
+            SetHelpContent(HelpBtnRemoteControl, "RemoteControl");
 
             // Side panels
             SetHelpContent(HelpBtnAchievements, "Achievements");

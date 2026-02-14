@@ -63,10 +63,10 @@
             <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
             <Setter Property="BorderThickness" Value="2"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="MinWidth" Value="110"/>
-            <Setter Property="Height" Value="36"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="7,5"/>
+            <Setter Property="MinWidth" Value="80"/>
+            <Setter Property="Height" Value="32"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -95,10 +95,10 @@
             <Setter Property="BorderBrush" Value="White"/>
             <Setter Property="BorderThickness" Value="2"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="MinWidth" Value="110"/>
-            <Setter Property="Height" Value="36"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="7,5"/>
+            <Setter Property="MinWidth" Value="80"/>
+            <Setter Property="Height" Value="32"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -1304,52 +1304,52 @@
                 <!-- Row 1 Tab Buttons: Settings, Presets, Progression, Assets -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="BtnSettings" Tag="Settings" Style="{StaticResource TabButtonActive}"
-                            Margin="6,0" Click="BtnSettings_Click" ToolTip="Dashboard">
+                            Margin="3,0" Click="BtnSettings_Click" ToolTip="Dashboard">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📊" FontSize="14" Margin="0,0,6,0"/>
-                            <TextBlock Text="Dashboard" FontSize="12"/>
+                            <TextBlock Text="📊" FontSize="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="Dashboard" FontSize="11"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnPresets" Tag="Presets" Style="{StaticResource TabButton}"
-                            Margin="6,0" Click="BtnPresets_Click" ToolTip="Presets &amp; Sessions">
+                            Margin="3,0" Click="BtnPresets_Click" ToolTip="Presets &amp; Sessions">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📋" FontSize="14" Margin="0,0,6,0"/>
-                            <TextBlock Text="Presets" FontSize="12"/>
+                            <TextBlock Text="📋" FontSize="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="Presets" FontSize="11"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnProgression" Tag="Progression" Style="{StaticResource TabButton}"
-                            Margin="6,0" Click="BtnProgression_Click" ToolTip="Level &amp; Progression">
+                            Margin="3,0" Click="BtnProgression_Click" ToolTip="Level &amp; Progression">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📊" FontSize="14" Margin="0,0,6,0"/>
-                            <TextBlock Text="Progression" FontSize="12"/>
+                            <TextBlock Text="📊" FontSize="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="Progression" FontSize="11"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnQuests" Tag="Quests" Style="{StaticResource TabButton}"
-                            Margin="6,0" Click="BtnQuests_Click" ToolTip="Daily &amp; Weekly Quests">
+                            Margin="3,0" Click="BtnQuests_Click" ToolTip="Daily &amp; Weekly Quests">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📜" FontSize="14" Margin="0,0,6,0"/>
-                            <TextBlock Text="Quests" FontSize="12"/>
+                            <TextBlock Text="📜" FontSize="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="Quests" FontSize="11"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnEnhancements" Tag="Enhancements" Style="{StaticResource TabButton}"
-                            Margin="6,0" Click="BtnEnhancements_Click" ToolTip="Bimbo Enhancement Tree">
+                            Margin="3,0" Click="BtnEnhancements_Click" ToolTip="Bimbo Enhancement Tree">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="✨" FontSize="14" Margin="0,0,6,0"/>
-                            <TextBlock Text="Enhancements" FontSize="12"/>
+                            <TextBlock Text="✨" FontSize="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="Enhancements" FontSize="11"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource TabButton}"
-                            Margin="6,0" Click="BtnAssets_Click" ToolTip="Assets &amp; Content Packs">
+                            Margin="3,0" Click="BtnAssets_Click" ToolTip="Assets &amp; Content Packs">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📁" FontSize="14" Margin="0,0,6,0"/>
-                            <TextBlock Text="Assets" FontSize="12"/>
+                            <TextBlock Text="📁" FontSize="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="Assets" FontSize="11"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnLab" Tag="Lab" Style="{StaticResource TabButton}"
-                            Margin="6,0" Click="BtnLab_Click" ToolTip="The Lab — Experimental Features">
+                            Margin="3,0" Click="BtnLab_Click" ToolTip="The Lab — Experimental Features">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🧪" FontSize="14" Margin="0,0,6,0"/>
-                            <TextBlock Text="The Lab" FontSize="12"/>
+                            <TextBlock Text="🧪" FontSize="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="The Lab" FontSize="11"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
@@ -1553,27 +1553,27 @@
                     <Button Grid.Column="0" x:Name="BtnAchievements" Tag="Achievements" Style="{StaticResource TabButton}"
                             Margin="2,0" Click="BtnAchievements_Click" ToolTip="Achievements">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🏆" FontSize="11" Margin="0,0,3,0"/>
+                            <TextBlock Text="🏆" FontSize="10" Margin="0,0,3,0"/>
                             <TextBlock Text="Achievements" FontSize="10"/>
                         </StackPanel>
                     </Button>
                     <Button Grid.Column="1" x:Name="BtnLeaderboard" Tag="Leaderboard" Style="{StaticResource TabButton}"
                             Margin="2,0" Click="BtnLeaderboard_Click" ToolTip="Leaderboard">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📊" FontSize="11" Margin="0,0,3,0"/>
+                            <TextBlock Text="📊" FontSize="10" Margin="0,0,3,0"/>
                             <TextBlock Text="Leaderboard" FontSize="10"/>
                         </StackPanel>
                     </Button>
                     <Button Grid.Column="2" x:Name="BtnCompanion" Tag="Companion" Style="{StaticResource TabButton}"
                             Margin="2,0" Click="BtnCompanion_Click" ToolTip="Companion Settings">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🤖" FontSize="11" Margin="0,0,3,0"/>
+                            <TextBlock Text="🤖" FontSize="10" Margin="0,0,3,0"/>
                             <TextBlock Text="Companion" FontSize="10"/>
                         </StackPanel>
                     </Button>
 
                     <Button Grid.Column="3" x:Name="BtnDiscordTab" Tag="Profile" Click="BtnDiscordTab_Click"
-                            ToolTip="Profile" Cursor="Hand" Height="28" Margin="2,0">
+                            ToolTip="Profile" Cursor="Hand" Height="32" Margin="2,0">
                         <Button.Style>
                             <Style TargetType="Button">
                                 <Setter Property="Background" Value="#5865F2"/>
@@ -1585,7 +1585,7 @@
                                         <ControlTemplate TargetType="Button">
                                             <Border x:Name="border" Background="{TemplateBinding Background}"
                                                     CornerRadius="6" BorderThickness="2" BorderBrush="#4752C4"
-                                                    Padding="8,4">
+                                                    Padding="7,3">
                                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
                                             <ControlTemplate.Triggers>
@@ -1600,12 +1600,12 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="👤" FontSize="11" Margin="0,0,4,0"/>
+                            <TextBlock Text="👤" FontSize="10" Margin="0,0,3,0"/>
                             <TextBlock Text="Profile" FontSize="10"/>
                         </StackPanel>
                     </Button>
                     <Button Grid.Column="4" x:Name="BtnPatreonExclusives" Tag="Patreon" Click="BtnPatreonExclusives_Click"
-                            ToolTip="View Patreon exclusive features" Cursor="Hand" Height="28" Margin="2,0">
+                            ToolTip="View Patreon exclusive features" Cursor="Hand" Height="32" Margin="2,0">
                         <Button.Style>
                             <Style TargetType="Button">
                                 <Setter Property="Background" Value="#FF424D"/>
@@ -1617,7 +1617,7 @@
                                         <ControlTemplate TargetType="Button">
                                             <Border x:Name="border" Background="{TemplateBinding Background}"
                                                     CornerRadius="6" BorderThickness="2" BorderBrush="#E8363F"
-                                                    Padding="8,4">
+                                                    Padding="7,3">
                                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
                                             <ControlTemplate.Triggers>
@@ -1632,15 +1632,15 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⭐" FontSize="11" Margin="0,0,4,0"/>
+                            <TextBlock Text="⭐" FontSize="10" Margin="0,0,3,0"/>
                             <TextBlock Text="Exclusives" FontSize="10"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnMainHelp" Grid.Column="5" Content="?" Click="BtnMainHelp_Click"
-                            Width="28" Height="28" ToolTip="How to use the app" Margin="3,0">
+                            Width="26" Height="26" ToolTip="How to use the app" Margin="3,0">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="#FF69B4" CornerRadius="14" Width="28" Height="28" Cursor="Hand">
+                                <Border Background="#FF69B4" CornerRadius="13" Width="26" Height="26" Cursor="Hand">
                                     <TextBlock Text="?" Foreground="White" FontWeight="Bold" FontSize="16"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
@@ -5253,7 +5253,9 @@
         <!-- The Lab Tab -->
         <ContentControl x:Name="LabTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed"
                         Template="{StaticResource AnimatedTabBackground}">
-            <Border Style="{StaticResource SectionPanel}">
+            <Grid>
+                <!-- Lab content (greyed out when locked) -->
+                <Border x:Name="LabContentBorder" Style="{StaticResource SectionPanel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
                         <!-- Tab Header -->
@@ -5263,6 +5265,9 @@
                                 <TextBlock Text="Experimental features currently in testing. These may change or be moved in future updates."
                                            Foreground="#808080" FontSize="12" Margin="0,4,0,0"/>
                             </StackPanel>
+                            <Button Content="📖 Guide" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    Style="{StaticResource OutlineButton}" Padding="10,4" Cursor="Hand"
+                                    Click="BtnLabGuide_Click" ToolTip="Open The Lab guide on the web"/>
                         </Grid>
 
                         <!-- KEYWORD TRIGGERS (moved from Settings) -->
@@ -5432,9 +5437,12 @@
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBlock Text="Remote Control" Foreground="White" FontSize="16" FontWeight="Bold"/>
                                     </StackPanel>
-                                    <CheckBox x:Name="ChkRemoteControlEnabled" Style="{StaticResource ToggleStyle}"
-                                              HorizontalAlignment="Right" VerticalAlignment="Center"
-                                              Checked="ChkRemoteControlEnabled_Changed" Unchecked="ChkRemoteControlEnabled_Changed"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                        <Button x:Name="HelpBtnRemoteControl" Style="{StaticResource HelpButtonStyle}"
+                                                VerticalAlignment="Center" Margin="0,0,8,0" Tag="RemoteControl" Panel.ZIndex="1"/>
+                                        <CheckBox x:Name="ChkRemoteControlEnabled" Style="{StaticResource ToggleStyle}"
+                                                  Checked="ChkRemoteControlEnabled_Changed" Unchecked="ChkRemoteControlEnabled_Changed"/>
+                                    </StackPanel>
                                 </Grid>
                                 <TextBlock Text="Allow another person to remotely trigger actions on your app via a mobile-friendly webpage."
                                            Foreground="#808080" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
@@ -5445,7 +5453,7 @@
                                     <Grid Margin="0,0,0,10">
                                         <TextBlock Text="Permission Tier:" Foreground="#C0C0C0" FontSize="12" VerticalAlignment="Center"/>
                                         <ComboBox x:Name="CmbRemoteTier" HorizontalAlignment="Right" Width="130"
-                                                  Background="#1A1A2E" Foreground="White" FontSize="12"
+                                                  Style="{StaticResource DarkComboBoxStyle}" FontSize="12"
                                                   SelectionChanged="CmbRemoteTier_SelectionChanged">
                                             <ComboBoxItem Content="Light" IsSelected="True"/>
                                             <ComboBoxItem Content="Standard"/>
@@ -5509,7 +5517,40 @@
 
                     </StackPanel>
                 </ScrollViewer>
-            </Border>
+                </Border>
+
+                <!-- Locked overlay for non-T2 users -->
+                <Border x:Name="LabLockedOverlay" Visibility="Collapsed"
+                        Background="#E01A1A2E" CornerRadius="10">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="500">
+                        <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                        <TextBlock Text="The Lab is in Beta Testing" FontSize="22" FontWeight="Bold"
+                                   Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                        <TextBlock TextWrapping="Wrap" TextAlignment="Center" Foreground="#B0B0B0" FontSize="13"
+                                   LineHeight="20" Margin="0,0,0,16">
+                            These are experimental features currently being tested. Once they are stable and ready, they will be available to all Patreon supporters.
+                            <LineBreak/><LineBreak/>
+                            In the meantime, beta access is available to <Run Foreground="#FF69B4" FontWeight="SemiBold">Prime Bimbo Subjects</Run> (Tier 2) and whitelisted users.
+                        </TextBlock>
+                        <Button Content="⭐ Become a Prime Bimbo Subject" Cursor="Hand" FontSize="13" FontWeight="Bold"
+                                Click="BtnPatreonExclusives_Click" Margin="0,4,0,0">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="border" CornerRadius="8" Padding="20,10"
+                                            Background="#FF69B4" BorderThickness="0" Cursor="Hand">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="border" Property="Background" Value="#FF85C8"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
         </ContentControl>
 
         <!-- Patreon Exclusives Tab -->

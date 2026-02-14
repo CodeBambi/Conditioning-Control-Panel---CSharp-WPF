@@ -823,6 +823,28 @@ namespace ConditioningControlPanel.Services
                              "entirely on your device - no images or text are sent anywhere."
             },
 
+            ["RemoteControl"] = new HelpContent
+            {
+                SectionId = "RemoteControl",
+                Icon = "\uD83D\uDCE1",
+                Title = "Remote Control",
+                WhatItDoes = "Allows another person to remotely control your app's effects from their phone or browser. " +
+                             "Enable it, share your session code, and they can trigger flashes, videos, overlays, " +
+                             "haptics, and more in real time.",
+                Tips = new List<string>
+                {
+                    "Choose a Permission Tier to control how much access the controller has",
+                    "Light tier allows flashes and overlays only — great for starting out",
+                    "The panic button is always available regardless of tier",
+                    "Share the controller link or session code — they'll need one to connect",
+                    "Only one controller can be connected at a time"
+                },
+                HowItWorks = "When enabled, the app connects to a signaling server and generates a unique session code. " +
+                             "The controller opens the web-based remote page and enters your code to connect. " +
+                             "Commands are sent in real time and executed locally on your machine. " +
+                             "The permission tier limits which effects the controller can trigger."
+            },
+
             ["Leaderboard"] = new HelpContent
             {
                 SectionId = "Leaderboard",
