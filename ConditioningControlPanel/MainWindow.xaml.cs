@@ -4077,6 +4077,15 @@ namespace ConditioningControlPanel
                 }
             }
 
+            // Re-evaluate keyword triggers access (may have been disabled before Patreon validated)
+            var hasT2 = KeywordTriggerService.HasAccess();
+            if (TxtKeywordTriggersLocked != null)
+                TxtKeywordTriggersLocked.Visibility = hasT2 ? Visibility.Collapsed : Visibility.Visible;
+            if (BtnKeywordTriggersStartStop != null)
+                BtnKeywordTriggersStartStop.IsEnabled = hasT2;
+            if (ChkScreenOcrEnabled != null)
+                ChkScreenOcrEnabled.IsEnabled = hasT2;
+
             // Update XP bar login state when Patreon auth changes
             UpdateXPBarLoginState();
         }

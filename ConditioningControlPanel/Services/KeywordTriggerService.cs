@@ -645,8 +645,8 @@ namespace ConditioningControlPanel.Services
                         break;
 
                     case KeywordVisualEffect.OverlayPulse:
-                        // Refresh overlays to create a pulse effect
-                        App.Overlay?.RefreshOverlays();
+                        // Briefly double overlay intensity then restore
+                        App.Overlay?.PulseOverlays();
                         break;
 
                     case KeywordVisualEffect.None:

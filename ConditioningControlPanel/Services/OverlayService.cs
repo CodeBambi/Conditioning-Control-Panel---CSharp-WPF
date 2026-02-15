@@ -230,6 +230,77 @@ public class OverlayService : IDisposable
     }
 
     /// <summary>
+    /// Briefly doubles the intensity of all active overlays for ~1 second, then restores.
+    /// </summary>
+    public void PulseOverlays()
+    {
+        if (!_isRunning) return;
+
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            var settings = App.Settings.Current;
+            var hasPink = settings.PinkFilterEnabled && _pinkFilterWindows.Count > 0;
+            var hasSpiral = settings.SpiralEnabled && _spiralWindows.Count > 0;
+            var hasBrainDrain = settings.BrainDrainEnabled && _brainDrainBlurWindows.Count > 0;
+
+            if (!hasPink && !hasSpiral && !hasBrainDrain) return;
+
+            // Double the intensity
+            if (hasPink)
+            {
+                var boosted = Math.Min(settings.PinkFilterOpacity * 2, 100);
+                var alpha = (byte)(boosted / 100.0 * 255);
+                foreach (var window in _pinkFilterWindows)
+                {
+                    if (window.Content is Border border &&
+                        border.Background is System.Windows.Media.SolidColorBrush brush)
+                    {
+                        brush.Color = System.Windows.Media.Color.FromArgb(alpha, 255, 105, 180);
+                    }
+                }
+            }
+
+            if (hasSpiral)
+            {
+                var boostedOpacity = Math.Min((settings.SpiralOpacity / 100.0) * 0.1 * 2, 1.0);
+                foreach (var image in _spiralGifImages)
+                    image.Opacity = boostedOpacity;
+                foreach (var media in _spiralMediaElements)
+                    media.Opacity = boostedOpacity;
+            }
+
+            if (hasBrainDrain)
+            {
+                var boostedIntensity = Math.Min(_currentBrainDrainIntensity * 2, 200);
+                double blurRadius = boostedIntensity * 0.4;
+                foreach (var img in _brainDrainImages.Values)
+                {
+                    if (img.Effect is System.Windows.Media.Effects.BlurEffect blur)
+                        blur.Radius = blurRadius;
+                }
+            }
+
+            // Restore after 1 second
+            Task.Delay(1000).ContinueWith(_ =>
+            {
+                try
+                {
+                    if (Application.Current?.Dispatcher == null) return;
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        if (hasPink) UpdatePinkFilterOpacity();
+                        if (hasSpiral) UpdateSpiralOpacity();
+                        if (hasBrainDrain) UpdateBrainDrainBlurOpacity(_currentBrainDrainIntensity);
+                    });
+                }
+                catch { /* Window may have closed */ }
+            });
+        });
+
+        App.Logger?.Debug("Overlay pulse triggered");
+    }
+
+    /// <summary>
     /// Restart all overlays when dual monitor setting changes.
     /// Windows need to be recreated to match the new monitor setup.
     /// </summary>
