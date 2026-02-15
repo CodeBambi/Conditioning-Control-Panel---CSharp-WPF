@@ -5718,13 +5718,13 @@ namespace ConditioningControlPanel
 
             if (isEnabled)
             {
-                // Must be logged in
-                if (!App.IsLoggedIn || string.IsNullOrEmpty(App.EffectiveUserId))
+                // Must have a cloud identity (unified ID from Patreon or Discord login)
+                if (string.IsNullOrEmpty(App.UnifiedUserId))
                 {
                     _isLoading = true;
                     ChkRemoteControlEnabled.IsChecked = false;
                     _isLoading = false;
-                    ShowStyledDialog("Login Required", "You must be logged in to use Remote Control.", "OK", "");
+                    ShowStyledDialog("Login Required", "You need to log in and sync your profile before using Remote Control.\n\nLog in via Patreon or Discord in the Settings tab.", "OK", "");
                     return;
                 }
 
@@ -5748,7 +5748,7 @@ namespace ConditioningControlPanel
                     ChkRemoteControlEnabled.IsChecked = false;
                     _isLoading = false;
                     RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
-                    ShowStyledDialog("Error", "Failed to start remote control session. Check your connection.", "OK", "");
+                    ShowStyledDialog("Connection Error", "Could not start remote control session. The server may be temporarily unavailable.\n\nPlease check your internet connection and try again.", "OK", "");
                     return;
                 }
 

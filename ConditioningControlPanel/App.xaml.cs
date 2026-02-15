@@ -5,6 +5,8 @@ using System.Linq;
 using System.Media;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Net.Http;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -319,13 +321,16 @@ namespace ConditioningControlPanel
         public static string? UnifiedUserId { get; set; }
 
         /// <summary>
-        /// Best available user identifier — UnifiedUserId, falling back to Patreon email or Discord ID
+        /// User identifier for server communication. Only the unified ID is valid —
+        /// fallback IDs like "patreon:email" don't match any server key.
         /// </summary>
-        public static string? EffectiveUserId =>
-            !string.IsNullOrEmpty(UnifiedUserId) ? UnifiedUserId :
-            !string.IsNullOrEmpty(Patreon?.PatronEmail) ? $"patreon:{Patreon.PatronEmail}" :
-            !string.IsNullOrEmpty(Discord?.UserId) ? $"discord:{Discord.UserId}" :
-            null;
+        public static string? EffectiveUserId => UnifiedUserId;
+
+        /// <summary>
+        /// Whether the user has a cloud identity (unified ID) for server features
+        /// like remote control, leaderboard, and profile sync.
+        /// </summary>
+        public static bool HasCloudIdentity => !string.IsNullOrEmpty(UnifiedUserId);
 
         /// <summary>
         /// Get the user's display name. In offline mode, returns the offline username.
@@ -590,6 +595,13 @@ namespace ConditioningControlPanel
             // Initialize services
             Settings = new SettingsService();
 
+            // Restore UnifiedUserId from settings (persisted from previous session)
+            if (!string.IsNullOrEmpty(Settings?.Current?.UnifiedId))
+            {
+                UnifiedUserId = Settings.Current.UnifiedId;
+                Logger?.Information("Restored UnifiedUserId from settings: {Id}", UnifiedUserId);
+            }
+
             // Check if installer set an assets path in registry
             ApplyInstallerAssetsPath();
 
@@ -693,6 +705,9 @@ namespace ConditioningControlPanel
 
             // Initialize Discord OAuth (validate session in background)
             _ = InitializeDiscordAsync();
+
+            // Validate restored session (if we have a cached UnifiedUserId but no provider authenticated yet)
+            _ = ValidateRestoredSessionAsync();
 
             // Initialize Update service and check for updates in background
             Update = new UpdateService();
@@ -815,6 +830,64 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 Logger?.Error(ex, "Failed to initialize Discord");
+            }
+        }
+
+        /// <summary>
+        /// Validates a restored UnifiedUserId against the server.
+        /// If no provider has authenticated, calls /v2/auth/restore-session to confirm the ID is still valid.
+        /// On 404, clears the cached ID. On network error, keeps cached state (offline-tolerant).
+        /// </summary>
+        private async Task ValidateRestoredSessionAsync()
+        {
+            try
+            {
+                // No cached ID — nothing to validate
+                if (string.IsNullOrEmpty(UnifiedUserId)) return;
+
+                // Wait a bit for provider auth to complete
+                await Task.Delay(3000);
+
+                // If a provider already authenticated, they validated the session — skip
+                if (Patreon?.IsAuthenticated == true || Discord?.IsAuthenticated == true) return;
+
+                // If offline mode, trust the cache
+                if (Settings?.Current?.OfflineMode == true) return;
+
+                Logger?.Information("Validating restored session for {Id}...", UnifiedUserId);
+
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                var body = new Newtonsoft.Json.Linq.JObject
+                {
+                    ["unified_id"] = UnifiedUserId,
+                    ["client_version"] = UpdateService.AppVersion
+                };
+                var content = new StringContent(body.ToString(), Encoding.UTF8, "application/json");
+                var response = await http.PostAsync("https://codebambi-proxy.vercel.app/v2/auth/restore-session", content);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    Logger?.Warning("Restored session invalid (user not found on server). Clearing UnifiedUserId.");
+                    UnifiedUserId = null;
+                    if (Settings?.Current != null)
+                    {
+                        Settings.Current.UnifiedId = null;
+                        Settings.Save();
+                    }
+                }
+                else if (response.IsSuccessStatusCode)
+                {
+                    Logger?.Information("Restored session validated successfully.");
+                }
+                else
+                {
+                    Logger?.Warning("Session validation returned {Status} — keeping cached state.", response.StatusCode);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Network error — keep cached state (offline-tolerant)
+                Logger?.Warning(ex, "Session validation failed (network error) — keeping cached state.");
             }
         }
 
