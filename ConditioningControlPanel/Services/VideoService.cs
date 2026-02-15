@@ -728,7 +728,15 @@ namespace ConditioningControlPanel.Services
 
             win.Content = videoView;
 
-            // Panic key is handled by the global keyboard hook — no local KeyDown needed
+            // Local panic key handler for immediate response (CloseAll's _isCleaningUp guard prevents re-entrancy)
+            win.KeyDown += (s, e) =>
+            {
+                if (App.Settings.Current.PanicKeyEnabled &&
+                    e.Key.ToString() == App.Settings.Current.PanicKey)
+                {
+                    ForceCleanup();
+                }
+            };
 
             win.Show();
             if (withAudio) win.Activate();
@@ -1389,7 +1397,15 @@ namespace ConditioningControlPanel.Services
             }
             else
             {
-                // Panic key is handled by the global keyboard hook — no local KeyDown needed
+                // Local panic key handler for immediate response (CloseAll's _isCleaningUp guard prevents re-entrancy)
+                win.KeyDown += (s, e) =>
+                {
+                    if (App.Settings.Current.PanicKeyEnabled &&
+                        e.Key.ToString() == App.Settings.Current.PanicKey)
+                    {
+                        ForceCleanup();
+                    }
+                };
             }
         }
 
