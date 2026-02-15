@@ -22,28 +22,24 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.15";
+        public const string AppVersion = "5.5.16";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.15 - Remote Control Improvements
+        public const string CurrentPatchNotes = @"v5.5.16 - Login Persistence & Better Error Messages
 
-📡 REMOTE CONTROL
-• New full-screen overlay when a controller is connected
-• Command notifications show what the controller is doing
-• Panic button now properly stops all effects including bubble count
-• Pink filter and spiral commands now work reliably
-• All effects stop automatically when controller disconnects
-• Real name is hidden from controller page for privacy
+🔑 LOGIN PERSISTENCE
+• Your login now persists across app restarts — no more losing your session
+• Session is validated against the server on startup (offline-tolerant)
 
-🫧 BUBBLE COUNT
-• Reduced bubble counts across all difficulties for better balance
+💬 BETTER ERROR MESSAGES
+• Remote Control shows clearer messages when not logged in or server is unavailable
 
-🔧 FIXES
-• Whitelisted users now get full Lab (Tier 2) access
-• V2 sync grants Lab access even without Patreon OAuth";
+🔧 UNDER THE HOOD
+• Removed broken fallback ID chain that caused silent server errors
+• Added server backup/restore endpoints for disaster recovery";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
