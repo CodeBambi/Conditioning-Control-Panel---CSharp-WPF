@@ -7562,7 +7562,17 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Width="240" Height="300" Margin="0,0,12,0" CornerRadius="8"
-                                                Background="#1A1A32" BorderBrush="#404060" BorderThickness="1">
+                                                Background="#1A1A32" BorderThickness="1">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="BorderBrush" Value="#404060"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsExternal}" Value="True">
+                                                            <Setter Property="BorderBrush" Value="#FFA500"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
                                             <Grid>
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="90"/>
@@ -7594,6 +7604,12 @@
                                                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
                                                                 Visibility="{Binding IsDownloaded, Converter={StaticResource BoolToVisibility}}">
                                                             <TextBlock Text="INSTALLED" FontSize="8" FontWeight="Bold" Foreground="White"/>
+                                                        </Border>
+                                                        <!-- Manual download badge for external packs -->
+                                                        <Border Background="#FFA500" CornerRadius="4" Padding="6,2"
+                                                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
+                                                                Visibility="{Binding ShowExternalButtons, Converter={StaticResource BoolToVisibility}}">
+                                                            <TextBlock Text="MANUAL DOWNLOAD" FontSize="8" FontWeight="Bold" Foreground="White"/>
                                                         </Border>
                                                     </Grid>
                                                 </Border>

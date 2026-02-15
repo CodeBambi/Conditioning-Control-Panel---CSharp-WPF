@@ -120,6 +120,17 @@ namespace ConditioningControlPanel.Models
             set { _upgradeUrl = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasUpgrade)); }
         }
 
+        private string? _externalUrl;
+        [JsonProperty("externalUrl")]
+        public string? ExternalUrl
+        {
+            get => _externalUrl;
+            set { _externalUrl = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsExternal)); OnPropertyChanged(nameof(ShowExternalButtons)); OnPropertyChanged(nameof(DownloadButtonText)); }
+        }
+
+        public bool IsExternal => !string.IsNullOrEmpty(ExternalUrl);
+        public bool ShowExternalButtons => IsExternal && !IsDownloaded;
+
         private string _version = "1.0.0";
         public string Version
         {
@@ -159,7 +170,7 @@ namespace ConditioningControlPanel.Models
         public bool IsDownloaded
         {
             get => _isDownloaded;
-            set { _isDownloaded = value; OnPropertyChanged(); OnPropertyChanged(nameof(DownloadButtonText)); OnPropertyChanged(nameof(ActivateButtonText)); }
+            set { _isDownloaded = value; OnPropertyChanged(); OnPropertyChanged(nameof(DownloadButtonText)); OnPropertyChanged(nameof(ActivateButtonText)); OnPropertyChanged(nameof(ShowExternalButtons)); }
         }
 
         private bool _isActive;
@@ -206,6 +217,7 @@ namespace ConditioningControlPanel.Models
                     return $"Downloading... {DownloadProgress:F0}%";
                 }
                 if (IsDownloaded) return "Uninstall";
+                if (IsExternal) return "Download";
                 return "Install";
             }
         }

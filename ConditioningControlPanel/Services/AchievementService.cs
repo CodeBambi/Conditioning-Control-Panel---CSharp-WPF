@@ -404,13 +404,6 @@ public class AchievementService : IDisposable
     /// </summary>
     public void TrackAvatarClick()
     {
-        // Easter egg only available in Bambi Sleep mode, not in General Sissy Hypno
-        var contentMode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-        if (contentMode == Models.ContentMode.SissyHypno)
-        {
-            return; // Skip Easter egg tracking in Sissy Hypno mode
-        }
-
         var clickCount = _progress.AvatarClickCount + 1;
         App.Logger?.Debug("TrackAvatarClick called. Current count will be: {Count}", clickCount);
 

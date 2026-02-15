@@ -301,6 +301,21 @@ Example responses with REAL video names:
         // ==========================================
         public string GetSystemPrompt()
         {
+            // Check for active community prompt (assigned via prite/companion)
+            var companionPrompt = App.Settings?.Current?.CompanionPrompt;
+            if (companionPrompt?.UseCustomPrompt == true &&
+                !string.IsNullOrEmpty(App.Settings?.Current?.ActiveCommunityPromptId))
+            {
+                // Build a temporary preset wrapper so we can reuse BuildPromptFromPreset
+                var communityPreset = new Models.PersonalityPreset
+                {
+                    Id = App.Settings!.Current!.ActiveCommunityPromptId!,
+                    Name = "Community Prompt",
+                    PromptSettings = companionPrompt
+                };
+                return BuildPromptFromPreset(communityPreset);
+            }
+
             // Get the active personality preset from PersonalityService
             var activePreset = App.Personality?.GetActivePreset();
 

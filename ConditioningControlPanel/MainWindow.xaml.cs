@@ -17251,6 +17251,13 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
+                    // External packs open in browser (e.g. MEGA link)
+                    if (pack.IsExternal)
+                    {
+                        Process.Start(new ProcessStartInfo(pack.ExternalUrl!) { UseShellExecute = true });
+                        return;
+                    }
+
                     // Show confirmation dialog before download
                     var sizeStr = pack.SizeBytes > 0 ? $" ({pack.SizeBytes / (1024.0 * 1024):F0} MB)" : "";
                     var result = MessageBox.Show(
