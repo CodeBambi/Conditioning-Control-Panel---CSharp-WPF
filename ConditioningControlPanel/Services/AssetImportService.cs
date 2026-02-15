@@ -195,7 +195,7 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Import assets from a ZIP file, preserving subfolder structure.
+        /// Import assets from a ZIP file into a pack subfolder, preserving internal structure.
         /// </summary>
         private async Task ImportZipAsync(string zipPath, ImportResult result, IProgress<ImportProgress>? progress)
         {
@@ -205,6 +205,17 @@ namespace ConditioningControlPanel.Services
                 var entries = archive.Entries
                     .Where(e => !string.IsNullOrEmpty(e.Name) && IsSupportedFile(Path.GetExtension(e.Name)))
                     .ToList();
+
+                // Derive pack name from ZIP filename
+                var packName = Path.GetFileNameWithoutExtension(zipPath);
+
+                // If all entries share a single common root folder, use that as pack name instead
+                // (but not if the root is just "images" or "videos" — that would create images/images/)
+                var commonRoot = DetectCommonRoot(entries);
+                if (!string.IsNullOrEmpty(commonRoot) && !IsKnownPrefix(commonRoot))
+                    packName = commonRoot;
+
+                result.PackName = packName;
 
                 var total = entries.Count;
                 var current = 0;
@@ -218,11 +229,25 @@ namespace ConditioningControlPanel.Services
 
                         if (baseDestFolder != null)
                         {
-                            // Preserve subfolder structure from ZIP
-                            var entryDir = Path.GetDirectoryName(entry.FullName) ?? "";
+                            var entryPath = entry.FullName.Replace('\\', '/');
+
+                            // Strip common root prefix if detected
+                            if (!string.IsNullOrEmpty(commonRoot) &&
+                                entryPath.StartsWith(commonRoot + "/", StringComparison.Ordinal))
+                            {
+                                entryPath = entryPath.Substring(commonRoot.Length + 1);
+                            }
+
+                            // Strip images/ or videos/ prefix to avoid double nesting
+                            entryPath = StripKnownPrefixes(entryPath);
+
+                            // Get remaining subfolder path (without filename)
+                            var entryDir = Path.GetDirectoryName(entryPath) ?? "";
+
+                            // Build destination: images/{packName}/{entryDir}/file.ext
                             var destFolder = string.IsNullOrEmpty(entryDir)
-                                ? baseDestFolder
-                                : Path.Combine(baseDestFolder, entryDir);
+                                ? Path.Combine(baseDestFolder, packName)
+                                : Path.Combine(baseDestFolder, packName, entryDir);
 
                             Directory.CreateDirectory(destFolder);
 
@@ -235,12 +260,12 @@ namespace ConditioningControlPanel.Services
                             if (IsVideo(ext))
                             {
                                 result.VideosImported++;
-                                App.Logger?.Debug("Extracted video from ZIP: {File}", fileName);
+                                App.Logger?.Debug("Extracted video from ZIP: {Pack}/{File}", packName, fileName);
                             }
                             else if (IsImage(ext))
                             {
                                 result.ImagesImported++;
-                                App.Logger?.Debug("Extracted image from ZIP: {File}", fileName);
+                                App.Logger?.Debug("Extracted image from ZIP: {Pack}/{File}", packName, fileName);
                             }
                         }
                     }
@@ -270,6 +295,47 @@ namespace ConditioningControlPanel.Services
                 result.Errors.Add($"Invalid or corrupted ZIP file: {Path.GetFileName(zipPath)}");
                 App.Logger?.Warning("Invalid ZIP file: {Path}", zipPath);
             }
+        }
+
+        /// <summary>
+        /// Detect if all ZIP entries share a single common root folder.
+        /// Returns the folder name, or null if entries are flat or have multiple roots.
+        /// </summary>
+        private static string? DetectCommonRoot(List<ZipArchiveEntry> entries)
+        {
+            var roots = entries
+                .Select(e => e.FullName.Replace('\\', '/').Split('/')[0])
+                .Distinct()
+                .ToList();
+
+            // Use it if exactly one root and at least one entry has a deeper path
+            if (roots.Count == 1 && entries.Any(e => e.FullName.Replace('\\', '/').Contains('/')))
+                return roots[0];
+
+            return null;
+        }
+
+        /// <summary>
+        /// Check if a folder name is a known asset prefix (images/videos).
+        /// </summary>
+        private static bool IsKnownPrefix(string name)
+        {
+            return name.Equals("images", StringComparison.OrdinalIgnoreCase) ||
+                   name.Equals("videos", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Strip images/ or videos/ prefix from an entry path to avoid double nesting.
+        /// </summary>
+        private static string StripKnownPrefixes(string path)
+        {
+            string[] prefixes = { "images/", "videos/" };
+            foreach (var prefix in prefixes)
+            {
+                if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    return path.Substring(prefix.Length);
+            }
+            return path;
         }
 
         /// <summary>
@@ -318,6 +384,7 @@ namespace ConditioningControlPanel.Services
         public int ImagesImported { get; set; }
         public int VideosImported { get; set; }
         public int Skipped { get; set; }
+        public string? PackName { get; set; }
         public List<string> Errors { get; } = new();
 
         public int TotalImported => ImagesImported + VideosImported;
@@ -336,6 +403,8 @@ namespace ConditioningControlPanel.Services
                 return Skipped > 0 ? $"No new files imported ({Skipped} already existed)" : "No supported files found";
 
             var summary = $"Imported {string.Join(" and ", parts)}";
+            if (!string.IsNullOrEmpty(PackName))
+                summary += $" into '{PackName}'";
             if (Skipped > 0)
                 summary += $" ({Skipped} skipped)";
 
