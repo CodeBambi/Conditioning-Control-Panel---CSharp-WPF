@@ -498,19 +498,16 @@ namespace ConditioningControlPanel.Services
                              "professionally assembled conditioning content.",
                 Tips = new List<string>
                 {
-                    "A free Patreon account gives you 10 GB/month — no payment needed!",
-                    "Patreon supporters get 100 GB/month",
-                    "Click Install to download a pack (uses bandwidth quota)",
+                    "Click a pack to download it — it opens in your browser via Mega",
+                    "After downloading, drag and drop the ZIP into this window to import!",
                     "Activate/Deactivate packs to include them in your rotation",
                     "Installed packs show in your asset browser",
-                    "Bandwidth resets monthly - check your usage",
-                    "Create your own packs and share them!"
+                    "Use 'Delete Downloaded Packs' to remove all pack data at once",
+                    "Your own images and videos are never affected by pack deletion"
                 },
-                HowItWorks = "Packs are downloaded from the community server and extracted to your assets " +
-                             "folder. Each pack has a size shown before download. Your monthly bandwidth " +
-                             "quota (shown in the bar) limits total downloads. A free Patreon login gets " +
-                             "10 GB/month, while Patreon supporters get 100 GB/month. Deactivating a pack " +
-                             "excludes its files from random selection without deleting them."
+                HowItWorks = "Packs are hosted on Mega for fast, reliable downloads. After downloading a pack ZIP, " +
+                             "just drag and drop it into the app window — it will be imported automatically. " +
+                             "Deactivating a pack excludes its files from random selection without deleting them."
             },
 
             ["AssetBrowser"] = new HelpContent

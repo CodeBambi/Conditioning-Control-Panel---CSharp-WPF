@@ -1451,7 +1451,7 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.17 IS OUT! 💖"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.18 IS OUT! 💖"
                             Click="BtnUpdateAvailable_Click" ToolTip="v5.5.17 - Video Stability Fix"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
@@ -7483,24 +7483,28 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
                     <!-- Header -->
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,10">
-                        <TextBlock Text="🎁 Community Content Packs"
-                                   Style="{StaticResource SectionHeader}"/>
-                        <Button x:Name="HelpBtnPacks" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="ContentPacks"/>
-                    </StackPanel>
+                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🎁 Community Content Packs"
+                                       Style="{StaticResource SectionHeader}"/>
+                            <Button x:Name="HelpBtnPacks" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="ContentPacks"/>
+                        </StackPanel>
+                        <TextBlock Text="After downloading a pack, just drag and drop the ZIP file into this window!"
+                                   Foreground="#888" FontSize="11" FontStyle="Italic"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    </Grid>
 
                     <!-- Horizontal scrolling pack cards -->
-                    <ScrollViewer x:Name="PacksScrollViewer" Grid.Row="2"
+                    <ScrollViewer x:Name="PacksScrollViewer" Grid.Row="1"
                                   HorizontalScrollBarVisibility="Auto"
                                   VerticalScrollBarVisibility="Disabled"
                                   PreviewMouseWheel="PacksScrollViewer_PreviewMouseWheel"
                                   Padding="0,0,0,8"
-                                  MaxHeight="340">
+                                  MaxHeight="280">
                         <ScrollViewer.Resources>
                             <!-- Force bigger scrollbar -->
                             <Style TargetType="ScrollBar">
@@ -7539,7 +7543,7 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Width="240" Height="300" Margin="0,0,12,0" CornerRadius="8"
+                                        <Border Width="192" Height="240" Margin="0,0,10,0" CornerRadius="8"
                                                 Background="#1A1A32" BorderThickness="1">
                                             <Border.Style>
                                                 <Style TargetType="Border">
@@ -7553,7 +7557,7 @@
                                             </Border.Style>
                                             <Grid>
                                                 <Grid.RowDefinitions>
-                                                    <RowDefinition Height="90"/>
+                                                    <RowDefinition Height="72"/>
                                                     <RowDefinition Height="*"/>
                                                 </Grid.RowDefinitions>
 
@@ -7593,7 +7597,7 @@
                                                 </Border>
 
                                                 <!-- Info section -->
-                                                <Grid Grid.Row="1" Margin="8,4,8,4">
+                                                <Grid Grid.Row="1" Margin="6,3,6,3">
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="Auto"/>
                                                         <RowDefinition Height="Auto"/>
@@ -7603,15 +7607,15 @@
                                                     </Grid.RowDefinitions>
 
                                                     <TextBlock Grid.Row="0" Text="{Binding Name}" FontWeight="Bold"
-                                                               Foreground="{StaticResource TextLightBrush}" FontSize="12"
-                                                               Margin="0,0,0,2"/>
+                                                               Foreground="{StaticResource TextLightBrush}" FontSize="11"
+                                                               Margin="0,0,0,1"/>
                                                     <TextBlock Grid.Row="1" Text="{Binding Description}"
-                                                               Foreground="{StaticResource TextMutedBrush}" FontSize="10"
+                                                               Foreground="{StaticResource TextMutedBrush}" FontSize="9"
                                                                TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
-                                                               MaxHeight="92"
+                                                               MaxHeight="60"
                                                                VerticalAlignment="Top"
                                                                ToolTip="{Binding Description}"/>
-                                                    <TextBlock Grid.Row="2" Foreground="#FF69B4" FontSize="9" Margin="0,2,0,4" FontWeight="SemiBold">
+                                                    <TextBlock Grid.Row="2" Foreground="#FF69B4" FontSize="8" Margin="0,1,0,3" FontWeight="SemiBold">
                                                         <TextBlock.Text>
                                                             <MultiBinding StringFormat="{}{0} images, {1} videos">
                                                                 <Binding Path="ImageCount"/>
@@ -7654,11 +7658,11 @@
                             </ItemsControl>
 
                             <!-- Creator Card: Join Discord -->
-                            <Border Width="220" Height="300" Margin="0,0,12,0" CornerRadius="8"
+                            <Border Width="176" Height="240" Margin="0,0,10,0" CornerRadius="8"
                                     Background="#1A1A32" BorderBrush="#5865F2" BorderThickness="2">
                                 <Grid>
                                     <Grid.RowDefinitions>
-                                        <RowDefinition Height="90"/>
+                                        <RowDefinition Height="72"/>
                                         <RowDefinition Height="*"/>
                                     </Grid.RowDefinitions>
 

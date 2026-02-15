@@ -22,19 +22,23 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.17";
+        public const string AppVersion = "5.5.18";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.17 - Video Stability Fix
+        public const string CurrentPatchNotes = @"v5.5.18 - Content Packs & Import Improvements
 
-🛡️ VIDEO STABILITY
-• Fixed crashes when pressing panic key or clicking during video playback
-• Eliminated race condition between multiple cleanup paths during video stop
-• Blocked native input passthrough to LibVLC renderer (WPF airspace fix)
-• Increased safety margins during video cleanup to prevent access violations";
+📦 CONTENT PACKS
+• All packs now hosted on Mega for faster, more reliable downloads
+• Added 'Delete Downloaded Packs' button to easily remove all pack data
+• Your local images and videos are never affected by pack deletion
+
+📥 ASSET IMPORT
+• ZIP drag-and-drop now shows a clear summary of imported files
+• App automatically switches to Assets tab after import
+• Asset tree refreshes immediately so you can see your new files";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
