@@ -22,24 +22,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.16";
+        public const string AppVersion = "5.5.17";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.16 - Login Persistence & Better Error Messages
+        public const string CurrentPatchNotes = @"v5.5.17 - Video Stability Fix
 
-🔑 LOGIN PERSISTENCE
-• Your login now persists across app restarts — no more losing your session
-• Session is validated against the server on startup (offline-tolerant)
-
-💬 BETTER ERROR MESSAGES
-• Remote Control shows clearer messages when not logged in or server is unavailable
-
-🔧 UNDER THE HOOD
-• Removed broken fallback ID chain that caused silent server errors
-• Added server backup/restore endpoints for disaster recovery";
+🛡️ VIDEO STABILITY
+• Fixed crashes when pressing panic key or clicking during video playback
+• Eliminated race condition between multiple cleanup paths during video stop
+• Blocked native input passthrough to LibVLC renderer (WPF airspace fix)
+• Increased safety margins during video cleanup to prevent access violations";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
