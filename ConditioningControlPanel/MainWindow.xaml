@@ -7468,6 +7468,10 @@
                     <Button x:Name="BtnRefreshPacks" Content="🔄 Refresh"
                             Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
                             Click="BtnRefreshPacks_Click" ToolTip="Refresh available packs"/>
+                    <Button x:Name="BtnDeleteDownloadedPacks" Content="🗑️ Delete Downloaded Packs"
+                            Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
+                            Click="BtnDeleteDownloadedPacks_Click"
+                            ToolTip="Delete all downloaded content packs (your local files are not affected)"/>
                     <Button x:Name="BtnOpenAssetsFolder" Content="📂 Open Folder"
                             Style="{StaticResource OutlineButton}" Padding="12,6"
                             Click="BtnOpenAssetsFolder_Click" ToolTip="Open assets folder in Explorer"/>
@@ -7483,38 +7487,12 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Header with bandwidth bar -->
-                    <Grid Grid.Row="0" Margin="0,0,0,10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="🎁 Community Content Packs"
-                                       Style="{StaticResource SectionHeader}"/>
-                            <Button x:Name="HelpBtnPacks" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="ContentPacks"/>
-                        </StackPanel>
-
-                        <!-- Bandwidth usage bar -->
-                        <StackPanel x:Name="BandwidthPanel" Grid.Column="1" Orientation="Horizontal"
-                                    HorizontalAlignment="Right" VerticalAlignment="Center"
-                                    Visibility="Collapsed">
-                            <TextBlock x:Name="TxtBandwidthLabel" Text="Bandwidth:"
-                                       Foreground="#888" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <Border Background="#1A1A2E" CornerRadius="4" Width="150" Height="16" VerticalAlignment="Center">
-                                <Grid>
-                                    <ProgressBar x:Name="BandwidthProgressBar"
-                                                 Minimum="0" Maximum="100" Value="0"
-                                                 Foreground="#FF69B4" Background="Transparent"
-                                                 BorderThickness="0"/>
-                                    <TextBlock x:Name="TxtBandwidthUsage" Text="0 / 10 GB"
-                                               Foreground="White" FontSize="10" FontWeight="SemiBold"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Grid>
-                            </Border>
-                        </StackPanel>
-                    </Grid>
+                    <!-- Header -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,10">
+                        <TextBlock Text="🎁 Community Content Packs"
+                                   Style="{StaticResource SectionHeader}"/>
+                        <Button x:Name="HelpBtnPacks" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="ContentPacks"/>
+                    </StackPanel>
 
                     <!-- Horizontal scrolling pack cards -->
                     <ScrollViewer x:Name="PacksScrollViewer" Grid.Row="2"
