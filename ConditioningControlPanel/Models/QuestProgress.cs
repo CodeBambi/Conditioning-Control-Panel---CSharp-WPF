@@ -49,6 +49,7 @@ public class QuestProgress
 
         int maxRerolls = hasPatreon ? 3 : 1;
         maxRerolls += App.SkillTree?.GetDailyFreeRerolls() ?? 0;
+        maxRerolls += App.Settings?.Current?.BonusDailyRerolls ?? 0;
         return Math.Max(0, maxRerolls - DailyRerollsUsed);
     }
 
@@ -68,6 +69,7 @@ public class QuestProgress
 
         int maxRerolls = hasPatreon ? 3 : 1;
         maxRerolls += App.SkillTree?.GetDailyFreeRerolls() ?? 0;
+        maxRerolls += App.Settings?.Current?.BonusWeeklyRerolls ?? 0;
         return Math.Max(0, maxRerolls - WeeklyRerollsUsed);
     }
 

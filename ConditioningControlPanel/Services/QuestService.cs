@@ -227,6 +227,7 @@ public class QuestService : IDisposable
         var questPool = App.QuestDefinitions?.GetDailyQuests() ?? QuestDefinition.DailyQuests.ToList();
         var availableQuests = questPool
             .Where(q => q.Id != excludeId)
+            .Where(q => IsQuestAvailableForLevel(q.Category))
             .ToList();
 
         if (availableQuests.Count == 0) return;
@@ -246,6 +247,7 @@ public class QuestService : IDisposable
         var questPool = App.QuestDefinitions?.GetWeeklyQuests() ?? QuestDefinition.WeeklyQuests.ToList();
         var availableQuests = questPool
             .Where(q => q.Id != excludeId)
+            .Where(q => IsQuestAvailableForLevel(q.Category))
             .ToList();
 
         if (availableQuests.Count == 0) return;
@@ -257,6 +259,23 @@ public class QuestService : IDisposable
 
         App.Logger?.Information("Generated new weekly quest: {QuestId} (from {Source})",
             selectedQuest.Id, App.QuestDefinitions != null ? "server" : "embedded");
+    }
+
+    /// <summary>
+    /// Check if a quest category's feature is unlocked at the player's current level.
+    /// </summary>
+    private static bool IsQuestAvailableForLevel(QuestCategory category)
+    {
+        var settings = App.Settings?.Current;
+        if (settings == null) return true;
+
+        return category switch
+        {
+            QuestCategory.Bubbles => settings.IsLevelUnlocked(20),
+            QuestCategory.LockCard => settings.IsLevelUnlocked(35),
+            QuestCategory.BubbleCount => settings.IsLevelUnlocked(50),
+            _ => true
+        };
     }
 
     /// <summary>

@@ -478,6 +478,14 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Information("V2 Sync: OG status synced from server: {IsOg}", v2Result.IsSeason0Og.Value);
                         }
 
+                        // Sync bonus rerolls from server (admin-granted)
+                        if (v2Result?.BonusDailyRerolls != null || v2Result?.BonusWeeklyRerolls != null)
+                        {
+                            settings.BonusDailyRerolls = v2Result.BonusDailyRerolls ?? 0;
+                            settings.BonusWeeklyRerolls = v2Result.BonusWeeklyRerolls ?? 0;
+                            App.Settings?.Save();
+                        }
+
                         // Sync whitelist status from server — enables Patreon features for whitelisted users
                         // even if they never did Patreon OAuth (e.g. Discord-only users)
                         if (v2Result?.PatreonIsWhitelisted == true)
@@ -1361,6 +1369,12 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("patreon_is_whitelisted")]
             public bool? PatreonIsWhitelisted { get; set; }
+
+            [JsonProperty("bonus_daily_rerolls")]
+            public int? BonusDailyRerolls { get; set; }
+
+            [JsonProperty("bonus_weekly_rerolls")]
+            public int? BonusWeeklyRerolls { get; set; }
 
             [JsonProperty("level_reset")]
             public bool? LevelReset { get; set; }

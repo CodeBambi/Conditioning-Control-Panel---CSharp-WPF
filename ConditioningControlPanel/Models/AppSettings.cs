@@ -242,6 +242,26 @@ namespace ConditioningControlPanel.Models
             set { _lastRerollResetDate = value; OnPropertyChanged(); }
         }
 
+        private int _bonusDailyRerolls = 0;
+        /// <summary>
+        /// Admin-granted bonus daily quest rerolls (from server).
+        /// </summary>
+        public int BonusDailyRerolls
+        {
+            get => _bonusDailyRerolls;
+            set { _bonusDailyRerolls = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _bonusWeeklyRerolls = 0;
+        /// <summary>
+        /// Admin-granted bonus weekly quest rerolls (from server).
+        /// </summary>
+        public int BonusWeeklyRerolls
+        {
+            get => _bonusWeeklyRerolls;
+            set { _bonusWeeklyRerolls = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
         private int _currentStreak = 0;
         /// <summary>
         /// Current consecutive day streak (used for streak multiplier skill).
