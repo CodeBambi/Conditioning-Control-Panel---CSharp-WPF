@@ -22,23 +22,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.18";
+        public const string AppVersion = "5.5.19";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.18 - Content Packs & Import Improvements
-
-📦 CONTENT PACKS
-• All packs now hosted on Mega for faster, more reliable downloads
-• Added 'Delete Downloaded Packs' button to easily remove all pack data
-• Your local images and videos are never affected by pack deletion
+        public const string CurrentPatchNotes = @"v5.5.19 - ZIP Pack Subfolders
 
 📥 ASSET IMPORT
-• ZIP drag-and-drop now shows a clear summary of imported files
-• App automatically switches to Assets tab after import
-• Asset tree refreshes immediately so you can see your new files";
+• ZIP packs now extract into their own subfolder (e.g. images/my-pack/)
+• No more files mixed together — each pack stays organized
+• Handles ZIPs with images/videos folders inside without double nesting
+• Import summary now shows the pack name";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
