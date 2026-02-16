@@ -1821,6 +1821,9 @@ namespace ConditioningControlPanel.Services
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
 
+            // Extend stuck detection timeout so long videos aren't killed prematurely
+            App.InteractionQueue?.ExtendTimeout(videoDurationSeconds);
+
             // Add 5 second buffer beyond video duration
             var timeoutSeconds = videoDurationSeconds + 5;
 

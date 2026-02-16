@@ -22,8 +22,8 @@ public class InteractionQueueService
     private DispatcherTimer? _stuckDetectionTimer;
     private DateTime _interactionStartTime;
 
-    // Maximum time an interaction can be active before auto-recovery (5 minutes)
-    private const int MaxInteractionDurationMinutes = 5;
+    // Default max time before auto-recovery when duration is unknown (5 minutes)
+    private const int DefaultMaxInteractionMinutes = 5;
 
     /// <summary>
     /// Currently active interaction type, or null if none
@@ -181,19 +181,39 @@ public class InteractionQueueService
     }
 
     /// <summary>
-    /// Starts a timer that auto-recovers from stuck interactions after MaxInteractionDurationMinutes
+    /// Extends the stuck detection timeout to accommodate a known interaction duration.
+    /// Call this when the actual duration becomes known (e.g., video duration from VLC).
     /// </summary>
-    private void StartStuckDetectionTimer()
+    /// <param name="durationSeconds">The expected duration in seconds</param>
+    public void ExtendTimeout(double durationSeconds)
+    {
+        lock (_lock)
+        {
+            if (!CurrentInteraction.HasValue) return;
+
+            // Restart the timer with: expected duration + 30s buffer, minimum 5 minutes
+            var timeoutMinutes = Math.Max(DefaultMaxInteractionMinutes, (durationSeconds + 30) / 60.0);
+            StartStuckDetectionTimer(TimeSpan.FromMinutes(timeoutMinutes));
+            App.Logger?.Debug("InteractionQueue: Extended stuck timeout to {Duration:F1} min for {Type}",
+                timeoutMinutes, CurrentInteraction);
+        }
+    }
+
+    /// <summary>
+    /// Starts a timer that auto-recovers from stuck interactions
+    /// </summary>
+    private void StartStuckDetectionTimer(TimeSpan? timeout = null)
     {
         try
         {
+            var interval = timeout ?? TimeSpan.FromMinutes(DefaultMaxInteractionMinutes);
             System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
                 StopStuckDetectionTimer();
 
                 _stuckDetectionTimer = new DispatcherTimer
                 {
-                    Interval = TimeSpan.FromMinutes(MaxInteractionDurationMinutes)
+                    Interval = interval
                 };
                 _stuckDetectionTimer.Tick += OnStuckDetectionTimerTick;
                 _stuckDetectionTimer.Start();
