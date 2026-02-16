@@ -2027,6 +2027,13 @@ namespace ConditioningControlPanel
             TxtDailyQuestCounter.Text = $"{dailyCompleted}/{QuestService.MaxDailyQuestsPerDay}";
             bool allDailyDone = questService.AreAllDailyQuestsCompleted();
 
+            // Update daily progress segments
+            var goldBrush = _dailySegmentGold ??= new SolidColorBrush(Color.FromRgb(0xFF, 0xD7, 0x00));
+            var greyBrush = _dailySegmentGrey ??= new SolidColorBrush(Color.FromRgb(0x3D, 0x3D, 0x60));
+            DailySegment1.Background = dailyCompleted >= 1 ? goldBrush : greyBrush;
+            DailySegment2.Background = dailyCompleted >= 2 ? goldBrush : greyBrush;
+            DailySegment3.Background = dailyCompleted >= 3 ? goldBrush : greyBrush;
+
             // Refresh daily quest display
             var dailyDef = questService.GetCurrentDailyDefinition();
             var dailyProgress = questService.Progress.DailyQuest;
@@ -6669,6 +6676,8 @@ namespace ConditioningControlPanel
         #region Quests
 
         private QuestCompletePopup? _questCompletePopup;
+        private SolidColorBrush? _dailySegmentGold;
+        private SolidColorBrush? _dailySegmentGrey;
 
         private void OnQuestCompleted(object? sender, Services.QuestCompletedEventArgs e)
         {
@@ -15971,6 +15980,21 @@ namespace ConditioningControlPanel
                 };
                 parentScrollViewer.RaiseEvent(eventArgs);
                 e.Handled = true;
+            }
+        }
+
+        private void InnerScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (sender is ScrollViewer sv)
+            {
+                var parent = VisualTreeHelper.GetParent(sv) as DependencyObject;
+                while (parent != null && parent is not ScrollViewer)
+                    parent = VisualTreeHelper.GetParent(parent);
+                if (parent is ScrollViewer parentSv)
+                {
+                    parentSv.ScrollToVerticalOffset(parentSv.VerticalOffset - e.Delta);
+                    e.Handled = true;
+                }
             }
         }
 
