@@ -236,7 +236,7 @@ public class InteractionQueueService
 
             var activeDuration = DateTime.Now - _interactionStartTime;
             
-            if(activeDuration > CurrentVideoDuration)
+            if(activeDuration < CurrentVideoDuration)
             {
                 return; // Not stuck just still playing a long video
             }
