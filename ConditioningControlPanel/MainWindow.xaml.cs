@@ -18,6 +18,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Rectangle = System.Windows.Shapes.Rectangle;
+using NAudio.Wave;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 
@@ -110,7 +111,8 @@ namespace ConditioningControlPanel
         
         // Avatar Tube Window
         private AvatarTubeWindow? _avatarTubeWindow;
-        private System.Windows.Media.MediaPlayer? _levelUpSoundPlayer;
+        private WaveOutEvent? _levelUpSoundDevice;
+        private AudioFileReader? _levelUpSoundFile;
         private bool _avatarWasAttachedBeforeMaximize = false;
         private bool _avatarWasAttachedBeforeBrowserFullscreen = false;
 
@@ -463,35 +465,68 @@ namespace ConditioningControlPanel
                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "assets", "sounds", "lvlup.mp3"),
                 };
 
-                foreach (var path in soundPaths)
+                var soundPath = soundPaths.FirstOrDefault(File.Exists);
+                if (soundPath == null)
                 {
-                    if (File.Exists(path))
-                    {
-                        // Stop any previous level up sound still playing
-                        _levelUpSoundPlayer?.Close();
-
-                        var player = new System.Windows.Media.MediaPlayer();
-                        player.Open(new Uri(path, UriKind.Absolute));
-                        player.Volume = (App.Settings.Current.MasterVolume / 100.0) * 0.5; // 50% of master volume
-                        player.MediaEnded += (s, e) =>
-                        {
-                            player.Close();
-                            if (_levelUpSoundPlayer == player)
-                                _levelUpSoundPlayer = null;
-                        };
-                        // Hold reference to prevent GC from killing playback
-                        _levelUpSoundPlayer = player;
-                        player.Play();
-                        App.Logger?.Debug("Level up sound played from: {Path}", path);
-                        return;
-                    }
+                    App.Logger?.Debug("Level up sound not found in any of: {Paths}", string.Join(", ", soundPaths));
+                    return;
                 }
-                App.Logger?.Debug("Level up sound not found in any of: {Paths}", string.Join(", ", soundPaths));
+
+                // Stop any previous level up sound still playing
+                StopLevelUpSound();
+
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        var audioFile = new AudioFileReader(soundPath);
+                        var outputDevice = new WaveOutEvent();
+
+                        var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                        var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.5f;
+                        audioFile.Volume = Math.Max(0.01f, curvedVolume);
+
+                        outputDevice.Init(audioFile);
+                        outputDevice.PlaybackStopped += (s, e) =>
+                        {
+                            outputDevice.Dispose();
+                            audioFile.Dispose();
+                            if (_levelUpSoundDevice == outputDevice)
+                            {
+                                _levelUpSoundDevice = null;
+                                _levelUpSoundFile = null;
+                            }
+                        };
+
+                        _levelUpSoundDevice = outputDevice;
+                        _levelUpSoundFile = audioFile;
+                        outputDevice.Play();
+
+                        App.Logger?.Debug("Level up sound played from: {Path}", soundPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("Failed to play level up sound: {Error}", ex.Message);
+                    }
+                });
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning("Failed to play level up sound: {Error}", ex.Message);
             }
+        }
+
+        private void StopLevelUpSound()
+        {
+            try
+            {
+                _levelUpSoundDevice?.Stop();
+                _levelUpSoundDevice?.Dispose();
+                _levelUpSoundFile?.Dispose();
+                _levelUpSoundDevice = null;
+                _levelUpSoundFile = null;
+            }
+            catch { }
         }
 
         private void OnGlobalKeyPressed(Key key)
@@ -3164,6 +3199,7 @@ namespace ConditioningControlPanel
                     CompanionTab.Visibility = Visibility.Visible;
                     BtnCompanion.Style = activeStyle;
                     SyncCompanionTabUI();
+                    InitializePhrasePresets();
                     break;
 
                 case "patreon":
@@ -6132,6 +6168,17 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Error(ex, "[RemoteControl] Failed to trigger panic from remote");
             }
+        }
+
+        internal void MinimizeToTrayForRemote()
+        {
+            _trayIcon?.MinimizeToTray();
+            _trayIcon?.ShowNotification("Remote Control", "Session active — minimized to tray.", System.Windows.Forms.ToolTipIcon.Info);
+        }
+
+        internal void RestoreFromTrayForRemote()
+        {
+            _trayIcon?.ShowWindow();
         }
 
         #endregion
@@ -11330,9 +11377,16 @@ namespace ConditioningControlPanel
             // Rank (own rank from leaderboard, if available)
             if (TxtProfileViewerRank != null)
             {
-                // Try to find own rank from leaderboard using display name
+                // Try to find own rank: unified_id first, then display name fallback
+                var unifiedId = App.UnifiedUserId;
                 var displayName = App.Settings?.Current?.UserDisplayName;
-                var ownEntry = !string.IsNullOrEmpty(displayName)
+
+                var ownEntry = !string.IsNullOrEmpty(unifiedId)
+                    ? App.Leaderboard?.Entries?.FirstOrDefault(e =>
+                        e.UnifiedId == unifiedId)
+                    : null;
+
+                ownEntry ??= !string.IsNullOrEmpty(displayName)
                     ? App.Leaderboard?.Entries?.FirstOrDefault(e =>
                         e.DisplayName?.Equals(displayName, StringComparison.OrdinalIgnoreCase) == true)
                     : null;
@@ -17092,6 +17146,162 @@ namespace ConditioningControlPanel
             var activeVideos = 0;
             CountAssetsRecursive(_assetTree, ref totalImages, ref totalVideos, ref activeImages, ref activeVideos);
             return (activeImages, activeVideos);
+        }
+
+        #endregion
+
+        #region Phrase Presets
+
+        private bool _isLoadingPhrasePreset = false;
+
+        private void InitializePhrasePresets()
+        {
+            RefreshPhrasePresetsComboBox();
+        }
+
+        private void RefreshPhrasePresetsComboBox()
+        {
+            _isLoadingPhrasePreset = true;
+            CmbPhrasePresets.ItemsSource = null;
+            CmbPhrasePresets.ItemsSource = App.Settings.Current.PhrasePresets;
+
+            if (!string.IsNullOrEmpty(App.Settings.Current.CurrentPhrasePresetId))
+            {
+                CmbPhrasePresets.SelectedValue = App.Settings.Current.CurrentPhrasePresetId;
+            }
+            _isLoadingPhrasePreset = false;
+        }
+
+        private void CmbPhrasePresets_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoadingPhrasePreset || _isLoading) return;
+            if (CmbPhrasePresets.SelectedItem is not Models.PhrasePreset preset) return;
+
+            preset.ApplyToSettings();
+            App.Settings.Current.CurrentPhrasePresetId = preset.Id;
+            App.Settings.Save();
+
+            UpdatePhraseCountDisplay();
+
+            App.Logger?.Information("Loaded phrase preset: {Name} ({Count} phrases)",
+                preset.Name, preset.ActivePhraseCount);
+        }
+
+        private void BtnSavePhrasePreset_Click(object sender, RoutedEventArgs e)
+        {
+            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
+            var activePhraseCount = App.CompanionPhrases?.GetActivePhraseCount(mode) ?? 0;
+
+            var dialog = new System.Windows.Window
+            {
+                Title = "Save Phrase Preset",
+                Width = 350,
+                Height = 150,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.NoResize,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A1A2E")),
+                WindowStyle = WindowStyle.ToolWindow
+            };
+
+            var grid = new Grid { Margin = new Thickness(15) };
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var label = new TextBlock
+            {
+                Text = "Enter a name for this phrase preset:",
+                Foreground = new SolidColorBrush(Colors.White),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            Grid.SetRow(label, 0);
+            grid.Children.Add(label);
+
+            var textBox = new TextBox
+            {
+                Text = $"Preset {App.Settings.Current.PhrasePresets.Count + 1}",
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252542")),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
+                Padding = new Thickness(8, 5, 8, 5),
+                Margin = new Thickness(0, 0, 0, 15)
+            };
+            textBox.SelectAll();
+            Grid.SetRow(textBox, 1);
+            grid.Children.Add(textBox);
+
+            var btnPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var btnOk = new Button
+            {
+                Content = "Save",
+                Width = 80,
+                Padding = new Thickness(8, 5, 8, 5),
+                Margin = new Thickness(0, 0, 8, 0),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderThickness = new Thickness(0)
+            };
+            var btnCancel = new Button
+            {
+                Content = "Cancel",
+                Width = 80,
+                Padding = new Thickness(8, 5, 8, 5),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#404060")),
+                Foreground = new SolidColorBrush(Colors.White),
+                BorderThickness = new Thickness(0)
+            };
+
+            btnOk.Click += (s, args) => { dialog.DialogResult = true; dialog.Close(); };
+            btnCancel.Click += (s, args) => { dialog.DialogResult = false; dialog.Close(); };
+
+            btnPanel.Children.Add(btnOk);
+            btnPanel.Children.Add(btnCancel);
+            Grid.SetRow(btnPanel, 2);
+            grid.Children.Add(btnPanel);
+
+            dialog.Content = grid;
+            textBox.Focus();
+
+            if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                var preset = Models.PhrasePreset.FromCurrentSettings(textBox.Text.Trim(), activePhraseCount);
+                App.Settings.Current.PhrasePresets.Add(preset);
+                App.Settings.Current.CurrentPhrasePresetId = preset.Id;
+                App.Settings.Save();
+
+                RefreshPhrasePresetsComboBox();
+                CmbPhrasePresets.SelectedValue = preset.Id;
+
+                App.Logger?.Information("Saved phrase preset: {Name} with {Count} active phrases",
+                    preset.Name, activePhraseCount);
+            }
+        }
+
+        private void BtnDeletePhrasePreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (CmbPhrasePresets.SelectedItem is not Models.PhrasePreset preset)
+            {
+                MessageBox.Show("Please select a preset to delete.", "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"Delete phrase preset '{preset.Name}'?\n\nThis cannot be undone.",
+                "Delete Preset",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                App.Settings.Current.PhrasePresets.Remove(preset);
+                App.Settings.Current.CurrentPhrasePresetId = null;
+                App.Settings.Save();
+
+                RefreshPhrasePresetsComboBox();
+
+                App.Logger?.Information("Deleted phrase preset: {Name}", preset.Name);
+            }
         }
 
         #endregion

@@ -2532,6 +2532,12 @@ namespace ConditioningControlPanel.Models
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public Dictionary<string, string> PhraseAudioOverrides { get; set; } = new();
 
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<PhrasePreset> PhrasePresets { get; set; } = new();
+
+        [JsonProperty]
+        public string? CurrentPhrasePresetId { get; set; }
+
         #endregion
 
         #region Validation

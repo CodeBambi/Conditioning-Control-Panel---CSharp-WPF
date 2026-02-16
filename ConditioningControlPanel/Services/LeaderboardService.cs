@@ -174,7 +174,8 @@ public class LeaderboardService : IDisposable
                 return 0;
             }
 
-            // Try to find the player by Discord ID first, then fall back to display name
+            // Try to find the player by unified ID, Discord ID, then display name
+            var unifiedId = App.UnifiedUserId;
             var discordId = App.Discord?.UserId;
             var displayName = App.UserDisplayName;
 
@@ -183,7 +184,14 @@ public class LeaderboardService : IDisposable
             for (int i = 0; i < Entries.Count; i++)
             {
                 var entry = Entries[i];
-                // Match by Discord ID (primary)
+                // Match by Unified ID (primary)
+                if (!string.IsNullOrEmpty(unifiedId) && entry.UnifiedId == unifiedId)
+                {
+                    position = i + 1;
+                    App.Logger?.Debug("GetPlayerPercentile: Found player by Unified ID at position {Position} out of {Total}", position, TotalUsers);
+                    break;
+                }
+                // Match by Discord ID
                 if (!string.IsNullOrEmpty(discordId) && entry.DiscordId == discordId)
                 {
                     position = i + 1;
@@ -201,7 +209,7 @@ public class LeaderboardService : IDisposable
 
             if (position <= 0)
             {
-                App.Logger?.Debug("GetPlayerPercentile: Player not found in leaderboard (DiscordId={DiscordId}, DisplayName={DisplayName})", discordId, displayName);
+                App.Logger?.Debug("GetPlayerPercentile: Player not found in leaderboard (UnifiedId={UnifiedId}, DiscordId={DiscordId}, DisplayName={DisplayName})", unifiedId, discordId, displayName);
                 return 0;
             }
 
@@ -261,6 +269,9 @@ public class LeaderboardEntry
 {
     [JsonProperty("rank")]
     public int Rank { get; set; }
+
+    [JsonProperty("unified_id")]
+    public string? UnifiedId { get; set; }
 
     [JsonProperty("display_name")]
     public string DisplayName { get; set; } = "";

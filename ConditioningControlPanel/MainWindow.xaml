@@ -5116,6 +5116,30 @@
                                             <TextBlock x:Name="TxtPhraseCount" Text="0 active" Foreground="#FF69B4" FontWeight="SemiBold"/>
                                         </StackPanel>
                                     </Button>
+
+                                    <!-- Phrase Presets -->
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox x:Name="CmbPhrasePresets" Grid.Column="0" FontSize="11"
+                                                  Style="{StaticResource DarkComboBoxStyle}"
+                                                  DisplayMemberPath="DisplayText"
+                                                  SelectedValuePath="Id"
+                                                  SelectionChanged="CmbPhrasePresets_SelectionChanged"/>
+                                        <Button Content="Save" Grid.Column="1"
+                                                Style="{StaticResource SmallPinkButton}"
+                                                Padding="10,4" FontSize="11" Margin="6,0,0,0"
+                                                ToolTip="Save current phrase config as a preset"
+                                                Click="BtnSavePhrasePreset_Click"/>
+                                        <Button Content="Delete" Grid.Column="2"
+                                                Style="{StaticResource OutlineButton}"
+                                                Padding="10,4" FontSize="11" Margin="4,0,0,0"
+                                                ToolTip="Delete selected phrase preset"
+                                                Click="BtnDeletePhrasePreset_Click"/>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 
