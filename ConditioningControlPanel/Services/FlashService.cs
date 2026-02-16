@@ -292,11 +292,13 @@ namespace ConditioningControlPanel.Services
                 // Scale is percentage: 50-250%, stored as 50-250, so divide by 100
                 var scale = settings.ImageScale / 100.0;
                 
-                // Load images in background
+                // Load images in parallel on background threads
+                var loadTasks = images.Select(imagePath => LoadImageAsync(imagePath)).ToArray();
+                var results = await Task.WhenAll(loadTasks);
+
                 var loadedImages = new List<LoadedImageData>();
-                foreach (var imagePath in images)
+                foreach (var data in results)
                 {
-                    var data = await LoadImageAsync(imagePath);
                     if (data != null)
                     {
                         var monitor = monitors[_random.Next(monitors.Count)];
@@ -334,11 +336,10 @@ namespace ConditioningControlPanel.Services
                 {
                     var extension = Path.GetExtension(path).ToLowerInvariant();
                     var data = new LoadedImageData { FilePath = path };
-                    
+
                     if (extension == ".gif")
                     {
-                        // Load GIF frames using System.Drawing (more reliable)
-                        LoadGifFramesSystemDrawing(path, data);
+                        LoadGifFrames(path, data);
                     }
                     else
                     {
@@ -346,13 +347,13 @@ namespace ConditioningControlPanel.Services
                         using var bitmap = new System.Drawing.Bitmap(path);
                         var bitmapSource = ConvertToBitmapSource(bitmap);
                         bitmapSource.Freeze();
-                        
+
                         data.Frames.Add(bitmapSource);
                         data.Width = bitmap.Width;
                         data.Height = bitmap.Height;
                         data.FrameDelay = TimeSpan.FromMilliseconds(100);
                     }
-                    
+
                     return data.Frames.Count > 0 ? data : null;
                 });
             }
@@ -363,7 +364,7 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void LoadGifFramesSystemDrawing(string path, LoadedImageData data)
+        private void LoadGifFrames(string path, LoadedImageData data)
         {
             try
             {
@@ -376,45 +377,39 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     var propertyItem = gif.GetPropertyItem(0x5100); // FrameDelay property
-                    if (propertyItem != null && propertyItem.Value != null)
+                    if (propertyItem?.Value != null)
                     {
-                        frameDelay = BitConverter.ToInt32(propertyItem.Value, 0) * 10; // Convert to ms
-                        if (frameDelay < 20) frameDelay = 100; // Sanity check
+                        frameDelay = BitConverter.ToInt32(propertyItem.Value, 0) * 10;
+                        if (frameDelay < 20) frameDelay = 100;
                     }
                 }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("Could not read GIF frame delay property: {Error}", ex.Message);
-                }
+                catch { }
 
-                // Performance: Dynamically limit frames based on image dimensions
-                // Large images need fewer frames to avoid memory pressure
-                var pixelsPerFrame = gif.Width * gif.Height * 4; // BGRA32 = 4 bytes per pixel
+                // Limit frames based on image size to keep memory reasonable
+                var pixelsPerFrame = gif.Width * gif.Height * 4L; // BGRA32
                 var estimatedMemoryMB = (pixelsPerFrame * frameCount) / (1024.0 * 1024.0);
 
-                // Cap at 30MB per GIF to prevent memory issues
                 const double MAX_MEMORY_MB = 30.0;
                 var maxFrames = frameCount;
                 if (estimatedMemoryMB > MAX_MEMORY_MB)
                 {
                     maxFrames = (int)(frameCount * (MAX_MEMORY_MB / estimatedMemoryMB));
-                    maxFrames = Math.Max(10, maxFrames); // At least 10 frames for animation
+                    maxFrames = Math.Max(10, maxFrames);
                 }
-                maxFrames = Math.Min(maxFrames, 60); // Hard cap at 60 frames
+                maxFrames = Math.Min(maxFrames, 60);
 
                 var step = frameCount > maxFrames ? frameCount / maxFrames : 1;
-                
+
                 for (int i = 0; i < frameCount && data.Frames.Count < maxFrames; i += step)
                 {
                     gif.SelectActiveFrame(dimension, i);
-                    
-                    // Clone the frame to avoid disposal issues
+
                     using var frameBitmap = new System.Drawing.Bitmap(gif.Width, gif.Height);
                     using (var g = Graphics.FromImage(frameBitmap))
                     {
                         g.DrawImage(gif, 0, 0, gif.Width, gif.Height);
                     }
-                    
+
                     var bitmapSource = ConvertToBitmapSource(frameBitmap);
                     bitmapSource.Freeze();
                     data.Frames.Add(bitmapSource);
@@ -423,29 +418,24 @@ namespace ConditioningControlPanel.Services
                 data.Width = gif.Width;
                 data.Height = gif.Height;
                 data.FrameDelay = TimeSpan.FromMilliseconds(step > 1 ? frameDelay * step : frameDelay);
-                
-                App.Logger.Debug("Loaded GIF with {Count} frames, delay {Delay}ms", data.Frames.Count, data.FrameDelay.TotalMilliseconds);
             }
             catch (Exception ex)
             {
                 App.Logger.Debug("Could not load GIF frames: {Error}", ex.Message);
-                
+
                 // Fallback: load as static image
                 try
                 {
                     using var bitmap = new System.Drawing.Bitmap(path);
                     var bitmapSource = ConvertToBitmapSource(bitmap);
                     bitmapSource.Freeze();
-                    
+
                     data.Frames.Add(bitmapSource);
                     data.Width = bitmap.Width;
                     data.Height = bitmap.Height;
                     data.FrameDelay = TimeSpan.FromMilliseconds(100);
                 }
-                catch (Exception innerEx)
-                {
-                    App.Logger?.Debug("GIF fallback to static image also failed: {Error}", innerEx.Message);
-                }
+                catch { }
             }
         }
 
@@ -651,7 +641,7 @@ namespace ConditioningControlPanel.Services
                 Stretch = Stretch.Uniform,
                 Source = imageData.Frames[0]
             };
-            
+
             window.ImageControl = image;
             window.Content = image;
             window.Opacity = 0;
@@ -707,8 +697,8 @@ namespace ConditioningControlPanel.Services
             {
                 _activeWindows.Remove(window);
             }
-            
-            window.Close();
+
+            SafeCloseFlashWindow(window);
             FlashClicked?.Invoke(this, EventArgs.Empty);
             _ = App.Haptics?.FlashClickVibeAsync();
 
@@ -745,10 +735,12 @@ namespace ConditioningControlPanel.Services
             var monitors = GetMonitors(settings.DualMonitorEnabled);
             var scale = settings.ImageScale / 100.0;
 
+            var loadTasks = images.Select(imagePath => LoadImageAsync(imagePath)).ToArray();
+            var results = await Task.WhenAll(loadTasks);
+
             var loadedImages = new List<LoadedImageData>();
-            foreach (var imagePath in images)
+            foreach (var data in results)
             {
-                var data = await LoadImageAsync(imagePath);
                 if (data != null)
                 {
                     var monitor = monitors[_random.Next(monitors.Count)];
@@ -827,7 +819,7 @@ namespace ConditioningControlPanel.Services
                     {
                         var elapsed = DateTime.Now - window.StartTime;
                         var frameIndex = (int)(elapsed.TotalMilliseconds / window.FrameDelay.TotalMilliseconds) % window.Frames.Count;
-                        
+
                         if (frameIndex != window.CurrentFrameIndex)
                         {
                             window.CurrentFrameIndex = frameIndex;
@@ -845,14 +837,7 @@ namespace ConditioningControlPanel.Services
             // Clean up windows
             foreach (var window in toRemove)
             {
-                try
-                {
-                    window.Close();
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("Failed to close expired flash window: {Error}", ex.Message);
-                }
+                SafeCloseFlashWindow(window);
 
                 lock (_lockObj)
                 {
@@ -1379,6 +1364,18 @@ namespace ConditioningControlPanel.Services
 
         #region Window Management
 
+        private void SafeCloseFlashWindow(FlashWindow window)
+        {
+            try
+            {
+                window.Close();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to close flash window: {Error}", ex.Message);
+            }
+        }
+
         private void MakeClickThrough(Window window)
         {
             try
@@ -1444,14 +1441,7 @@ namespace ConditioningControlPanel.Services
 
             foreach (var window in windowsCopy)
             {
-                try
-                {
-                    window.Close();
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("Failed to close flash window: {Error}", ex.Message);
-                }
+                SafeCloseFlashWindow(window);
             }
 
             _soundPlayingForCurrentFlash = false;
