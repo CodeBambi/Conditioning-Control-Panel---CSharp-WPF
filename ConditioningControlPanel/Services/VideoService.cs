@@ -73,6 +73,7 @@ namespace ConditioningControlPanel.Services
         /// Whether a video is currently playing
         /// </summary>
         public bool IsPlaying => _videoPlaying;
+        public bool IsRunning => _isRunning;
 
         /// <summary>
         /// Get the shared LibVLC instance (used by BubbleCountWindow).

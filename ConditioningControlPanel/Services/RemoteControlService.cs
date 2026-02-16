@@ -283,6 +283,7 @@ namespace ConditioningControlPanel.Services
                 if (App.Autonomy?.IsEnabled == true) services.Add("autonomy");
                 if (App.IsSessionRunning) services.Add("session");
                 if (App.Flash?.IsRunning == true) services.Add("flash_loop");
+                if (App.Video?.IsRunning == true) services.Add("video_loop");
                 if (App.Subliminal?.IsRunning == true) services.Add("subliminal_loop");
                 if (App.LockCard?.IsRunning == true) services.Add("lock_card");
                 if (App.MindWipe?.IsRunning == true) services.Add("mind_wipe");
@@ -476,6 +477,14 @@ namespace ConditioningControlPanel.Services
                         // Standard tier
                         case "trigger_video":
                             App.Video?.TriggerVideo();
+                            break;
+
+                        case "start_video":
+                            App.Video?.Start();
+                            break;
+
+                        case "stop_video":
+                            App.Video?.Stop();
                             break;
 
                         case "trigger_haptic":

@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using NAudio.Wave;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel
@@ -84,10 +85,28 @@ namespace ConditioningControlPanel
                 var soundPath = soundPaths.FirstOrDefault(System.IO.File.Exists);
                 if (soundPath != null)
                 {
-                    var player = new System.Windows.Media.MediaPlayer();
-                    player.Open(new Uri(soundPath));
-                    player.Volume = (App.Settings.Current.MasterVolume / 100.0) * 0.5; // 50% of master volume
-                    player.Play();
+                    System.Threading.Tasks.Task.Run(() =>
+                    {
+                        try
+                        {
+                            using var audioFile = new AudioFileReader(soundPath);
+                            using var outputDevice = new WaveOutEvent();
+
+                            var masterVolume = App.Settings.Current.MasterVolume / 100f;
+                            var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.5f;
+                            audioFile.Volume = Math.Max(0.01f, curvedVolume);
+
+                            outputDevice.Init(audioFile);
+                            outputDevice.Play();
+
+                            while (outputDevice.PlaybackState == PlaybackState.Playing)
+                                System.Threading.Thread.Sleep(50);
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("Failed to play completion sound: {Error}", ex.Message);
+                        }
+                    });
                 }
             }
             catch (Exception ex)

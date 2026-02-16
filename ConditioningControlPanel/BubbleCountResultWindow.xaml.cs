@@ -319,6 +319,19 @@ namespace ConditioningControlPanel
             timer.Start();
         }
 
+        /// <summary>
+        /// Force close all result windows (used by panic button)
+        /// </summary>
+        public static void ForceCloseAll()
+        {
+            foreach (var window in _allWindows.ToArray())
+            {
+                window._isCompleted = true;
+                try { window.Close(); } catch { }
+            }
+            _allWindows.Clear();
+        }
+
         private void CompleteAll(bool success)
         {
             foreach (var window in _allWindows.ToArray())

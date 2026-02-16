@@ -369,6 +369,19 @@ namespace ConditioningControlPanel
                 UpdateLevelDisplay();
                 // Also update avatar in case level changed significantly
                 _avatarTubeWindow?.UpdateAvatarForLevel(App.Settings.Current.PlayerLevel);
+
+                // Start autonomy if it was enabled but couldn't start earlier (Patreon wasn't validated yet)
+                var s = App.Settings?.Current;
+                if (s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven && s.IsLevelUnlocked(100)
+                    && App.Autonomy?.IsEnabled != true)
+                {
+                    var hasAccess = s.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+                    if (hasAccess)
+                    {
+                        App.Autonomy?.Start();
+                        App.Logger?.Information("Started autonomy service after profile loaded");
+                    }
+                }
             });
         }
 
@@ -645,6 +658,7 @@ namespace ConditioningControlPanel
                 // LibVLC windows become orphaned if we exit without proper cleanup
                 App.Video?.ForceCleanup(synchronous: true);
                 BubbleCountWindow.ForceCloseAll();
+                BubbleCountResultWindow.ForceCloseAll();
 
                 // Give LibVLC a moment to release native resources
                 Thread.Sleep(100);
@@ -12295,6 +12309,7 @@ namespace ConditioningControlPanel
             // Force close any open lock card windows (panic button should close them immediately)
             LockCardWindow.ForceCloseAll();
             BubbleCountWindow.ForceCloseAll();
+            BubbleCountResultWindow.ForceCloseAll();
 
             // Stop ramp timer and reset sliders
             StopRampTimer();

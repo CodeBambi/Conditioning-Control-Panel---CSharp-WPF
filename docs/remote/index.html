@@ -767,10 +767,14 @@
             <!-- Loops -->
             <div class="category">
                 <div class="category-title">Loops</div>
-                <div class="btn-grid two-col">
+                <div class="btn-grid">
                     <button class="cmd-btn" data-action="start_flash" data-action-off="stop_flash" data-toggle="flash_loop" data-tier="light">
                         <span class="icon">&#x26A1;</span>
                         <span class="label">Flash Loop</span>
+                    </button>
+                    <button class="cmd-btn" data-action="start_video" data-action-off="stop_video" data-toggle="video_loop" data-tier="standard">
+                        <span class="icon">&#x1F4F9;</span>
+                        <span class="label">Video Loop</span>
                     </button>
                     <button class="cmd-btn" data-action="start_subliminal" data-action-off="stop_subliminal" data-toggle="subliminal_loop" data-tier="light">
                         <span class="icon">&#x1F4AC;</span>
@@ -958,6 +962,10 @@
                             <div class="guide-item">
                                 <span class="guide-item-name">Flash Loop</span>
                                 <span class="guide-item-desc">&mdash; Toggle continuous flash image loop</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Video Loop</span>
+                                <span class="guide-item-desc">&mdash; Toggle continuous mandatory video loop (Standard)</span>
                             </div>
                             <div class="guide-item">
                                 <span class="guide-item-name">Sub Loop</span>
@@ -1422,8 +1430,8 @@
                     entry.status = 'fail';
                     entry.error = data.error;
 
-                    // If session expired or controller invalid, disconnect
-                    if (res.status === 404 || res.status === 403) {
+                    // If session expired, disconnect (but not for tier permission errors)
+                    if (res.status === 404) {
                         stopPolling();
                         showConnectScreen();
                     }
@@ -1514,6 +1522,7 @@
                 'no_panic': 'no_panic',
                 'autonomy': 'autonomy',
                 'flash_loop': 'flash_loop',
+                'video_loop': 'video_loop',
                 'subliminal_loop': 'subliminal_loop',
                 'lock_card': 'lock_card',
                 'mind_wipe': 'mind_wipe',
