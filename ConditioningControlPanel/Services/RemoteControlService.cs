@@ -78,6 +78,11 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("[RemoteControl] Session started: {Code}, tier: {Tier}", SessionCode, tier);
                 SessionStarted?.Invoke(this, EventArgs.Empty);
 
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    (System.Windows.Application.Current?.MainWindow as MainWindow)?.MinimizeToTrayForRemote();
+                });
+
                 return SessionCode;
             }
             catch (Exception ex)
@@ -277,6 +282,11 @@ namespace ConditioningControlPanel.Services
                 if (App.Settings?.Current?.PanicKeyEnabled == false) services.Add("no_panic");
                 if (App.Autonomy?.IsEnabled == true) services.Add("autonomy");
                 if (App.IsSessionRunning) services.Add("session");
+                if (App.Flash?.IsRunning == true) services.Add("flash_loop");
+                if (App.Subliminal?.IsRunning == true) services.Add("subliminal_loop");
+                if (App.LockCard?.IsRunning == true) services.Add("lock_card");
+                if (App.MindWipe?.IsRunning == true) services.Add("mind_wipe");
+                if (App.BouncingText?.IsRunning == true) services.Add("bounce_text");
             }
             catch { }
             return services;
@@ -324,11 +334,7 @@ namespace ConditioningControlPanel.Services
                 {
                     mw.EnablePinkFilter(false);
                     mw.EnableSpiral(false);
-                    mw.Show();
-                    mw.WindowState = System.Windows.WindowState.Normal;
-                    mw.Activate();
-                    mw.Topmost = true;
-                    mw.Topmost = false;
+                    mw.RestoreFromTrayForRemote();
                     mw.ShowAvatarTube();
                 }
             }
@@ -369,6 +375,28 @@ namespace ConditioningControlPanel.Services
 
                         case "trigger_subliminal":
                             App.Subliminal?.FlashSubliminal();
+                            break;
+
+                        case "start_flash":
+                            App.Flash?.Start();
+                            break;
+
+                        case "stop_flash":
+                            App.Flash?.Stop();
+                            break;
+
+                        case "start_subliminal":
+                            App.Subliminal?.Start();
+                            break;
+
+                        case "stop_subliminal":
+                            App.Subliminal?.Stop();
+                            break;
+
+                        case "trigger_custom_subliminal":
+                            var customText = parameters?["text"]?.ToString();
+                            if (!string.IsNullOrWhiteSpace(customText))
+                                App.Subliminal?.FlashSubliminalCustom(customText);
                             break;
 
                         case "show_pink_filter":
@@ -475,6 +503,42 @@ namespace ConditioningControlPanel.Services
                             App.BubbleCount?.TriggerGame(forceTest: true);
                             break;
 
+                        case "trigger_lock_card":
+                            App.LockCard?.ShowLockCard();
+                            break;
+
+                        case "start_lock_card":
+                            if (App.Settings?.Current != null) App.Settings.Current.LockCardEnabled = true;
+                            App.LockCard?.Start();
+                            break;
+
+                        case "stop_lock_card":
+                            App.LockCard?.Stop();
+                            break;
+
+                        case "trigger_mind_wipe":
+                            if (App.MindWipe?.AudioFileCount > 0)
+                                App.MindWipe?.TriggerOnce();
+                            break;
+
+                        case "start_mind_wipe":
+                            var freq = App.Settings?.Current?.MindWipeFrequency ?? 6;
+                            var vol = (App.Settings?.Current?.MindWipeVolume ?? 50) / 100.0;
+                            App.MindWipe?.Start(freq, vol);
+                            break;
+
+                        case "stop_mind_wipe":
+                            App.MindWipe?.Stop();
+                            break;
+
+                        case "start_bounce_text":
+                            App.BouncingText?.Start(bypassLevelCheck: true);
+                            break;
+
+                        case "stop_bounce_text":
+                            App.BouncingText?.Stop();
+                            break;
+
                         case "start_session":
                             // Create a default 30-minute session
                             var session = new Models.Session
@@ -490,6 +554,14 @@ namespace ConditioningControlPanel.Services
                             if (mainWindow != null)
                             {
                                 mainWindow.StartSessionFromRemote(session);
+                            }
+                            if (parameters?["strict_lock"]?.Value<bool>() == true)
+                            {
+                                if (App.Settings?.Current != null)
+                                {
+                                    App.Settings.Current.StrictLockEnabled = true;
+                                    App.Settings.Save();
+                                }
                             }
                             break;
 

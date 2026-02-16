@@ -33,6 +33,8 @@ namespace ConditioningControlPanel.Services
         private bool _disposed;
         private int _subliminalCount;
 
+        public bool IsRunning => _isRunning;
+
         /// <summary>
         /// Fired when a subliminal is displayed
         /// </summary>
@@ -156,6 +158,20 @@ namespace ConditioningControlPanel.Services
                 TriggerSubliminalWithHapticPattern(text);
                 App.Progression?.AddXP(10, XPSource.Subliminal);
             }
+        }
+
+        /// <summary>
+        /// Flash a custom subliminal text (from remote control).
+        /// Sanitizes input and caps length.
+        /// </summary>
+        public void FlashSubliminalCustom(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            text = text.Trim();
+            if (text.Length > 200) text = text.Substring(0, 200);
+            text = System.Text.RegularExpressions.Regex.Replace(text, "<[^>]*>", "");
+            TriggerSubliminalWithHapticPattern(text);
+            App.Progression?.AddXP(10, XPSource.Subliminal);
         }
 
         // Track if a deferred reset is pending (for when video ends)

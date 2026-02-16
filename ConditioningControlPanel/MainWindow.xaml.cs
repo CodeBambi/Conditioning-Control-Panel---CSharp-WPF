@@ -5907,7 +5907,11 @@ namespace ConditioningControlPanel
 
         private void BtnCopyRemoteLink_Click(object sender, RoutedEventArgs e)
         {
-            System.Windows.Clipboard.SetText("https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/remote/");
+            var code = App.RemoteControl?.SessionCode;
+            var url = "https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/remote/";
+            if (!string.IsNullOrEmpty(code))
+                url += $"?code={code}";
+            System.Windows.Clipboard.SetText(url);
             BtnCopyRemoteLink.Content = "Copied!";
             var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
             timer.Tick += (s, _) => { BtnCopyRemoteLink.Content = "Copy Link"; timer.Stop(); };

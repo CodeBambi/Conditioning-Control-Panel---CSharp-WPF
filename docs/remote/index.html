@@ -539,6 +539,83 @@
             background: rgba(255,68,68,0.3);
         }
 
+        /* Custom subliminal input */
+        .custom-sub-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .custom-sub-input {
+            flex: 1;
+            padding: 10px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--bg-secondary);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.8rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .custom-sub-input:focus {
+            border-color: var(--accent-pink);
+        }
+
+        .custom-sub-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .custom-sub-btn {
+            padding: 10px 18px;
+            background: var(--accent-gradient);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s;
+            flex-shrink: 0;
+        }
+
+        .custom-sub-btn:active {
+            transform: scale(0.95);
+        }
+
+        .custom-sub-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        /* Session checkbox */
+        .session-options {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--bg-secondary);
+            border-radius: 10px;
+        }
+
+        .session-options label {
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .session-options input[type="checkbox"] {
+            accent-color: var(--accent-pink);
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
         /* Guide section */
         .guide-section {
             margin-top: 20px;
@@ -687,6 +764,30 @@
                 </div>
             </div>
 
+            <!-- Loops -->
+            <div class="category">
+                <div class="category-title">Loops</div>
+                <div class="btn-grid two-col">
+                    <button class="cmd-btn" data-action="start_flash" data-action-off="stop_flash" data-toggle="flash_loop" data-tier="light">
+                        <span class="icon">&#x26A1;</span>
+                        <span class="label">Flash Loop</span>
+                    </button>
+                    <button class="cmd-btn" data-action="start_subliminal" data-action-off="stop_subliminal" data-toggle="subliminal_loop" data-tier="light">
+                        <span class="icon">&#x1F4AC;</span>
+                        <span class="label">Sub Loop</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Custom Subliminal -->
+            <div class="category" id="custom-sub-group">
+                <div class="category-title">Custom Subliminal</div>
+                <div class="custom-sub-row">
+                    <input type="text" class="custom-sub-input" id="custom-sub-input" maxlength="200" placeholder="Type subliminal text..." data-tier="light">
+                    <button class="custom-sub-btn" id="custom-sub-send" data-tier="light">Send</button>
+                </div>
+            </div>
+
             <!-- Overlays -->
             <div class="category">
                 <div class="category-title">Overlays</div>
@@ -733,6 +834,33 @@
                 </div>
             </div>
 
+            <!-- Effects -->
+            <div class="category">
+                <div class="category-title">Effects</div>
+                <div class="btn-grid">
+                    <button class="cmd-btn" data-action="trigger_lock_card" data-tier="standard">
+                        <span class="icon">&#x1F0CF;</span>
+                        <span class="label">Lock Card</span>
+                    </button>
+                    <button class="cmd-btn" data-action="start_lock_card" data-action-off="stop_lock_card" data-toggle="lock_card" data-tier="standard">
+                        <span class="icon">&#x1F501;</span>
+                        <span class="label">Lock Loop</span>
+                    </button>
+                    <button class="cmd-btn" data-action="trigger_mind_wipe" data-tier="full">
+                        <span class="icon">&#x1F9F9;</span>
+                        <span class="label">Mind Wipe</span>
+                    </button>
+                    <button class="cmd-btn" data-action="start_mind_wipe" data-action-off="stop_mind_wipe" data-toggle="mind_wipe" data-tier="full">
+                        <span class="icon">&#x1F9F9;</span>
+                        <span class="label">Wipe Loop</span>
+                    </button>
+                    <button class="cmd-btn" data-action="start_bounce_text" data-action-off="stop_bounce_text" data-toggle="bounce_text" data-tier="full">
+                        <span class="icon">&#x1F4DD;</span>
+                        <span class="label">Bounce</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Haptics -->
             <div class="category">
                 <div class="category-title">Haptics</div>
@@ -749,6 +877,25 @@
                         <span class="icon">&#x1F50A;</span>
                         <span class="label">Unduck</span>
                     </button>
+                </div>
+            </div>
+
+            <!-- Session -->
+            <div class="category" id="session-group">
+                <div class="category-title">Session</div>
+                <div class="btn-grid two-col">
+                    <button class="cmd-btn" id="btn-start-session" data-tier="full">
+                        <span class="icon">&#x25B6;</span>
+                        <span class="label">Start Session</span>
+                    </button>
+                    <button class="cmd-btn" data-action="stop_session" data-tier="full">
+                        <span class="icon">&#x23F9;</span>
+                        <span class="label">Stop Session</span>
+                    </button>
+                </div>
+                <div class="session-options" id="session-options">
+                    <input type="checkbox" id="session-strict-lock">
+                    <label for="session-strict-lock">Enable Strict Lock with Session</label>
                 </div>
             </div>
 
@@ -807,6 +954,24 @@
                             </div>
                         </div>
                         <div class="guide-category">
+                            <div class="guide-category-title">Loops</div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Flash Loop</span>
+                                <span class="guide-item-desc">&mdash; Toggle continuous flash image loop</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Sub Loop</span>
+                                <span class="guide-item-desc">&mdash; Toggle continuous subliminal message loop</span>
+                            </div>
+                        </div>
+                        <div class="guide-category">
+                            <div class="guide-category-title">Custom Subliminal</div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Send</span>
+                                <span class="guide-item-desc">&mdash; Flash a custom subliminal message (max 200 chars)</span>
+                            </div>
+                        </div>
+                        <div class="guide-category">
                             <div class="guide-category-title">Overlays</div>
                             <div class="guide-item">
                                 <span class="guide-item-name">Pink Filter</span>
@@ -834,6 +999,44 @@
                             <div class="guide-item">
                                 <span class="guide-item-name">Bubble Count</span>
                                 <span class="guide-item-desc">&mdash; Video counting minigame</span>
+                            </div>
+                        </div>
+                        <div class="guide-category">
+                            <div class="guide-category-title">Effects</div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Lock Card</span>
+                                <span class="guide-item-desc">&mdash; Trigger a lock card popup (Standard)</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Lock Loop</span>
+                                <span class="guide-item-desc">&mdash; Toggle lock card loop (Standard)</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Mind Wipe</span>
+                                <span class="guide-item-desc">&mdash; Trigger a mind wipe sound (Full)</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Wipe Loop</span>
+                                <span class="guide-item-desc">&mdash; Toggle mind wipe loop (Full)</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Bounce</span>
+                                <span class="guide-item-desc">&mdash; Toggle bouncing text overlay (Full)</span>
+                            </div>
+                        </div>
+                        <div class="guide-category">
+                            <div class="guide-category-title">Session</div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Start Session</span>
+                                <span class="guide-item-desc">&mdash; Start a 30-minute remote session (Full)</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Stop Session</span>
+                                <span class="guide-item-desc">&mdash; End the current session (Full)</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Strict Lock</span>
+                                <span class="guide-item-desc">&mdash; Checkbox to enable strict lock when starting a session</span>
                             </div>
                         </div>
                         <div class="guide-category">
@@ -1053,6 +1256,30 @@
                     btn.classList.remove('disabled');
                 }
             });
+
+            // Custom subliminal input: light tier
+            const customSubGroup = $('custom-sub-group');
+            if (customSubGroup) {
+                if (myLevel < TIER_LEVELS['light']) {
+                    customSubGroup.style.opacity = '0.35';
+                    customSubGroup.style.pointerEvents = 'none';
+                } else {
+                    customSubGroup.style.opacity = '';
+                    customSubGroup.style.pointerEvents = '';
+                }
+            }
+
+            // Session options: full tier
+            const sessionGroup = $('session-group');
+            if (sessionGroup) {
+                if (myLevel < TIER_LEVELS['full']) {
+                    sessionGroup.style.opacity = '0.35';
+                    sessionGroup.style.pointerEvents = 'none';
+                } else {
+                    sessionGroup.style.opacity = '';
+                    sessionGroup.style.pointerEvents = '';
+                }
+            }
         }
 
         // ═══════ Opacity Sliders ═══════
@@ -1127,6 +1354,44 @@
                 if (!action) return;
                 await sendCommand(action);
             });
+        });
+
+        // ═══════ Custom Subliminal ═══════
+        const customSubInput = $('custom-sub-input');
+        const customSubSend = $('custom-sub-send');
+
+        function sendCustomSubliminal() {
+            const text = customSubInput.value.trim();
+            if (!text) return;
+            sendCommand('trigger_custom_subliminal', { text });
+            customSubInput.value = '';
+        }
+
+        customSubSend.addEventListener('click', sendCustomSubliminal);
+        customSubInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendCustomSubliminal();
+        });
+
+        // ═══════ Session Start Button ═══════
+        const btnStartSession = $('btn-start-session');
+        const sessionStrictLock = $('session-strict-lock');
+
+        btnStartSession.addEventListener('click', (e) => {
+            if (btnStartSession.classList.contains('disabled')) return;
+
+            // Ripple effect
+            const ripple = document.createElement('span');
+            ripple.className = 'ripple';
+            const rect = btnStartSession.getBoundingClientRect();
+            const x = (e.clientX || rect.left + rect.width / 2) - rect.left;
+            const y = (e.clientY || rect.top + rect.height / 2) - rect.top;
+            ripple.style.left = x + 'px';
+            ripple.style.top = y + 'px';
+            ripple.style.width = ripple.style.height = Math.max(rect.width, rect.height) + 'px';
+            btnStartSession.appendChild(ripple);
+            setTimeout(() => ripple.remove(), 500);
+
+            sendCommand('start_session', { strict_lock: sessionStrictLock.checked });
         });
 
         // ═══════ Send Command ═══════
@@ -1247,7 +1512,12 @@
                 'spiral': 'spiral',
                 'strict_lock': 'strict_lock',
                 'no_panic': 'no_panic',
-                'autonomy': 'autonomy'
+                'autonomy': 'autonomy',
+                'flash_loop': 'flash_loop',
+                'subliminal_loop': 'subliminal_loop',
+                'lock_card': 'lock_card',
+                'mind_wipe': 'mind_wipe',
+                'bounce_text': 'bounce_text'
             };
 
             document.querySelectorAll('.cmd-btn[data-toggle]').forEach(btn => {
@@ -1302,8 +1572,23 @@
             }
         });
 
-        // ═══════ Auto-focus first input ═══════
-        codeInputs[0].focus();
+        // ═══════ Auto-connect from URL code ═══════
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlCode = (urlParams.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+        if (urlCode.length === 6) {
+            // Fill in code inputs and auto-connect
+            for (let i = 0; i < 6; i++) {
+                codeInputs[i].value = urlCode[i];
+            }
+            // Remove code from URL so refreshing doesn't re-connect
+            window.history.replaceState({}, '', window.location.pathname);
+            // Trigger connect
+            btnConnect.disabled = false;
+            btnConnect.click();
+        } else {
+            codeInputs[0].focus();
+        }
     })();
     </script>
 </body>
