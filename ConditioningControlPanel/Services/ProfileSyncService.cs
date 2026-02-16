@@ -25,7 +25,6 @@ namespace ConditioningControlPanel.Services
         private bool _disposed;
         private bool _syncEnabled = true;
         private bool _pendingQuestResetClear;
-        private bool _pendingSkillsResetAck;
 
         /// <summary>
         /// Whether using Patreon auth (vs Discord)
@@ -361,7 +360,7 @@ namespace ConditioningControlPanel.Services
                         reset_weekly_quest = false,
                         reset_daily_quest = false,
                         force_streak_override = false,
-                        force_skills_reset = _pendingSkillsResetAck ? (bool?)false : null
+                        force_skills_reset = settings.PendingSkillsResetAck ? (bool?)false : null
                     };
 
                     var v2Request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/sync");
@@ -408,16 +407,19 @@ namespace ConditioningControlPanel.Services
                         }
 
                         // Handle force_skills_reset - clear all skills and refund points
-                        if (v2Result?.ForceSkillsReset == true)
+                        // Guard: only apply if we haven't already acknowledged (survives crashes)
+                        if (v2Result?.ForceSkillsReset == true && !settings.PendingSkillsResetAck)
                         {
                             App.Logger?.Information("V2 Sync: Force skills reset - clearing all skills");
                             ApplyForceSkillsReset(v2Result.SkillPoints);
-                            _pendingSkillsResetAck = true; // Acknowledge on next sync to clear server flag
+                            settings.PendingSkillsResetAck = true;
+                            App.Settings?.Save();
                         }
-                        else if (_pendingSkillsResetAck)
+                        else if (settings.PendingSkillsResetAck && v2Result?.ForceSkillsReset != true)
                         {
                             // Server flag was cleared by our acknowledgment
-                            _pendingSkillsResetAck = false;
+                            settings.PendingSkillsResetAck = false;
+                            App.Settings?.Save();
                         }
                         else if (v2Result?.SkillPoints.HasValue == true && v2Result.SkillPoints.Value != settings.SkillPoints)
                         {

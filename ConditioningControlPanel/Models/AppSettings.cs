@@ -104,6 +104,13 @@ namespace ConditioningControlPanel.Models
             set { _skillPoints = Math.Max(0, value); OnPropertyChanged(); }
         }
 
+        /// <summary>
+        /// Persisted flag indicating we need to acknowledge a force_skills_reset to the server.
+        /// Survives crashes so we don't re-apply the reset on restart.
+        /// </summary>
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool PendingSkillsResetAck { get; set; }
+
         private List<string> _unlockedSkills = new();
         /// <summary>
         /// IDs of skills that have been unlocked in the enhancement tree.
