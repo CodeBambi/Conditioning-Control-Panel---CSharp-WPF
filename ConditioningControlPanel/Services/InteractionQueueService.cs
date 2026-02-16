@@ -24,6 +24,8 @@ public class InteractionQueueService
 
     // Maximum time an interaction can be active before auto-recovery (5 minutes)
     private const int MaxInteractionDurationMinutes = 5;
+    
+    public TimeSpan CurrentVideoDuration { get; set; }
 
     /// <summary>
     /// Currently active interaction type, or null if none
@@ -131,6 +133,7 @@ public class InteractionQueueService
 
             App.Logger?.Information("InteractionQueue: Completed {Type}", type);
             CurrentInteraction = null;
+            CurrentVideoDuration = TimeSpan.Zero;
 
             // Trigger next queued interaction
             if (_queue.Count > 0)
@@ -223,21 +226,27 @@ public class InteractionQueueService
 
     private void OnStuckDetectionTimerTick(object? sender, EventArgs e)
     {
-        _stuckDetectionTimer?.Stop();
-
         lock (_lock)
         {
             if (!CurrentInteraction.HasValue)
             {
+                _stuckDetectionTimer?.Stop();
                 return; // Not stuck anymore
             }
 
             var activeDuration = DateTime.Now - _interactionStartTime;
+            
+            if(activeDuration > CurrentVideoDuration)
+            {
+                return; // Not stuck just still playing a long video
+            }
             App.Logger?.Warning("InteractionQueue: STUCK INTERACTION DETECTED! {Type} has been active for {Duration:F1} minutes. Auto-recovering...",
                 CurrentInteraction, activeDuration.TotalMinutes);
-
+            
+            _stuckDetectionTimer?.Stop();
             // Force reset to recover
             CurrentInteraction = null;
+            CurrentVideoDuration = TimeSpan.Zero;
 
             // Trigger next queued interaction if any
             if (_queue.Count > 0)

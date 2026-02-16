@@ -333,6 +333,7 @@ namespace ConditioningControlPanel.Services
             _safetyTimer?.Stop();
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
+            App.InteractionQueue.CurrentVideoDuration = TimeSpan.Zero;
 
             // Force cleanup of any playing video - use synchronous disposal during stop
             // because Stop is typically called during app shutdown
@@ -580,6 +581,7 @@ namespace ConditioningControlPanel.Services
             _strictActive = false;
             CloseAll(synchronous);
             App.Audio?.ForceUnduck();
+            App.InteractionQueue.CurrentVideoDuration = TimeSpan.Zero;
             _penalties = 0;
             App.Logger?.Information("VideoService: Force cleanup completed (synchronous={Sync})", synchronous);
         }
@@ -1819,6 +1821,7 @@ namespace ConditioningControlPanel.Services
             // Stop the fallback timer since we now have accurate duration
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
+            App.InteractionQueue.CurrentVideoDuration = TimeSpan.FromSeconds(videoDurationSeconds); //when the video is started from the interactionQueue it also starts a time. so we need tell that timer howlong the video is or else it will cut it off after 5 min.
 
             // Add 5 second buffer beyond video duration
             var timeoutSeconds = videoDurationSeconds + 5;
