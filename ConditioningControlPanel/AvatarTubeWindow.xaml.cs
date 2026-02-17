@@ -180,6 +180,7 @@ namespace ConditioningControlPanel
         private const int WS_EX_TOPMOST = 0x00000008;
         private const uint WS_POPUP = 0x80000000;
         private const uint WS_CAPTION = 0x00C00000;
+        private static readonly IntPtr HWND_TOP = IntPtr.Zero;
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         private static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
 
@@ -267,7 +268,10 @@ namespace ConditioningControlPanel
             PreviewKeyDown += Window_PreviewKeyDown;
 
             // Keep tube in front during position changes when attached
-            LocationChanged += (s, e) => { if (_isAttached) BringToFrontTemporarily(); };
+            LocationChanged += (s, e) => { if (_isAttached) BringAttachedPairToFront(); };
+
+            // When tube gets activated (e.g. after topmost video closes), redirect to parent
+            Activated += TubeWindow_Activated;
 
             // Wire up video service events for companion speech (1.3s before video)
             if (App.Video != null)
@@ -840,7 +844,7 @@ namespace ConditioningControlPanel
                 {
                     UpdatePosition();
                     StartFloatingAnimation();
-                    BringToFrontTemporarily();
+                    BringAttachedPairToFront();
                 }
 
                             // Reset bubble position to ensure correct placement after layout
@@ -1252,7 +1256,7 @@ namespace ConditioningControlPanel
                 if (_parentWindow.WindowState == WindowState.Minimized) return;
                 UpdatePosition();
                 // Keep tube in front when attached, during parent move
-                if (_isAttached) BringToFrontTemporarily();
+                if (_isAttached) BringAttachedPairToFront();
             }
             catch { /* Window may be closing */ }
         }
@@ -1283,7 +1287,7 @@ namespace ConditioningControlPanel
                             if (_isAttached)
                             {
                                 UpdatePosition();
-                                BringToFrontTemporarily();
+                                BringAttachedPairToFront();
                             }
                             // When detached, WPF Topmost property handles it
                         }
@@ -1305,7 +1309,7 @@ namespace ConditioningControlPanel
                     if (_isAttached)
                     {
                         UpdatePosition();
-                        BringToFrontTemporarily();
+                        BringAttachedPairToFront();
                     }
                     // When detached, WPF Topmost property handles it
                 }
@@ -1330,12 +1334,6 @@ namespace ConditioningControlPanel
             if (_parentWindow == null) return;
             try
             {
-                // Only show tube if parent window is actually the foreground window
-                var parentHandle = new System.Windows.Interop.WindowInteropHelper(_parentWindow).Handle;
-                var foreground = GetForegroundWindow();
-                if (parentHandle == IntPtr.Zero || foreground != parentHandle)
-                    return;
-
                 if (_parentWindow.WindowState != WindowState.Minimized && _parentWindow.IsVisible
                     && App.Settings?.Current?.AvatarEnabled == true)
                 {
@@ -1350,7 +1348,7 @@ namespace ConditioningControlPanel
                         {
                             if (_isAttached && _tubeHandle != IntPtr.Zero)
                             {
-                                BringToFrontTemporarily();
+                                BringAttachedPairToFront();
                             }
                         }), System.Windows.Threading.DispatcherPriority.Background);
                     }
@@ -1370,7 +1368,7 @@ namespace ConditioningControlPanel
                 {
                     if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
                     {
-                        BringToFrontTemporarily();
+                        BringAttachedPairToFront();
                     }
                 }), System.Windows.Threading.DispatcherPriority.Background);
             }
@@ -1409,13 +1407,17 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // When attached, only show if parent window is the foreground window
+                // When attached, only show if our process owns the foreground window
                 if (_isAttached && _parentWindow != null)
                 {
-                    var parentHandle = new System.Windows.Interop.WindowInteropHelper(_parentWindow).Handle;
                     var foreground = GetForegroundWindow();
-                    if (parentHandle == IntPtr.Zero || foreground != parentHandle)
-                        return; // Don't show tube if main window isn't in front
+                    if (foreground != IntPtr.Zero)
+                    {
+                        GetWindowThreadProcessId(foreground, out uint foregroundPid);
+                        uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                        if (foregroundPid != ourPid)
+                            return; // Don't show tube if our app isn't in front
+                    }
                 }
 
                 Show();
@@ -1424,7 +1426,7 @@ namespace ConditioningControlPanel
                 if (_parentWindow != null && _parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized)
                 {
                     UpdatePosition();
-                    if (_isAttached) BringToFrontTemporarily();
+                    if (_isAttached) BringAttachedPairToFront();
                 }
 
                 StartFloatingAnimation();
@@ -2085,7 +2087,7 @@ namespace ConditioningControlPanel
 
             // Start z-order refresh to keep bubble on top of main window
             StartZOrderRefreshTimer();
-            BringToFrontTemporarily();
+            BringAttachedPairToFront();
 
             // Calculate display duration based on text length
             // Base: 5 seconds, plus ~0.05s per character, min 5s, max 14s
@@ -2402,6 +2404,54 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Bring both the parent window and the tube to the top of z-order together.
+        /// This prevents the tube from being separated from the parent (e.g. tube on top,
+        /// parent behind other apps) after video ends, fullscreen exit, or tab changes.
+        /// </summary>
+        private void BringAttachedPairToFront()
+        {
+            if (_tubeHandle == IntPtr.Zero) return;
+            if (!_isAttached) return;
+            if (_parentWindow == null || !_parentWindow.IsVisible || _parentWindow.WindowState == WindowState.Minimized)
+                return;
+            if (_parentHandle == IntPtr.Zero)
+                _parentHandle = new WindowInteropHelper(_parentWindow).Handle;
+            if (_parentHandle == IntPtr.Zero) return;
+
+            // Parent to top first, then tube above it — keeps them as a pair
+            SetWindowPos(_parentHandle, HWND_TOP, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            SetWindowPos(_tubeHandle, HWND_TOP, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+
+        /// <summary>
+        /// When the tube window gets activated while attached (e.g. after a topmost video window closes),
+        /// redirect activation to the parent window so they stay paired.
+        /// </summary>
+        private void TubeWindow_Activated(object? sender, EventArgs e)
+        {
+            if (!_isAttached || _parentWindow == null) return;
+            try
+            {
+                // Defer activation to parent so Windows finishes current activation first
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        if (_isAttached && _parentWindow != null && _parentWindow.IsVisible
+                            && _parentWindow.WindowState != WindowState.Minimized)
+                        {
+                            _parentWindow.Activate();
+                        }
+                    }
+                    catch { /* Window may be closing */ }
+                }), DispatcherPriority.Background);
+            }
+            catch { /* Window may be closing */ }
+        }
+
+        /// <summary>
         /// Reassert topmost status when detached - ensures avatar stays on top as a widget
         /// </summary>
         private void ReassertTopmost()
@@ -2428,7 +2478,13 @@ namespace ConditioningControlPanel
             {
                 if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
                 {
-                    BringToFrontTemporarily();
+                    // Only refresh z-order when our app owns the foreground — don't steal focus
+                    // from other apps. ParentWindow_Activated handles restoration when user returns.
+                    var foreground = GetForegroundWindow();
+                    if (foreground == _parentHandle || foreground == _tubeHandle)
+                    {
+                        BringAttachedPairToFront();
+                    }
                 }
             };
             _zOrderRefreshTimer.Start();
@@ -2791,7 +2847,7 @@ namespace ConditioningControlPanel
 
                 // Start z-order refresh to keep bubble on top of main window
                 StartZOrderRefreshTimer();
-                BringToFrontTemporarily();
+                BringAttachedPairToFront();
 
                 // Play the voice line audio in sync with the bubble
                 PlayVoiceLineAudio(filePath);
@@ -2933,7 +2989,7 @@ namespace ConditioningControlPanel
 
             // Start z-order refresh to keep bubble on top of main window
             StartZOrderRefreshTimer();
-            BringToFrontTemporarily();
+            BringAttachedPairToFront();
 
             App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
 
@@ -3555,7 +3611,21 @@ namespace ConditioningControlPanel
 
         private void OnVideoEnded(object? sender, EventArgs e)
         {
-            // Optional: could add ending message
+            // After video ends, restore z-order so both windows come back together
+            if (_isAttached)
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        if (_isAttached && _tubeHandle != IntPtr.Zero)
+                        {
+                            BringAttachedPairToFront();
+                        }
+                    }
+                    catch { /* Window may be closing */ }
+                }), DispatcherPriority.Background);
+            }
         }
 
         private void OnGameCompleted(object? sender, EventArgs e)
@@ -4049,7 +4119,7 @@ namespace ConditioningControlPanel
 
             // Snap back to parent window position
             UpdatePosition();
-            BringToFrontTemporarily();
+            BringAttachedPairToFront();
 
             // Defer the TOOLWINDOW style to ensure it's applied after all window state changes
             Dispatcher.BeginInvoke(new Action(() =>
