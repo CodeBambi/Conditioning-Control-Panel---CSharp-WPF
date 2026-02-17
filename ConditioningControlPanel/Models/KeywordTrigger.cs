@@ -17,7 +17,9 @@ namespace ConditioningControlPanel.Models
         None,
         SubliminalFlash,
         ImageFlash,
-        OverlayPulse
+        OverlayPulse,
+        MindWipe,
+        Bubbles
     }
 
     /// <summary>

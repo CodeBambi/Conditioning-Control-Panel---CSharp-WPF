@@ -53,9 +53,20 @@ namespace ConditioningControlPanel
         private BrowserService? _browser;
         private bool _browserInitialized = false;
         private bool _skipSiteToggleNavigation = false;
-        private List<Window> _browserFullscreenWindows = new();
         private Window? _browserPopoutWindow = null;
         private bool _isDualMonitorPlaybackActive = false;
+        private bool _isBrowserFullscreen = false;
+        private bool _browserFullscreenWasPopout = false;
+        private double _browserPreFullscreenZoom = 1.0;
+        // Popout pre-fullscreen state
+        private WindowStyle _popoutPreFsStyle;
+        private ResizeMode _popoutPreFsResize;
+        private WindowState _popoutPreFsState;
+        private double _popoutPreFsLeft, _popoutPreFsTop, _popoutPreFsWidth, _popoutPreFsHeight;
+        private bool _popoutPreFsTopmost;
+        // MainWindow pre-fullscreen state (embedded case)
+        private WindowState _mainPreFsState;
+        private bool _mainPreFsTopmost;
         private TrayIconService? _trayIcon;
         private GlobalKeyboardHook? _keyboardHook;
         private bool _isCapturingPanicKey = false;
@@ -5702,6 +5713,8 @@ namespace ConditioningControlPanel
             visualCombo.Items.Add("Subliminal");
             visualCombo.Items.Add("Image Flash");
             visualCombo.Items.Add("Overlay Pulse");
+            visualCombo.Items.Add("Mind Wipe");
+            visualCombo.Items.Add("Bubbles");
             visualCombo.SelectionChanged += CmbKeywordVisualEffect_SelectionChanged;
             Grid.SetColumn(visualCombo, 2);
             settingsRow.Children.Add(visualCombo);
@@ -11913,6 +11926,15 @@ namespace ConditioningControlPanel
                 // Handle window CLOSING (before close) - detach WebView to prevent parent/child errors
                 _browserPopoutWindow.Closing += (s, args) =>
                 {
+                    // Exit browser fullscreen first if the popout is being closed while fullscreen
+                    if (_isBrowserFullscreen && _browserFullscreenWasPopout)
+                    {
+                        _isBrowserFullscreen = false;
+                        _browserFullscreenWasPopout = false;
+                        if (_browser != null)
+                            _browser.ZoomFactor = _browserPreFullscreenZoom;
+                    }
+
                     if (_browserPopoutWindow != null)
                     {
                         // CRITICAL: Remove WebView from window content BEFORE closing
@@ -11996,64 +12018,72 @@ namespace ConditioningControlPanel
 
         public void EnterBrowserFullscreen()
         {
-            if (_browser?.WebView == null) return;
+            if (_browser?.WebView == null || _isBrowserFullscreen) return;
 
             try
             {
                 // Save avatar attached state before entering fullscreen
                 _avatarWasAttachedBeforeBrowserFullscreen = _avatarTubeWindow != null && !_avatarTubeWindow.IsDetached;
-
-                var allScreens = App.GetAllScreensCached();
-                if (allScreens.Length == 0)
-                {
-                    App.Logger?.Warning("No screens available for browser fullscreen");
-                    return;
-                }
-
-                var primary = allScreens.FirstOrDefault(s => s.Primary) ?? allScreens[0];
-
-                // Remove WebView from its current container (could be embedded or popup)
-                if (BrowserContainer.Children.Contains(_browser.WebView))
-                {
-                    BrowserContainer.Children.Remove(_browser.WebView);
-                }
-                else if (_browserPopoutWindow != null && _browserPopoutWindow.Content == _browser.WebView)
-                {
-                    _browserPopoutWindow.Content = null;
-                }
-
-                // Create primary fullscreen window with WebView
-                var primaryWin = new Window
-                {
-                    WindowStyle = WindowStyle.None,
-                    ResizeMode = ResizeMode.NoResize,
-                    Topmost = true,
-                    ShowInTaskbar = false,
-                    Background = System.Windows.Media.Brushes.Black,
-                    Left = primary.Bounds.Left,
-                    Top = primary.Bounds.Top,
-                    Width = primary.Bounds.Width,
-                    Height = primary.Bounds.Height,
-                    Content = _browser.WebView
-                };
-
+                _browserPreFullscreenZoom = _browser.ZoomFactor;
                 _browser.ZoomFactor = 1.0;
+                _isBrowserFullscreen = true;
 
-                primaryWin.KeyDown += (s, e) =>
+                if (_browserPopoutWindow != null)
                 {
-                    if (e.Key == Key.Escape)
+                    // === POPOUT MODE: make the popout window itself go fullscreen ===
+                    _browserFullscreenWasPopout = true;
+
+                    // Save popout window state for restore
+                    _popoutPreFsStyle = _browserPopoutWindow.WindowStyle;
+                    _popoutPreFsResize = _browserPopoutWindow.ResizeMode;
+                    _popoutPreFsState = _browserPopoutWindow.WindowState;
+                    _popoutPreFsLeft = _browserPopoutWindow.Left;
+                    _popoutPreFsTop = _browserPopoutWindow.Top;
+                    _popoutPreFsWidth = _browserPopoutWindow.Width;
+                    _popoutPreFsHeight = _browserPopoutWindow.Height;
+                    _popoutPreFsTopmost = _browserPopoutWindow.Topmost;
+
+                    // Go fullscreen — must set Normal first to change WindowStyle
+                    if (_browserPopoutWindow.WindowState == WindowState.Maximized)
+                        _browserPopoutWindow.WindowState = WindowState.Normal;
+
+                    _browserPopoutWindow.WindowStyle = WindowStyle.None;
+                    _browserPopoutWindow.ResizeMode = ResizeMode.NoResize;
+                    _browserPopoutWindow.Topmost = true;
+
+                    // Position to cover the screen the popout is on
+                    var screen = System.Windows.Forms.Screen.FromHandle(
+                        new System.Windows.Interop.WindowInteropHelper(_browserPopoutWindow).Handle);
+                    _browserPopoutWindow.Left = screen.Bounds.Left;
+                    _browserPopoutWindow.Top = screen.Bounds.Top;
+                    _browserPopoutWindow.Width = screen.Bounds.Width;
+                    _browserPopoutWindow.Height = screen.Bounds.Height;
+
+                    App.Logger?.Information("Browser popout entered fullscreen (no reparent)");
+                }
+                else
+                {
+                    // === EMBEDDED MODE: move WebView to overlay within same Window HWND ===
+                    _browserFullscreenWasPopout = false;
+
+                    // Move WebView from BrowserContainer to the fullscreen overlay
+                    // Both are within the same MainWindow HWND, so no DirectX swapchain recreation
+                    if (BrowserContainer.Children.Contains(_browser.WebView))
                     {
-                        _browser?.WebView?.CoreWebView2?.ExecuteScriptAsync("document.exitFullscreen()");
+                        BrowserContainer.Children.Remove(_browser.WebView);
                     }
-                };
+                    BrowserFullscreenOverlay.Children.Add(_browser.WebView);
+                    BrowserFullscreenOverlay.Visibility = Visibility.Visible;
 
-                primaryWin.Show();
-                _browserFullscreenWindows.Add(primaryWin);
+                    // Save and maximize MainWindow
+                    _mainPreFsState = WindowState;
+                    _mainPreFsTopmost = Topmost;
+                    Topmost = true;
+                    if (WindowState != WindowState.Maximized)
+                        WindowState = WindowState.Maximized;
 
-                // Note: WebView2 can't be mirrored to secondary screens due to DirectX rendering
-                // Browser fullscreen only displays on primary monitor
-
-                App.Logger?.Information("Browser entered fullscreen on primary monitor");
+                    App.Logger?.Information("Browser embedded entered fullscreen via overlay (no reparent)");
+                }
             }
             catch (Exception ex)
             {
@@ -12064,46 +12094,49 @@ namespace ConditioningControlPanel
 
         private void ExitBrowserFullscreen()
         {
+            if (!_isBrowserFullscreen) return;
+
             try
             {
-                // Close all fullscreen windows
-                foreach (var win in _browserFullscreenWindows.ToList())
+                if (_browserFullscreenWasPopout && _browserPopoutWindow != null)
                 {
-                    try
-                    {
-                        // Get the WebView before closing if it's the primary
-                        if (win.Content == _browser?.WebView)
-                        {
-                            win.Content = null;
-                        }
-                        win.Close();
-                    }
-                    catch { }
+                    // === POPOUT MODE: restore popout window state ===
+                    _browserPopoutWindow.WindowStyle = _popoutPreFsStyle;
+                    _browserPopoutWindow.ResizeMode = _popoutPreFsResize;
+                    _browserPopoutWindow.Topmost = _popoutPreFsTopmost;
+                    _browserPopoutWindow.Left = _popoutPreFsLeft;
+                    _browserPopoutWindow.Top = _popoutPreFsTop;
+                    _browserPopoutWindow.Width = _popoutPreFsWidth;
+                    _browserPopoutWindow.Height = _popoutPreFsHeight;
+                    _browserPopoutWindow.WindowState = _popoutPreFsState;
                 }
-                _browserFullscreenWindows.Clear();
-
-                // Restore WebView to correct container (popup if popped out, otherwise embedded)
-                if (_browser?.WebView != null)
+                else
                 {
-                    if (_browserPopoutWindow != null)
+                    // === EMBEDDED MODE: move WebView back from overlay ===
+                    if (_browser?.WebView != null)
                     {
-                        // Browser was popped out - return to popup window
-                        if (_browserPopoutWindow.Content != _browser.WebView)
+                        if (BrowserFullscreenOverlay.Children.Contains(_browser.WebView))
                         {
-                            _browserPopoutWindow.Content = _browser.WebView;
+                            BrowserFullscreenOverlay.Children.Remove(_browser.WebView);
                         }
-                        // Restore zoom to 50%
-                        _browser.ZoomFactor = 0.5;
+                        if (!BrowserContainer.Children.Contains(_browser.WebView))
+                        {
+                            BrowserContainer.Children.Add(_browser.WebView);
+                        }
                     }
-                    else if (!BrowserContainer.Children.Contains(_browser.WebView))
-                    {
-                        // Return to embedded container
-                        BrowserContainer.Children.Add(_browser.WebView);
-                        // Restore zoom to 50%
-                        _browser.ZoomFactor = 0.5;
-                    }
+                    BrowserFullscreenOverlay.Visibility = Visibility.Collapsed;
+
+                    // Restore MainWindow state
+                    Topmost = _mainPreFsTopmost;
+                    if (WindowState != _mainPreFsState)
+                        WindowState = _mainPreFsState;
                 }
 
+                // Restore zoom
+                if (_browser != null)
+                    _browser.ZoomFactor = _browserPreFullscreenZoom;
+
+                _isBrowserFullscreen = false;
                 _avatarWasAttachedBeforeBrowserFullscreen = false;
 
                 App.Logger?.Information("Browser exited fullscreen");

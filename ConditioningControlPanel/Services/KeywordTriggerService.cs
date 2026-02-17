@@ -649,6 +649,16 @@ namespace ConditioningControlPanel.Services
                         App.Overlay?.PulseOverlays();
                         break;
 
+                    case KeywordVisualEffect.MindWipe:
+                        // Only trigger if audio files exist (TriggerOnce shows a MessageBox when empty)
+                        if (App.MindWipe?.AudioFileCount > 0)
+                            App.MindWipe.TriggerOnce();
+                        break;
+
+                    case KeywordVisualEffect.Bubbles:
+                        App.Bubbles?.SpawnOnce();
+                        break;
+
                     case KeywordVisualEffect.None:
                     default:
                         break;

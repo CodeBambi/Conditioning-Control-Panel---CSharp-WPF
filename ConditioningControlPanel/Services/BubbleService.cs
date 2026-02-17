@@ -212,6 +212,49 @@ public class BubbleService : IDisposable
         });
     }
 
+    /// <summary>
+    /// Spawn a single bubble immediately (for keyword triggers).
+    /// Works even when the service isn't continuously running.
+    /// </summary>
+    public void SpawnOnce()
+    {
+        Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            try
+            {
+                if (_bubbleImage == null)
+                    LoadBubbleImage();
+
+                // Ensure animation timer is running to animate the spawned bubble
+                if (_animationTimer == null || !_animationTimer.IsEnabled)
+                {
+                    _animationTimer = new DispatcherTimer(DispatcherPriority.Render)
+                    {
+                        Interval = TimeSpan.FromMilliseconds(32)
+                    };
+                    _animationTimer.Tick += AnimateAllBubbles;
+                    _animationTimer.Start();
+                }
+
+                var settings = App.Settings.Current;
+                var screens = settings.DualMonitorEnabled
+                    ? App.GetAllScreensCached()
+                    : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+                var screen = screens[_random.Next(screens.Length)];
+                var isClickable = App.IsSessionRunning ? settings.BubblesClickable : true;
+                var bubble = new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable);
+                _bubbles.Add(bubble);
+
+                App.Logger?.Debug("SpawnOnce: spawned trigger bubble, total: {Count}", _bubbles.Count);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error("SpawnOnce: Failed to spawn bubble: {Error}", ex.Message);
+            }
+        });
+    }
+
     private void OnPop(Bubble bubble)
     {
         // Roll for lucky bubble (5% chance for 10x XP if skill unlocked)
