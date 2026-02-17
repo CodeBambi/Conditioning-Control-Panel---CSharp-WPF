@@ -2110,8 +2110,8 @@ namespace ConditioningControlPanel
                 double progressPercent = dailyDef.TargetValue > 0
                     ? Math.Min(1.0, (double)dailyProgress.CurrentProgress / dailyDef.TargetValue)
                     : 0;
-                DailyProgressFill.Width = DailyQuestCard.ActualWidth > 30
-                    ? (DailyQuestCard.ActualWidth - 130) * progressPercent
+                DailyProgressFill.Width = DailyProgressTrack.ActualWidth > 0
+                    ? DailyProgressTrack.ActualWidth * progressPercent
                     : 0;
 
                 // Show completed overlay if done (briefly visible before next quest loads)
@@ -2181,8 +2181,8 @@ namespace ConditioningControlPanel
                 double progressPercent = weeklyDef.TargetValue > 0
                     ? Math.Min(1.0, (double)weeklyProgress.CurrentProgress / weeklyDef.TargetValue)
                     : 0;
-                WeeklyProgressFill.Width = WeeklyQuestCard.ActualWidth > 30
-                    ? (WeeklyQuestCard.ActualWidth - 130) * progressPercent
+                WeeklyProgressFill.Width = WeeklyProgressTrack.ActualWidth > 0
+                    ? WeeklyProgressTrack.ActualWidth * progressPercent
                     : 0;
 
                 // Show completed overlay if done

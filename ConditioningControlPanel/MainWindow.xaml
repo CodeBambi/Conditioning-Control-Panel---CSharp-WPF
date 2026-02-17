@@ -4268,7 +4268,7 @@
 
                                                 <!-- Progress Bar -->
                                                 <Grid Margin="0,12,0,0">
-                                                    <Border Background="#1A1A2E" CornerRadius="4" Height="10">
+                                                    <Border x:Name="DailyProgressTrack" Background="#1A1A2E" CornerRadius="4" Height="10">
                                                         <Border x:Name="DailyProgressFill" Background="#FFD700"
                                                                 CornerRadius="4" HorizontalAlignment="Left" Width="0"/>
                                                     </Border>
@@ -4385,7 +4385,7 @@
 
                                                 <!-- Progress Bar -->
                                                 <Grid Margin="0,12,0,0">
-                                                    <Border Background="#1A1A2E" CornerRadius="4" Height="10">
+                                                    <Border x:Name="WeeklyProgressTrack" Background="#1A1A2E" CornerRadius="4" Height="10">
                                                         <Border x:Name="WeeklyProgressFill" Background="#9370DB"
                                                                 CornerRadius="4" HorizontalAlignment="Left" Width="0"/>
                                                     </Border>
