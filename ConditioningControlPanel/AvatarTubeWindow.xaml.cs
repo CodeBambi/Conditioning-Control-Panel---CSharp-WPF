@@ -2327,6 +2327,15 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Block link clicks during remote control — navigating the browser
+                // while a web video is playing fullscreen breaks the playback state
+                if (App.RemoteControl?.ControllerConnected == true)
+                {
+                    App.Logger?.Debug("Speech bubble link blocked - remote controller is connected");
+                    e.Handled = true;
+                    return;
+                }
+
                 var url = e.Uri.AbsoluteUri;
                 App.Logger?.Information("Speech bubble link clicked - Raw URI: {Uri}, AbsoluteUri: {Url}", e.Uri, url);
 
