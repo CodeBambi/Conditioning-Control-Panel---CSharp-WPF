@@ -45,6 +45,9 @@ namespace ConditioningControlPanel.Services
         public event EventHandler? SessionStarted;
         public event EventHandler? SessionEnded;
 
+        // Direct reference to MainWindow — Application.Current.MainWindow becomes null when hidden to tray
+        public MainWindow? MainWindowRef { get; set; }
+
         public Func<List<object>>? GetAvailableSessionsCallback { get; set; }
         public Func<SessionProgressInfo?>? GetSessionProgressCallback { get; set; }
         public Func<string, Models.Session?>? FindSessionByIdCallback { get; set; }
@@ -98,11 +101,6 @@ namespace ConditioningControlPanel.Services
 
                 App.Logger?.Information("[RemoteControl] Session started: {Code}, tier: {Tier}", SessionCode, tier);
                 SessionStarted?.Invoke(this, EventArgs.Empty);
-
-                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
-                {
-                    (System.Windows.Application.Current?.MainWindow as MainWindow)?.MinimizeToTrayForRemote();
-                });
 
                 return SessionCode;
             }
@@ -203,9 +201,8 @@ namespace ConditioningControlPanel.Services
                     if (connected)
                     {
                         // Stop the engine so only the controller triggers effects
-                        var mw = System.Windows.Application.Current?.MainWindow as MainWindow;
-                        if (mw?.IsEngineRunning == true)
-                            mw.StopEngine();
+                        if (MainWindowRef?.IsEngineRunning == true)
+                            MainWindowRef.StopEngine();
 
                         // Ensure overlay service is ready for remote commands
                         EnsureOverlayRunning();
@@ -356,14 +353,16 @@ namespace ConditioningControlPanel.Services
 
                 App.InteractionQueue?.ForceReset();
 
+                // Stop session engine and main engine if running
+                MainWindowRef?.StopSessionFromRemote();
+
                 // Sync checkbox state and bring window to front
-                var mw = System.Windows.Application.Current?.MainWindow as MainWindow;
-                if (mw != null)
+                if (MainWindowRef != null)
                 {
-                    mw.EnablePinkFilter(false);
-                    mw.EnableSpiral(false);
-                    mw.RestoreFromTrayForRemote();
-                    mw.ShowAvatarTube();
+                    MainWindowRef.EnablePinkFilter(false);
+                    MainWindowRef.EnableSpiral(false);
+                    MainWindowRef.RestoreFromTrayForRemote();
+                    MainWindowRef.ShowAvatarTube();
                 }
             }
             catch (Exception ex)
@@ -435,7 +434,7 @@ namespace ConditioningControlPanel.Services
                             if (App.Settings?.Current != null)
                             {
                                 App.Settings.Current.PinkFilterEnabled = true;
-                                (System.Windows.Application.Current.MainWindow as MainWindow)?.EnablePinkFilter(true);
+                                MainWindowRef?.EnablePinkFilter(true);
                                 EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
@@ -446,7 +445,7 @@ namespace ConditioningControlPanel.Services
                             if (App.Settings?.Current != null)
                             {
                                 App.Settings.Current.PinkFilterEnabled = false;
-                                (System.Windows.Application.Current.MainWindow as MainWindow)?.EnablePinkFilter(false);
+                                MainWindowRef?.EnablePinkFilter(false);
                                 EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
@@ -457,7 +456,7 @@ namespace ConditioningControlPanel.Services
                             if (App.Settings?.Current != null)
                             {
                                 App.Settings.Current.SpiralEnabled = true;
-                                (System.Windows.Application.Current.MainWindow as MainWindow)?.EnableSpiral(true);
+                                MainWindowRef?.EnableSpiral(true);
                                 EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
@@ -468,7 +467,7 @@ namespace ConditioningControlPanel.Services
                             if (App.Settings?.Current != null)
                             {
                                 App.Settings.Current.SpiralEnabled = false;
-                                (System.Windows.Application.Current.MainWindow as MainWindow)?.EnableSpiral(false);
+                                MainWindowRef?.EnableSpiral(false);
                                 EnsureOverlayRunning();
                                 App.Overlay?.RefreshOverlays();
                                 App.Settings.Save();
@@ -587,19 +586,39 @@ namespace ConditioningControlPanel.Services
                             {
                                 session = FindSessionByIdCallback?.Invoke(sessionId);
                             }
-                            session ??= new Models.Session
+                            // Fall back to a generic session that preserves
+                            // the user's current settings (so effects keep running)
+                            if (session == null)
                             {
-                                Id = "remote_session",
-                                Name = "Remote Session",
-                                Icon = "🎮",
-                                DurationMinutes = 30,
-                                Difficulty = Models.SessionDifficulty.Medium,
-                                BonusXP = 200
-                            };
-                            var mainWindow = System.Windows.Application.Current.MainWindow as MainWindow;
-                            if (mainWindow != null)
+                                var cur = App.Settings?.Current;
+                                session = new Models.Session
+                                {
+                                    Id = "remote_session",
+                                    Name = "Remote Session",
+                                    Icon = "🎮",
+                                    DurationMinutes = 30,
+                                    Difficulty = Models.SessionDifficulty.Medium,
+                                    BonusXP = 200,
+                                    Settings = new Models.SessionSettings
+                                    {
+                                        FlashEnabled = cur?.FlashEnabled ?? true,
+                                        FlashPerHour = cur?.FlashFrequency ?? 10,
+                                        FlashOpacity = cur?.FlashOpacity ?? 100,
+                                        FlashImages = cur?.SimultaneousImages ?? 1,
+                                        FlashClickable = cur?.FlashClickable ?? false,
+                                        FlashAudioEnabled = cur?.FlashAudioEnabled ?? false,
+                                        SubliminalEnabled = cur?.SubliminalEnabled ?? true,
+                                        SubliminalPerMin = cur?.SubliminalFrequency ?? 5,
+                                        SubliminalOpacity = cur?.SubliminalOpacity ?? 100,
+                                        SubliminalFrames = cur?.SubliminalDuration ?? 5,
+                                        MandatoryVideosEnabled = cur?.MandatoryVideosEnabled ?? false,
+                                        BubblesEnabled = cur?.BubblesEnabled ?? false,
+                                    }
+                                };
+                            }
+                            if (MainWindowRef != null)
                             {
-                                mainWindow.StartSessionFromRemote(session);
+                                MainWindowRef.StartSessionFromRemote(session);
                             }
                             if (parameters?["strict_lock"]?.Value<bool>() == true)
                             {
@@ -612,17 +631,17 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "pause_session":
-                            (System.Windows.Application.Current.MainWindow as MainWindow)
+                            MainWindowRef
                                 ?.PauseSessionFromRemote();
                             break;
 
                         case "resume_session":
-                            (System.Windows.Application.Current.MainWindow as MainWindow)
+                            MainWindowRef
                                 ?.ResumeSessionFromRemote();
                             break;
 
                         case "stop_session":
-                            (System.Windows.Application.Current.MainWindow as MainWindow)
+                            MainWindowRef
                                 ?.StopSessionFromRemote();
                             break;
 

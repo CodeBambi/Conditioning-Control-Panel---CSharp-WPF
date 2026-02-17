@@ -735,6 +735,9 @@ namespace ConditioningControlPanel
             var mainWindow = new MainWindow();
             mainWindow.Show();
 
+            // Give RemoteControlService a direct reference (Application.Current.MainWindow is null when hidden to tray)
+            if (RemoteControl != null) RemoteControl.MainWindowRef = mainWindow;
+
             // Close splash screen with fade animation
             splash.SetProgress(1.0, "Ready!");
             splash.FadeOutAndClose();

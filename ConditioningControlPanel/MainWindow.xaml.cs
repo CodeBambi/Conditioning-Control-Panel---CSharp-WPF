@@ -4160,6 +4160,16 @@ namespace ConditioningControlPanel
             if (ChkScreenOcrEnabled != null)
                 ChkScreenOcrEnabled.IsEnabled = hasT2;
 
+            // If triggers were enabled in settings but couldn't start earlier (Patreon not validated yet),
+            // start them now that access is confirmed
+            if (hasT2 && App.Settings?.Current?.KeywordTriggersEnabled == true)
+            {
+                App.KeywordTriggers?.Start();
+                _keyboardHook?.Start();
+                if (App.Settings.Current.ScreenOcrEnabled)
+                    App.ScreenOcr?.Start();
+            }
+
             // Update XP bar login state when Patreon auth changes
             UpdateXPBarLoginState();
         }
@@ -6154,12 +6164,15 @@ namespace ConditioningControlPanel
                 if (_sessionEngine?.IsRunning == true && _sessionEngine.CurrentSession != null)
                 {
                     var session = _sessionEngine.CurrentSession;
-                    RemoteSessionInfoPanel.Visibility = Visibility.Visible;
+                    // Show active state, hide idle state
+                    RemoteSessionIdle.Visibility = Visibility.Collapsed;
+                    RemoteSessionActive.Visibility = Visibility.Visible;
+
                     TxtRemoteSessionName.Text = $"{session.Icon} {session.GetModeAwareName()}";
 
                     var elapsed = _sessionEngine.ElapsedTime;
                     var total = TimeSpan.FromMinutes(session.DurationMinutes);
-                    var pauseLabel = _sessionEngine.IsPaused ? "  PAUSED" : "";
+                    var pauseLabel = _sessionEngine.IsPaused ? "  ⏸ PAUSED" : "";
                     TxtRemoteSessionTime.Text = $"{elapsed:mm\\:ss} / {total:mm\\:ss}{pauseLabel}";
 
                     var phaseIndex = _sessionEngine.CurrentPhaseIndex;
@@ -6170,7 +6183,9 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    RemoteSessionInfoPanel.Visibility = Visibility.Collapsed;
+                    // Show idle state, hide active state
+                    RemoteSessionIdle.Visibility = Visibility.Visible;
+                    RemoteSessionActive.Visibility = Visibility.Collapsed;
                 }
             }
             catch { }
@@ -6220,6 +6235,15 @@ namespace ConditioningControlPanel
         {
             try
             {
+                App.Logger?.Information("[RemoteControl] StartSessionFromRemote called for: {Name} (id: {Id})", session.Name, session.Id);
+
+                // Stop any existing running session first
+                if (_sessionEngine?.IsRunning == true)
+                {
+                    App.Logger?.Information("[RemoteControl] Stopping existing session engine before starting new one");
+                    _sessionEngine.StopSession(completed: false);
+                }
+
                 if (_sessionEngine == null)
                 {
                     _sessionEngine = new Services.SessionEngine(this);
@@ -6227,17 +6251,21 @@ namespace ConditioningControlPanel
                     _sessionEngine.SessionStopped += OnSessionStopped;
                 }
 
+                // Call StartEngine directly — BtnStart_Click returns early
+                // when remote controlled due to its guard check
                 if (!_isRunning)
                 {
-                    BtnStart_Click(this, new RoutedEventArgs());
+                    App.Logger?.Information("[RemoteControl] Starting main engine for remote session");
+                    StartEngine();
                 }
 
                 App.IsSessionRunning = true;
                 await _sessionEngine.StartSessionAsync(session);
+                App.Logger?.Information("[RemoteControl] Session engine started successfully for: {Name}", session.Name);
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "[RemoteControl] Failed to start session from remote");
+                App.Logger?.Error(ex, "[RemoteControl] Failed to start session from remote: {Name}", session?.Name);
             }
         }
 
@@ -6271,8 +6299,18 @@ namespace ConditioningControlPanel
         {
             try
             {
+                App.Logger?.Information("[RemoteControl] StopSessionFromRemote called");
                 if (_sessionEngine?.IsRunning == true)
                     _sessionEngine.StopSession();
+
+                App.IsSessionRunning = false;
+
+                // Also stop the main engine to reset services and _isRunning state
+                if (_isRunning)
+                {
+                    App.Logger?.Information("[RemoteControl] Also stopping main engine");
+                    StopEngine();
+                }
             }
             catch (Exception ex)
             {

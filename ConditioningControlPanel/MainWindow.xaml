@@ -8148,18 +8148,30 @@
                     <TextBlock x:Name="TxtOverlaySessionCode" Text="" Foreground="#808080" FontSize="18"
                                FontFamily="Consolas" HorizontalAlignment="Center" Margin="0,0,0,16"/>
 
-                    <!-- Session progress info (shown when a session is running) -->
-                    <StackPanel x:Name="RemoteSessionInfoPanel" Visibility="Collapsed" HorizontalAlignment="Center" Margin="0,0,0,16">
-                        <TextBlock x:Name="TxtRemoteSessionName" Text="" Foreground="#FF69B4" FontSize="18" FontWeight="SemiBold"
-                                   HorizontalAlignment="Center" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtRemoteSessionTime" Text="" Foreground="#FFFFFF" FontSize="22"
-                                   FontFamily="Consolas" HorizontalAlignment="Center" Margin="0,0,0,4"/>
-                        <TextBlock x:Name="TxtRemoteSessionPhase" Text="" Foreground="#707090" FontSize="13"
-                                   HorizontalAlignment="Center"/>
-                    </StackPanel>
-
                     <TextBlock Text="Someone else is controlling your app" Foreground="#A0A0A0" FontSize="14"
-                               HorizontalAlignment="Center" Margin="0,0,0,40"/>
+                               HorizontalAlignment="Center" Margin="0,0,0,24"/>
+
+                    <!-- Session info card — always visible -->
+                    <Border HorizontalAlignment="Center" Margin="0,0,0,24"
+                            Background="#18FFFFFF" CornerRadius="10" Padding="32,16" MinWidth="320">
+                        <Grid>
+                            <!-- Idle state: no session running -->
+                            <StackPanel x:Name="RemoteSessionIdle" HorizontalAlignment="Center">
+                                <TextBlock Text="📋" FontSize="28" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                                <TextBlock Text="No active session" Foreground="#606080" FontSize="14"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                            <!-- Active state: session name + timer -->
+                            <StackPanel x:Name="RemoteSessionActive" Visibility="Collapsed" HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtRemoteSessionName" Text="" Foreground="#FF69B4" FontSize="20" FontWeight="Bold"
+                                           HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="TxtRemoteSessionTime" Text="" Foreground="#FFFFFF" FontSize="28"
+                                           FontFamily="Consolas" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                                <TextBlock x:Name="TxtRemoteSessionPhase" Text="" Foreground="#A0A0B0" FontSize="13"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
 
                     <!-- End Session button -->
                     <Button Content="End Session" Click="BtnEndRemoteSession_Click" Cursor="Hand"
