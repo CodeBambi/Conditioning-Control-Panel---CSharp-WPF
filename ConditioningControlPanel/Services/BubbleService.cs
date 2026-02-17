@@ -86,7 +86,7 @@ public class BubbleService : IDisposable
 
     private void AnimateAllBubbles(object? sender, EventArgs e)
     {
-        if (!_isRunning) return;
+        if (_bubbles.Count == 0) return;
 
         // Animate all bubbles in a single pass - iterate by index to avoid allocation
         for (int i = _bubbles.Count - 1; i >= 0; i--)
@@ -281,12 +281,27 @@ public class BubbleService : IDisposable
         // Bubble floated off screen - remove immediately (no animation needed)
         _bubbles.Remove(bubble);
         OnBubbleMissed?.Invoke();
+        StopAnimationTimerIfIdle();
     }
 
     private void OnDestroy(Bubble bubble)
     {
         // Called when bubble is fully destroyed (after pop animation completes)
         _bubbles.Remove(bubble);
+        StopAnimationTimerIfIdle();
+    }
+
+    /// <summary>
+    /// Stop the animation timer if there are no bubbles left and the service isn't running
+    /// (cleans up timers started by SpawnOnce when the service isn't actively running)
+    /// </summary>
+    private void StopAnimationTimerIfIdle()
+    {
+        if (!_isRunning && _bubbles.Count == 0 && _animationTimer != null)
+        {
+            _animationTimer.Stop();
+            _animationTimer = null;
+        }
     }
 
     private void PlayPopSound(bool isLucky = false)
