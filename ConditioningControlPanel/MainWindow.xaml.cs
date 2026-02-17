@@ -72,11 +72,6 @@ namespace ConditioningControlPanel
         private WindowState _popoutPreFsState;
         private double _popoutPreFsLeft, _popoutPreFsTop, _popoutPreFsWidth, _popoutPreFsHeight;
         private bool _popoutPreFsTopmost;
-        // MainWindow pre-fullscreen state (embedded case)
-        private WindowState _mainPreFsState;
-        private bool _mainPreFsTopmost;
-        private ResizeMode _mainPreFsResize;
-        private double _mainPreFsLeft, _mainPreFsTop, _mainPreFsWidth, _mainPreFsHeight;
         private TrayIconService? _trayIcon;
         private GlobalKeyboardHook? _keyboardHook;
         private bool _isCapturingPanicKey = false;
@@ -6081,9 +6076,18 @@ namespace ConditioningControlPanel
                 var sessions = new List<object>();
                 try
                 {
+                    // Include built-in sessions
                     foreach (var s in Models.Session.GetAllSessions().Where(s => s.IsAvailable))
                     {
                         sessions.Add(new { id = s.Id, name = s.GetModeAwareName(), icon = s.Icon, duration_minutes = s.DurationMinutes, difficulty = s.Difficulty.ToString() });
+                    }
+                    // Include custom sessions from SessionManager
+                    if (_sessionManager != null)
+                    {
+                        foreach (var s in _sessionManager.CustomSessions.Where(s => s.IsAvailable))
+                        {
+                            sessions.Add(new { id = s.Id, name = s.GetModeAwareName(), icon = s.Icon, duration_minutes = s.DurationMinutes, difficulty = s.Difficulty.ToString() });
+                        }
                     }
                 }
                 catch { }
@@ -6119,8 +6123,16 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    return Models.Session.GetAllSessions()
+                    // Check built-in sessions first
+                    var session = Models.Session.GetAllSessions()
                         .FirstOrDefault(s => s.Id == sessionId && s.IsAvailable);
+                    // Then check custom sessions
+                    if (session == null && _sessionManager != null)
+                    {
+                        session = _sessionManager.CustomSessions
+                            .FirstOrDefault(s => s.Id == sessionId && s.IsAvailable);
+                    }
+                    return session;
                 }
                 catch { return null; }
             };
@@ -12139,7 +12151,7 @@ namespace ConditioningControlPanel
 
                 if (_browserPopoutWindow != null)
                 {
-                    // === POPOUT MODE: make the popout window itself go fullscreen ===
+                    // === POPOUT MODE: user already had browser popped out ===
                     _browserFullscreenWasPopout = true;
 
                     // Save popout window state for restore
@@ -12152,59 +12164,85 @@ namespace ConditioningControlPanel
                     _popoutPreFsHeight = _browserPopoutWindow.Height;
                     _popoutPreFsTopmost = _browserPopoutWindow.Topmost;
 
-                    // Go fullscreen — must set Normal first to change WindowStyle
+                    // Go fullscreen in-place
                     if (_browserPopoutWindow.WindowState == WindowState.Maximized)
                         _browserPopoutWindow.WindowState = WindowState.Normal;
 
                     _browserPopoutWindow.WindowStyle = WindowStyle.None;
                     _browserPopoutWindow.ResizeMode = ResizeMode.NoResize;
-
-                    // Use SetWindowPos with physical pixels — avoids DPI scaling issues
-                    var popoutHwnd = new System.Windows.Interop.WindowInteropHelper(_browserPopoutWindow).Handle;
-                    var screen = System.Windows.Forms.Screen.FromHandle(popoutHwnd);
-                    SetWindowPos(popoutHwnd, HWND_TOPMOST,
-                        screen.Bounds.Left, screen.Bounds.Top,
-                        screen.Bounds.Width, screen.Bounds.Height, 0);
-
-                    App.Logger?.Information("Browser popout entered fullscreen (no reparent)");
+                    _browserPopoutWindow.Topmost = true;
+                    _browserPopoutWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
+                    _browserPopoutWindow.WindowState = WindowState.Maximized;
                 }
                 else
                 {
-                    // === EMBEDDED MODE: move WebView to overlay within same Window HWND ===
+                    // === EMBEDDED MODE: create fullscreen window directly ===
+                    // Same approach as the mandatory video windows which work correctly:
+                    // Create Window with WindowStyle.None from the start, Show, then Maximize.
                     _browserFullscreenWasPopout = false;
 
-                    // Move WebView from BrowserContainer to the fullscreen overlay
-                    // Both are within the same MainWindow HWND, so no DirectX swapchain recreation
+                    // Remove WebView from embedded container
                     if (BrowserContainer.Children.Contains(_browser.WebView))
                     {
                         BrowserContainer.Children.Remove(_browser.WebView);
                     }
-                    BrowserFullscreenOverlay.Children.Add(_browser.WebView);
-                    BrowserFullscreenOverlay.Visibility = Visibility.Visible;
+                    BrowserLoadingText.Text = "\ud83c\udf10 Browser in fullscreen";
+                    BrowserLoadingText.Visibility = Visibility.Visible;
 
-                    // Save MainWindow state
-                    _mainPreFsState = WindowState;
-                    _mainPreFsTopmost = Topmost;
-                    _mainPreFsResize = ResizeMode;
-                    _mainPreFsLeft = Left;
-                    _mainPreFsTop = Top;
-                    _mainPreFsWidth = Width;
-                    _mainPreFsHeight = Height;
+                    var screen = System.Windows.Forms.Screen.FromHandle(
+                        new System.Windows.Interop.WindowInteropHelper(this).Handle);
 
-                    // Use SetWindowPos with physical pixels — avoids DPI scaling
-                    // and WindowChrome padding that WindowState.Maximized would add
-                    if (WindowState == WindowState.Maximized)
-                        WindowState = WindowState.Normal;
-                    ResizeMode = ResizeMode.NoResize;
+                    // Create window with fullscreen properties from the start (like video windows)
+                    _browserPopoutWindow = new Window
+                    {
+                        WindowStyle = WindowStyle.None,
+                        ResizeMode = ResizeMode.NoResize,
+                        ShowInTaskbar = false,
+                        Topmost = true,
+                        Background = System.Windows.Media.Brushes.Black,
+                        WindowStartupLocation = WindowStartupLocation.Manual,
+                        Left = screen.Bounds.X + 100,
+                        Top = screen.Bounds.Y + 100,
+                        Width = 400,
+                        Height = 300,
+                        Content = _browser.WebView
+                    };
 
-                    var mainHwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-                    var screen = System.Windows.Forms.Screen.FromHandle(mainHwnd);
-                    SetWindowPos(mainHwnd, HWND_TOPMOST,
-                        screen.Bounds.Left, screen.Bounds.Top,
-                        screen.Bounds.Width, screen.Bounds.Height, 0);
+                    _browserPopoutWindow.Closing += (s, args) =>
+                    {
+                        if (_isBrowserFullscreen)
+                        {
+                            _isBrowserFullscreen = false;
+                            if (_browser != null)
+                                _browser.ZoomFactor = _browserPreFullscreenZoom;
+                        }
+                        if (_browserPopoutWindow != null)
+                            _browserPopoutWindow.Content = null;
+                    };
 
-                    App.Logger?.Information("Browser embedded entered fullscreen via overlay (no reparent)");
+                    _browserPopoutWindow.Closed += (s, args) =>
+                    {
+                        if (_browser?.WebView != null && !BrowserContainer.Children.Contains(_browser.WebView))
+                        {
+                            BrowserContainer.Children.Add(_browser.WebView);
+                            BrowserLoadingText.Visibility = Visibility.Collapsed;
+                        }
+                        _browserPopoutWindow = null;
+                    };
+
+                    // Show small first, pump render queue, then maximize — exactly like video windows
+                    _browserPopoutWindow.Show();
+                    _browserPopoutWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
+                    _browserPopoutWindow.WindowState = WindowState.Maximized;
                 }
+
+                // Re-request fullscreen on the video element after the window transition.
+                // Reparenting or resizing the WebView can cause the document's Fullscreen API
+                // state to be lost, leaving the site's regular layout visible as "black bands".
+                // ExecuteScriptAsync bypasses the user-gesture requirement in WebView2.
+                _ = ReRequestVideoFullscreenAsync();
+
+                App.Logger?.Information("Browser entered fullscreen");
             }
             catch (Exception ex)
             {
@@ -12219,47 +12257,26 @@ namespace ConditioningControlPanel
 
             try
             {
-                if (_browserFullscreenWasPopout && _browserPopoutWindow != null)
+                if (_browserPopoutWindow != null)
                 {
-                    // === POPOUT MODE: restore popout window state ===
-                    _browserPopoutWindow.WindowStyle = _popoutPreFsStyle;
-                    _browserPopoutWindow.ResizeMode = _popoutPreFsResize;
-                    _browserPopoutWindow.Topmost = _popoutPreFsTopmost;
-
-                    // Restore position/size (saved as WPF DIPs, which is correct for WPF properties)
-                    _browserPopoutWindow.Left = _popoutPreFsLeft;
-                    _browserPopoutWindow.Top = _popoutPreFsTop;
-                    _browserPopoutWindow.Width = _popoutPreFsWidth;
-                    _browserPopoutWindow.Height = _popoutPreFsHeight;
-                    _browserPopoutWindow.WindowState = _popoutPreFsState;
-                }
-                else
-                {
-                    // === EMBEDDED MODE: move WebView back from overlay ===
-                    if (_browser?.WebView != null)
+                    if (_browserFullscreenWasPopout)
                     {
-                        if (BrowserFullscreenOverlay.Children.Contains(_browser.WebView))
-                        {
-                            BrowserFullscreenOverlay.Children.Remove(_browser.WebView);
-                        }
-                        if (!BrowserContainer.Children.Contains(_browser.WebView))
-                        {
-                            BrowserContainer.Children.Add(_browser.WebView);
-                        }
+                        // === Was already popped out by user — restore popout window state ===
+                        _browserPopoutWindow.WindowStyle = _popoutPreFsStyle;
+                        _browserPopoutWindow.ResizeMode = _popoutPreFsResize;
+                        _browserPopoutWindow.Topmost = _popoutPreFsTopmost;
+                        _browserPopoutWindow.Left = _popoutPreFsLeft;
+                        _browserPopoutWindow.Top = _popoutPreFsTop;
+                        _browserPopoutWindow.Width = _popoutPreFsWidth;
+                        _browserPopoutWindow.Height = _popoutPreFsHeight;
+                        _browserPopoutWindow.WindowState = _popoutPreFsState;
                     }
-                    BrowserFullscreenOverlay.Visibility = Visibility.Collapsed;
-
-                    // Restore MainWindow state — clear topmost first via SetWindowPos
-                    var mainHwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-                    SetWindowPos(mainHwnd, _mainPreFsTopmost ? HWND_TOPMOST : HWND_NOTOPMOST,
-                        0, 0, 0, 0, SWP_NOACTIVATE | 0x0001 /*SWP_NOSIZE*/ | 0x0002 /*SWP_NOMOVE*/);
-                    ResizeMode = _mainPreFsResize;
-                    Topmost = _mainPreFsTopmost;
-                    Left = _mainPreFsLeft;
-                    Top = _mainPreFsTop;
-                    Width = _mainPreFsWidth;
-                    Height = _mainPreFsHeight;
-                    WindowState = _mainPreFsState;
+                    else
+                    {
+                        // === Was embedded — close the auto-popout to return to embedded ===
+                        _browserPopoutWindow.Close();
+                        // The Closed handler returns the WebView to BrowserContainer
+                    }
                 }
 
                 // Restore zoom
@@ -12274,6 +12291,39 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Failed to exit browser fullscreen");
+            }
+        }
+
+        /// <summary>
+        /// After reparenting or resizing the WebView for fullscreen, the document's
+        /// Fullscreen API state may be lost. This re-requests fullscreen on the video
+        /// element so it covers the entire viewport instead of showing the site layout.
+        /// </summary>
+        private async Task ReRequestVideoFullscreenAsync()
+        {
+            if (_browser?.WebView?.CoreWebView2 == null) return;
+
+            try
+            {
+                // Wait for the WebView to settle in its new window/size
+                await Task.Delay(300);
+
+                await _browser.WebView.CoreWebView2.ExecuteScriptAsync(@"
+                    (function() {
+                        var video = document.querySelector('video');
+                        if (video) {
+                            if (video.requestFullscreen) {
+                                video.requestFullscreen();
+                            } else if (video.webkitRequestFullscreen) {
+                                video.webkitRequestFullscreen();
+                            }
+                        }
+                    })();
+                ");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug(ex, "Failed to re-request video fullscreen");
             }
         }
 

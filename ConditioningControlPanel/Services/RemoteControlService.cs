@@ -12,11 +12,17 @@ namespace ConditioningControlPanel.Services
 {
     public class SessionProgressInfo
     {
+        [JsonProperty("name")]
         public string Name { get; set; } = "";
+        [JsonProperty("icon")]
         public string Icon { get; set; } = "";
+        [JsonProperty("elapsed_seconds")]
         public int ElapsedSeconds { get; set; }
+        [JsonProperty("total_seconds")]
         public int TotalSeconds { get; set; }
+        [JsonProperty("is_paused")]
         public bool IsPaused { get; set; }
+        [JsonProperty("current_phase")]
         public string CurrentPhase { get; set; } = "";
     }
 
