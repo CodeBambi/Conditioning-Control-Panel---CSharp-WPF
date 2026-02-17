@@ -44,6 +44,14 @@ namespace ConditioningControlPanel
         [DllImport("user32.dll")]
         private static extern bool BringWindowToTop(IntPtr hWnd);
 
+        [DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+            int X, int Y, int cx, int cy, uint uFlags);
+
+        private static readonly IntPtr HWND_TOPMOST = new(-1);
+        private static readonly IntPtr HWND_NOTOPMOST = new(-2);
+        private const uint SWP_NOACTIVATE = 0x0010;
+
         private const int SW_RESTORE = 9;
         private const int SW_SHOW = 5;
 
@@ -67,6 +75,8 @@ namespace ConditioningControlPanel
         // MainWindow pre-fullscreen state (embedded case)
         private WindowState _mainPreFsState;
         private bool _mainPreFsTopmost;
+        private ResizeMode _mainPreFsResize;
+        private double _mainPreFsLeft, _mainPreFsTop, _mainPreFsWidth, _mainPreFsHeight;
         private TrayIconService? _trayIcon;
         private GlobalKeyboardHook? _keyboardHook;
         private bool _isCapturingPanicKey = false;
@@ -74,6 +84,7 @@ namespace ConditioningControlPanel
         private int _panicPressCount = 0;
         private bool _isStreakFixMode = false;
         private DispatcherTimer? _remoteNotificationTimer;
+        private DispatcherTimer? _remoteSessionInfoTimer;
 
         private static readonly Dictionary<string, string> CommandLabels = new()
         {
@@ -5839,6 +5850,9 @@ namespace ConditioningControlPanel
                 App.RemoteControl.ControllerConnectedChanged += OnRemoteControllerChanged;
                 App.RemoteControl.CommandReceived += OnRemoteCommandReceived;
                 App.RemoteControl.SessionEnded += OnRemoteSessionEnded;
+
+                // Wire up session callbacks for remote status
+                WireRemoteSessionCallbacks();
             }
             else
             {
@@ -6040,6 +6054,8 @@ namespace ConditioningControlPanel
 
             var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300));
             RemoteControlOverlay.BeginAnimation(OpacityProperty, fadeIn);
+
+            StartRemoteSessionInfoTimer();
         }
 
         private void HideRemoteControlOverlay()
@@ -6053,6 +6069,99 @@ namespace ConditioningControlPanel
             };
             RemoteControlOverlay.BeginAnimation(OpacityProperty, fadeOut);
             _remoteNotificationTimer?.Stop();
+            _remoteSessionInfoTimer?.Stop();
+        }
+
+        private void WireRemoteSessionCallbacks()
+        {
+            if (App.RemoteControl == null) return;
+
+            App.RemoteControl.GetAvailableSessionsCallback = () =>
+            {
+                var sessions = new List<object>();
+                try
+                {
+                    foreach (var s in Models.Session.GetAllSessions().Where(s => s.IsAvailable))
+                    {
+                        sessions.Add(new { id = s.Id, name = s.GetModeAwareName(), icon = s.Icon, duration_minutes = s.DurationMinutes, difficulty = s.Difficulty.ToString() });
+                    }
+                }
+                catch { }
+                return sessions;
+            };
+
+            App.RemoteControl.GetSessionProgressCallback = () =>
+            {
+                try
+                {
+                    if (_sessionEngine?.IsRunning != true || _sessionEngine.CurrentSession == null)
+                        return null;
+
+                    var session = _sessionEngine.CurrentSession;
+                    var phaseIndex = _sessionEngine.CurrentPhaseIndex;
+                    var phaseName = session.Phases != null && phaseIndex >= 0 && phaseIndex < session.Phases.Count
+                        ? session.Phases[phaseIndex].Name : "";
+
+                    return new Services.SessionProgressInfo
+                    {
+                        Name = session.GetModeAwareName(),
+                        Icon = session.Icon,
+                        ElapsedSeconds = (int)_sessionEngine.ElapsedTime.TotalSeconds,
+                        TotalSeconds = session.DurationMinutes * 60,
+                        IsPaused = _sessionEngine.IsPaused,
+                        CurrentPhase = phaseName
+                    };
+                }
+                catch { return null; }
+            };
+
+            App.RemoteControl.FindSessionByIdCallback = (sessionId) =>
+            {
+                try
+                {
+                    return Models.Session.GetAllSessions()
+                        .FirstOrDefault(s => s.Id == sessionId && s.IsAvailable);
+                }
+                catch { return null; }
+            };
+        }
+
+        private void StartRemoteSessionInfoTimer()
+        {
+            _remoteSessionInfoTimer?.Stop();
+            _remoteSessionInfoTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _remoteSessionInfoTimer.Tick += (s, _) => UpdateRemoteSessionInfo();
+            _remoteSessionInfoTimer.Start();
+            UpdateRemoteSessionInfo();
+        }
+
+        private void UpdateRemoteSessionInfo()
+        {
+            try
+            {
+                if (_sessionEngine?.IsRunning == true && _sessionEngine.CurrentSession != null)
+                {
+                    var session = _sessionEngine.CurrentSession;
+                    RemoteSessionInfoPanel.Visibility = Visibility.Visible;
+                    TxtRemoteSessionName.Text = $"{session.Icon} {session.GetModeAwareName()}";
+
+                    var elapsed = _sessionEngine.ElapsedTime;
+                    var total = TimeSpan.FromMinutes(session.DurationMinutes);
+                    var pauseLabel = _sessionEngine.IsPaused ? "  PAUSED" : "";
+                    TxtRemoteSessionTime.Text = $"{elapsed:mm\\:ss} / {total:mm\\:ss}{pauseLabel}";
+
+                    var phaseIndex = _sessionEngine.CurrentPhaseIndex;
+                    if (session.Phases != null && phaseIndex >= 0 && phaseIndex < session.Phases.Count)
+                        TxtRemoteSessionPhase.Text = session.Phases[phaseIndex].Name;
+                    else
+                        TxtRemoteSessionPhase.Text = "";
+                }
+                else
+                {
+                    RemoteSessionInfoPanel.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch { }
         }
 
         private void OnRemoteCommandReceived(object? sender, string action)
@@ -12049,15 +12158,13 @@ namespace ConditioningControlPanel
 
                     _browserPopoutWindow.WindowStyle = WindowStyle.None;
                     _browserPopoutWindow.ResizeMode = ResizeMode.NoResize;
-                    _browserPopoutWindow.Topmost = true;
 
-                    // Position to cover the screen the popout is on
-                    var screen = System.Windows.Forms.Screen.FromHandle(
-                        new System.Windows.Interop.WindowInteropHelper(_browserPopoutWindow).Handle);
-                    _browserPopoutWindow.Left = screen.Bounds.Left;
-                    _browserPopoutWindow.Top = screen.Bounds.Top;
-                    _browserPopoutWindow.Width = screen.Bounds.Width;
-                    _browserPopoutWindow.Height = screen.Bounds.Height;
+                    // Use SetWindowPos with physical pixels — avoids DPI scaling issues
+                    var popoutHwnd = new System.Windows.Interop.WindowInteropHelper(_browserPopoutWindow).Handle;
+                    var screen = System.Windows.Forms.Screen.FromHandle(popoutHwnd);
+                    SetWindowPos(popoutHwnd, HWND_TOPMOST,
+                        screen.Bounds.Left, screen.Bounds.Top,
+                        screen.Bounds.Width, screen.Bounds.Height, 0);
 
                     App.Logger?.Information("Browser popout entered fullscreen (no reparent)");
                 }
@@ -12075,12 +12182,26 @@ namespace ConditioningControlPanel
                     BrowserFullscreenOverlay.Children.Add(_browser.WebView);
                     BrowserFullscreenOverlay.Visibility = Visibility.Visible;
 
-                    // Save and maximize MainWindow
+                    // Save MainWindow state
                     _mainPreFsState = WindowState;
                     _mainPreFsTopmost = Topmost;
-                    Topmost = true;
-                    if (WindowState != WindowState.Maximized)
-                        WindowState = WindowState.Maximized;
+                    _mainPreFsResize = ResizeMode;
+                    _mainPreFsLeft = Left;
+                    _mainPreFsTop = Top;
+                    _mainPreFsWidth = Width;
+                    _mainPreFsHeight = Height;
+
+                    // Use SetWindowPos with physical pixels — avoids DPI scaling
+                    // and WindowChrome padding that WindowState.Maximized would add
+                    if (WindowState == WindowState.Maximized)
+                        WindowState = WindowState.Normal;
+                    ResizeMode = ResizeMode.NoResize;
+
+                    var mainHwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                    var screen = System.Windows.Forms.Screen.FromHandle(mainHwnd);
+                    SetWindowPos(mainHwnd, HWND_TOPMOST,
+                        screen.Bounds.Left, screen.Bounds.Top,
+                        screen.Bounds.Width, screen.Bounds.Height, 0);
 
                     App.Logger?.Information("Browser embedded entered fullscreen via overlay (no reparent)");
                 }
@@ -12104,6 +12225,8 @@ namespace ConditioningControlPanel
                     _browserPopoutWindow.WindowStyle = _popoutPreFsStyle;
                     _browserPopoutWindow.ResizeMode = _popoutPreFsResize;
                     _browserPopoutWindow.Topmost = _popoutPreFsTopmost;
+
+                    // Restore position/size (saved as WPF DIPs, which is correct for WPF properties)
                     _browserPopoutWindow.Left = _popoutPreFsLeft;
                     _browserPopoutWindow.Top = _popoutPreFsTop;
                     _browserPopoutWindow.Width = _popoutPreFsWidth;
@@ -12126,10 +12249,17 @@ namespace ConditioningControlPanel
                     }
                     BrowserFullscreenOverlay.Visibility = Visibility.Collapsed;
 
-                    // Restore MainWindow state
+                    // Restore MainWindow state — clear topmost first via SetWindowPos
+                    var mainHwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                    SetWindowPos(mainHwnd, _mainPreFsTopmost ? HWND_TOPMOST : HWND_NOTOPMOST,
+                        0, 0, 0, 0, SWP_NOACTIVATE | 0x0001 /*SWP_NOSIZE*/ | 0x0002 /*SWP_NOMOVE*/);
+                    ResizeMode = _mainPreFsResize;
                     Topmost = _mainPreFsTopmost;
-                    if (WindowState != _mainPreFsState)
-                        WindowState = _mainPreFsState;
+                    Left = _mainPreFsLeft;
+                    Top = _mainPreFsTop;
+                    Width = _mainPreFsWidth;
+                    Height = _mainPreFsHeight;
+                    WindowState = _mainPreFsState;
                 }
 
                 // Restore zoom

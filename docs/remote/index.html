@@ -590,6 +590,145 @@
             cursor: not-allowed;
         }
 
+        /* Session picker */
+        .session-picker {
+            margin-top: 8px;
+        }
+
+        .session-select {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--bg-secondary);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.8rem;
+            outline: none;
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23707090' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 32px;
+        }
+
+        .session-select:focus {
+            border-color: var(--accent-pink);
+        }
+
+        .session-preview {
+            margin-top: 6px;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--bg-secondary);
+            border-radius: 10px;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            display: none;
+        }
+
+        .session-preview .sp-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .session-preview .sp-meta {
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* Session progress card */
+        .session-progress {
+            margin-top: 8px;
+            padding: 12px;
+            background: var(--bg-primary);
+            border: 1px solid rgba(255,105,180,0.3);
+            border-radius: 10px;
+            display: none;
+        }
+
+        .session-progress .sp-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .session-progress .sp-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .session-progress .sp-paused {
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--orange);
+            background: rgba(255,165,0,0.15);
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+
+        .session-progress .sp-bar-track {
+            width: 100%;
+            height: 6px;
+            background: var(--bg-secondary);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 6px;
+        }
+
+        .session-progress .sp-bar-fill {
+            height: 100%;
+            background: var(--accent-gradient);
+            border-radius: 3px;
+            transition: width 1s linear;
+        }
+
+        .session-progress .sp-time {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 4px;
+        }
+
+        .session-progress .sp-phase {
+            font-size: 0.7rem;
+            color: var(--accent-pink);
+        }
+
+        .session-progress .sp-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .session-progress .sp-controls button {
+            flex: 1;
+            padding: 8px;
+            border-radius: 8px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid var(--bg-secondary);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            transition: all 0.15s;
+        }
+
+        .session-progress .sp-controls button:active {
+            transform: scale(0.95);
+        }
+
+        .session-progress .sp-controls button:hover {
+            border-color: var(--accent-pink);
+        }
+
         /* Session checkbox */
         .session-options {
             display: flex;
@@ -887,19 +1026,53 @@
             <!-- Session -->
             <div class="category" id="session-group">
                 <div class="category-title">Session</div>
-                <div class="btn-grid two-col">
-                    <button class="cmd-btn" id="btn-start-session" data-tier="full">
-                        <span class="icon">&#x25B6;</span>
-                        <span class="label">Start Session</span>
-                    </button>
-                    <button class="cmd-btn" data-action="stop_session" data-tier="full">
-                        <span class="icon">&#x23F9;</span>
-                        <span class="label">Stop Session</span>
-                    </button>
+
+                <!-- Session picker (shown when no session running) -->
+                <div id="session-picker-area">
+                    <div class="session-picker">
+                        <select class="session-select" id="session-select">
+                            <option value="">Select a session...</option>
+                        </select>
+                        <div class="session-preview" id="session-preview">
+                            <div class="sp-name" id="sp-preview-name"></div>
+                            <div class="sp-meta" id="sp-preview-meta"></div>
+                        </div>
+                    </div>
+                    <div class="btn-grid two-col" style="margin-top:8px">
+                        <button class="cmd-btn" id="btn-start-session" data-tier="full">
+                            <span class="icon">&#x25B6;</span>
+                            <span class="label">Start Session</span>
+                        </button>
+                        <button class="cmd-btn" data-action="stop_session" data-tier="full">
+                            <span class="icon">&#x23F9;</span>
+                            <span class="label">Stop Session</span>
+                        </button>
+                    </div>
+                    <div class="session-options" id="session-options">
+                        <input type="checkbox" id="session-strict-lock">
+                        <label for="session-strict-lock">Enable Strict Lock with Session</label>
+                    </div>
                 </div>
-                <div class="session-options" id="session-options">
-                    <input type="checkbox" id="session-strict-lock">
-                    <label for="session-strict-lock">Enable Strict Lock with Session</label>
+
+                <!-- Session progress card (shown when session is running) -->
+                <div class="session-progress" id="session-progress">
+                    <div class="sp-header">
+                        <span class="sp-title" id="sp-title"></span>
+                        <span class="sp-paused" id="sp-paused" style="display:none">PAUSED</span>
+                    </div>
+                    <div class="sp-bar-track">
+                        <div class="sp-bar-fill" id="sp-bar-fill" style="width:0%"></div>
+                    </div>
+                    <div class="sp-time">
+                        <span id="sp-elapsed">00:00</span>
+                        <span id="sp-total">00:00</span>
+                    </div>
+                    <div class="sp-phase" id="sp-phase"></div>
+                    <div class="sp-controls">
+                        <button id="sp-btn-pause">&#x23F8; Pause</button>
+                        <button id="sp-btn-resume" style="display:none">&#x25B6; Resume</button>
+                        <button id="sp-btn-stop">&#x23F9; Stop</button>
+                    </div>
                 </div>
             </div>
 
@@ -1035,12 +1208,16 @@
                         <div class="guide-category">
                             <div class="guide-category-title">Session</div>
                             <div class="guide-item">
-                                <span class="guide-item-name">Start Session</span>
-                                <span class="guide-item-desc">&mdash; Start a 30-minute remote session (Full)</span>
+                                <span class="guide-item-name">Session Picker</span>
+                                <span class="guide-item-desc">&mdash; Choose from sub's available sessions (with phases &amp; effects)</span>
                             </div>
                             <div class="guide-item">
-                                <span class="guide-item-name">Stop Session</span>
-                                <span class="guide-item-desc">&mdash; End the current session (Full)</span>
+                                <span class="guide-item-name">Start Session</span>
+                                <span class="guide-item-desc">&mdash; Start selected session, or generic 30-min if none picked (Full)</span>
+                            </div>
+                            <div class="guide-item">
+                                <span class="guide-item-name">Progress Card</span>
+                                <span class="guide-item-desc">&mdash; Shows elapsed time, progress bar, current phase, pause/resume</span>
                             </div>
                             <div class="guide-item">
                                 <span class="guide-item-name">Strict Lock</span>
@@ -1207,6 +1384,11 @@
                 subName.textContent = data.display_name;
                 subLevel.textContent = `Lv. ${data.level}`;
 
+                // Populate session dropdown from initial connect data
+                if (data.available_sessions) {
+                    populateSessionSelect(data.available_sessions);
+                }
+
                 applyTierRestrictions();
                 applySliderTierRestrictions();
                 showControlPanel();
@@ -1246,7 +1428,9 @@
             codeInputs.forEach(i => i.value = '');
             toggleStates = {};
             logEntries = [];
+            availableSessions = [];
             renderLog();
+            updateSessionProgress(null);
             sessionCode = '';
             controllerId = '';
         }
@@ -1390,9 +1574,96 @@
             if (e.key === 'Enter') sendCustomSubliminal();
         });
 
-        // ═══════ Session Start Button ═══════
+        // ═══════ Session Picker & Progress ═══════
         const btnStartSession = $('btn-start-session');
         const sessionStrictLock = $('session-strict-lock');
+        const sessionSelect = $('session-select');
+        const sessionPreview = $('session-preview');
+        const spPreviewName = $('sp-preview-name');
+        const spPreviewMeta = $('sp-preview-meta');
+        const sessionPickerArea = $('session-picker-area');
+        const sessionProgress = $('session-progress');
+        const spTitle = $('sp-title');
+        const spPaused = $('sp-paused');
+        const spBarFill = $('sp-bar-fill');
+        const spElapsed = $('sp-elapsed');
+        const spTotal = $('sp-total');
+        const spPhase = $('sp-phase');
+        const spBtnPause = $('sp-btn-pause');
+        const spBtnResume = $('sp-btn-resume');
+
+        let availableSessions = [];
+
+        function populateSessionSelect(sessions) {
+            if (!sessions || !sessions.length) return;
+            availableSessions = sessions;
+            // Keep current selection if possible
+            const currentVal = sessionSelect.value;
+            sessionSelect.innerHTML = '<option value="">Select a session...</option>';
+            sessions.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = `${s.icon} ${s.name} (${s.duration_minutes}min)`;
+                sessionSelect.appendChild(opt);
+            });
+            if (currentVal) sessionSelect.value = currentVal;
+        }
+
+        sessionSelect.addEventListener('change', () => {
+            const id = sessionSelect.value;
+            const s = availableSessions.find(x => x.id === id);
+            if (s) {
+                spPreviewName.textContent = `${s.icon} ${s.name}`;
+                spPreviewMeta.textContent = `${s.duration_minutes} min \u2022 ${s.difficulty}`;
+                sessionPreview.style.display = 'block';
+            } else {
+                sessionPreview.style.display = 'none';
+            }
+        });
+
+        function formatTime(totalSeconds) {
+            const m = Math.floor(totalSeconds / 60);
+            const s = Math.floor(totalSeconds % 60);
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        function updateSessionProgress(info) {
+            if (!info) {
+                // No active session
+                sessionProgress.style.display = 'none';
+                sessionPickerArea.style.display = 'block';
+                return;
+            }
+
+            // Session is running — show progress, hide picker
+            sessionPickerArea.style.display = 'none';
+            sessionProgress.style.display = 'block';
+
+            spTitle.textContent = `${info.icon} ${info.name}`;
+            spElapsed.textContent = formatTime(info.elapsed_seconds);
+            spTotal.textContent = formatTime(info.total_seconds);
+            spPhase.textContent = info.current_phase || '';
+
+            const pct = info.total_seconds > 0
+                ? Math.min(100, (info.elapsed_seconds / info.total_seconds) * 100)
+                : 0;
+            spBarFill.style.width = pct + '%';
+
+            if (info.is_paused) {
+                spPaused.style.display = 'inline';
+                spBtnPause.style.display = 'none';
+                spBtnResume.style.display = 'block';
+            } else {
+                spPaused.style.display = 'none';
+                spBtnPause.style.display = 'block';
+                spBtnResume.style.display = 'none';
+            }
+        }
+
+        // Pause/Resume/Stop buttons
+        $('sp-btn-pause').addEventListener('click', () => sendCommand('pause_session'));
+        $('sp-btn-resume').addEventListener('click', () => sendCommand('resume_session'));
+        $('sp-btn-stop').addEventListener('click', () => sendCommand('stop_session'));
 
         btnStartSession.addEventListener('click', (e) => {
             if (btnStartSession.classList.contains('disabled')) return;
@@ -1409,7 +1680,10 @@
             btnStartSession.appendChild(ripple);
             setTimeout(() => ripple.remove(), 500);
 
-            sendCommand('start_session', { strict_lock: sessionStrictLock.checked });
+            const params = { strict_lock: sessionStrictLock.checked };
+            const selectedId = sessionSelect.value;
+            if (selectedId) params.session_id = selectedId;
+            sendCommand('start_session', params);
         });
 
         // ═══════ Send Command ═══════
@@ -1550,6 +1824,14 @@
                 if (data.active_services) {
                     syncToggleStates(data.active_services);
                 }
+
+                // Update available sessions dropdown
+                if (data.available_sessions) {
+                    populateSessionSelect(data.available_sessions);
+                }
+
+                // Update session progress display
+                updateSessionProgress(data.session_info || null);
 
                 // Update log if last_executed changed
                 if (data.last_executed && data.last_executed.id) {

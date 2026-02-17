@@ -1199,6 +1199,8 @@
 
     </Window.Resources>
 
+    <!-- Root grid allows browser fullscreen overlay without reparenting WebView across HWNDs -->
+    <Grid x:Name="RootGrid">
     <!-- Viewbox scales all content proportionally with window size -->
     <Viewbox Stretch="Fill">
         <!-- Design canvas at reference size - wider to fit all header buttons -->
@@ -8144,7 +8146,18 @@
                     <TextBlock Text="REMOTE CONTROLLED" Foreground="#00FF88" FontSize="28" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,0,0,8"/>
                     <TextBlock x:Name="TxtOverlaySessionCode" Text="" Foreground="#808080" FontSize="18"
-                               FontFamily="Consolas" HorizontalAlignment="Center" Margin="0,0,0,30"/>
+                               FontFamily="Consolas" HorizontalAlignment="Center" Margin="0,0,0,16"/>
+
+                    <!-- Session progress info (shown when a session is running) -->
+                    <StackPanel x:Name="RemoteSessionInfoPanel" Visibility="Collapsed" HorizontalAlignment="Center" Margin="0,0,0,16">
+                        <TextBlock x:Name="TxtRemoteSessionName" Text="" Foreground="#FF69B4" FontSize="18" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="TxtRemoteSessionTime" Text="" Foreground="#FFFFFF" FontSize="22"
+                                   FontFamily="Consolas" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="TxtRemoteSessionPhase" Text="" Foreground="#707090" FontSize="13"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+
                     <TextBlock Text="Someone else is controlling your app" Foreground="#A0A0A0" FontSize="14"
                                HorizontalAlignment="Center" Margin="0,0,0,40"/>
 
@@ -8421,4 +8434,9 @@
         </Border>
         </Grid>
     </Viewbox>
+
+    <!-- Browser fullscreen overlay - sits outside Viewbox so WebView gets native resolution.
+         WebView stays within same Window HWND, avoiding DirectX swapchain recreation that causes HDR blinks. -->
+    <Grid x:Name="BrowserFullscreenOverlay" Background="Black" Visibility="Collapsed" Panel.ZIndex="9999"/>
+    </Grid>
 </Window>

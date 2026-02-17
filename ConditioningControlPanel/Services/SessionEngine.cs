@@ -86,6 +86,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private bool IsMainWindowValid => _mainWindow != null && !_mainWindowClosed && _mainWindow.IsLoaded;
         public bool IsPaused => _isPaused;
+        public int CurrentPhaseIndex => _currentPhaseIndex;
         public int PauseCount => _pauseCount;
         public int XPPenalty => _pauseCount * 100; // 100 XP per pause
         public Session? CurrentSession => _currentSession;

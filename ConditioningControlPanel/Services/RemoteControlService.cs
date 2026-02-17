@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,6 +10,16 @@ using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services
 {
+    public class SessionProgressInfo
+    {
+        public string Name { get; set; } = "";
+        public string Icon { get; set; } = "";
+        public int ElapsedSeconds { get; set; }
+        public int TotalSeconds { get; set; }
+        public bool IsPaused { get; set; }
+        public string CurrentPhase { get; set; } = "";
+    }
+
     public class RemoteControlService : IDisposable
     {
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
@@ -27,6 +38,10 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<string>? CommandReceived;
         public event EventHandler? SessionStarted;
         public event EventHandler? SessionEnded;
+
+        public Func<List<object>>? GetAvailableSessionsCallback { get; set; }
+        public Func<SessionProgressInfo?>? GetSessionProgressCallback { get; set; }
+        public Func<string, Models.Session?>? FindSessionByIdCallback { get; set; }
 
         public RemoteControlService()
         {
@@ -253,12 +268,18 @@ namespace ConditioningControlPanel.Services
                     };
                 }
 
+                // Get available sessions and current session progress
+                var availableSessions = GetAvailableSessionsCallback?.Invoke();
+                var sessionInfo = GetSessionProgressCallback?.Invoke();
+
                 var body = JsonConvert.SerializeObject(new
                 {
                     unified_id = unifiedId,
                     active_services = activeServices,
                     level,
-                    last_executed = lastExecuted
+                    last_executed = lastExecuted,
+                    available_sessions = availableSessions,
+                    session_info = sessionInfo
                 });
 
                 await _httpClient.PostAsync(
@@ -549,8 +570,14 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "start_session":
-                            // Create a default 30-minute session
-                            var session = new Models.Session
+                            // Look up requested session by ID, fall back to generic
+                            var sessionId = parameters?["session_id"]?.ToString();
+                            Models.Session? session = null;
+                            if (!string.IsNullOrEmpty(sessionId))
+                            {
+                                session = FindSessionByIdCallback?.Invoke(sessionId);
+                            }
+                            session ??= new Models.Session
                             {
                                 Id = "remote_session",
                                 Name = "Remote Session",

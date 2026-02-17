@@ -4752,6 +4752,27 @@ namespace ConditioningControlPanel
             // Pause browser
             MenuItemPauseBrowser.Header = _isBrowserPaused ? "▶ Resume Browser" : "⏸ Pause Browser";
             MenuItemPauseBrowser.Foreground = _isBrowserPaused ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
+
+            // Lock most options when remote controlled (keep talk, attach/detach, resize)
+            if (App.RemoteControl?.ControllerConnected == true)
+            {
+                var lockedBrush = new SolidColorBrush(Color.FromRgb(0x60, 0x60, 0x70));
+                MenuItemEngine.IsEnabled = false;
+                MenuItemEngine.Header = "🔒 Start Engine";
+                MenuItemEngine.Foreground = lockedBrush;
+                MenuItemTriggerMode.IsEnabled = false;
+                MenuItemTriggerMode.Foreground = lockedBrush;
+                MenuItemBambiTakeover.IsEnabled = false;
+                MenuItemBambiTakeover.Foreground = lockedBrush;
+                MenuItemPersonality.IsEnabled = false;
+                MenuItemPersonality.Foreground = lockedBrush;
+                MenuItemMute.IsEnabled = false;
+                MenuItemMute.Foreground = lockedBrush;
+                MenuItemMuteWhispers.IsEnabled = false;
+                MenuItemMuteWhispers.Foreground = lockedBrush;
+                MenuItemPauseBrowser.IsEnabled = false;
+                MenuItemPauseBrowser.Foreground = lockedBrush;
+            }
         }
 
         /// <summary>
