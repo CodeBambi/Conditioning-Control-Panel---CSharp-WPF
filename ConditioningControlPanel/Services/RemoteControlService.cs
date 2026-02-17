@@ -400,6 +400,8 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "start_flash":
+                            if (App.Settings?.Current != null)
+                                App.Settings.Current.FlashEnabled = true;
                             App.Flash?.Start();
                             break;
 
@@ -408,6 +410,8 @@ namespace ConditioningControlPanel.Services
                             break;
 
                         case "start_subliminal":
+                            if (App.Settings?.Current != null)
+                                App.Settings.Current.SubliminalEnabled = true;
                             App.Subliminal?.Start();
                             break;
 
