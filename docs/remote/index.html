@@ -1360,7 +1360,17 @@
                 }
 
                 if (!action) return;
-                await sendCommand(action);
+                const ok = await sendCommand(action);
+
+                // Revert toggle if command failed
+                if (!ok && toggleKey) {
+                    toggleStates[toggleKey] = !toggleStates[toggleKey];
+                    if (toggleStates[toggleKey]) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                }
             });
         });
 
@@ -1409,6 +1419,8 @@
             if (logEntries.length > 30) logEntries.pop();
             renderLog();
 
+            let success = false;
+
             try {
                 const res = await fetch(`${API_BASE}/remote/command`, {
                     method: 'POST',
@@ -1426,6 +1438,7 @@
                 if (res.ok) {
                     entry.status = 'ok';
                     entry.commandId = data.command_id;
+                    success = true;
                 } else {
                     entry.status = 'fail';
                     entry.error = data.error;
@@ -1442,11 +1455,16 @@
             }
 
             renderLog();
+            return success;
         }
 
         // ═══════ Status Polling ═══════
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 3;
+
         function startPolling() {
             if (pollTimer) clearInterval(pollTimer);
+            reconnectAttempts = 0;
             pollTimer = setInterval(pollStatus, POLL_INTERVAL);
             pollStatus();
         }
@@ -1458,6 +1476,35 @@
             }
         }
 
+        async function tryAutoReconnect() {
+            if (!sessionCode || reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                stopPolling();
+                showConnectScreen();
+                return false;
+            }
+
+            reconnectAttempts++;
+            try {
+                const res = await fetch(`${API_BASE}/remote/connect`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: sessionCode })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    controllerId = data.controller_id;
+                    reconnectAttempts = 0;
+                    console.log('[Remote] Auto-reconnected successfully');
+                    return true;
+                }
+            } catch (e) { }
+
+            stopPolling();
+            showConnectScreen();
+            return false;
+        }
+
         async function pollStatus() {
             if (!sessionCode || !controllerId) return;
 
@@ -1467,14 +1514,22 @@
                 );
 
                 if (!res.ok) {
-                    if (res.status === 404 || res.status === 403) {
+                    if (res.status === 404) {
+                        // Session truly gone (sub stopped it)
                         stopPolling();
                         showConnectScreen();
+                        return;
+                    }
+                    if (res.status === 403) {
+                        // Controller ID invalidated — try to reconnect
+                        const ok = await tryAutoReconnect();
+                        if (ok) return; // reconnected, next poll will work
                         return;
                     }
                     return;
                 }
 
+                reconnectAttempts = 0;
                 const data = await res.json();
 
                 // Update online status
@@ -1505,11 +1560,19 @@
                     }
                 }
             } catch (err) {
-                // Network error, show as offline
+                // Network error, show as offline but don't disconnect
                 subStatusDot.className = 'status-dot offline';
                 subStatusText.textContent = 'Connection lost';
             }
         }
+
+        // Resume polling immediately when tab/browser becomes visible again
+        // (browsers throttle setInterval in background tabs)
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && sessionCode && controllerId) {
+                pollStatus();
+            }
+        });
 
         function syncToggleStates(activeServices) {
             const GRACE_PERIOD_MS = 5000; // don't override user clicks for 5 seconds
