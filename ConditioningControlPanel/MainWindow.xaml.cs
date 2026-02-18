@@ -48,6 +48,12 @@ namespace ConditioningControlPanel
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
             int X, int Y, int cx, int cy, uint uFlags);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
         private static readonly IntPtr HWND_TOPMOST = new(-1);
         private static readonly IntPtr HWND_NOTOPMOST = new(-2);
         private const uint SWP_NOACTIVATE = 0x0010;
@@ -17006,7 +17012,14 @@ namespace ConditioningControlPanel
                 };
                 previewWindow.Closed += (s, args) =>
                 {
-                    // Reactivate main window when preview closes to prevent it going behind other apps
+                    // Only reactivate if our process still owns the foreground
+                    var foreground = GetForegroundWindow();
+                    if (foreground != IntPtr.Zero)
+                    {
+                        GetWindowThreadProcessId(foreground, out uint foregroundPid);
+                        uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                        if (foregroundPid != ourPid) return;
+                    }
                     Activate();
                 };
                 previewWindow.LoadFile(filePath);

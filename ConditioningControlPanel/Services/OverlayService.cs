@@ -38,6 +38,8 @@ public class OverlayService : IDisposable
     private bool _isGifSpiral;
     private string _spiralPath = "";
     private Dictionary<MediaElement, DateTime> _mediaStartTimes = new();
+    private double _lastAppliedPinkOpacity = -1;
+    private double _lastAppliedSpiralOpacity = -1;
 
     // GIF frame animation fields
     private List<BitmapSource> _spiralGifFrames = new();
@@ -258,6 +260,7 @@ public class OverlayService : IDisposable
                         brush.Color = System.Windows.Media.Color.FromArgb(alpha, 255, 105, 180);
                     }
                 }
+                _lastAppliedPinkOpacity = -1;
             }
 
             if (hasSpiral)
@@ -267,6 +270,7 @@ public class OverlayService : IDisposable
                     image.Opacity = boostedOpacity;
                 foreach (var media in _spiralMediaElements)
                     media.Opacity = boostedOpacity;
+                _lastAppliedSpiralOpacity = -1;
             }
 
             if (hasBrainDrain)
@@ -379,6 +383,8 @@ public class OverlayService : IDisposable
         {
             UpdateSpiralOpacity();
         }
+
+        ReassertZOrder();
     }
 
     #region Pink Filter
@@ -486,6 +492,7 @@ public class OverlayService : IDisposable
                 App.Logger?.Debug("Failed to close pink filter window: {Error}", ex.Message);
             }
         }
+        _lastAppliedPinkOpacity = -1;
         _pinkFilterWindows.Clear();
         App.Logger?.Debug("Pink filter stopped");
     }
@@ -493,6 +500,8 @@ public class OverlayService : IDisposable
     private void UpdatePinkFilterOpacity()
     {
         var actualOpacity = App.Settings.Current.PinkFilterOpacity / 100.0;
+        if (actualOpacity == _lastAppliedPinkOpacity) return;
+        _lastAppliedPinkOpacity = actualOpacity;
         foreach (var window in _pinkFilterWindows)
         {
             if (window.Content is Border border)
@@ -970,6 +979,7 @@ public class OverlayService : IDisposable
                 App.Logger?.Debug("Failed to close spiral window: {Error}", ex.Message);
             }
         }
+        _lastAppliedSpiralOpacity = -1;
         _spiralWindows.Clear();
         App.Logger?.Debug("Spiral stopped");
     }
@@ -978,6 +988,8 @@ public class OverlayService : IDisposable
     {
         // Very subtle opacity - 90% reduction
         var opacity = (App.Settings.Current.SpiralOpacity / 100.0) * 0.1;
+        if (opacity == _lastAppliedSpiralOpacity) return;
+        _lastAppliedSpiralOpacity = opacity;
 
         // Update GIF images
         foreach (var image in _spiralGifImages)
@@ -1387,6 +1399,20 @@ public class OverlayService : IDisposable
             screen.DeviceName, bounds.Left, bounds.Top, bounds.Width, bounds.Height, success);
     }
 
+    private void ReassertZOrder()
+    {
+        foreach (var list in new[] { _pinkFilterWindows, _spiralWindows, _brainDrainBlurWindows })
+        {
+            foreach (var window in list)
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                if (hwnd != IntPtr.Zero)
+                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+        }
+    }
+
     /// <summary>
     /// Gets the screen bounds converted to WPF device-independent coordinates.
     /// Used for initial window creation - final positioning done via SetWindowPos.
@@ -1569,6 +1595,8 @@ public class OverlayService : IDisposable
     private const uint SWP_NOACTIVATE = 0x0010;
     private const uint SWP_FRAMECHANGED = 0x0020;
     private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
 
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
