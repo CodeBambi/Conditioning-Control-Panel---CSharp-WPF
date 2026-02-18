@@ -2528,6 +2528,14 @@ namespace ConditioningControlPanel.Models
             set { _ocrHighlightAll = value; OnPropertyChanged(); }
         }
 
+        private bool _ocrHighlightVisibleInCapture;
+        [JsonProperty("ocrHighlightVisibleInCapture")]
+        public bool OcrHighlightVisibleInCapture
+        {
+            get => _ocrHighlightVisibleInCapture;
+            set { _ocrHighlightVisibleInCapture = value; OnPropertyChanged(); }
+        }
+
         private List<KeywordTrigger> _keywordTriggers = new();
         /// <summary>
         /// Configured keyword triggers

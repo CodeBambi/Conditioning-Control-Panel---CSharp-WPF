@@ -97,7 +97,9 @@ namespace ConditioningControlPanel.Services
                     PositionWindowOnScreen(window, targetScreen);
 
                     // Exclude from screen capture so our highlights don't get OCR'd
-                    SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+                    // (unless user wants highlights visible in streams/recordings)
+                    if (App.Settings?.Current?.OcrHighlightVisibleInCapture != true)
+                        SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
                 };
 
                 window.Show();
@@ -175,6 +177,28 @@ namespace ConditioningControlPanel.Services
             };
 
             storyboard.Begin();
+        }
+
+        /// <summary>
+        /// Updates the display affinity on all existing overlay windows
+        /// so the capture-visibility setting takes effect immediately.
+        /// </summary>
+        public void RefreshCaptureVisibility()
+        {
+            if (_disposed) return;
+            bool visible = App.Settings?.Current?.OcrHighlightVisibleInCapture == true;
+            uint affinity = visible ? 0u : WDA_EXCLUDEFROMCAPTURE;
+
+            foreach (var (window, _) in _screenOverlays.Values)
+            {
+                try
+                {
+                    var hwnd = new WindowInteropHelper(window).Handle;
+                    if (hwnd != IntPtr.Zero)
+                        SetWindowDisplayAffinity(hwnd, affinity);
+                }
+                catch { }
+            }
         }
 
         #region DPI / Positioning Helpers

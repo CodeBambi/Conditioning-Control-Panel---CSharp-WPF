@@ -5544,6 +5544,11 @@
                                                         <ComboBoxItem Content="Random subset"/>
                                                     </ComboBox>
                                                 </StackPanel>
+                                                <CheckBox x:Name="ChkHighlightVisibleInCapture" Content="Show highlights in screen capture / streams"
+                                                          Foreground="#A0A0A0" FontSize="10" Margin="0,2,0,4"
+                                                          Checked="ChkHighlightVisibleInCapture_Changed"
+                                                          Unchecked="ChkHighlightVisibleInCapture_Changed"
+                                                          ToolTip="When enabled, keyword highlights will be visible in OBS, Discord, and other screen sharing. When disabled, highlights are hidden from capture to avoid OCR feedback loops."/>
                                                 <TextBlock Text="Highlight Duration" Foreground="#A0A0A0" FontSize="10"/>
                                                 <Grid ToolTip="How long the pink highlight stays on screen (0.3s - 5.0s)">
                                                     <Slider x:Name="SliderKeywordHighlightDuration" Minimum="0.3" Maximum="5.0"

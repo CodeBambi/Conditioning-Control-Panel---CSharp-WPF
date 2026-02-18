@@ -5426,6 +5426,13 @@ namespace ConditioningControlPanel
             App.Settings.Current.OcrHighlightAll = CmbOcrHighlightMode.SelectedIndex == 0;
         }
 
+        private void ChkHighlightVisibleInCapture_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.OcrHighlightVisibleInCapture = ChkHighlightVisibleInCapture.IsChecked == true;
+            App.KeywordHighlight?.RefreshCaptureVisibility();
+        }
+
         private void BtnAddKeywordTrigger_Click(object sender, RoutedEventArgs e)
         {
             var triggers = App.Settings.Current.KeywordTriggers;
@@ -13380,6 +13387,8 @@ namespace ConditioningControlPanel
                         TxtKeywordHighlightDuration.Text = $"{s.KeywordHighlightDurationMs / 1000.0:0.0}s";
                         if (CmbOcrHighlightMode != null)
                             CmbOcrHighlightMode.SelectedIndex = s.OcrHighlightAll ? 0 : 1;
+                        if (ChkHighlightVisibleInCapture != null)
+                            ChkHighlightVisibleInCapture.IsChecked = s.OcrHighlightVisibleInCapture;
                     }
                 }
             }
