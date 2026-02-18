@@ -5726,6 +5726,7 @@ namespace ConditioningControlPanel
                 MinWidth = 100
             };
             visualCombo.Items.Add("None");
+            visualCombo.Items.Add("Highlight Only");
             visualCombo.Items.Add("Subliminal");
             visualCombo.Items.Add("Image Flash");
             visualCombo.Items.Add("Overlay Pulse");
@@ -12450,6 +12451,9 @@ namespace ConditioningControlPanel
         public void StartEngine()
         {
             SaveSettings();
+
+            // Check for Relapse achievement (restart within 10s of ESC)
+            App.Achievements?.CheckRelapse();
 
             var settings = App.Settings.Current;
 

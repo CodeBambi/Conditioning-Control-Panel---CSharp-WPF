@@ -51,6 +51,7 @@ public class QuestService : IDisposable
 {
     private readonly string _progressPath;
     private readonly DispatcherTimer _saveTimer;
+    private readonly DispatcherTimer _refreshTimer;
     private readonly Random _random = new();
     private bool _isDirty;
 
@@ -103,6 +104,18 @@ public class QuestService : IDisposable
             }
         };
         _saveTimer.Start();
+
+        // Quest refresh timer — detect day/week rollover while app is running
+        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        _refreshTimer.Tick += (s, e) =>
+        {
+            if (Progress.IsDailyExpired() || Progress.IsWeeklyExpired())
+            {
+                App.Logger?.Information("Quest day/week rollover detected, refreshing quests");
+                CheckAndGenerateQuests();
+            }
+        };
+        _refreshTimer.Start();
 
         App.Logger?.Information("QuestService initialized. Daily: {Daily}, Weekly: {Weekly}",
             Progress.DailyQuest?.DefinitionId ?? "none",
@@ -782,6 +795,7 @@ public class QuestService : IDisposable
     public void Dispose()
     {
         _saveTimer.Stop();
+        _refreshTimer.Stop();
         if (_isDirty)
         {
             Save();

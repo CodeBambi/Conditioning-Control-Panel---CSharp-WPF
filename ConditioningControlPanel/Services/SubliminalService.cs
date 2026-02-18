@@ -474,7 +474,9 @@ namespace ConditioningControlPanel.Services
             var bgTransparent = App.Settings.Current.SubBackgroundTransparent;
 
             // Get all monitors and create windows for all at once
-            var screens = App.GetAllScreensCached();
+            var screens = App.Settings.Current.DualMonitorEnabled
+                ? App.GetAllScreensCached()
+                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
             var windows = new List<Window>();
             var stealsFocus = App.Settings.Current.SubliminalStealsFocus;
 

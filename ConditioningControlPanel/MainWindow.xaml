@@ -5091,7 +5091,7 @@
                                     <Grid Margin="0,0,0,12">
                                         <TextBlock Text="Show Companion" Foreground="White" FontSize="13" VerticalAlignment="Center"/>
                                         <CheckBox x:Name="ChkAvatarEnabledCompanion" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right" IsChecked="True"
+                                                  HorizontalAlignment="Right"
                                                   Checked="ChkAvatarEnabled_Changed" Unchecked="ChkAvatarEnabled_Changed"/>
                                     </Grid>
 
@@ -5533,6 +5533,16 @@
                                                       Checked="ChkKeywordHighlightEnabled_Changed"
                                                       Unchecked="ChkKeywordHighlightEnabled_Changed"
                                                       ToolTip="Show a glowing overlay over the word when OCR detects a keyword match"/>
+                                            <StackPanel x:Name="HighlightDurationPanel" Visibility="Collapsed" Margin="0,4,0,0">
+                                                <TextBlock Text="Highlight Duration" Foreground="#A0A0A0" FontSize="10"/>
+                                                <Grid ToolTip="How long the pink highlight stays on screen (0.3s - 5.0s)">
+                                                    <Slider x:Name="SliderKeywordHighlightDuration" Minimum="0.3" Maximum="5.0"
+                                                            TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                            ValueChanged="SliderKeywordHighlightDuration_ValueChanged"/>
+                                                    <TextBlock x:Name="TxtKeywordHighlightDuration" Text="0.6s"
+                                                               Foreground="#FF69B4" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
+                                                </Grid>
+                                            </StackPanel>
                                             <StackPanel x:Name="ScreenOcrIntervalPanel" Visibility="Collapsed" Margin="0,6,0,0">
                                                 <TextBlock Text="Scan Interval" Foreground="#A0A0A0" FontSize="10"/>
                                                 <Grid ToolTip="How often to scan your screen for trigger keywords (lower = more responsive but uses more CPU)">
@@ -7551,7 +7561,7 @@
 
                     <!-- Horizontal scrolling pack cards -->
                     <ScrollViewer x:Name="PacksScrollViewer" Grid.Row="1"
-                                  HorizontalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Visible"
                                   VerticalScrollBarVisibility="Disabled"
                                   PreviewMouseWheel="PacksScrollViewer_PreviewMouseWheel"
                                   Padding="0,0,0,8"

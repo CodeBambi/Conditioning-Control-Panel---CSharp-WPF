@@ -446,6 +446,17 @@ public class AchievementService : IDisposable
         TrackSessionStarted();
 
         // Check Relapse (started within 10 seconds of panic)
+        CheckRelapse();
+
+        _isDirty = true;
+    }
+
+    /// <summary>
+    /// Check for Relapse achievement (started within 10 seconds of panic/ESC).
+    /// Called from both SessionEngine and direct StartEngine to cover all start paths.
+    /// </summary>
+    public void CheckRelapse()
+    {
         if (_progress.LastPanicPressTime.HasValue)
         {
             var elapsed = (DateTime.Now - _progress.LastPanicPressTime.Value).TotalSeconds;
@@ -454,8 +465,6 @@ public class AchievementService : IDisposable
                 TryUnlock("relapse");
             }
         }
-
-        _isDirty = true;
     }
     
     /// <summary>
