@@ -155,11 +155,14 @@ namespace ConditioningControlPanel.Services
 
         private void AnimateHighlight(Border border, Canvas canvas)
         {
-            // Quick pop-in + fade-out (~600ms total)
+            var totalMs = App.Settings?.Current?.KeywordHighlightDurationMs ?? 600;
+            var popIn = (int)(totalMs * 0.13);
+            var holdEnd = (int)(totalMs * 0.42);
+
             var anim = new DoubleAnimationUsingKeyFrames();
-            anim.KeyFrames.Add(new LinearDoubleKeyFrame(1.0, TimeSpan.FromMilliseconds(80)));   // pop in
-            anim.KeyFrames.Add(new LinearDoubleKeyFrame(1.0, TimeSpan.FromMilliseconds(250)));  // hold
-            anim.KeyFrames.Add(new LinearDoubleKeyFrame(0.0, TimeSpan.FromMilliseconds(600)));  // fade out
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(1.0, TimeSpan.FromMilliseconds(popIn)));     // pop in
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(1.0, TimeSpan.FromMilliseconds(holdEnd)));   // hold
+            anim.KeyFrames.Add(new LinearDoubleKeyFrame(0.0, TimeSpan.FromMilliseconds(totalMs)));   // fade out
 
             Storyboard.SetTarget(anim, border);
             Storyboard.SetTargetProperty(anim, new PropertyPath(UIElement.OpacityProperty));

@@ -5739,6 +5739,7 @@ namespace ConditioningControlPanel
             visualCombo.Items.Add("None");
             visualCombo.Items.Add("Highlight Only");
             visualCombo.Items.Add("Subliminal");
+            visualCombo.Items.Add("Exact Subliminal");
             visualCombo.Items.Add("Image Flash");
             visualCombo.Items.Add("Overlay Pulse");
             visualCombo.Items.Add("Mind Wipe");

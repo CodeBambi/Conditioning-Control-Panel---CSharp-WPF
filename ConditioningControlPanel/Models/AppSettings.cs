@@ -2512,6 +2512,14 @@ namespace ConditioningControlPanel.Models
             set { _keywordHighlightEnabled = value; OnPropertyChanged(); }
         }
 
+        private int _keywordHighlightDurationMs = 600;
+        [JsonProperty]
+        public int KeywordHighlightDurationMs
+        {
+            get => _keywordHighlightDurationMs;
+            set { _keywordHighlightDurationMs = Math.Clamp(value, 300, 5000); OnPropertyChanged(); }
+        }
+
         private List<KeywordTrigger> _keywordTriggers = new();
         /// <summary>
         /// Configured keyword triggers

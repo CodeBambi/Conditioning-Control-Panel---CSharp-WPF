@@ -15,7 +15,9 @@ namespace ConditioningControlPanel.Models
     public enum KeywordVisualEffect
     {
         None,
+        HighlightOnly,
         SubliminalFlash,
+        ExactSubliminal,
         ImageFlash,
         OverlayPulse,
         MindWipe,

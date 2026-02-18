@@ -549,6 +549,18 @@ namespace ConditioningControlPanel.Services
             {
                 if (_disposed) return;
 
+                // HighlightOnly — show highlight overlay and skip all other effects
+                if (trigger.VisualEffect == KeywordVisualEffect.HighlightOnly)
+                {
+                    if (matchedWords != null && matchedWords.Count > 0
+                        && App.Settings?.Current?.KeywordHighlightEnabled == true)
+                    {
+                        Application.Current?.Dispatcher?.Invoke(() =>
+                            App.KeywordHighlight?.ShowHighlight(matchedWords));
+                    }
+                    return;
+                }
+
                 // 1. Duck audio (if enabled)
                 if (trigger.DuckAudio && App.Settings?.Current?.AudioDuckingEnabled == true)
                 {
@@ -639,6 +651,11 @@ namespace ConditioningControlPanel.Services
                         App.Subliminal?.FlashSubliminal();
                         break;
 
+                    case KeywordVisualEffect.ExactSubliminal:
+                        // Flash the matched keyword itself as subliminal text
+                        App.Subliminal?.FlashSubliminalCustom(trigger.Keyword.ToUpperInvariant());
+                        break;
+
                     case KeywordVisualEffect.ImageFlash:
                         // Trigger a single image flash
                         App.Flash?.TriggerFlashOnce();
@@ -659,6 +676,7 @@ namespace ConditioningControlPanel.Services
                         App.Bubbles?.SpawnOnce();
                         break;
 
+                    case KeywordVisualEffect.HighlightOnly:
                     case KeywordVisualEffect.None:
                     default:
                         break;
