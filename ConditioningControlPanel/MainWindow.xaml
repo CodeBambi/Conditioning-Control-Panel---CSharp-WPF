@@ -1453,8 +1453,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.21 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.21 - OCR Highlight Upgrades"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.22 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.22 - Overlay & Focus Fixes"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -5735,6 +5735,34 @@
                                             FontWeight="Bold" FontSize="12"
                                             Cursor="Hand" Visibility="Collapsed"
                                             Click="BtnLinkDiscord_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Cloud Settings Backup Section (visible when user has cloud identity) -->
+                        <Border x:Name="CloudSettingsBackupSection" Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,15"
+                                BorderBrush="#9B59B6" BorderThickness="1" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock Text="Cloud Settings Backup" Foreground="#9B59B6" FontSize="14" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock x:Name="TxtCloudBackupStatus"
+                                           Text="Checking backup status..."
+                                           Foreground="#B0B0B0" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <Button x:Name="BtnBackupSettingsNow"
+                                            Content="☁ Backup Now"
+                                            Background="#9B59B6" Foreground="White"
+                                            BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
+                                            FontWeight="Bold" FontSize="12"
+                                            Cursor="Hand"
+                                            Click="BtnBackupSettingsNow_Click"/>
+                                    <Button x:Name="BtnRestoreSettings"
+                                            Content="Restore from Cloud"
+                                            Background="Transparent" Foreground="#9B59B6"
+                                            BorderBrush="#9B59B6" BorderThickness="1" Padding="15,8"
+                                            FontWeight="Bold" FontSize="12"
+                                            Cursor="Hand"
+                                            Click="BtnRestoreSettings_Click"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>

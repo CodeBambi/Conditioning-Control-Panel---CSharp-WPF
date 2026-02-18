@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
 
@@ -10,8 +11,13 @@ namespace ConditioningControlPanel.Services
     public class SettingsService
     {
         private readonly string _settingsPath;
-        
+
         public AppSettings Current { get; private set; }
+
+        /// <summary>
+        /// True if the settings file did not exist when the service was initialized (fresh install).
+        /// </summary>
+        public bool WasSettingsFileMissing { get; private set; }
 
         public SettingsService()
         {
@@ -93,13 +99,18 @@ namespace ConditioningControlPanel.Services
                         return settings;
                     }
                 }
+                else
+                {
+                    WasSettingsFileMissing = true;
+                }
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning("Could not load settings: {Error}", ex.Message);
             }
 
-            App.Logger?.Information("Using default settings");
+            WasSettingsFileMissing = true;
+            App.Logger?.Information("Using default settings (fresh install detected)");
             return new AppSettings();
         }
 
@@ -210,11 +221,35 @@ namespace ConditioningControlPanel.Services
 
                 App.Logger?.Information("Settings saved to {Path} (Triggers: {TriggerCount}, ActivePacks: {PackCount})",
                     _settingsPath, Current.CustomTriggers?.Count ?? 0, Current.ActivePackIds?.Count ?? 0);
+
+                // Auto-backup settings to cloud (fire-and-forget, debounced)
+                if (App.HasCloudIdentity && App.ProfileSync != null)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try { await App.ProfileSync.BackupSettingsAsync(); }
+                        catch (Exception backupEx)
+                        {
+                            App.Logger?.Debug("Auto settings backup failed: {Error}", backupEx.Message);
+                        }
+                    });
+                }
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Could not save settings");
             }
+        }
+
+        /// <summary>
+        /// Replace current settings with the given settings object and save to disk.
+        /// Used by cloud restore to apply restored settings.
+        /// </summary>
+        public void RestoreFrom(AppSettings settings)
+        {
+            Current = settings ?? throw new ArgumentNullException(nameof(settings));
+            Save();
+            App.Logger?.Information("Settings restored from external source");
         }
 
         public void Reset()

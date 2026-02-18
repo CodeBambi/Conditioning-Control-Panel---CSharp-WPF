@@ -709,6 +709,9 @@ namespace ConditioningControlPanel
             // Validate restored session (if we have a cached UnifiedUserId but no provider authenticated yet)
             _ = ValidateRestoredSessionAsync();
 
+            // Check if this is a fresh install and offer cloud settings restore
+            _ = CheckCloudSettingsRestoreAsync();
+
             // Initialize Update service and check for updates in background
             Update = new UpdateService();
             _ = CheckForUpdatesInBackgroundAsync();
@@ -892,6 +895,113 @@ namespace ConditioningControlPanel
                 // Network error — keep cached state (offline-tolerant)
                 Logger?.Warning(ex, "Session validation failed (network error) — keeping cached state.");
             }
+        }
+
+        /// <summary>
+        /// On fresh install, check if a cloud settings backup exists and offer to restore it.
+        /// Waits for authentication to complete before checking.
+        /// </summary>
+        private async Task CheckCloudSettingsRestoreAsync()
+        {
+            try
+            {
+                // Only run on fresh installs (no settings file existed)
+                if (Settings?.WasSettingsFileMissing != true) return;
+
+                // Wait for provider auth to complete
+                await Task.Delay(5000);
+
+                // Need a cloud identity to check for backup
+                if (!HasCloudIdentity) return;
+                if (ProfileSync == null) return;
+
+                Logger?.Information("Fresh install detected with cloud identity — checking for settings backup...");
+
+                var backupInfo = await ProfileSync.GetSettingsBackupInfoAsync();
+                if (backupInfo == null)
+                {
+                    Logger?.Information("No cloud settings backup found");
+                    return;
+                }
+
+                Logger?.Information("Cloud settings backup found (v{Version}, {Date})",
+                    backupInfo.AppVersion, backupInfo.BackedUpAt);
+
+                // Ask user on UI thread
+                await Current.Dispatcher.InvokeAsync(async () =>
+                {
+                    var dateStr = backupInfo.BackedUpAt?.ToLocalTime().ToString("MMM d, yyyy h:mm tt") ?? "unknown date";
+                    var result = System.Windows.MessageBox.Show(
+                        $"A cloud backup of your settings was found!\n\n" +
+                        $"Backed up: {dateStr}\n" +
+                        $"App version: {backupInfo.AppVersion}\n\n" +
+                        $"Would you like to restore your settings from this backup?",
+                        "Restore Settings from Cloud",
+                        System.Windows.MessageBoxButton.YesNo,
+                        System.Windows.MessageBoxImage.Question);
+
+                    if (result != System.Windows.MessageBoxResult.Yes) return;
+
+                    var restored = await ProfileSync.RestoreSettingsFromCloudAsync();
+                    if (restored == null)
+                    {
+                        System.Windows.MessageBox.Show(
+                            "Failed to restore settings from cloud.",
+                            "Restore Failed",
+                            System.Windows.MessageBoxButton.OK,
+                            System.Windows.MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    ApplyRestoredSettings(restored);
+
+                    System.Windows.MessageBox.Show(
+                        "Settings restored from cloud! Some UI changes may require a restart to take full effect.",
+                        "Settings Restored",
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Information);
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Cloud settings restore check failed");
+            }
+        }
+
+        /// <summary>
+        /// Apply restored settings while preserving identity and progression fields
+        /// (those are server-authoritative and should not be overwritten from backup).
+        /// </summary>
+        private void ApplyRestoredSettings(Models.AppSettings restored)
+        {
+            var current = Settings?.Current;
+            if (current == null || Settings == null) return;
+
+            // Preserve identity/progression fields from current settings
+            restored.UnifiedId = current.UnifiedId;
+            restored.PlayerLevel = current.PlayerLevel;
+            restored.PlayerXP = current.PlayerXP;
+            restored.SkillPoints = current.SkillPoints;
+            restored.UnlockedSkills = current.UnlockedSkills;
+            restored.HighestLevelEver = current.HighestLevelEver;
+            restored.IsSeason0Og = current.IsSeason0Og;
+            restored.CurrentSeason = current.CurrentSeason;
+            restored.PendingSkillsResetAck = current.PendingSkillsResetAck;
+            restored.UserDisplayName = current.UserDisplayName;
+            restored.PatreonTier = current.PatreonTier;
+            restored.PatreonPremiumValidUntil = current.PatreonPremiumValidUntil;
+            restored.LastPatreonVerification = current.LastPatreonVerification;
+            restored.OpenRouterApiKey = current.OpenRouterApiKey;
+
+            Settings.RestoreFrom(restored);
+
+            // Refresh UI if MainWindow is loaded
+            if (MainWindow is MainWindow mw)
+            {
+                mw.ApplySessionSettings();
+            }
+
+            Logger?.Information("Applied restored cloud settings (identity/progression fields preserved)");
         }
 
         /// <summary>

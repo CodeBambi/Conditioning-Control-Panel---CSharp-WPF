@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -7,6 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
 
 namespace ConditioningControlPanel.Services
@@ -1207,6 +1210,215 @@ namespace ConditioningControlPanel.Services
             request.Headers.Add("X-CCP-Signature", signature);
         }
 
+        #region Settings Backup/Restore
+
+        private DateTime _lastSettingsBackupTime = DateTime.MinValue;
+        private static readonly TimeSpan SettingsBackupDebounce = TimeSpan.FromMinutes(5);
+
+        /// <summary>
+        /// Properties to exclude from settings backup (server-authoritative or identity fields).
+        /// </summary>
+        private static readonly HashSet<string> ExcludedBackupProperties = new(StringComparer.OrdinalIgnoreCase)
+        {
+            nameof(AppSettings.UnifiedId),
+            nameof(AppSettings.OpenRouterApiKey),
+            nameof(AppSettings.PlayerLevel),
+            nameof(AppSettings.PlayerXP),
+            nameof(AppSettings.SkillPoints),
+            nameof(AppSettings.UnlockedSkills),
+            nameof(AppSettings.HighestLevelEver),
+            nameof(AppSettings.IsSeason0Og),
+            nameof(AppSettings.CurrentSeason),
+            nameof(AppSettings.PendingSkillsResetAck),
+            nameof(AppSettings.UserDisplayName),
+            nameof(AppSettings.PatreonTier),
+            nameof(AppSettings.PatreonPremiumValidUntil),
+            nameof(AppSettings.LastPatreonVerification),
+        };
+
+        /// <summary>
+        /// Backup current settings to the cloud. Debounced to 5 minutes unless forced.
+        /// </summary>
+        public async Task<bool> BackupSettingsAsync(bool force = false)
+        {
+            if (App.Settings?.Current?.OfflineMode == true) return false;
+
+            var unifiedId = App.Settings?.Current?.UnifiedId;
+            if (string.IsNullOrEmpty(unifiedId)) return false;
+
+            // Debounce: skip if backed up recently (unless forced)
+            if (!force && (DateTime.Now - _lastSettingsBackupTime) < SettingsBackupDebounce)
+            {
+                App.Logger?.Debug("Settings backup skipped (debounce, last backup {Ago}s ago)",
+                    (int)(DateTime.Now - _lastSettingsBackupTime).TotalSeconds);
+                return false;
+            }
+
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings == null) return false;
+
+                // Serialize settings, then strip excluded properties
+                var fullJson = JsonConvert.SerializeObject(settings, Formatting.None);
+                var obj = Newtonsoft.Json.Linq.JObject.Parse(fullJson);
+
+                foreach (var prop in ExcludedBackupProperties)
+                {
+                    // Remove by JSON property name (which may differ from C# property name)
+                    // Find the matching key case-insensitively
+                    var key = obj.Properties()
+                        .FirstOrDefault(p => string.Equals(p.Name, prop, StringComparison.OrdinalIgnoreCase))?.Name;
+                    if (key != null) obj.Remove(key);
+                }
+
+                var strippedJson = obj.ToString(Formatting.None);
+
+                // Gzip compress
+                byte[] compressedBytes;
+                using (var output = new MemoryStream())
+                {
+                    using (var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true))
+                    {
+                        var jsonBytes = Encoding.UTF8.GetBytes(strippedJson);
+                        await gzip.WriteAsync(jsonBytes, 0, jsonBytes.Length);
+                    }
+                    compressedBytes = output.ToArray();
+                }
+
+                var base64Data = Convert.ToBase64String(compressedBytes);
+
+                var requestData = new
+                {
+                    unified_id = unifiedId,
+                    settings_data = base64Data,
+                    app_version = UpdateService.AppVersion
+                };
+
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/backup-settings");
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(requestData),
+                    Encoding.UTF8,
+                    "application/json"
+                );
+
+                var response = await _httpClient.SendAsync(request);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    App.Logger?.Warning("Settings backup failed: {Status} - {Error}", response.StatusCode, error);
+                    return false;
+                }
+
+                _lastSettingsBackupTime = DateTime.Now;
+                App.Logger?.Information("Settings backed up to cloud ({Size} bytes compressed)", compressedBytes.Length);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Settings backup failed");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Check if a settings backup exists in the cloud and return its metadata.
+        /// </summary>
+        public async Task<SettingsBackupInfo?> GetSettingsBackupInfoAsync()
+        {
+            var unifiedId = App.Settings?.Current?.UnifiedId;
+            if (string.IsNullOrEmpty(unifiedId)) return null;
+
+            try
+            {
+                var requestData = new { unified_id = unifiedId };
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/settings-backup");
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(requestData),
+                    Encoding.UTF8,
+                    "application/json"
+                );
+
+                var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode) return null;
+
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<SettingsBackupResponse>(json);
+
+                if (result?.Backup == null) return null;
+
+                return new SettingsBackupInfo
+                {
+                    AppVersion = result.Backup.AppVersion,
+                    BackedUpAt = DateTime.TryParse(result.Backup.BackedUpAt, out var dt) ? dt : null,
+                    SizeBytes = result.Backup.SizeBytes
+                };
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Settings backup info check failed: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Download and decompress settings from the cloud.
+        /// Returns deserialized AppSettings (with excluded properties at their defaults), or null on failure.
+        /// </summary>
+        public async Task<AppSettings?> RestoreSettingsFromCloudAsync()
+        {
+            var unifiedId = App.Settings?.Current?.UnifiedId;
+            if (string.IsNullOrEmpty(unifiedId)) return null;
+
+            try
+            {
+                var requestData = new { unified_id = unifiedId };
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/settings-backup");
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(requestData),
+                    Encoding.UTF8,
+                    "application/json"
+                );
+
+                var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode) return null;
+
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<SettingsBackupResponse>(json);
+
+                if (result?.Backup?.SettingsData == null) return null;
+
+                // Decompress: base64 → gzip → JSON
+                var compressedBytes = Convert.FromBase64String(result.Backup.SettingsData);
+                string settingsJson;
+                using (var input = new MemoryStream(compressedBytes))
+                using (var gzip = new GZipStream(input, CompressionMode.Decompress))
+                using (var reader = new StreamReader(gzip, Encoding.UTF8))
+                {
+                    settingsJson = await reader.ReadToEndAsync();
+                }
+
+                var serializerSettings = new JsonSerializerSettings
+                {
+                    ObjectCreationHandling = ObjectCreationHandling.Replace
+                };
+                var restored = JsonConvert.DeserializeObject<AppSettings>(settingsJson, serializerSettings);
+
+                App.Logger?.Information("Settings restored from cloud (v{Version}, {Size} bytes)",
+                    result.Backup.AppVersion, result.Backup.SizeBytes);
+
+                return restored;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Settings restore from cloud failed");
+                return null;
+            }
+        }
+
+        #endregion
+
         public void Dispose()
         {
             if (_disposed) return;
@@ -1451,6 +1663,30 @@ namespace ConditioningControlPanel.Services
             public string? Error { get; set; }
         }
 
+        private class SettingsBackupResponse
+        {
+            [JsonProperty("success")]
+            public bool Success { get; set; }
+
+            [JsonProperty("backup")]
+            public SettingsBackupData? Backup { get; set; }
+        }
+
+        private class SettingsBackupData
+        {
+            [JsonProperty("settings_data")]
+            public string? SettingsData { get; set; }
+
+            [JsonProperty("app_version")]
+            public string? AppVersion { get; set; }
+
+            [JsonProperty("backed_up_at")]
+            public string? BackedUpAt { get; set; }
+
+            [JsonProperty("size_bytes")]
+            public int SizeBytes { get; set; }
+        }
+
         private class V2StreakStats
         {
             [JsonProperty("daily_quest_streak")]
@@ -1473,5 +1709,15 @@ namespace ConditioningControlPanel.Services
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// Public metadata about a cloud settings backup (for UI display).
+    /// </summary>
+    public class SettingsBackupInfo
+    {
+        public string? AppVersion { get; set; }
+        public DateTime? BackedUpAt { get; set; }
+        public int SizeBytes { get; set; }
     }
 }

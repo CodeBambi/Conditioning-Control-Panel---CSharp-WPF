@@ -4349,6 +4349,13 @@ namespace ConditioningControlPanel
             // Show individual buttons for unlinked providers
             BtnLinkPatreon.Visibility = (hasUnifiedId && !hasLinkedPatreon) ? Visibility.Visible : Visibility.Collapsed;
             BtnLinkDiscord.Visibility = (hasUnifiedId && !hasLinkedDiscord) ? Visibility.Visible : Visibility.Collapsed;
+
+            // Show cloud settings backup section if user has a cloud identity
+            CloudSettingsBackupSection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
+            if (hasUnifiedId)
+            {
+                _ = UpdateBackupStatus();
+            }
         }
 
         /// <summary>
@@ -4434,6 +4441,160 @@ namespace ConditioningControlPanel
                 BtnLinkDiscord.Content = "🎮 Link Discord";
             }
         }
+
+        #region Cloud Settings Backup
+
+        private async void BtnBackupSettingsNow_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.ProfileSync == null) return;
+
+            BtnBackupSettingsNow.IsEnabled = false;
+            BtnBackupSettingsNow.Content = "Backing up...";
+
+            try
+            {
+                var success = await App.ProfileSync.BackupSettingsAsync(force: true);
+
+                if (success)
+                {
+                    MessageBox.Show(
+                        "Settings backed up to cloud successfully!",
+                        "Backup Complete",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+
+                    await UpdateBackupStatus();
+                }
+                else
+                {
+                    MessageBox.Show(
+                        "Failed to backup settings. Please try again later.",
+                        "Backup Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Manual settings backup failed");
+                MessageBox.Show(
+                    $"Backup failed: {ex.Message}",
+                    "Backup Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+            finally
+            {
+                BtnBackupSettingsNow.IsEnabled = true;
+                BtnBackupSettingsNow.Content = "☁ Backup Now";
+            }
+        }
+
+        private async void BtnRestoreSettings_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.ProfileSync == null) return;
+
+            var confirm = MessageBox.Show(
+                "This will replace your current settings with the cloud backup.\n\n" +
+                "Your progression (level, XP, skills) will NOT be affected.\n\n" +
+                "Are you sure you want to restore?",
+                "Restore Settings from Cloud",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (confirm != MessageBoxResult.Yes) return;
+
+            BtnRestoreSettings.IsEnabled = false;
+            BtnRestoreSettings.Content = "Restoring...";
+
+            try
+            {
+                var restored = await App.ProfileSync.RestoreSettingsFromCloudAsync();
+
+                if (restored == null)
+                {
+                    MessageBox.Show(
+                        "No cloud backup found or restore failed.",
+                        "Restore Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                // Preserve identity/progression fields from current settings
+                var current = App.Settings?.Current;
+                if (current != null)
+                {
+                    restored.UnifiedId = current.UnifiedId;
+                    restored.PlayerLevel = current.PlayerLevel;
+                    restored.PlayerXP = current.PlayerXP;
+                    restored.SkillPoints = current.SkillPoints;
+                    restored.UnlockedSkills = current.UnlockedSkills;
+                    restored.HighestLevelEver = current.HighestLevelEver;
+                    restored.IsSeason0Og = current.IsSeason0Og;
+                    restored.CurrentSeason = current.CurrentSeason;
+                    restored.PendingSkillsResetAck = current.PendingSkillsResetAck;
+                    restored.UserDisplayName = current.UserDisplayName;
+                    restored.PatreonTier = current.PatreonTier;
+                    restored.PatreonPremiumValidUntil = current.PatreonPremiumValidUntil;
+                    restored.LastPatreonVerification = current.LastPatreonVerification;
+                    restored.OpenRouterApiKey = current.OpenRouterApiKey;
+                }
+
+                App.Settings?.RestoreFrom(restored);
+
+                _isLoading = true;
+                LoadSettings();
+                _isLoading = false;
+
+                MessageBox.Show(
+                    "Settings restored from cloud! Some changes may require a restart to take full effect.",
+                    "Settings Restored",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Manual settings restore failed");
+                MessageBox.Show(
+                    $"Restore failed: {ex.Message}",
+                    "Restore Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+            finally
+            {
+                BtnRestoreSettings.IsEnabled = true;
+                BtnRestoreSettings.Content = "Restore from Cloud";
+            }
+        }
+
+        private async Task UpdateBackupStatus()
+        {
+            try
+            {
+                if (App.ProfileSync == null || !App.HasCloudIdentity) return;
+
+                var info = await App.ProfileSync.GetSettingsBackupInfoAsync();
+
+                if (info?.BackedUpAt != null)
+                {
+                    var dateStr = info.BackedUpAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
+                    TxtCloudBackupStatus.Text = $"Last backup: {dateStr} (v{info.AppVersion})";
+                }
+                else
+                {
+                    TxtCloudBackupStatus.Text = "No cloud backup found. Back up your settings to protect them.";
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to update backup status: {Error}", ex.Message);
+                TxtCloudBackupStatus.Text = "Could not check backup status.";
+            }
+        }
+
+        #endregion
 
         private void ChkShareAchievements_Changed(object sender, RoutedEventArgs e)
         {
