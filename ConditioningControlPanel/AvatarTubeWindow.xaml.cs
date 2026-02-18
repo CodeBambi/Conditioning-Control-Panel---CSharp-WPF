@@ -2427,6 +2427,17 @@ namespace ConditioningControlPanel
                 _parentHandle = new WindowInteropHelper(_parentWindow).Handle;
             if (_parentHandle == IntPtr.Zero) return;
 
+            // Only bring to front when our process owns the foreground window —
+            // otherwise we'd steal z-order from other apps (e.g. fullscreen video players)
+            var foreground = GetForegroundWindow();
+            if (foreground != IntPtr.Zero && foreground != _parentHandle && foreground != _tubeHandle)
+            {
+                GetWindowThreadProcessId(foreground, out uint foregroundPid);
+                uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                if (foregroundPid != ourPid)
+                    return;
+            }
+
             // Parent to top first, then tube above it — keeps them as a pair
             SetWindowPos(_parentHandle, HWND_TOP, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -2443,6 +2454,17 @@ namespace ConditioningControlPanel
             if (!_isAttached || _parentWindow == null) return;
             try
             {
+                // Only redirect activation to parent if our process already owns the foreground —
+                // otherwise we'd steal focus from other apps (e.g. fullscreen video players)
+                var foreground = GetForegroundWindow();
+                if (foreground != IntPtr.Zero)
+                {
+                    GetWindowThreadProcessId(foreground, out uint foregroundPid);
+                    uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                    if (foregroundPid != ourPid)
+                        return; // Another app is in front, don't steal focus
+                }
+
                 // Defer activation to parent so Windows finishes current activation first
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
