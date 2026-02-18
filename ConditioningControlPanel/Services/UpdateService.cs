@@ -22,26 +22,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.5.21";
+        public const string AppVersion = "5.5.22";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.5.21 - OCR Highlight Upgrades
-
-🎯 KEYWORD TRIGGERS
-• New effect: Highlight Only — shows pink highlight with no audio/haptic/XP
-• New effect: Exact Subliminal — flashes the matched keyword as subliminal text
-• Highlight duration slider (0.3s–5.0s) to control overlay timing
-• OCR highlight mode: All matches vs Random subset
-• Option to show keyword highlights in screen capture/streams
+        public const string CurrentPatchNotes = @"v5.5.22 - Overlay & Focus Fixes
 
 🔧 FIXES
-• Window no longer steals focus from other apps while in background
-• Clipboard crash fixed when another app holds the clipboard lock
-• Quest completion no longer lost when running past midnight
-• Subliminal, companion toggle, relapse achievement, packs scrollbar, quest refresh fixes";
+• Overlays (pink filter, spiral, brain drain) now stay on top after mandatory videos
+• Reduced overlay flicker by skipping redundant opacity updates
+• Preview window no longer steals focus from other apps when closed";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

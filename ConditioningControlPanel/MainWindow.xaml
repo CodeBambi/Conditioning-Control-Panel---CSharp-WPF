@@ -1454,7 +1454,7 @@
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
                     <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.22 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.22 - Overlay & Focus Fixes"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.22 - Overlay &amp; Focus Fixes"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
