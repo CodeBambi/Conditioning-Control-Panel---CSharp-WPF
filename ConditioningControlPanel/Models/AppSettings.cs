@@ -2520,6 +2520,14 @@ namespace ConditioningControlPanel.Models
             set { _keywordHighlightDurationMs = Math.Clamp(value, 300, 5000); OnPropertyChanged(); }
         }
 
+        private bool _ocrHighlightAll = true;
+        [JsonProperty("ocrHighlightAll")]
+        public bool OcrHighlightAll
+        {
+            get => _ocrHighlightAll;
+            set { _ocrHighlightAll = value; OnPropertyChanged(); }
+        }
+
         private List<KeywordTrigger> _keywordTriggers = new();
         /// <summary>
         /// Configured keyword triggers

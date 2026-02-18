@@ -5420,6 +5420,12 @@ namespace ConditioningControlPanel
             App.Settings.Current.KeywordHighlightDurationMs = ms;
         }
 
+        private void CmbOcrHighlightMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.OcrHighlightAll = CmbOcrHighlightMode.SelectedIndex == 0;
+        }
+
         private void BtnAddKeywordTrigger_Click(object sender, RoutedEventArgs e)
         {
             var triggers = App.Settings.Current.KeywordTriggers;
@@ -13372,6 +13378,8 @@ namespace ConditioningControlPanel
                         HighlightDurationPanel.Visibility = s.KeywordHighlightEnabled ? Visibility.Visible : Visibility.Collapsed;
                         SliderKeywordHighlightDuration.Value = s.KeywordHighlightDurationMs / 1000.0;
                         TxtKeywordHighlightDuration.Text = $"{s.KeywordHighlightDurationMs / 1000.0:0.0}s";
+                        if (CmbOcrHighlightMode != null)
+                            CmbOcrHighlightMode.SelectedIndex = s.OcrHighlightAll ? 0 : 1;
                     }
                 }
             }

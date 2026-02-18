@@ -5534,6 +5534,16 @@
                                                       Unchecked="ChkKeywordHighlightEnabled_Changed"
                                                       ToolTip="Show a glowing overlay over the word when OCR detects a keyword match"/>
                                             <StackPanel x:Name="HighlightDurationPanel" Visibility="Collapsed" Margin="0,4,0,0">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                    <TextBlock Text="Highlight mode:" Foreground="#A0A0A0" FontSize="10" VerticalAlignment="Center"/>
+                                                    <ComboBox x:Name="CmbOcrHighlightMode" Margin="6,0,0,0" MinWidth="110"
+                                                              Style="{StaticResource DarkComboBoxStyle}" FontSize="10"
+                                                              SelectionChanged="CmbOcrHighlightMode_SelectionChanged"
+                                                              ToolTip="All matches: highlights every keyword immediately. Random subset: highlights a random selection each scan.">
+                                                        <ComboBoxItem Content="All matches"/>
+                                                        <ComboBoxItem Content="Random subset"/>
+                                                    </ComboBox>
+                                                </StackPanel>
                                                 <TextBlock Text="Highlight Duration" Foreground="#A0A0A0" FontSize="10"/>
                                                 <Grid ToolTip="How long the pink highlight stays on screen (0.3s - 5.0s)">
                                                     <Slider x:Name="SliderKeywordHighlightDuration" Minimum="0.3" Maximum="5.0"

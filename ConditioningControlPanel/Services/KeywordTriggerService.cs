@@ -338,42 +338,56 @@ namespace ConditioningControlPanel.Services
             // Forget highlighted texts that are no longer on screen at all
             _highlightedOcrTexts.IntersectWith(visibleTexts);
 
-            // 4. Two-scan position stability: stable = present in both current and previous scan
-            var stableKeys = new HashSet<string>(currentPositions);
-            stableKeys.IntersectWith(_pendingOcrPositions);
-
-            // 5. From stable words, keep only those whose TEXT hasn't been highlighted yet
             var newWords = new List<OcrWordHit>();
             var newTexts = new HashSet<string>();
 
-            foreach (var key in stableKeys)
+            bool highlightAll = settings.OcrHighlightAll;
+
+            if (highlightAll)
             {
-                if (wordsByKey.TryGetValue(key, out var word))
+                // "All matches" mode: skip two-scan stability gate, highlight every match immediately
+                foreach (var kvp in wordsByKey)
                 {
-                    var text = word.Text.ToLowerInvariant();
+                    var text = kvp.Value.Text.ToLowerInvariant();
                     if (!_highlightedOcrTexts.Contains(text))
                     {
-                        newWords.Add(word);
+                        newWords.Add(kvp.Value);
                         newTexts.Add(text);
                     }
                 }
             }
-
-            // 5.5 Check if any new positions have unhighlighted text needing confirmation
-            //     (positions in current scan NOT in previous scan, with text not yet handled)
-            foreach (var key in currentPositions)
+            else
             {
-                if (_pendingOcrPositions.Contains(key)) continue;
-                if (!wordsByKey.TryGetValue(key, out var w)) continue;
-                var t = w.Text.ToLowerInvariant();
-                if (_highlightedOcrTexts.Contains(t) || newTexts.Contains(t)) continue;
-                NeedsOcrConfirmation = true;
-                break;
+                // "Random subset" mode: pick a random subset of unhighlighted matches
+                var candidates = new List<OcrWordHit>();
+                foreach (var kvp in wordsByKey)
+                {
+                    var text = kvp.Value.Text.ToLowerInvariant();
+                    if (!_highlightedOcrTexts.Contains(text))
+                        candidates.Add(kvp.Value);
+                }
+
+                if (candidates.Count > 0)
+                {
+                    var rng = new Random();
+                    int count = rng.Next(1, candidates.Count + 1);
+                    // Shuffle and take 'count' items
+                    for (int i = candidates.Count - 1; i > 0; i--)
+                    {
+                        int j = rng.Next(i + 1);
+                        (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
+                    }
+                    for (int i = 0; i < count; i++)
+                    {
+                        newWords.Add(candidates[i]);
+                        newTexts.Add(candidates[i].Text.ToLowerInvariant());
+                    }
+                }
             }
 
             // 6. Update tracking
-            _pendingOcrPositions = currentPositions;       // current positions become next scan's pending
-            _highlightedOcrTexts.UnionWith(newTexts);      // mark newly highlighted texts
+            _pendingOcrPositions = currentPositions;
+            _highlightedOcrTexts.UnionWith(newTexts);
 
             if (newWords.Count == 0 || effectTrigger == null) return;
 
