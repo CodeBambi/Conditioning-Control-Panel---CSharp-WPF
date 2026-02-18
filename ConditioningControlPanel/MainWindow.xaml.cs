@@ -5950,8 +5950,16 @@ namespace ConditioningControlPanel
             var code = App.RemoteControl?.SessionCode;
             if (!string.IsNullOrEmpty(code))
             {
-                System.Windows.Clipboard.SetText(code);
-                BtnCopyRemoteCode.Content = "Copied!";
+                try
+                {
+                    System.Windows.Clipboard.SetText(code);
+                    BtnCopyRemoteCode.Content = "Copied!";
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to copy remote code to clipboard");
+                    BtnCopyRemoteCode.Content = "Failed";
+                }
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
                 timer.Tick += (s, _) => { BtnCopyRemoteCode.Content = "Copy"; timer.Stop(); };
                 timer.Start();
@@ -5964,8 +5972,16 @@ namespace ConditioningControlPanel
             var url = "https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/remote/";
             if (!string.IsNullOrEmpty(code))
                 url += $"?code={code}";
-            System.Windows.Clipboard.SetText(url);
-            BtnCopyRemoteLink.Content = "Copied!";
+            try
+            {
+                System.Windows.Clipboard.SetText(url);
+                BtnCopyRemoteLink.Content = "Copied!";
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to copy remote link to clipboard");
+                BtnCopyRemoteLink.Content = "Failed";
+            }
             var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
             timer.Tick += (s, _) => { BtnCopyRemoteLink.Content = "Copy Link"; timer.Stop(); };
             timer.Start();
