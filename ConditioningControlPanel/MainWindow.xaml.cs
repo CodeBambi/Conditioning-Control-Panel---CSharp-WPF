@@ -286,6 +286,7 @@ namespace ConditioningControlPanel
             {
                 App.Quests.QuestCompleted += OnQuestCompleted;
                 App.Quests.QuestProgressChanged += OnQuestProgressChanged;
+                App.Quests.QuestsRefreshed += (s, e) => Dispatcher.Invoke(() => RefreshQuestUI());
             }
 
             // Subscribe to skill tree events
@@ -5407,6 +5408,16 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             App.Settings.Current.KeywordHighlightEnabled = ChkKeywordHighlightEnabled.IsChecked == true;
+            if (HighlightDurationPanel != null)
+                HighlightDurationPanel.Visibility = ChkKeywordHighlightEnabled.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void SliderKeywordHighlightDuration_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var ms = (int)(SliderKeywordHighlightDuration.Value * 1000);
+            TxtKeywordHighlightDuration.Text = $"{SliderKeywordHighlightDuration.Value:0.0}s";
+            App.Settings.Current.KeywordHighlightDurationMs = ms;
         }
 
         private void BtnAddKeywordTrigger_Click(object sender, RoutedEventArgs e)
@@ -13353,7 +13364,15 @@ namespace ConditioningControlPanel
                     ScreenOcrIntervalPanel.Visibility = s.ScreenOcrEnabled && hasT2 ? Visibility.Visible : Visibility.Collapsed;
                 }
                 if (ChkKeywordHighlightEnabled != null)
+                {
                     ChkKeywordHighlightEnabled.IsChecked = s.KeywordHighlightEnabled;
+                    if (HighlightDurationPanel != null)
+                    {
+                        HighlightDurationPanel.Visibility = s.KeywordHighlightEnabled ? Visibility.Visible : Visibility.Collapsed;
+                        SliderKeywordHighlightDuration.Value = s.KeywordHighlightDurationMs / 1000.0;
+                        TxtKeywordHighlightDuration.Text = $"{s.KeywordHighlightDurationMs / 1000.0:0.0}s";
+                    }
+                }
             }
 
             // Discord Sharing Settings
