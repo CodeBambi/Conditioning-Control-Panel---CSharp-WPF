@@ -1062,7 +1062,7 @@ namespace ConditioningControlPanel.Services
             var unifiedId = App.Settings?.Current?.UnifiedId;
             if (string.IsNullOrEmpty(unifiedId))
             {
-                return (false, "Oopsie Insurance requires an internet connection", null);
+                return (false, "Oopsie Insurance requires a cloud account. Please log in first.", null);
             }
 
             try
@@ -1093,7 +1093,7 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Oopsie insurance request failed");
-                return (false, "Oopsie Insurance requires an internet connection", null);
+                return (false, $"Connection failed: {ex.Message}", null);
             }
         }
 

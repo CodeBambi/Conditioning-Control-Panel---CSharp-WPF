@@ -2447,12 +2447,12 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
-        #region Keyword Triggers (Patreon T2)
+        #region Keyword Triggers
 
         private bool _keywordTriggersEnabled = false;
         /// <summary>
         /// Enable keyword trigger system — intercepts typed text and fires multi-modal responses.
-        /// Requires Patreon Tier 2 or whitelist.
+        /// Requires Patreon access.
         /// </summary>
         public bool KeywordTriggersEnabled
         {

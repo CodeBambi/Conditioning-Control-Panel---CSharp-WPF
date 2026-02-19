@@ -3025,21 +3025,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void BtnLabGuide_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/guide-lab.html",
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "Failed to open Lab guide link");
-            }
-        }
 
         private void ChkDiscordRichPresence_Changed(object sender, RoutedEventArgs e)
         {
@@ -3178,7 +3163,6 @@ namespace ConditioningControlPanel
             AssetsTab.Visibility = Visibility.Collapsed;
             DiscordTab.Visibility = Visibility.Collapsed;
             EnhancementsTab.Visibility = Visibility.Collapsed;
-            LabTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive
             var inactiveStyle = FindResource("TabButton") as Style;
@@ -3192,7 +3176,6 @@ namespace ConditioningControlPanel
             BtnCompanion.Style = inactiveStyle;
             BtnLeaderboard.Style = inactiveStyle;
             BtnOpenAssetsTop.Style = inactiveStyle;
-            BtnLab.Style = inactiveStyle;
             // BtnPatreonExclusives keeps its inline Patreon red style defined in XAML
 
             switch (tab)
@@ -3274,14 +3257,6 @@ namespace ConditioningControlPanel
                     UpdateDiscordTabUI();
                     break;
 
-                case "lab":
-                    LabTab.Visibility = Visibility.Visible;
-                    BtnLab.Style = activeStyle;
-                    var hasLabAccess = App.Patreon?.CurrentTier >= PatreonTier.Level2 || App.Patreon?.IsWhitelisted == true;
-                    LabLockedOverlay.Visibility = hasLabAccess ? Visibility.Collapsed : Visibility.Visible;
-                    LabContentBorder.Opacity = hasLabAccess ? 1.0 : 0.15;
-                    LabContentBorder.IsHitTestVisible = hasLabAccess;
-                    break;
             }
         }
 
@@ -4160,17 +4135,17 @@ namespace ConditioningControlPanel
             }
 
             // Re-evaluate keyword triggers access (may have been disabled before Patreon validated)
-            var hasT2 = KeywordTriggerService.HasAccess();
+            var hasKeywordAccess = KeywordTriggerService.HasAccess();
             if (TxtKeywordTriggersLocked != null)
-                TxtKeywordTriggersLocked.Visibility = hasT2 ? Visibility.Collapsed : Visibility.Visible;
+                TxtKeywordTriggersLocked.Visibility = hasKeywordAccess ? Visibility.Collapsed : Visibility.Visible;
             if (BtnKeywordTriggersStartStop != null)
-                BtnKeywordTriggersStartStop.IsEnabled = hasT2;
+                BtnKeywordTriggersStartStop.IsEnabled = hasKeywordAccess;
             if (ChkScreenOcrEnabled != null)
-                ChkScreenOcrEnabled.IsEnabled = hasT2;
+                ChkScreenOcrEnabled.IsEnabled = hasKeywordAccess;
 
             // If triggers were enabled in settings but couldn't start earlier (Patreon not validated yet),
             // start them now that access is confirmed
-            if (hasT2 && App.Settings?.Current?.KeywordTriggersEnabled == true)
+            if (hasKeywordAccess && App.Settings?.Current?.KeywordTriggersEnabled == true)
             {
                 App.KeywordTriggers?.Start();
                 _keyboardHook?.Start();
@@ -4599,25 +4574,25 @@ namespace ConditioningControlPanel
 
         private void ChkShareAchievements_Changed(object sender, RoutedEventArgs e)
         {
-            if (App.Settings?.Current != null)
+            if (App.Settings?.Current != null && sender is CheckBox chk)
             {
-                App.Settings.Current.DiscordShareAchievements = ChkShareAchievements.IsChecked == true;
+                App.Settings.Current.DiscordShareAchievements = chk.IsChecked == true;
             }
         }
 
         private void ChkShareLevelUps_Changed(object sender, RoutedEventArgs e)
         {
-            if (App.Settings?.Current != null)
+            if (App.Settings?.Current != null && sender is CheckBox chk)
             {
-                App.Settings.Current.DiscordShareLevelUps = ChkShareLevelUps.IsChecked == true;
+                App.Settings.Current.DiscordShareLevelUps = chk.IsChecked == true;
             }
         }
 
         private void ChkShowLevelInPresence_Changed(object sender, RoutedEventArgs e)
         {
-            if (App.Settings?.Current != null)
+            if (App.Settings?.Current != null && sender is CheckBox chk)
             {
-                App.Settings.Current.DiscordShowLevelInPresence = ChkShowLevelInPresence.IsChecked == true;
+                App.Settings.Current.DiscordShowLevelInPresence = chk.IsChecked == true;
                 // Update presence immediately to reflect change
                 App.DiscordRpc?.UpdateLevel(App.Settings.Current.PlayerLevel);
             }
@@ -4630,9 +4605,7 @@ namespace ConditioningControlPanel
                 var isChecked = chk.IsChecked == true;
                 App.Settings.Current.AllowDiscordDm = isChecked;
 
-                // Sync both checkboxes
-                if (ChkAllowDiscordDm != null && ChkAllowDiscordDm != chk)
-                    ChkAllowDiscordDm.IsChecked = isChecked;
+                // Sync profile tab checkbox
                 if (ChkDiscordTabAllowDm != null && ChkDiscordTabAllowDm != chk)
                     ChkDiscordTabAllowDm.IsChecked = isChecked;
 
@@ -4668,9 +4641,7 @@ namespace ConditioningControlPanel
                 var isChecked = chk.IsChecked == true;
                 App.Settings.Current.ShareProfilePicture = isChecked;
 
-                // Sync both checkboxes (Patreon tab and Discord tab)
-                if (ChkShareProfilePicture != null && ChkShareProfilePicture != chk)
-                    ChkShareProfilePicture.IsChecked = isChecked;
+                // Sync profile tab checkbox
                 if (ChkDiscordTabSharePfp != null && ChkDiscordTabSharePfp != chk)
                     ChkDiscordTabSharePfp.IsChecked = isChecked;
 
@@ -4689,9 +4660,7 @@ namespace ConditioningControlPanel
                 var isChecked = chk.IsChecked == true;
                 App.Settings.Current.ShowOnlineStatus = isChecked;
 
-                // Sync both checkboxes (Patreon tab and Discord tab)
-                if (ChkShowOnlineStatus != null && ChkShowOnlineStatus != chk)
-                    ChkShowOnlineStatus.IsChecked = isChecked;
+                // Sync profile tab checkbox
                 if (ChkDiscordTabShowOnline != null && ChkDiscordTabShowOnline != chk)
                     ChkDiscordTabShowOnline.IsChecked = isChecked;
 
@@ -5467,7 +5436,7 @@ namespace ConditioningControlPanel
                 if (!KeywordTriggerService.HasAccess())
                 {
                     MessageBox.Show(
-                        "Keyword Triggers are available for Tier 2 Patreon supporters.",
+                        "Keyword Triggers are available for Patreon supporters.",
                         "Patreon Feature",
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
@@ -5543,7 +5512,7 @@ namespace ConditioningControlPanel
             {
                 ChkScreenOcrEnabled.IsChecked = false;
                 MessageBox.Show(
-                    "Screen OCR requires Tier 2 Patreon access.",
+                    "Screen OCR requires Patreon access.",
                     "Patreon Feature",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
@@ -13527,13 +13496,13 @@ namespace ConditioningControlPanel
                 SliderKeywordGlobalCooldown.Value = s.KeywordGlobalCooldownSeconds;
                 SliderKeywordSessionMultiplier.Value = s.KeywordSessionMultiplier;
 
-                var hasT2 = KeywordTriggerService.HasAccess();
+                var hasKeywordAccess = KeywordTriggerService.HasAccess();
 
                 // Show/hide lock indicator
                 if (TxtKeywordTriggersLocked != null)
-                    TxtKeywordTriggersLocked.Visibility = hasT2 ? Visibility.Collapsed : Visibility.Visible;
+                    TxtKeywordTriggersLocked.Visibility = hasKeywordAccess ? Visibility.Collapsed : Visibility.Visible;
                 if (BtnKeywordTriggersStartStop != null)
-                    BtnKeywordTriggersStartStop.IsEnabled = hasT2;
+                    BtnKeywordTriggersStartStop.IsEnabled = hasKeywordAccess;
 
                 UpdateKeywordTriggersButtonState();
                 RefreshKeywordTriggerList();
@@ -13542,9 +13511,9 @@ namespace ConditioningControlPanel
                 if (ChkScreenOcrEnabled != null)
                 {
                     ChkScreenOcrEnabled.IsChecked = s.ScreenOcrEnabled;
-                    ChkScreenOcrEnabled.IsEnabled = hasT2;
+                    ChkScreenOcrEnabled.IsEnabled = hasKeywordAccess;
                     SliderScreenOcrInterval.Value = s.ScreenOcrIntervalMs / 1000.0;
-                    ScreenOcrIntervalPanel.Visibility = s.ScreenOcrEnabled && hasT2 ? Visibility.Visible : Visibility.Collapsed;
+                    ScreenOcrIntervalPanel.Visibility = s.ScreenOcrEnabled && hasKeywordAccess ? Visibility.Visible : Visibility.Collapsed;
                 }
                 if (ChkKeywordHighlightEnabled != null)
                 {
@@ -13563,12 +13532,6 @@ namespace ConditioningControlPanel
             }
 
             // Discord Sharing Settings
-            ChkShareAchievements.IsChecked = s.DiscordShareAchievements;
-            ChkShareLevelUps.IsChecked = s.DiscordShareLevelUps;
-            ChkShowLevelInPresence.IsChecked = s.DiscordShowLevelInPresence;
-            ChkAllowDiscordDm.IsChecked = s.AllowDiscordDm;
-            ChkShareProfilePicture.IsChecked = s.ShareProfilePicture;
-            if (ChkShowOnlineStatus != null) ChkShowOnlineStatus.IsChecked = s.ShowOnlineStatus;
             if (ChkDiscordTabShowOnline != null) ChkDiscordTabShowOnline.IsChecked = s.ShowOnlineStatus;
 
             // Update Discord UI (both main tab and Patreon tab)
@@ -16144,7 +16107,6 @@ namespace ConditioningControlPanel
         private AssetTreeItem? _selectedFolder;
 
         private void BtnAssets_Click(object sender, RoutedEventArgs e) => ShowTab("assets");
-        private void BtnLab_Click(object sender, RoutedEventArgs e) => ShowTab("lab");
 
         private void BtnOpenAssetsFolder_Click(object sender, RoutedEventArgs e)
         {

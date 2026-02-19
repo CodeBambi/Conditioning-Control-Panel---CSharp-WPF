@@ -16,7 +16,7 @@ namespace ConditioningControlPanel.Services
     /// <summary>
     /// Intercepts typed text system-wide and fires multi-modal responses (audio, visual, haptic, XP)
     /// when configured keyword triggers are detected.
-    /// Requires Patreon Tier 2 or whitelist.
+    /// Requires Patreon access.
     /// </summary>
     public class KeywordTriggerService : IDisposable
     {
@@ -156,13 +156,13 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Check if user has access to keyword triggers (T2 or whitelisted).
+        /// Check if user has access to keyword triggers (Patreon supporter).
         /// </summary>
         public static bool HasAccess()
         {
             var patreon = App.Patreon;
             if (patreon == null) return false;
-            return patreon.CurrentTier >= PatreonTier.Level2 || patreon.IsWhitelisted;
+            return patreon.HasPremiumAccess;
         }
 
         /// <summary>
