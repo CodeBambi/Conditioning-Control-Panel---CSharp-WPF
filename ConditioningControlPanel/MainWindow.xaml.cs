@@ -650,6 +650,7 @@ namespace ConditioningControlPanel
                 Activate();
                 Topmost = true;  // Temporarily topmost to ensure it's visible
                 Topmost = false; // Then disable topmost
+                App.Overlay?.NotifyTopWindowClosed();
                 ShowAvatarTube();
 
                 if (sessionWasPaused)
@@ -2560,8 +2561,8 @@ namespace ConditioningControlPanel
             }
             else
             {
-                // Offline fallback
-                TxtFixStreakStatus.Text = "❌ Oopsie Insurance requires an internet connection";
+                // No cloud account
+                TxtFixStreakStatus.Text = "❌ Oopsie Insurance requires a cloud account. Please log in first.";
                 TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF5252"));
                 TxtFixStreakStatus.Visibility = Visibility.Visible;
                 return;
@@ -6568,6 +6569,7 @@ namespace ConditioningControlPanel
                 Activate();
                 Topmost = true;
                 Topmost = false;
+                App.Overlay?.NotifyTopWindowClosed();
                 ShowAvatarTube();
             }
             catch (Exception ex)

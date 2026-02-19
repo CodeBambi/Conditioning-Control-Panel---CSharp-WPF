@@ -40,6 +40,7 @@ public class OverlayService : IDisposable
     private Dictionary<MediaElement, DateTime> _mediaStartTimes = new();
     private double _lastAppliedPinkOpacity = -1;
     private double _lastAppliedSpiralOpacity = -1;
+    private int _consecutiveTopmostLossCount;
 
     // GIF frame animation fields
     private List<BitmapSource> _spiralGifFrames = new();
@@ -384,7 +385,20 @@ public class OverlayService : IDisposable
             UpdateSpiralOpacity();
         }
 
-        ReassertZOrder();
+        bool needed = ReassertZOrder();
+        if (needed)
+        {
+            _consecutiveTopmostLossCount++;
+            if (_consecutiveTopmostLossCount >= 6) // 6 x 500ms = 3 seconds of continuous loss
+            {
+                _consecutiveTopmostLossCount = 0;
+                RecreateOverlays();
+            }
+        }
+        else
+        {
+            _consecutiveTopmostLossCount = 0;
+        }
     }
 
     #region Pink Filter
@@ -1399,18 +1413,68 @@ public class OverlayService : IDisposable
             screen.DeviceName, bounds.Left, bounds.Top, bounds.Width, bounds.Height, success);
     }
 
-    private void ReassertZOrder()
+    /// <summary>
+    /// Re-asserts HWND_TOPMOST on overlay windows, but only if they've actually lost it.
+    /// Returns true if any window needed recovery.
+    /// </summary>
+    private bool ReassertZOrder()
     {
+        bool anyRecovered = false;
         foreach (var list in new[] { _pinkFilterWindows, _spiralWindows, _brainDrainBlurWindows })
         {
             foreach (var window in list)
             {
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
-                if (hwnd != IntPtr.Zero)
+                if (hwnd == IntPtr.Zero) continue;
+
+                int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+                if ((exStyle & WS_EX_TOPMOST) == 0)
+                {
                     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    anyRecovered = true;
+                }
             }
         }
+        return anyRecovered;
+    }
+
+    /// <summary>
+    /// Called by FlashService/VideoService/MainWindow after closing topmost windows.
+    /// Immediately re-asserts overlay z-order after a short delay to let the closing window fully destroy.
+    /// </summary>
+    public void NotifyTopWindowClosed()
+    {
+        if (!_isRunning) return;
+
+        Application.Current?.Dispatcher?.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            if (_isDisposed || !_isRunning) return;
+            ReassertZOrder();
+        });
+    }
+
+    /// <summary>
+    /// Recreates all active overlay windows. Used as a fallback when overlays persistently lose topmost status.
+    /// </summary>
+    private void RecreateOverlays()
+    {
+        App.Logger?.Warning("Overlay topmost loss persisted for 3s — recreating overlay windows");
+
+        var settings = App.Settings.Current;
+        bool hadPinkFilter = _pinkFilterWindows.Count > 0;
+        bool hadSpiral = _spiralWindows.Count > 0;
+        bool hadBrainDrain = _brainDrainBlurWindows.Count > 0;
+
+        if (hadPinkFilter) StopPinkFilter();
+        if (hadSpiral) StopSpiral();
+        if (hadBrainDrain) StopBrainDrainBlur();
+
+        if (hadPinkFilter && settings.PinkFilterEnabled) StartPinkFilter();
+        if (hadSpiral && settings.SpiralEnabled) StartSpiral();
+        // Brain drain is started externally, so just log if it was active
+        if (hadBrainDrain)
+            App.Logger?.Debug("Brain drain blur was active before recreation — must be restarted externally");
     }
 
     /// <summary>
@@ -1546,6 +1610,7 @@ public class OverlayService : IDisposable
     private const int WS_EX_LAYERED = 0x00080000;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const int WS_EX_TOPMOST = 0x00000008;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int GetWindowLong(IntPtr hwnd, int index);

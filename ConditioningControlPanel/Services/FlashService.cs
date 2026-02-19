@@ -673,7 +673,7 @@ namespace ConditioningControlPanel.Services
             }
             
             // Award XP for viewing
-            var xpAmount = _soundPlayingForCurrentFlash ? 15 : 7;
+            var xpAmount = _soundPlayingForCurrentFlash ? 5 : 2;
 
             // Roll for lucky flash (5% chance for 5x XP if skill unlocked)
             var multiplier = App.SkillTree?.RollLuckyFlash() ?? 1;
@@ -844,6 +844,9 @@ namespace ConditioningControlPanel.Services
                     _activeWindows.Remove(window);
                 }
             }
+
+            if (toRemove.Count > 0)
+                App.Overlay?.NotifyTopWindowClosed();
         }
 
         private void ForceFlashCleanup()
@@ -1445,6 +1448,9 @@ namespace ConditioningControlPanel.Services
             }
 
             _soundPlayingForCurrentFlash = false;
+
+            if (windowsCopy.Count > 0)
+                App.Overlay?.NotifyTopWindowClosed();
         }
 
         #endregion
