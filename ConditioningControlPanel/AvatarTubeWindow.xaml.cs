@@ -2231,6 +2231,26 @@ namespace ConditioningControlPanel
             { "Bambi - I Want Your Cum", "https://hypnotube.com/video/bambi-i-want-your-cum-64715.html" },
             { "Bambi Day 7 Remix", "https://hypnotube.com/video/bambi-day-7-remix-65691.html" },
             { "Bambi Tiktok Wide Remix By Analbambi", "https://hypnotube.com/video/bambi-tiktok-wide-remix-by-analbambi-66055.html" },
+            // Sissy Hypno pool
+            { "Ultimate Sissy Mindfuck", "https://hypnotube.com/video/ultimate-sissy-mindfuck-106170.html" },
+            { "Femboy Heaven - TS PMV", "https://hypnotube.com/video/femboy-heaven-ts-pmv-90699.html" },
+            { "Wife Helps You Take Cock", "https://hypnotube.com/video/wife-helps-you-take-cock-91559.html" },
+            { "Up and Down", "https://hypnotube.com/video/up-and-down-95541.html" },
+            { "Neural Rewire - Mommys Fap Roulette - Devereux", "https://hypnotube.com/video/neural-rewire-mommys-fap-roulette-devereux-115970.html" },
+            { "Girly Thoughts Vertical Loop", "https://hypnotube.com/video/girly-thoughts-vertical-loop-118644.html" },
+            { "Splitscreen Anal Trainer 4 - By Dildoslut", "https://hypnotube.com/video/splitscreen-anal-trainer-4-by-dildoslut-111004.html" },
+            { "Anal Dream - SissyGalJasmine Edition", "https://hypnotube.com/video/anal-dream-sissygaljasmine-edition-90388.html" },
+            { "BBC Stoner Goon File", "https://hypnotube.com/video/bbc-stoner-goon-file-89975.html" },
+            { "Sissy Desires", "https://hypnotube.com/video/sissy-desires-103899.html" },
+            { "A Touch Of Femboy - TS PMV", "https://hypnotube.com/video/a-touch-of-femboy-ts-pmv-110470.html" },
+            { "Say Yes To Cock Hypnosis", "https://hypnotube.com/video/say-yes-to-cock-hypnosis-112015.html" },
+            { "Pegging Dreams - Full", "https://hypnotube.com/video/pegging-dreams-full-110796.html" },
+            { "Hold it Down - Deepthroat Trainer By Whore Factory", "https://hypnotube.com/video/hold-it-down-deepthroat-trainer-by-whore-factory-112708.html" },
+            { "Anal Slut Trainer", "https://hypnotube.com/video/anal-slut-trainer-101540.html" },
+            { "You Love Cock", "https://hypnotube.com/video/you-love-cock-105890.html" },
+            { "Deep Acceptance", "https://hypnotube.com/video/deep-acceptance-113157.html" },
+            { "Eat Your Cum", "https://hypnotube.com/video/eat-your-cum-116026.html" },
+            { "Trans Love Hypno - CrimsonPMV", "https://hypnotube.com/video/trans-love-hypno-crimsonpmv-121310.html" },
         };
 
         private void PopulateSpeechBubble(string text)
@@ -2265,6 +2285,20 @@ namespace ConditioningControlPanel
                     {
                         linkPositions.Add((idx, kvp.Key.Length, kvp.Key, kvp.Value));
                     }
+                }
+            }
+
+            // Also detect raw URLs in the text (the AI sometimes outputs full URLs from the link pool)
+            var urlRegex = new Regex(@"https?://[^\s,""'<>]+", RegexOptions.IgnoreCase);
+            foreach (Match match in urlRegex.Matches(text))
+            {
+                bool overlaps = linkPositions.Any(lp =>
+                    (match.Index >= lp.start && match.Index < lp.start + lp.length) ||
+                    (match.Index + match.Length > lp.start && match.Index + match.Length <= lp.start + lp.length));
+
+                if (!overlaps)
+                {
+                    linkPositions.Add((match.Index, match.Length, match.Value, match.Value));
                 }
             }
 
@@ -2452,6 +2486,10 @@ namespace ConditioningControlPanel
         private void TubeWindow_Activated(object? sender, EventArgs e)
         {
             if (!_isAttached || _parentWindow == null) return;
+
+            // Don't redirect activation when user is typing in the chat input
+            if (_isInputVisible) return;
+
             try
             {
                 // Only redirect activation to parent if our process already owns the foreground —
