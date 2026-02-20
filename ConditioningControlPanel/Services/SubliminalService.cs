@@ -70,10 +70,15 @@ namespace ConditioningControlPanel.Services
             _isRunning = false;
             _timer.Stop();
             
-            // Close any active windows
+            // Detach animations and close any active windows
             foreach (var win in _activeWindows.ToList())
             {
-                try { win.Close(); } catch { }
+                try
+                {
+                    win.BeginAnimation(Window.OpacityProperty, null);
+                    win.Close();
+                }
+                catch { }
             }
             _activeWindows.Clear();
             
@@ -758,6 +763,9 @@ namespace ConditioningControlPanel.Services
             storyboard.Completed += (s, e) =>
             {
                 _activeWindows.Remove(win);
+                // Detach animation clocks from the Window to break reference cycle
+                // (Storyboard.SetTarget creates clocks that prevent GC of the Window)
+                win.BeginAnimation(Window.OpacityProperty, null);
                 win.Close();
             };
 

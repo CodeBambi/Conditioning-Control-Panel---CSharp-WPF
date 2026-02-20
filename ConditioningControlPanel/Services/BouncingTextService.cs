@@ -450,7 +450,9 @@ internal class BouncingTextWindow : Window
     public void UpdateText(string text, Color color)
     {
         _textBlock.Text = text;
-        _textBlock.Foreground = new SolidColorBrush(color);
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        _textBlock.Foreground = brush;
     }
 
     public void UpdateFontSize(int fontSize)
