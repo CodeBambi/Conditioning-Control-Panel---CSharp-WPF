@@ -658,11 +658,6 @@ namespace ConditioningControlPanel
                     // Update pause button to show resume icon
                     if (TxtPauseIcon != null) TxtPauseIcon.Text = "▶";
                     if (BtnPauseSession != null) BtnPauseSession.ToolTip = "Resume session";
-                    _trayIcon?.ShowNotification("Session Paused", "Press panic key again within 2 seconds to exit completely.", System.Windows.Forms.ToolTipIcon.Info);
-                }
-                else
-                {
-                    _trayIcon?.ShowNotification("Stopped", "Press panic key again within 2 seconds to exit completely.", System.Windows.Forms.ToolTipIcon.Info);
                 }
             }
             else if (_panicPressCount >= 2)
