@@ -4140,6 +4140,9 @@ namespace ConditioningControlPanel
             var level1Unlocked = hasPremiumAccess;
             var level2Unlocked = hasPremiumAccess; // Same as Level 1 now - all features at Tier 1
 
+            // Master overlay for the entire features grid
+            PatreonFeaturesOverlay.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
+
             AiChatLocked.Visibility = level1Unlocked ? Visibility.Collapsed : Visibility.Visible;
             AiChatUnlocked.Visibility = level1Unlocked ? Visibility.Visible : Visibility.Collapsed;
 

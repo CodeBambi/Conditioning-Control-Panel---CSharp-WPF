@@ -1743,7 +1743,7 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.6.0 IS OUT! 💖"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.6.1 IS OUT! 💖"
                             Click="BtnUpdateAvailable_Click" ToolTip="v5.5.22 - Overlay &amp; Focus Fixes"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
@@ -5738,8 +5738,40 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- 2-Column Grid of Feature Expanders -->
+                        <!-- 2-Column Grid of Feature Expanders (wrapped with Patreon lock overlay) -->
                         <Grid Margin="0,10,0,0">
+                        <!-- Patreon-Only Overlay for entire features grid -->
+                        <Border x:Name="PatreonFeaturesOverlay" Background="#CC1A1A2E" CornerRadius="12" Panel.ZIndex="100">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                <TextBlock Text="Patreon Exclusive Features" Foreground="#FF69B4" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center">
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                                    </TextBlock.Effect>
+                                </TextBlock>
+                                <TextBlock Text="Support on Patreon to unlock AI Companion, Window Awareness, Haptics, and more"
+                                           Foreground="#AAAAAA" FontSize="13" HorizontalAlignment="Center" Margin="0,10,0,0" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="400"/>
+                                <Button Content="Visit Patreon" Background="#FF424D" Foreground="White"
+                                        BorderThickness="0" Padding="20,10" Margin="0,18,0,0"
+                                        FontWeight="Bold" FontSize="13" Cursor="Hand"
+                                        Click="BtnVisitPatreon_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#E8363F"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                        <!-- Actual features grid -->
+                        <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="10"/>
@@ -6876,6 +6908,7 @@
                                 </Grid>
                             </Expander>
 
+                        </Grid>
                         </Grid>
 
                         <!-- Patreon Info Box -->

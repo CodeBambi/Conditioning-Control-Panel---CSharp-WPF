@@ -30,15 +30,7 @@ namespace ConditioningControlPanel
         [STAThread]
         public static void Main(string[] args)
         {
-            // Check for update splash mode - this is used when the app is copied to a temp
-            // location with a different name to show a splash screen during installer execution
-            if (args.Length >= 2 && args[0] == "--update-splash")
-            {
-                RunUpdateSplashMode(args[1]);
-                return;
-            }
-
-            // Velopack: Handle updates before anything else
+// Velopack: Handle updates before anything else
             // This allows Velopack to process update commands (install, uninstall, etc.)
             VelopackApp.Build().Run();
 
@@ -48,97 +40,7 @@ namespace ConditioningControlPanel
             app.Run();
         }
 
-        /// <summary>
-        /// Runs the app in update splash mode - shows a splash window and executes the installer.
-        /// This is called when the app is launched as "CCPUpdateHelper.exe --update-splash [installer-path]"
-        /// Since it has a different exe name, the installer won't close it.
-        /// </summary>
-        private static void RunUpdateSplashMode(string installerPath)
-        {
-            // Create a minimal WPF app just for the splash
-            var app = new Application();
-
-            // Create the splash window
-            var splash = new Window
-            {
-                Title = "Conditioning Control Panel - Updating",
-                Width = 450,
-                Height = 180,
-                WindowStyle = WindowStyle.None,
-                WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A1A2E")),
-                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
-                BorderThickness = new Thickness(2),
-                ResizeMode = ResizeMode.NoResize,
-                Topmost = true,
-                AllowsTransparency = false
-            };
-
-            // Create content
-            var grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            var mainText = new TextBlock
-            {
-                Text = "Installing update...",
-                Foreground = new SolidColorBrush(Colors.White),
-                FontSize = 24,
-                FontWeight = FontWeights.SemiBold,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetRow(mainText, 0);
-            grid.Children.Add(mainText);
-
-            var subText = new TextBlock
-            {
-                Text = "Please wait, the app will restart automatically",
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
-                FontSize = 14,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 0, 0, 30)
-            };
-            Grid.SetRow(subText, 1);
-            grid.Children.Add(subText);
-
-            splash.Content = grid;
-            splash.Show();
-
-            // Force render
-            splash.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => { }));
-
-            // Run the installer on a background thread, then shutdown when done
-            Task.Run(() =>
-            {
-                try
-                {
-                    var startInfo = new ProcessStartInfo
-                    {
-                        FileName = installerPath,
-                        Arguments = "/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS",
-                        UseShellExecute = true
-                    };
-
-                    var process = Process.Start(startInfo);
-                    process?.WaitForExit();
-                }
-                catch
-                {
-                    // Ignore errors - just exit
-                }
-                finally
-                {
-                    // Shutdown the splash app
-                    app.Dispatcher.Invoke(() => app.Shutdown());
-                }
-            });
-
-            // Run the splash app (blocks until shutdown)
-            app.Run(splash);
-        }
-
-        // Single instance mutex
+// Single instance mutex
         private static Mutex? _mutex;
         private static bool _mutexOwned = false;
         private const string MutexName = "ConditioningControlPanel_SingleInstance_Mutex";

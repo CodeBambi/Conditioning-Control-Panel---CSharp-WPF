@@ -22,13 +22,13 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.0";
+        public const string AppVersion = "5.6.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.0 - Cloud Backup, Visual Polish & More
+        public const string CurrentPatchNotes = @"v5.6.1 - Cloud Backup, Visual Polish & More
 
 ☁️ NEW
 • Cloud settings backup & restore — settings auto-backup to cloud; fresh installs offer to restore your setup
@@ -755,46 +755,7 @@ namespace ConditioningControlPanel.Services
 
             App.Logger?.Information("Installer arguments: {Args}", installerArgs);
 
-            // Try to launch the update splash helper (a copy of ourselves with a different name)
-            // This provides visual feedback during the update since Inno Setup's /SILENT progress
-            // can be delayed and there's a gap between app close and new app start
-            try
-            {
-                var currentExe = Process.GetCurrentProcess().MainModule?.FileName;
-                if (!string.IsNullOrEmpty(currentExe) && File.Exists(currentExe))
-                {
-                    // Copy ourselves to temp with a different name so installer won't close us
-                    var tempHelper = Path.Combine(Path.GetTempPath(), "CCPUpdateHelper.exe");
-
-                    App.Logger?.Information("Copying exe to update helper: {Source} -> {Dest}", currentExe, tempHelper);
-                    File.Copy(currentExe, tempHelper, overwrite: true);
-
-                    // Launch the helper with the installer path
-                    var helperStartInfo = new ProcessStartInfo
-                    {
-                        FileName = tempHelper,
-                        Arguments = $"--update-splash \"{installerPath}\"",
-                        UseShellExecute = true
-                    };
-
-                    App.Logger?.Information("Launching update splash helper...");
-                    Process.Start(helperStartInfo);
-
-                    // Give the helper a moment to start and show its window
-                    System.Threading.Thread.Sleep(1000);
-
-                    // Exit the current application - the helper will run the installer
-                    App.Logger?.Information("Exiting application, update splash helper will handle installation...");
-                    Application.Current.Shutdown();
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "Failed to launch update splash helper, falling back to direct installer launch");
-            }
-
-            // Fallback: Start the installer directly (no splash helper)
+            // Start the installer directly - Inno Setup handles closing/restarting the app
             var startInfo = new ProcessStartInfo
             {
                 FileName = installerPath,
