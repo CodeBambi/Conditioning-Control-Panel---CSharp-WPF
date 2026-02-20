@@ -2328,6 +2328,17 @@ namespace ConditioningControlPanel.Models
             set { _unifiedId = value; OnPropertyChanged(); }
         }
 
+        private string? _authToken = null;
+        /// <summary>
+        /// Server-issued auth token for V2 API requests. Rotated on each auth event.
+        /// </summary>
+        [JsonProperty("auth_token")]
+        public string? AuthToken
+        {
+            get => _authToken;
+            set { _authToken = value; OnPropertyChanged(); }
+        }
+
         private string? _userDisplayName = null;
         /// <summary>
         /// User's display name (synced with server). Used across all providers.

@@ -355,7 +355,7 @@ public static class AccountService
                 }
 
                 // Apply user data to settings
-                v2Auth.ApplyUserDataToSettings(authResponse.User);
+                v2Auth.ApplyUserDataToSettings(authResponse.User, authResponse.AuthToken);
 
                 // Also update App static properties for compatibility
                 App.UnifiedUserId = authResponse.User.UnifiedId;
@@ -442,6 +442,10 @@ public static class AccountService
                     App.Settings!.Current!.HasLinkedDiscord = true;
                 else if (provider == "patreon")
                     App.Settings!.Current!.HasLinkedPatreon = true;
+
+                // Store new auth token from link response
+                if (!string.IsNullOrEmpty(result.AuthToken) && App.Settings?.Current != null)
+                    App.Settings.Current.AuthToken = result.AuthToken;
 
                 App.Settings?.Save();
 

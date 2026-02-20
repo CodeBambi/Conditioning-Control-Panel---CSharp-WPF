@@ -785,6 +785,23 @@ namespace ConditioningControlPanel
                 }
                 else if (response.IsSuccessStatusCode)
                 {
+                    // Parse and store auth token from restore-session response
+                    try
+                    {
+                        var responseJson = await response.Content.ReadAsStringAsync();
+                        var responseObj = Newtonsoft.Json.Linq.JObject.Parse(responseJson);
+                        var authToken = responseObj["auth_token"]?.ToString();
+                        if (!string.IsNullOrEmpty(authToken) && Settings?.Current != null)
+                        {
+                            Settings.Current.AuthToken = authToken;
+                            Settings.Save();
+                            Logger?.Information("Stored auth token from restore-session.");
+                        }
+                    }
+                    catch (Exception parseEx)
+                    {
+                        Logger?.Debug("Failed to parse restore-session auth token: {Error}", parseEx.Message);
+                    }
                     Logger?.Information("Restored session validated successfully.");
                 }
                 else

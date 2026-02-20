@@ -122,7 +122,7 @@ namespace ConditioningControlPanel
                 if (authResponse.User != null && !authResponse.NeedsRegistration)
                 {
                     // Existing user found - success!
-                    v2Auth.ApplyUserDataToSettings(authResponse.User);
+                    v2Auth.ApplyUserDataToSettings(authResponse.User, authResponse.AuthToken);
                     App.UnifiedUserId = authResponse.User.UnifiedId;
 
                     UpdateServiceProperties(provider, authResponse.User.UnifiedId, authResponse.User.DisplayName);
@@ -286,7 +286,9 @@ namespace ConditioningControlPanel
                             _firstProvider!,
                             _firstProviderToken!);
 
-                        v2Auth.ApplyUserDataToSettings(authResponse.User);
+                        // Use link token if available (rotated), otherwise fall back to auth token
+                        var effectiveToken = linkResult.AuthToken ?? authResponse.AuthToken;
+                        v2Auth.ApplyUserDataToSettings(authResponse.User, effectiveToken);
                         App.UnifiedUserId = authResponse.User.UnifiedId;
 
                         // Update both service properties
@@ -480,7 +482,7 @@ namespace ConditioningControlPanel
 
                 if (authResponse.Success && authResponse.User != null)
                 {
-                    v2Auth.ApplyUserDataToSettings(authResponse.User);
+                    v2Auth.ApplyUserDataToSettings(authResponse.User, authResponse.AuthToken);
                     App.UnifiedUserId = authResponse.User.UnifiedId;
 
                     UpdateServiceProperties(_firstProvider!, authResponse.User.UnifiedId, authResponse.User.DisplayName);

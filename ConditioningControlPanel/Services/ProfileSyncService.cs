@@ -129,6 +129,7 @@ namespace ConditioningControlPanel.Services
                 {
                     // V2 heartbeat - uses unified_id with enriched activity data
                     var v2Request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/heartbeat");
+                    AddAuthHeader(v2Request);
                     v2Request.Content = new StringContent(
                         Newtonsoft.Json.JsonConvert.SerializeObject(new
                         {
@@ -140,6 +141,7 @@ namespace ConditioningControlPanel.Services
                         Encoding.UTF8, "application/json");
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
+                    HandleUnauthorized(v2Response);
                     App.Logger?.Debug("V2 Heartbeat: {Status}", v2Response.StatusCode);
                     return;
                 }
@@ -369,6 +371,7 @@ namespace ConditioningControlPanel.Services
                     };
 
                     var v2Request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/sync");
+                    AddAuthHeader(v2Request);
                     var v2Body = JsonConvert.SerializeObject(v2SyncData);
                     v2Request.Content = new StringContent(v2Body, Encoding.UTF8, "application/json");
                     SignRequest(v2Request, v2Body);
@@ -377,6 +380,7 @@ namespace ConditioningControlPanel.Services
 
                     if (!v2Response.IsSuccessStatusCode)
                     {
+                        HandleUnauthorized(v2Response);
                         var error = await v2Response.Content.ReadAsStringAsync();
                         App.Logger?.Warning("V2 Profile sync failed: {Status} - {Error}", v2Response.StatusCode, error);
                         LastSyncError = $"Sync failed: {v2Response.StatusCode}";
@@ -1135,6 +1139,7 @@ namespace ConditioningControlPanel.Services
             {
                 var requestData = new { unified_id = unifiedId, fix_date = fixDate };
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/use-oopsie");
+                AddAuthHeader(request);
                 request.Content = new StringContent(
                     JsonConvert.SerializeObject(requestData),
                     Encoding.UTF8,
@@ -1146,6 +1151,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    HandleUnauthorized(response);
                     var errorResult = JsonConvert.DeserializeObject<OopsieErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
                     App.Logger?.Warning("Oopsie insurance failed: {Error}", errorMsg);
@@ -1179,6 +1185,7 @@ namespace ConditioningControlPanel.Services
             {
                 var requestData = new { unified_id = unifiedId, new_display_name = newName };
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/change-display-name");
+                AddAuthHeader(request);
                 request.Content = new StringContent(
                     JsonConvert.SerializeObject(requestData),
                     Encoding.UTF8,
@@ -1190,6 +1197,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    HandleUnauthorized(response);
                     var errorResult = JsonConvert.DeserializeObject<ChangeDisplayNameErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
                     App.Logger?.Warning("Change display name failed: {Error}", errorMsg);
@@ -1223,6 +1231,7 @@ namespace ConditioningControlPanel.Services
             {
                 var requestData = new { unified_id = unifiedId, confirmation = "DELETE" };
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/delete-account");
+                AddAuthHeader(request);
                 request.Content = new StringContent(
                     JsonConvert.SerializeObject(requestData),
                     Encoding.UTF8,
@@ -1234,6 +1243,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    HandleUnauthorized(response);
                     var errorResult = JsonConvert.DeserializeObject<DeleteAccountErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
                     App.Logger?.Warning("Delete account failed: {Error}", errorMsg);
@@ -1249,6 +1259,35 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Error(ex, "Delete account request failed");
                 return (false, "Account deletion requires an internet connection");
             }
+        }
+
+        /// <summary>
+        /// Adds the X-Auth-Token header to a V2 API request if an auth token is available.
+        /// </summary>
+        private static void AddAuthHeader(HttpRequestMessage request)
+        {
+            var token = App.Settings?.Current?.AuthToken;
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Add("X-Auth-Token", token);
+        }
+
+        /// <summary>
+        /// Handles a 401 Unauthorized response by clearing the stored auth token.
+        /// Returns true if the response was a 401.
+        /// </summary>
+        private static bool HandleUnauthorized(HttpResponseMessage response)
+        {
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                App.Logger?.Warning("[Auth] Received 401 — clearing stored auth token. User will get a new token on next auth.");
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.AuthToken = null;
+                    App.Settings.Save();
+                }
+                return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -1300,6 +1339,7 @@ namespace ConditioningControlPanel.Services
             nameof(AppSettings.PatreonTier),
             nameof(AppSettings.PatreonPremiumValidUntil),
             nameof(AppSettings.LastPatreonVerification),
+            nameof(AppSettings.AuthToken),
         };
 
         /// <summary>
@@ -1362,6 +1402,7 @@ namespace ConditioningControlPanel.Services
                 };
 
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/backup-settings");
+                AddAuthHeader(request);
                 request.Content = new StringContent(
                     JsonConvert.SerializeObject(requestData),
                     Encoding.UTF8,
@@ -1372,6 +1413,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    HandleUnauthorized(response);
                     var error = await response.Content.ReadAsStringAsync();
                     App.Logger?.Warning("Settings backup failed: {Status} - {Error}", response.StatusCode, error);
                     return false;
@@ -1400,6 +1442,7 @@ namespace ConditioningControlPanel.Services
             {
                 var requestData = new { unified_id = unifiedId };
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/settings-backup");
+                AddAuthHeader(request);
                 request.Content = new StringContent(
                     JsonConvert.SerializeObject(requestData),
                     Encoding.UTF8,
@@ -1407,7 +1450,11 @@ namespace ConditioningControlPanel.Services
                 );
 
                 var response = await _httpClient.SendAsync(request);
-                if (!response.IsSuccessStatusCode) return null;
+                if (!response.IsSuccessStatusCode)
+                {
+                    HandleUnauthorized(response);
+                    return null;
+                }
 
                 var json = await response.Content.ReadAsStringAsync();
                 var result = JsonConvert.DeserializeObject<SettingsBackupResponse>(json);
@@ -1441,6 +1488,7 @@ namespace ConditioningControlPanel.Services
             {
                 var requestData = new { unified_id = unifiedId };
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/settings-backup");
+                AddAuthHeader(request);
                 request.Content = new StringContent(
                     JsonConvert.SerializeObject(requestData),
                     Encoding.UTF8,
@@ -1448,7 +1496,11 @@ namespace ConditioningControlPanel.Services
                 );
 
                 var response = await _httpClient.SendAsync(request);
-                if (!response.IsSuccessStatusCode) return null;
+                if (!response.IsSuccessStatusCode)
+                {
+                    HandleUnauthorized(response);
+                    return null;
+                }
 
                 var json = await response.Content.ReadAsStringAsync();
                 var result = JsonConvert.DeserializeObject<SettingsBackupResponse>(json);

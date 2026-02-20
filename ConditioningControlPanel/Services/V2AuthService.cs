@@ -50,6 +50,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("error")]
             public string? Error { get; set; }
+
+            [JsonProperty("auth_token")]
+            public string? AuthToken { get; set; }
         }
 
         public class LegacyData
@@ -170,6 +173,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("error")]
             public string? Error { get; set; }
+
+            [JsonProperty("auth_token")]
+            public string? AuthToken { get; set; }
         }
 
         #endregion
@@ -311,7 +317,9 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var response = await _http.GetAsync($"{SERVER_URL}/v2/user/profile?unified_id={Uri.EscapeDataString(unifiedId)}");
+                var request = new HttpRequestMessage(HttpMethod.Get, $"{SERVER_URL}/v2/user/profile?unified_id={Uri.EscapeDataString(unifiedId)}");
+                AddAuthHeader(request);
+                var response = await _http.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
@@ -348,8 +356,10 @@ namespace ConditioningControlPanel.Services
                 if (stats != null) payload["stats"] = stats;
                 if (achievements != null) payload["achievements"] = new JArray(achievements);
 
-                var content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
-                var response = await _http.PostAsync($"{SERVER_URL}/v2/user/update", content);
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/user/update");
+                AddAuthHeader(request);
+                request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
+                var response = await _http.SendAsync(request);
 
                 return response.IsSuccessStatusCode;
             }
@@ -372,8 +382,10 @@ namespace ConditioningControlPanel.Services
                     ["unified_id"] = unifiedId
                 };
 
-                var content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
-                var response = await _http.PostAsync($"{SERVER_URL}/v2/user/heartbeat", content);
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/user/heartbeat");
+                AddAuthHeader(request);
+                request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
+                var response = await _http.SendAsync(request);
 
                 return response.IsSuccessStatusCode;
             }
@@ -396,8 +408,10 @@ namespace ConditioningControlPanel.Services
                     ["confirmation"] = "DELETE"
                 };
 
-                var content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
-                var response = await _http.PostAsync($"{SERVER_URL}/v2/user/delete-account", content);
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/user/delete-account");
+                AddAuthHeader(request);
+                request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
+                var response = await _http.SendAsync(request);
 
                 return response.IsSuccessStatusCode;
             }
@@ -409,9 +423,19 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Apply v2 user data to local settings
+        /// Adds the X-Auth-Token header to a V2 API request if an auth token is available.
         /// </summary>
-        public void ApplyUserDataToSettings(V2User user)
+        private static void AddAuthHeader(HttpRequestMessage request)
+        {
+            var token = App.Settings?.Current?.AuthToken;
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Add("X-Auth-Token", token);
+        }
+
+        /// <summary>
+        /// Apply v2 user data to local settings, optionally storing an auth token.
+        /// </summary>
+        public void ApplyUserDataToSettings(V2User user, string? authToken = null)
         {
             var settings = App.Settings?.Current;
             if (settings == null) return;
@@ -424,6 +448,12 @@ namespace ConditioningControlPanel.Services
             settings.HasLinkedDiscord = !string.IsNullOrEmpty(user.DiscordId);
             settings.HasLinkedPatreon = !string.IsNullOrEmpty(user.PatreonId);
             settings.PatreonTier = user.PatreonTier;
+
+            // Store auth token if provided
+            if (!string.IsNullOrEmpty(authToken))
+            {
+                settings.AuthToken = authToken;
+            }
 
             // Sync level/XP using "take higher" logic to prevent progress loss
             // Server returns TOTAL accumulated XP, but PlayerXP stores current-level XP
