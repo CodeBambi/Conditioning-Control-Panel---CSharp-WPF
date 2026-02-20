@@ -7410,8 +7410,7 @@
                                   HorizontalScrollBarVisibility="Visible"
                                   VerticalScrollBarVisibility="Disabled"
                                   PreviewMouseWheel="PacksScrollViewer_PreviewMouseWheel"
-                                  Padding="0,0,0,8"
-                                  MaxHeight="280">
+                                  Padding="0,0,0,8">
                         <ScrollViewer.Resources>
                             <!-- Force bigger scrollbar -->
                             <Style TargetType="ScrollBar">

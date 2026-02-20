@@ -16176,6 +16176,10 @@ namespace ConditioningControlPanel
                 // Bind to ItemsControl
                 PackCardsItemsControl.ItemsSource = _availablePacks;
 
+                // Force ScrollViewer to recalculate after items are loaded
+                PacksScrollViewer?.InvalidateMeasure();
+                PacksScrollViewer?.UpdateLayout();
+
                 // Load preview images for all packs
                 var loadTasks = new List<Task>();
                 foreach (var pack in packs)

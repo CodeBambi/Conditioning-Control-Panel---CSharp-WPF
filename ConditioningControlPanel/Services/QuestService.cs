@@ -242,6 +242,32 @@ public class QuestService : IDisposable
             changed = true;
         }
 
+        // If daily quest's feature is locked at current level, regenerate
+        if (Progress.DailyQuest != null && !Progress.DailyQuest.IsCompleted)
+        {
+            var dailyDef = GetCurrentDailyDefinition();
+            if (dailyDef != null && !IsQuestAvailableForLevel(dailyDef.Category))
+            {
+                App.Logger?.Information("Daily quest '{QuestId}' requires locked feature ({Category}), regenerating",
+                    Progress.DailyQuest.DefinitionId, dailyDef.Category);
+                GenerateNewDailyQuest();
+                changed = true;
+            }
+        }
+
+        // If weekly quest's feature is locked at current level, regenerate
+        if (Progress.WeeklyQuest != null && !Progress.WeeklyQuest.IsCompleted)
+        {
+            var weeklyDef = GetCurrentWeeklyDefinition();
+            if (weeklyDef != null && !IsQuestAvailableForLevel(weeklyDef.Category))
+            {
+                App.Logger?.Information("Weekly quest '{QuestId}' requires locked feature ({Category}), regenerating",
+                    Progress.WeeklyQuest.DefinitionId, weeklyDef.Category);
+                GenerateNewWeeklyQuest();
+                changed = true;
+            }
+        }
+
         if (changed)
         {
             _isDirty = true;

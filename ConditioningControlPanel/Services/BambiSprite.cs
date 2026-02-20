@@ -467,8 +467,27 @@ Example responses with REAL video names:
             if (!string.IsNullOrWhiteSpace(hypnotubeLinks))
             {
                 sb.AppendLine("--- HYPNOTUBE VIDEO LINKS ---");
-                sb.AppendLine("When suggesting videos, recommend links from this pool:");
-                sb.AppendLine(hypnotubeLinks);
+                sb.AppendLine("When suggesting videos, say the EXACT video name from this list. Do NOT output URLs — just say the video name naturally.");
+                // Build a reverse lookup from URL -> name using KnownVideoLinks
+                var urlToName = AvatarTubeWindow.KnownVideoLinks.ToDictionary(
+                    kvp => kvp.Value, kvp => kvp.Key, StringComparer.OrdinalIgnoreCase);
+                foreach (var rawUrl in hypnotubeLinks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (urlToName.TryGetValue(rawUrl, out var name))
+                    {
+                        sb.AppendLine($"- \"{name}\"");
+                    }
+                    else
+                    {
+                        // Fallback: extract a readable name from the URL slug
+                        var slug = rawUrl.Split('/').LastOrDefault()?.Replace(".html", "") ?? rawUrl;
+                        // Remove trailing ID number (e.g. "girly-thoughts-vertical-loop-118644" -> "girly-thoughts-vertical-loop")
+                        slug = System.Text.RegularExpressions.Regex.Replace(slug, @"-\d+$", "");
+                        var fallbackName = System.Globalization.CultureInfo.CurrentCulture.TextInfo
+                            .ToTitleCase(slug.Replace('-', ' '));
+                        sb.AppendLine($"- \"{fallbackName}\"");
+                    }
+                }
                 sb.AppendLine();
             }
 
