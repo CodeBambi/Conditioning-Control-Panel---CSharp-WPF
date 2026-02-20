@@ -1846,7 +1846,7 @@
                 <StackPanel>
                     
                     <!-- Flash Images Section -->
-                    <Border x:Name="FlashSection" CornerRadius="10" Padding="10,6" Margin="0,0,0,6" BorderThickness="1">
+                    <Border x:Name="FlashSection" CornerRadius="10" Padding="10,6" Margin="0,0,0,6" BorderThickness="3">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                 <GradientStop Color="#1E1E3A" Offset="0"/>
@@ -1926,7 +1926,7 @@
                     </Border>
 
                     <!-- Visuals Section -->
-                    <Border x:Name="VisualsSection" CornerRadius="10" Padding="10,6" Margin="0,0,0,6" BorderThickness="1">
+                    <Border x:Name="VisualsSection" CornerRadius="10" Padding="10,6" Margin="0,0,0,6" BorderThickness="3">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                 <GradientStop Color="#1E1E3A" Offset="0"/>
@@ -2015,7 +2015,7 @@
                 <StackPanel>
                     
                     <!-- Mandatory Video Section -->
-                    <Border x:Name="VideoSection" CornerRadius="10" Padding="10,7" Margin="0,0,0,6" BorderThickness="1">
+                    <Border x:Name="VideoSection" CornerRadius="10" Padding="10,7" Margin="0,0,0,6" BorderThickness="3">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                 <GradientStop Color="#1E1E3A" Offset="0"/>
@@ -2120,7 +2120,7 @@
                     </Border>
 
                     <!-- Subliminals Section -->
-                    <Border x:Name="SubliminalSection" CornerRadius="10" Padding="10,7" Margin="0,0,0,6" BorderThickness="1">
+                    <Border x:Name="SubliminalSection" CornerRadius="10" Padding="10,7" Margin="0,0,0,6" BorderThickness="3">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                 <GradientStop Color="#1E1E3A" Offset="0"/>
@@ -2188,7 +2188,7 @@
                     </Border>
 
                     <!-- System Section -->
-                    <Border x:Name="SystemSection" CornerRadius="10" Padding="10,7" Margin="0,0,0,6" BorderThickness="1">
+                    <Border x:Name="SystemSection" CornerRadius="10" Padding="10,7" Margin="0,0,0,6" BorderThickness="3">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                 <GradientStop Color="#1E1E3A" Offset="0"/>
@@ -2306,7 +2306,7 @@
                 </Grid.RowDefinitions>
 
                 <!-- Browser Section -->
-                <Border Grid.Row="0" CornerRadius="10" Padding="9" Margin="0,0,0,5" BorderThickness="1">
+                <Border Grid.Row="0" CornerRadius="10" Padding="9" Margin="0,0,0,5" BorderThickness="3">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                             <GradientStop Color="#1E1E3A" Offset="0"/>
@@ -2506,7 +2506,7 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- Audio Section (left half) -->
-                    <Border x:Name="AudioSection" Grid.Column="0" CornerRadius="10" Padding="9" Margin="0,0,0,6" BorderThickness="1" VerticalAlignment="Stretch">
+                    <Border x:Name="AudioSection" Grid.Column="0" CornerRadius="10" Padding="9" Margin="0,0,0,6" BorderThickness="3" VerticalAlignment="Stretch">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                 <GradientStop Color="#1E1E3A" Offset="0"/>
@@ -2592,7 +2592,7 @@
                     </Border>
 
                     <!-- Quick Actions (right half) -->
-                    <Border Grid.Column="2" CornerRadius="10" Padding="9" Margin="0,0,0,6" BorderThickness="1" VerticalAlignment="Stretch">
+                    <Border Grid.Column="2" CornerRadius="10" Padding="9" Margin="0,0,0,6" BorderThickness="3" VerticalAlignment="Stretch">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                 <GradientStop Color="#1E1E3A" Offset="0"/>
