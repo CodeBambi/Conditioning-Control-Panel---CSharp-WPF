@@ -425,7 +425,20 @@ Example responses with REAL video names:
             sb.AppendLine("KNOWLEDGE BASE:");
             if (!string.IsNullOrWhiteSpace(settings.KnowledgeBase))
             {
-                sb.AppendLine(settings.KnowledgeBase);
+                var isBambiMode = App.Settings?.Current?.IsBambiMode != false;
+                if (!isBambiMode)
+                {
+                    // Filter out Bambi-titled content from knowledge base in non-Bambi modes
+                    var filteredLines = settings.KnowledgeBase
+                        .Split('\n')
+                        .Where(line => !line.Contains("Bambi", System.StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+                    sb.AppendLine(string.Join("\n", filteredLines));
+                }
+                else
+                {
+                    sb.AppendLine(settings.KnowledgeBase);
+                }
                 sb.AppendLine();
             }
 
@@ -549,11 +562,6 @@ Example responses with REAL video names:
             result = System.Text.RegularExpressions.Regex.Replace(result,
                 @"bambi cow", "bimbo cow",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-            // Add a final reminder to never mention Bambi videos
-            result += @"
-
-CRITICAL REMINDER: You are in Sissy Hypno mode. NEVER mention any video or audio with ""Bambi"" in the title. Only use generic sissy/bimbo content from your video list, or skip video suggestions and just be flirty.";
 
             return result;
         }

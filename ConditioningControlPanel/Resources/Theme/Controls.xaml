@@ -13,12 +13,62 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                    <Border x:Name="border" CornerRadius="5" Padding="{TemplateBinding Padding}"
+                            RenderTransformOrigin="0.5,0.5">
+                        <Border.Background>
+                            <SolidColorBrush x:Name="bg" Color="#FF69B4"/>
+                        </Border.Background>
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="borderScale" ScaleX="1" ScaleY="1"/>
+                        </Border.RenderTransform>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="{StaticResource DarkPinkBrush}"/>
+                        <EventTrigger RoutedEvent="MouseEnter">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                    To="#FF1493" Duration="0:0:0.2"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <EventTrigger RoutedEvent="MouseLeave">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                    To="#FF69B4" Duration="0:0:0.2"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
+                                                         To="0.96" Duration="0:0:0.08"/>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
+                                                         To="0.96" Duration="0:0:0.08"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
+                                                         To="1.0" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
+                                                         To="1.0" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -36,12 +86,62 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                    <Border x:Name="border" CornerRadius="5" Padding="{TemplateBinding Padding}"
+                            RenderTransformOrigin="0.5,0.5">
+                        <Border.Background>
+                            <SolidColorBrush x:Name="bg" Color="#404060"/>
+                        </Border.Background>
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="borderScale" ScaleX="1" ScaleY="1"/>
+                        </Border.RenderTransform>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="{StaticResource PanelAccentHoverBrush}"/>
+                        <EventTrigger RoutedEvent="MouseEnter">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                    To="#505080" Duration="0:0:0.2"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <EventTrigger RoutedEvent="MouseLeave">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                    To="#404060" Duration="0:0:0.2"/>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
+                                                         To="0.96" Duration="0:0:0.08"/>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
+                                                         To="0.96" Duration="0:0:0.08"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
+                                                         To="1.0" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
+                                                         To="1.0" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -77,15 +177,52 @@
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
                     <Grid>
-                        <Border x:Name="track" Width="44" Height="22" CornerRadius="11" 
-                                    Background="#404060" Cursor="Hand"/>
-                        <Border x:Name="thumb" Width="18" Height="18" CornerRadius="9" 
-                                    Background="White" HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                        <Border x:Name="track" Width="44" Height="22" CornerRadius="11" Cursor="Hand">
+                            <Border.Background>
+                                <SolidColorBrush x:Name="trackBrush" Color="#404060"/>
+                            </Border.Background>
+                        </Border>
+                        <Border x:Name="thumb" Width="18" Height="18" CornerRadius="9"
+                                    Background="White" HorizontalAlignment="Left" Margin="2,0,0,0">
+                            <Border.RenderTransform>
+                                <TranslateTransform x:Name="thumbTranslate" X="0"/>
+                            </Border.RenderTransform>
+                        </Border>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="track" Property="Background" Value="{StaticResource PinkBrush}"/>
-                            <Setter TargetName="thumb" Property="Margin" Value="24,0,0,0"/>
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="thumbTranslate"
+                                                         Storyboard.TargetProperty="X"
+                                                         To="22" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseInOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <ColorAnimation Storyboard.TargetName="trackBrush"
+                                                        Storyboard.TargetProperty="Color"
+                                                        To="#FF69B4" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="thumbTranslate"
+                                                         Storyboard.TargetProperty="X"
+                                                         To="0" Duration="0:0:0.15">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseInOut"/>
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                        <ColorAnimation Storyboard.TargetName="trackBrush"
+                                                        Storyboard.TargetProperty="Color"
+                                                        To="#404060" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

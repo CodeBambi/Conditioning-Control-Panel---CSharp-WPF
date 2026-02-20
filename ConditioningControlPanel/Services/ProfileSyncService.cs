@@ -21,7 +21,7 @@ namespace ConditioningControlPanel.Services
     public class ProfileSyncService : IDisposable
     {
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
-        private const int HeartbeatIntervalSeconds = 45; // Send heartbeat every 45 seconds
+        private const int HeartbeatIntervalSeconds = 120; // Send heartbeat every 2 minutes
 
         private readonly HttpClient _httpClient;
         private DispatcherTimer? _heartbeatTimer;
@@ -356,6 +356,8 @@ namespace ConditioningControlPanel.Services
                         },
                         unlocked_skills = settings.UnlockedSkills?.ToList() ?? new List<string>(),
                         skill_points = settings.SkillPoints,
+                        total_conditioning_minutes = settings.TotalConditioningMinutes,
+                        companion_progress = settings.CompanionProgressData,
                         allow_discord_dm = settings.AllowDiscordDm,
                         show_online_status = settings.ShowOnlineStatus,
                         share_profile_picture = settings.ShareProfilePicture,
@@ -517,6 +519,48 @@ namespace ConditioningControlPanel.Services
                                 settings.HighestLevelEver = serverHighest;
                                 App.Settings?.Save();
                             }
+                        }
+
+                        // Merge total conditioning minutes from server (take higher)
+                        if (v2Result?.TotalConditioningMinutes.HasValue == true && v2Result.TotalConditioningMinutes.Value > settings.TotalConditioningMinutes)
+                        {
+                            App.Logger?.Information("V2 Sync: Conditioning time server={Server:F1} > local={Local:F1} — using server value",
+                                v2Result.TotalConditioningMinutes.Value, settings.TotalConditioningMinutes);
+                            settings.TotalConditioningMinutes = v2Result.TotalConditioningMinutes.Value;
+                            App.Settings?.Save();
+                        }
+
+                        // Merge companion progress from server (per-companion, higher level wins)
+                        if (v2Result?.CompanionProgress != null && v2Result.CompanionProgress.Count > 0)
+                        {
+                            var needsCompanionSave = false;
+                            foreach (var (key, serverProgress) in v2Result.CompanionProgress)
+                            {
+                                if (int.TryParse(key, out var companionId))
+                                {
+                                    var localData = settings.CompanionProgressData;
+                                    localData.TryGetValue(companionId, out var localProgress);
+
+                                    var localLevel = localProgress?.Level ?? 0;
+                                    var serverLevel = serverProgress?.Level ?? 0;
+                                    var localXP = localProgress?.TotalXPEarned ?? 0;
+                                    var serverXP = serverProgress?.TotalXPEarned ?? 0;
+
+                                    if (serverLevel > localLevel || (serverLevel == localLevel && serverXP > localXP))
+                                    {
+                                        App.Logger?.Information("V2 Sync: Companion {Id} server Lv.{SLv} > local Lv.{LLv} — using server",
+                                            companionId, serverLevel, localLevel);
+                                        localData[companionId] = serverProgress!;
+                                        needsCompanionSave = true;
+                                    }
+                                    else if (localProgress == null && serverProgress != null)
+                                    {
+                                        localData[companionId] = serverProgress;
+                                        needsCompanionSave = true;
+                                    }
+                                }
+                            }
+                            if (needsCompanionSave) App.Settings?.Save();
                         }
 
                         // Handle level_reset — server admin reset all levels, force client to accept
@@ -921,6 +965,28 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Information("Conditioning time sync: Local has more time ({Local:F1} min) > cloud ({Cloud:F1} min), will sync UP",
                         settings.TotalConditioningMinutes, cloudProfile.TotalConditioningMinutes.Value);
                     // Will sync up on next SyncProfileAsync
+                }
+            }
+
+            // Merge companion progress from cloud (per-companion, higher level wins)
+            if (cloudProfile.CompanionProgress != null && cloudProfile.CompanionProgress.Count > 0)
+            {
+                foreach (var (key, serverProgress) in cloudProfile.CompanionProgress)
+                {
+                    if (int.TryParse(key, out var companionId))
+                    {
+                        var localData = settings.CompanionProgressData;
+                        localData.TryGetValue(companionId, out var localProgress);
+
+                        var localLevel = localProgress?.Level ?? 0;
+                        var serverLevel = serverProgress?.Level ?? 0;
+
+                        if (serverLevel > localLevel || (localProgress == null && serverProgress != null))
+                        {
+                            localData[companionId] = serverProgress!;
+                            needsSave = true;
+                        }
+                    }
                 }
             }
 
@@ -1488,6 +1554,9 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("total_conditioning_minutes")]
             public double? TotalConditioningMinutes { get; set; }
 
+            [JsonProperty("companion_progress")]
+            public Dictionary<string, Models.CompanionProgress>? CompanionProgress { get; set; }
+
             [JsonProperty("reset_weekly_quest")]
             public bool? ResetWeeklyQuest { get; set; }
 
@@ -1592,6 +1661,12 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("level_reset")]
             public bool? LevelReset { get; set; }
+
+            [JsonProperty("total_conditioning_minutes")]
+            public double? TotalConditioningMinutes { get; set; }
+
+            [JsonProperty("companion_progress")]
+            public Dictionary<string, Models.CompanionProgress>? CompanionProgress { get; set; }
 
             [JsonProperty("user")]
             public V2SyncUser? User { get; set; }

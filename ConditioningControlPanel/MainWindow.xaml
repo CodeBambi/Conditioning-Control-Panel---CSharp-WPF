@@ -72,16 +72,32 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="border"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <Border.Background>
+                                <SolidColorBrush x:Name="bg" Color="Transparent"/>
+                            </Border.Background>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{StaticResource TransparentPinkBrush}"/>
-                            </Trigger>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                        To="#30FF69B4" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                        To="Transparent" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -104,16 +120,32 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="border"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <Border.Background>
+                                <SolidColorBrush x:Name="bg" Color="#FF69B4"/>
+                            </Border.Background>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#FF8FAF"/>
-                            </Trigger>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                        To="#FF8FAF" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                        To="#FF69B4" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -132,16 +164,63 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="border" Background="{TemplateBinding Background}"
-                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="border" CornerRadius="4" Padding="{TemplateBinding Padding}"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.Background>
+                                <SolidColorBrush x:Name="bg" Color="#FF69B4"/>
+                            </Border.Background>
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="borderScale" ScaleX="1" ScaleY="1"/>
+                            </Border.RenderTransform>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#FF8FAF"/>
-                            </Trigger>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                        To="#FF8FAF" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                        To="#FF69B4" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#E0507A"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
+                                                             To="0.96" Duration="0:0:0.08"/>
+                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
+                                                             To="0.96" Duration="0:0:0.08"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
+                                                             To="1.0" Duration="0:0:0.15">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
+                                                             To="1.0" Duration="0:0:0.15">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -163,15 +242,65 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" 
-                                BorderBrush="{TemplateBinding BorderBrush}" 
-                                BorderThickness="{TemplateBinding BorderThickness}" 
-                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="border"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.Background>
+                                <SolidColorBrush x:Name="bg" Color="Transparent"/>
+                            </Border.Background>
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="borderScale" ScaleX="1" ScaleY="1"/>
+                            </Border.RenderTransform>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{StaticResource TransparentPinkBrush}"/>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                        To="#30FF69B4" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                        To="Transparent" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
+                                                             To="0.96" Duration="0:0:0.08"/>
+                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
+                                                             To="0.96" Duration="0:0:0.08"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
+                                                             To="1.0" Duration="0:0:0.15">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
+                                                             To="1.0" Duration="0:0:0.15">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -308,12 +437,30 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="0">
+                        <Border x:Name="border" CornerRadius="4" Padding="0">
+                            <Border.Background>
+                                <SolidColorBrush x:Name="bg" Color="#353555"/>
+                            </Border.Background>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                        To="#FF69B4" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <ColorAnimation Storyboard.TargetName="bg" Storyboard.TargetProperty="Color"
+                                                        To="#353555" Duration="0:0:0.2"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
                                 <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -517,6 +664,39 @@
             <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="Padding" Value="9"/>
             <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#0A0A1E" BlurRadius="8" ShadowDepth="1" Opacity="0.25"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- TextBox Focus Glow Style -->
+        <Style x:Key="FocusGlowTextBox" TargetType="TextBox">
+            <Setter Property="CaretBrush" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#FF69B4" BlurRadius="8" ShadowDepth="0" Opacity="0"/>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <EventTrigger RoutedEvent="GotKeyboardFocus">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="Effect.Opacity"
+                                             To="0.5" Duration="0:0:0.25"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+                <EventTrigger RoutedEvent="LostKeyboardFocus">
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="Effect.Opacity"
+                                             To="0" Duration="0:0:0.3"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </EventTrigger>
+            </Style.Triggers>
         </Style>
 
         <!-- Section Header Style -->
@@ -1397,16 +1577,27 @@
                     <TextBlock x:Name="TxtHeaderVersion" Text="" Foreground="{StaticResource PinkBrush}" FontSize="12" FontWeight="Normal"
                                VerticalAlignment="Bottom" Margin="6,0,0,2"/>
                     <!-- Streak Fire Icon (unlocked by Good Girl Streak skill) -->
-                    <StackPanel x:Name="StreakFirePill" Orientation="Horizontal" VerticalAlignment="Center"
-                                Margin="10,0,0,0" Visibility="Collapsed"
-                                ToolTip="Daily login streak (Good Girl Streak skill)">
-                        <TextBlock Text="🔥" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TxtStreakFireCount" Text="0" Foreground="#FF6B35" FontSize="14"
-                                   FontWeight="Bold" VerticalAlignment="Center" Margin="2,0,0,0"/>
-                        <TextBlock x:Name="TxtStreakShieldIcon" Text="🛡️" FontFamily="Segoe UI Emoji" FontSize="12"
-                                   VerticalAlignment="Center" Margin="4,0,0,0" Visibility="Collapsed"
-                                   ToolTip="Streak shield available — protects your streak if you miss a day"/>
-                    </StackPanel>
+                    <Border x:Name="StreakFirePill" VerticalAlignment="Center"
+                            Margin="10,0,0,0" Visibility="Collapsed" CornerRadius="11" Padding="7,4"
+                            Background="#1E1232" BorderBrush="#5C3D6E" BorderThickness="1"
+                            ToolTip="Daily login streak (Good Girl Streak skill)">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Flame vector icon -->
+                            <Viewbox Width="13" Height="13" VerticalAlignment="Center">
+                                <Path Fill="#C47DAA"
+                                      Data="M8,1 C8,1 2.5,6.5 2.5,10 C2.5,13 5,15.5 8,15.5 C11,15.5 13.5,13 13.5,10 C13.5,6.5 8,1 8,1 Z M8,13.5 C6,13.5 4.5,12 4.5,10 C4.5,8 7,5 8,3.8 C9,5 11.5,8 11.5,10 C11.5,12 10,13.5 8,13.5 Z"/>
+                            </Viewbox>
+                            <TextBlock x:Name="TxtStreakFireCount" Text="0" Foreground="#C9A0D0" FontSize="13"
+                                       FontWeight="Bold" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                            <!-- Shield vector icon -->
+                            <Viewbox x:Name="TxtStreakShieldIcon" Width="12" Height="12"
+                                     VerticalAlignment="Center" Margin="5,0,0,0" Visibility="Collapsed"
+                                     ToolTip="Streak shield available — protects your streak if you miss a day">
+                                <Path Fill="#8B7BA0"
+                                      Data="M8,1 L2,4 V9.5 C2,13 5,15.5 8,17 C11,15.5 14,13 14,9.5 V4 Z M8,15 C5.8,13.8 4,11.8 4,9.5 V5.2 L8,3 L12,5.2 V9.5 C12,11.8 10.2,13.8 8,15 Z"/>
+                            </Viewbox>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Row 1 Tab Buttons: Settings, Presets, Progression, Assets -->
@@ -1552,7 +1743,7 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.5.22 IS OUT! 💖"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.6.0 IS OUT! 💖"
                             Click="BtnUpdateAvailable_Click" ToolTip="v5.5.22 - Overlay &amp; Focus Fixes"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
@@ -1648,6 +1839,7 @@
                         <ColumnDefinition Width="1*"/>
                         <ColumnDefinition Width="1.1*"/>
                         <ColumnDefinition Width="1*"/>
+                        <ColumnDefinition Width="0.7*"/>
                         <ColumnDefinition Width="1.2*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
@@ -1705,7 +1897,14 @@
                             <TextBlock Text="Profile" FontSize="10"/>
                         </StackPanel>
                     </Button>
-                    <Button Grid.Column="4" x:Name="BtnPatreonExclusives" Tag="Patreon" Click="BtnPatreonExclusives_Click"
+                    <Button Grid.Column="4" x:Name="BtnLab" Tag="Lab" Style="{StaticResource TabButton}"
+                            Margin="2,0" Click="BtnLab_Click" ToolTip="The Lab - Experimental Features">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🧪" FontSize="10" Margin="0,0,3,0"/>
+                            <TextBlock Text="Lab" FontSize="10"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="5" x:Name="BtnPatreonExclusives" Tag="Patreon" Click="BtnPatreonExclusives_Click"
                             ToolTip="View Patreon exclusive features" Cursor="Hand" Height="32" Margin="2,0">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -1737,7 +1936,7 @@
                             <TextBlock Text="Exclusives" FontSize="10"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="BtnMainHelp" Grid.Column="5" Content="?" Click="BtnMainHelp_Click"
+                    <Button x:Name="BtnMainHelp" Grid.Column="6" Content="?" Click="BtnMainHelp_Click"
                             Width="26" Height="26" ToolTip="How to use the app" Margin="3,0">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
@@ -3994,13 +4193,15 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtStartTime" Grid.Column="0" Text="16:00" Background="#1E1E3A" 
-                                     Foreground="White" BorderBrush="{StaticResource PinkBrush}" 
-                                     Padding="6,4" FontSize="12" TextAlignment="Center"/>
+                            <TextBox x:Name="TxtStartTime" Grid.Column="0" Text="16:00" Background="#1E1E3A"
+                                     Foreground="White" BorderBrush="{StaticResource PinkBrush}"
+                                     Padding="6,4" FontSize="12" TextAlignment="Center"
+                                     Style="{StaticResource FocusGlowTextBox}"/>
                             <TextBlock Grid.Column="1" Text="→" Foreground="White" FontSize="12" Margin="5,0" VerticalAlignment="Center"/>
-                            <TextBox x:Name="TxtEndTime" Grid.Column="2" Text="22:00" Background="#1E1E3A" 
-                                     Foreground="White" BorderBrush="{StaticResource PinkBrush}" 
-                                     Padding="6,4" FontSize="12" TextAlignment="Center"/>
+                            <TextBox x:Name="TxtEndTime" Grid.Column="2" Text="22:00" Background="#1E1E3A"
+                                     Foreground="White" BorderBrush="{StaticResource PinkBrush}"
+                                     Padding="6,4" FontSize="12" TextAlignment="Center"
+                                     Style="{StaticResource FocusGlowTextBox}"/>
                         </Grid>
                         
                         <!-- Days -->
@@ -5139,6 +5340,7 @@
                                              BorderThickness="1"
                                              Padding="8,6"
                                              Margin="0,0,0,10"
+                                             Style="{StaticResource FocusGlowTextBox}"
                                              TextChanged="TxtHypnotubeLinks_TextChanged"/>
                                 </StackPanel>
                             </Border>
@@ -5666,7 +5868,7 @@
                             <Expander Grid.Row="0" Grid.Column="2" Style="{StaticResource ExclusivesSectionExpander}">
                                 <Expander.Header>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="🤖 Bambi Takeover" Foreground="White" FontSize="14" FontWeight="Bold"/>
+                                        <TextBlock x:Name="TxtTakeoverHeader" Text="🤖 Bambi Takeover" Foreground="White" FontSize="14" FontWeight="Bold"/>
                                     </StackPanel>
                                 </Expander.Header>
                                 <StackPanel>
@@ -7061,6 +7263,29 @@
             </Border>            <Border Grid.Column="2" Grid.Row="0" Grid.RowSpan="3" Style="{StaticResource SectionPanel}" BorderBrush="#5865F2" BorderThickness="1"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="10"><TextBlock Text="Community Settings" Foreground="#5865F2" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/><Border Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,12" BorderBrush="#5865F2" BorderThickness="1"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock x:Name="TxtDiscordTabStatus" Text="Not Connected" Foreground="White" FontSize="14" FontWeight="Bold"/><TextBlock x:Name="TxtDiscordTabInfo" Text="Link Discord for community features" Foreground="#808080" FontSize="11" Margin="0,2,0,0"/></StackPanel><Button x:Name="BtnDiscordTabLogin" Grid.Column="1" Content="Login" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,8" FontWeight="Bold" FontSize="11" Cursor="Hand" Click="BtnDiscordTabLogin_Click"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Discord Rich Presence" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Show your activity status" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabRichPresence" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkDiscordRichPresence_Changed" Unchecked="ChkDiscordRichPresence_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Show Level in Status" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Display your level" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShowLevel" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkShowLevelInPresence_Changed" Unchecked="ChkShowLevelInPresence_Changed"/></Grid></Border><TextBlock Text="Community Sharing" Foreground="#5865F2" FontSize="13" FontWeight="Bold" Margin="0,12,0,10"/><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Achievements" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post achievements to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareAchievements" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareAchievements_Changed" Unchecked="ChkShareAchievements_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Level Milestones" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Post level ups to Discord" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShareLevelUps" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareLevelUps_Changed" Unchecked="ChkShareLevelUps_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Allow DMs from Leaderboard" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Let others message you" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabAllowDm" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkAllowDiscordDm_Changed" Unchecked="ChkAllowDiscordDm_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Share Profile Picture" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Show your avatar to others" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabSharePfp" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShareProfilePicture_Changed" Unchecked="ChkShareProfilePicture_Changed"/></Grid></Border><Border Background="#1E1E3A" CornerRadius="6" Padding="12" Margin="0,0,0,8"><Grid><StackPanel><TextBlock Text="Show Online Status" Foreground="White" FontSize="12" FontWeight="SemiBold"/><TextBlock Text="Appear offline when disabled" Foreground="#808080" FontSize="10"/></StackPanel><CheckBox x:Name="ChkDiscordTabShowOnline" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="True" Checked="ChkShowOnlineStatus_Changed" Unchecked="ChkShowOnlineStatus_Changed"/></Grid></Border><TextBlock Text="All sharing is opt-in." Foreground="#5865F2" FontSize="10" FontStyle="Italic" Margin="0,10,0,0"/><Button Content="Join Discord Server" Background="#5865F2" Foreground="White" BorderThickness="0" Padding="15,12" Margin="0,15,0,0" FontWeight="Bold" FontSize="12" Cursor="Hand" Click="BtnDiscord_Click"/></StackPanel></ScrollViewer></Border>
             </Grid>
         </ContentControl>
+        <!-- Lab Tab -->
+        <ContentControl x:Name="LabTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+            <Border Style="{StaticResource SectionPanel}">
+                <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
+                        <TextBlock Text="🧪" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                        <TextBlock Text="The Lab" Foreground="White" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="#00FF88" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                        <TextBlock Text="new testing features coming soon :3" Foreground="#666680" FontSize="14"
+                                   HorizontalAlignment="Center" Margin="0,8,0,0" FontStyle="Italic"/>
+                        <Border Background="#1E1E3A" CornerRadius="10" Padding="20,12" Margin="0,25,0,0"
+                                BorderBrush="#00FF88" BorderThickness="1" Opacity="0.6">
+                            <TextBlock Text="This is where experimental features will live before they graduate to the main app."
+                                       Foreground="#808080" FontSize="11" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </ContentControl>
+
         <!-- Leaderboard Tab -->
         <ContentControl x:Name="LeaderboardTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
                 <Grid>
@@ -7359,7 +7584,7 @@
             <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto" MaxHeight="290"/>
+                <RowDefinition Height="Auto" MaxHeight="340"/>
                 <RowDefinition Height="5"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
@@ -7708,7 +7933,7 @@
                                       SelectedItemChanged="AssetTreeView_SelectedItemChanged"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                      ScrollViewer.VerticalScrollBarVisibility="Visible">
                                 <TreeView.Resources>
                                     <!-- Force bigger scrollbars in TreeView -->
                                     <Style TargetType="ScrollBar">
@@ -7784,7 +8009,7 @@
                         <!-- RIGHT: Thumbnail Preview Grid -->
                         <Border Grid.Column="2" Background="#1A1A2E" CornerRadius="6" Padding="4">
                             <Grid>
-                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ScrollViewer VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled">
                                     <ItemsControl x:Name="ThumbnailsItemsControl">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>

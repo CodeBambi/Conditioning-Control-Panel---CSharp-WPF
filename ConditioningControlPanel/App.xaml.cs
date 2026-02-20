@@ -993,6 +993,26 @@ namespace ConditioningControlPanel
             restored.LastPatreonVerification = current.LastPatreonVerification;
             restored.OpenRouterApiKey = current.OpenRouterApiKey;
 
+            // Preserve lifetime stats — take higher value (current may have server-synced data)
+            restored.TotalConditioningMinutes = Math.Max(current.TotalConditioningMinutes, restored.TotalConditioningMinutes);
+
+            // Preserve companion progress — per-companion, take higher level
+            foreach (var (id, currentProgress) in current.CompanionProgressData)
+            {
+                if (restored.CompanionProgressData.TryGetValue(id, out var restoredProgress))
+                {
+                    if (currentProgress.Level > restoredProgress.Level ||
+                        (currentProgress.Level == restoredProgress.Level && currentProgress.TotalXPEarned > restoredProgress.TotalXPEarned))
+                    {
+                        restored.CompanionProgressData[id] = currentProgress;
+                    }
+                }
+                else
+                {
+                    restored.CompanionProgressData[id] = currentProgress;
+                }
+            }
+
             Settings.RestoreFrom(restored);
 
             // Refresh UI if MainWindow is loaded
