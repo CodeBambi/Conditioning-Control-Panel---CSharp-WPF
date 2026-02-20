@@ -929,7 +929,19 @@ namespace ConditioningControlPanel
                 TxtHypnotubeModeLabel.Text = App.Settings?.Current?.ContentModeDisplay ?? "Bambi Sleep";
 
             if (TxtHypnotubeLinks != null)
-                TxtHypnotubeLinks.Text = App.Settings?.Current?.ActiveHypnotubeLinks ?? "";
+            {
+                var links = App.Settings?.Current?.ActiveHypnotubeLinks ?? "";
+                // Show default links when empty so users see examples of the expected format
+                if (string.IsNullOrWhiteSpace(links))
+                {
+                    links = App.Settings?.Current?.IsBambiMode == true
+                        ? Services.BambiSprite.DefaultBambiSleepLinks
+                        : Services.BambiSprite.DefaultSissyHypnoLinks;
+                    if (App.Settings?.Current != null)
+                        App.Settings.Current.ActiveHypnotubeLinks = links;
+                }
+                TxtHypnotubeLinks.Text = links;
+            }
         }
 
         private void TxtHypnotubeLinks_TextChanged(object sender, TextChangedEventArgs e)
