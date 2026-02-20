@@ -22,45 +22,17 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.1";
+        public const string AppVersion = "5.6.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.1 - Cloud Backup, Visual Polish & More
-
-☁️ NEW
-• Cloud settings backup & restore — settings auto-backup to cloud; fresh installs offer to restore your setup
-• Hypnotube link pool now pre-populated with default links for both content modes
-• OCR keyword highlight modes — All matches vs Random subset, Highlight Only, Exact Subliminal, adjustable duration
-• Streaming-safe highlight toggle for screen captures/streams
-• Remote control upgrades — session picker, progress, loops, effects, custom subliminals, auto-connect link
-• Phrase presets for companion
-• Mind Wipe & Bubbles added to keyword trigger visual effects
-• Parallel image loading for faster flash performance
-• Bonus quest rerolls, quests filtered by unlocked level
-• Former Lab features moved to Patreon Exclusives
-
-🎨 VISUAL POLISH
-• Dashboard section borders thickened for better readability
-• Overall UI refinements and layout improvements
+        public const string CurrentPatchNotes = @"v5.6.2 - Bugfixes
 
 🔧 FIXES
-• Overlays now stay on top after mandatory videos
-• Reduced overlay flicker and focus stealing
-• Fixed subliminal window memory leak
-• Fixed avatar chat input losing focus
-• Fixed CCP stealing focus from other apps in background
-• Fixed quest completion lost when running past midnight
-• Fixed clipboard crash when another app holds the lock
-• Fixed remote session start when window hidden to tray
-• Fixed trigger-spawned bubbles stuck at bottom of screen
-• Fixed quest progress bar overflow
-• Fixed stuck detection killing videos longer than 5 minutes
-• Fixed skill points reset repeating on crash
-• Removed Windows notifications from panic button
-• 5 additional user-reported bug fixes";
+• Improved cloud sync reliability
+• Fixed potential session restore issues";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

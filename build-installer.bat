@@ -7,7 +7,7 @@ echo ============================================
 echo.
 
 :: Configuration
-set VERSION=5.6.1
+set VERSION=5.6.2
 set PROJECT_DIR=ConditioningControlPanel
 set PUBLISH_DIR=%PROJECT_DIR%\bin\Release\net8.0-windows10.0.19041.0\win-x64\publish
 set INSTALLER_OUTPUT=installer-output
