@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy | Conditioning Control Panel</title>
+    <meta name="description" content="Privacy policy for Conditioning Control Panel — what data we collect, how it's stored, and your rights.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔒</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <span>Privacy Policy</span>
+            </div>
+            <h1>Privacy Policy</h1>
+            <p>How Conditioning Control Panel handles your data</p>
+        </div>
+
+        <div class="guide-content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#data-controller">Data Controller</a></li>
+                    <li><a href="#what-we-collect">What Data We Collect</a></li>
+                    <li><a href="#why-we-collect">Why We Collect It</a></li>
+                    <li><a href="#how-stored">How Data Is Stored</a></li>
+                    <li><a href="#third-party">Third-Party Services</a></li>
+                    <li><a href="#data-retention">Data Retention</a></li>
+                    <li><a href="#your-rights">Your Rights</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                </ul>
+            </div>
+
+            <section id="data-controller">
+                <h2>Data Controller</h2>
+                <p>Conditioning Control Panel (CCP) is an open-source project maintained by <strong>CodeBambi</strong>. The source code is publicly available on <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a>.</p>
+                <p>Because this is an open-source hobby project, there is no registered company behind it. CodeBambi acts as the data controller for any personal data processed through the cloud features.</p>
+            </section>
+
+            <section id="what-we-collect">
+                <h2>What Data We Collect</h2>
+
+                <h3>Account Information (Cloud Features)</h3>
+                <p>If you sign in with Discord or Patreon, we store:</p>
+                <ul>
+                    <li><strong>Display name</strong> &mdash; your chosen username</li>
+                    <li><strong>Email address</strong> &mdash; from your OAuth provider (Discord or Patreon)</li>
+                    <li><strong>Discord ID / Patreon ID</strong> &mdash; used to link your account</li>
+                    <li><strong>Patreon subscription tier</strong> &mdash; to verify premium access</li>
+                </ul>
+
+                <h3>Progression Data</h3>
+                <p>When cloud sync is active, we store:</p>
+                <ul>
+                    <li>Level, XP, and seasonal statistics (flash clicks, video watches, bubble pops, etc.)</li>
+                    <li>Achievement progress and unlock status</li>
+                    <li>Quest completion data</li>
+                    <li>Skill tree selections</li>
+                    <li>Total conditioning minutes and companion progress</li>
+                </ul>
+
+                <h3>Settings Backup</h3>
+                <p>If you use the cloud settings backup feature, your application preferences are stored on the server so they can be restored on a fresh install.</p>
+
+                <h3>What We Do NOT Collect</h3>
+                <ul>
+                    <li>IP addresses (not logged by the application)</li>
+                    <li>Content of your media files (images, videos, sounds stay local)</li>
+                    <li>Browsing history or screen content</li>
+                    <li>System information beyond what's needed for the app</li>
+                </ul>
+            </section>
+
+            <section id="why-we-collect">
+                <h2>Why We Collect It</h2>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Purpose</th>
+                            <th>Data Used</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Account sync across devices</td>
+                            <td>Discord/Patreon ID, display name, email</td>
+                        </tr>
+                        <tr>
+                            <td>Leaderboards</td>
+                            <td>Display name, level, XP, statistics</td>
+                        </tr>
+                        <tr>
+                            <td>Anti-cheat</td>
+                            <td>XP rate, session timing, statistics consistency</td>
+                        </tr>
+                        <tr>
+                            <td>Patreon tier verification</td>
+                            <td>Patreon ID, subscription status</td>
+                        </tr>
+                        <tr>
+                            <td>Settings backup/restore</td>
+                            <td>Application preferences</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="how-stored">
+                <h2>How Data Is Stored</h2>
+
+                <h3>Server-Side</h3>
+                <p>Cloud data is stored in <strong>Upstash Redis</strong>, a managed database service. The server runs on <strong>Vercel</strong> (serverless functions). Data is transmitted over HTTPS.</p>
+
+                <h3>Client-Side</h3>
+                <ul>
+                    <li><strong>Settings and progress</strong> are stored as JSON files in <code>%APPDATA%/ConditioningControlPanel/</code></li>
+                    <li><strong>OAuth tokens</strong> (Discord/Patreon) are encrypted locally using <strong>Windows DPAPI</strong> (Data Protection API), tied to your Windows user account</li>
+                    <li><strong>Auth tokens</strong> for the sync server are stored in application settings and validated via SHA-256 hashing</li>
+                </ul>
+            </section>
+
+            <section id="third-party">
+                <h2>Third-Party Services</h2>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Service</th>
+                            <th>Purpose</th>
+                            <th>Data Shared</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><a href="https://www.patreon.com/policy/privacy" target="_blank">Patreon</a></td>
+                            <td>OAuth login, subscription verification</td>
+                            <td>OAuth tokens (via their API)</td>
+                        </tr>
+                        <tr>
+                            <td><a href="https://discord.com/privacy" target="_blank">Discord</a></td>
+                            <td>OAuth login, account linking</td>
+                            <td>OAuth tokens (via their API)</td>
+                        </tr>
+                        <tr>
+                            <td><a href="https://openrouter.ai/privacy" target="_blank">OpenRouter</a></td>
+                            <td>AI companion chat (if enabled)</td>
+                            <td>Chat messages you send to the companion</td>
+                        </tr>
+                        <tr>
+                            <td><a href="https://vercel.com/legal/privacy-policy" target="_blank">Vercel</a></td>
+                            <td>Server hosting</td>
+                            <td>API requests are processed through Vercel</td>
+                        </tr>
+                        <tr>
+                            <td><a href="https://upstash.com/trust/privacy.pdf" target="_blank">Upstash</a></td>
+                            <td>Database hosting (Redis)</td>
+                            <td>All server-side user data is stored here</td>
+                        </tr>
+                        <tr>
+                            <td><a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank">GitHub</a></td>
+                            <td>Auto-updates, source code hosting</td>
+                            <td>Update check requests</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="data-retention">
+                <h2>Data Retention</h2>
+
+                <ul>
+                    <li><strong>Active accounts:</strong> Data is retained as long as your account is active and you continue using the application.</li>
+                    <li><strong>Inactive accounts:</strong> There is currently no automatic deletion of inactive accounts. Your data persists until you request deletion.</li>
+                    <li><strong>Deleted accounts:</strong> When you delete your account, all associated data (user record, index entries, leaderboard entries, legacy keys) is removed immediately and permanently.</li>
+                    <li><strong>IP addresses:</strong> The application does not log IP addresses. Standard Vercel infrastructure logs may briefly retain connection metadata per their own policy.</li>
+                </ul>
+            </section>
+
+            <section id="your-rights">
+                <h2>Your Rights</h2>
+
+                <p>You have the following rights regarding your data:</p>
+
+                <h3>Access &amp; Export Your Data</h3>
+                <p>You can export a full copy of your data at any time using the <strong>Export Data</strong> button in the app's Settings tab (under Account). This calls the <code>/v2/user/export-data</code> endpoint and returns all stored data associated with your account.</p>
+
+                <h3>Delete Your Account</h3>
+                <p>You can permanently delete your account and all associated data using the <strong>Delete Account</strong> button in the app's Settings tab. This removes:</p>
+                <ul>
+                    <li>Your user record and all progression data</li>
+                    <li>All index entries (email, display name, Discord ID, Patreon ID)</li>
+                    <li>All leaderboard entries across all seasons</li>
+                    <li>Settings backups</li>
+                    <li>Legacy data from previous versions</li>
+                </ul>
+
+                <div class="info-box warning">
+                    <h5>⚠️ Deletion Is Permanent</h5>
+                    <p>Account deletion cannot be undone. All data is removed immediately from the server.</p>
+                </div>
+
+                <h3>Offline Use</h3>
+                <p>You are not required to create an account or use any cloud features. The application works fully offline &mdash; cloud sync, leaderboards, and account features are entirely optional.</p>
+            </section>
+
+            <section id="contact">
+                <h2>Contact</h2>
+
+                <p>If you have questions about your data or this privacy policy:</p>
+                <ul>
+                    <li><strong>GitHub Issues:</strong> <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/issues" target="_blank">Open an issue</a></li>
+                    <li><strong>Discord:</strong> <a href="https://discord.gg/YxVAMt4qaZ" target="_blank">Join the Discord server</a></li>
+                </ul>
+
+                <p><em>Last updated: February 2026</em></p>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>
