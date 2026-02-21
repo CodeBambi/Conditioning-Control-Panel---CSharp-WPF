@@ -5738,6 +5738,33 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Data & Privacy Section (visible when user has cloud identity) -->
+                        <Border x:Name="DataPrivacySection" Background="#1A1A2E" CornerRadius="8" Padding="15" Margin="0,0,0,15"
+                                BorderBrush="#555" BorderThickness="1" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock Text="Data &amp; Privacy" Foreground="#B0B0B0" FontSize="14" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <TextBlock Text="Export your cloud data or view our privacy policy."
+                                           Foreground="#888" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <Button x:Name="BtnExportData"
+                                            Content="Export My Data"
+                                            Background="#555" Foreground="White"
+                                            BorderThickness="0" Padding="15,8" Margin="0,0,10,0"
+                                            FontWeight="Bold" FontSize="12"
+                                            Cursor="Hand"
+                                            Click="BtnExportData_Click"/>
+                                    <Button x:Name="BtnPrivacyPolicy"
+                                            Content="Privacy Policy"
+                                            Background="Transparent" Foreground="#888"
+                                            BorderBrush="#555" BorderThickness="1" Padding="15,8"
+                                            FontWeight="Bold" FontSize="12"
+                                            Cursor="Hand"
+                                            Click="BtnPrivacyPolicy_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
                         <!-- 2-Column Grid of Feature Expanders (wrapped with Patreon lock overlay) -->
                         <Grid Margin="0,10,0,0">
                         <!-- Patreon-Only Overlay for entire features grid -->

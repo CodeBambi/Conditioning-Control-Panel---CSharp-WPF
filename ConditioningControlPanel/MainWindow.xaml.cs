@@ -4380,6 +4380,7 @@ namespace ConditioningControlPanel
 
             // Show cloud settings backup section if user has a cloud identity
             CloudSettingsBackupSection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
+            DataPrivacySection.Visibility = hasUnifiedId ? Visibility.Visible : Visibility.Collapsed;
             if (hasUnifiedId)
             {
                 _ = UpdateBackupStatus();
@@ -4594,6 +4595,76 @@ namespace ConditioningControlPanel
             {
                 BtnRestoreSettings.IsEnabled = true;
                 BtnRestoreSettings.Content = "Restore from Cloud";
+            }
+        }
+
+        private async void BtnExportData_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.ProfileSync == null) return;
+
+            BtnExportData.IsEnabled = false;
+            BtnExportData.Content = "Exporting...";
+
+            try
+            {
+                var (success, error, jsonData) = await App.ProfileSync.ExportDataAsync();
+
+                if (!success || jsonData == null)
+                {
+                    MessageBox.Show(
+                        error ?? "Failed to export data.",
+                        "Export Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                var dialog = new Microsoft.Win32.SaveFileDialog
+                {
+                    FileName = $"my-data-export-{DateTime.Now:yyyy-MM-dd}.json",
+                    Filter = "JSON files (*.json)|*.json",
+                    Title = "Save Data Export"
+                };
+
+                if (dialog.ShowDialog() == true)
+                {
+                    File.WriteAllText(dialog.FileName, jsonData);
+                    MessageBox.Show(
+                        $"Data exported to:\n{dialog.FileName}",
+                        "Export Complete",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Data export failed");
+                MessageBox.Show(
+                    $"Export failed: {ex.Message}",
+                    "Export Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+            finally
+            {
+                BtnExportData.IsEnabled = true;
+                BtnExportData.Content = "Export My Data";
+            }
+        }
+
+        private void BtnPrivacyPolicy_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/privacy-policy.html",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to open privacy policy");
             }
         }
 

@@ -1279,6 +1279,55 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Export all user data from the server (GDPR data access request).
+        /// Returns the raw JSON string for saving to file.
+        /// </summary>
+        public async Task<(bool success, string? error, string? jsonData)> ExportDataAsync()
+        {
+            var unifiedId = App.Settings?.Current?.UnifiedId;
+            if (string.IsNullOrEmpty(unifiedId))
+            {
+                return (false, "You must be logged in to export your data", null);
+            }
+
+            try
+            {
+                var requestData = new { unified_id = unifiedId };
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/export-data");
+                AddAuthHeader(request);
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(requestData),
+                    Encoding.UTF8,
+                    "application/json"
+                );
+
+                var response = await _httpClient.SendAsync(request);
+                var json = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    HandleUnauthorized(response);
+                    var errorResult = JsonConvert.DeserializeObject<DeleteAccountErrorResponse>(json);
+                    var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
+                    App.Logger?.Warning("Export data failed: {Error}", errorMsg);
+                    return (false, errorMsg, null);
+                }
+
+                // Pretty-print the JSON for readability
+                var parsed = Newtonsoft.Json.Linq.JToken.Parse(json);
+                var prettyJson = parsed.ToString(Formatting.Indented);
+
+                App.Logger?.Information("Data exported for user: {UnifiedId}", unifiedId);
+                return (true, null, prettyJson);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Export data request failed");
+                return (false, "Data export requires an internet connection", null);
+            }
+        }
+
+        /// <summary>
         /// Adds the X-Auth-Token header to a V2 API request if an auth token is available.
         /// </summary>
         private static void AddAuthHeader(HttpRequestMessage request)
