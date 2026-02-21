@@ -22,17 +22,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.2";
+        public const string AppVersion = "5.6.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.2 - Bugfixes
+        public const string CurrentPatchNotes = @"v5.6.3 - Privacy & Data Export
 
-🔧 FIXES
-• Improved cloud sync reliability
-• Fixed potential session restore issues";
+🔒 PRIVACY
+• Added in-app Data Export button (download all your cloud data as JSON)
+• Added in-app Privacy Policy link
+• Account deletion now cleans up all associated data including settings backups";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
