@@ -16259,7 +16259,7 @@ namespace ConditioningControlPanel
                         {
                             try
                             {
-                                var previewImages = await LoadPreviewImagesFromUrlsAsync(pack.PreviewUrls);
+                                var previewImages = await LoadPreviewImagesFromUrlsAsync(pack.Id, pack.PreviewUrls);
                                 if (previewImages.Count > 0)
                                 {
                                     Dispatcher.Invoke(() =>
@@ -16333,9 +16333,14 @@ namespace ConditioningControlPanel
             _packPreviewTimer = null;
         }
 
-        private async Task<List<BitmapImage>> LoadPreviewImagesFromUrlsAsync(List<string> urls)
+        private async Task<List<BitmapImage>> LoadPreviewImagesFromUrlsAsync(string packId, List<string> urls)
         {
             var images = new List<BitmapImage>();
+            var cacheDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "ConditioningControlPanel", "pack-previews", packId);
+            Directory.CreateDirectory(cacheDir);
+
             using var httpClient = new HttpClient();
             httpClient.Timeout = TimeSpan.FromSeconds(10);
 
@@ -16343,7 +16348,20 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    var bytes = await httpClient.GetByteArrayAsync(url);
+                    var fileName = GetPackPreviewFileName(url);
+                    var localPath = Path.Combine(cacheDir, fileName);
+                    byte[] bytes;
+
+                    if (File.Exists(localPath))
+                    {
+                        bytes = await File.ReadAllBytesAsync(localPath);
+                    }
+                    else
+                    {
+                        bytes = await httpClient.GetByteArrayAsync(url);
+                        await File.WriteAllBytesAsync(localPath, bytes);
+                    }
+
                     var bitmap = new BitmapImage();
                     using (var stream = new MemoryStream(bytes))
                     {
@@ -16362,6 +16380,12 @@ namespace ConditioningControlPanel
             }
 
             return images;
+        }
+
+        private static string GetPackPreviewFileName(string url)
+        {
+            try { return Path.GetFileName(new Uri(url).LocalPath); }
+            catch { return "image.png"; }
         }
 
         private void OnPackDownloadProgress(object? sender, (ContentPack Pack, int Progress) e)
