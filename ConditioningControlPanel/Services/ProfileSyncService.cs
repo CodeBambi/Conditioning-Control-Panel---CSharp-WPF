@@ -280,6 +280,8 @@ namespace ConditioningControlPanel.Services
         /// Sync local progression to cloud.
         /// Called after sessions and periodically.
         /// </summary>
+        private static readonly TimeSpan SyncCooldown = TimeSpan.FromSeconds(30);
+
         public async Task<bool> SyncProfileAsync()
         {
             // Skip if offline mode is enabled
@@ -292,6 +294,14 @@ namespace ConditioningControlPanel.Services
             if (!IsSyncEnabled)
             {
                 App.Logger?.Debug("Profile sync skipped - not authenticated");
+                return false;
+            }
+
+            // Client-side sync cooldown to match server-side enforcement
+            if (LastSyncTime.HasValue && DateTime.Now - LastSyncTime.Value < SyncCooldown)
+            {
+                App.Logger?.Debug("Profile sync skipped - cooldown active ({Remaining}s remaining)",
+                    Math.Ceiling((SyncCooldown - (DateTime.Now - LastSyncTime.Value)).TotalSeconds));
                 return false;
             }
 
@@ -380,6 +390,13 @@ namespace ConditioningControlPanel.Services
 
                     if (!v2Response.IsSuccessStatusCode)
                     {
+                        // On 429 (cooldown), set LastSyncTime to prevent immediate retry
+                        if (v2Response.StatusCode == (System.Net.HttpStatusCode)429)
+                        {
+                            LastSyncTime = DateTime.Now;
+                            App.Logger?.Debug("V2 Profile sync rate-limited by server, will retry later");
+                            return false;
+                        }
                         HandleUnauthorized(v2Response);
                         var error = await v2Response.Content.ReadAsStringAsync();
                         App.Logger?.Warning("V2 Profile sync failed: {Status} - {Error}", v2Response.StatusCode, error);

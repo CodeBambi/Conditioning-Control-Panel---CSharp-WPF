@@ -57,6 +57,9 @@ namespace ConditioningControlPanel
         private static LibVLC? _libVLC;
         private static List<LibVLCSharp.Shared.MediaPlayer> _allMediaPlayers = new();
 
+        /// <summary>Duration of the last played video in seconds (shared for XP scaling)</summary>
+        internal static double LastVideoDurationSeconds { get; private set; } = 30;
+
         public BubbleCountWindow(string videoPath, BubbleCountService.Difficulty difficulty,
             bool strictMode, Action<bool> onComplete,
             Screen? screen = null, bool isPrimary = true)
@@ -423,6 +426,7 @@ namespace ConditioningControlPanel
                 {
                     // Get video duration
                     _videoDurationSeconds = GetVideoDuration(_videoPath);
+                    LastVideoDurationSeconds = _videoDurationSeconds;
 
                     // Calculate target bubbles
                     CalculateTargetBubbles();

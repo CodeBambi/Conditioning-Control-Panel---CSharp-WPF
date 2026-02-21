@@ -35,6 +35,13 @@ public class BubbleCountService : IDisposable
     // Mercy/retry system (strict mode)
     private int _retryCount = 0;
     private readonly List<Window> _messageWindows = new();
+
+    // Anti-exploit: cooldown between XP-awarding completions
+    private DateTime _lastXpAwardTime = DateTime.MinValue;
+    private static readonly TimeSpan GameXpCooldown = TimeSpan.FromMinutes(3);
+
+    /// <summary>Minimum video duration (seconds) for full XP. Shorter videos scale proportionally.</summary>
+    private const double FullXpVideoDurationSeconds = 60.0;
     
     public bool IsRunning => _isRunning;
     public bool IsBusy => _isBusy;
@@ -204,6 +211,17 @@ public class BubbleCountService : IDisposable
         });
     }
 
+    /// <summary>
+    /// Calculate XP scaled by video duration. Videos under 60s give proportionally less XP.
+    /// </summary>
+    internal static int ScaleXpByDuration(int baseXp)
+    {
+        var duration = BubbleCountWindow.LastVideoDurationSeconds;
+        if (duration >= FullXpVideoDurationSeconds) return baseXp;
+        var scale = Math.Max(0.1, duration / FullXpVideoDurationSeconds);
+        return Math.Max(1, (int)(baseXp * scale));
+    }
+
     private void OnGameComplete(bool success)
     {
         if (success)
@@ -212,10 +230,23 @@ public class BubbleCountService : IDisposable
             _isBusy = false;
             App.Bubbles?.Resume();
             App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
-            App.Progression?.AddXP(100, XPSource.BubbleCount);
+
+            var now = DateTime.UtcNow;
+            if (now - _lastXpAwardTime >= GameXpCooldown)
+            {
+                var xp = ScaleXpByDuration(100);
+                App.Progression?.AddXP(xp, XPSource.BubbleCount);
+                _lastXpAwardTime = now;
+                App.Logger?.Information("Bubble count game completed! +{Xp} XP (video {Duration:F0}s)", xp, BubbleCountWindow.LastVideoDurationSeconds);
+            }
+            else
+            {
+                App.Logger?.Debug("Bubble count completed but XP on cooldown ({Remaining:F0}s remaining)",
+                    (GameXpCooldown - (now - _lastXpAwardTime)).TotalSeconds);
+            }
+
             App.Quests?.TrackBubbleCountCompleted();
             GameCompleted?.Invoke(this, EventArgs.Empty);
-            App.Logger?.Information("Bubble count game completed successfully! +100 XP");
         }
         else
         {

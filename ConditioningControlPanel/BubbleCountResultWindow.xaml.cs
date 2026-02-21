@@ -177,9 +177,10 @@ namespace ConditioningControlPanel
             
             if (answer == _correctAnswer)
             {
-                // Correct!
-                App.Progression?.AddXP(250, XPSource.BubbleCount);
-                ShowFeedbackOnAll("🎉 CORRECT! +250 XP 🎉", Color.FromRgb(50, 205, 50));
+                // Correct! XP scaled by video duration
+                var xp = Services.BubbleCountService.ScaleXpByDuration(250);
+                App.Progression?.AddXP(xp, XPSource.BubbleCount);
+                ShowFeedbackOnAll($"🎉 CORRECT! +{xp} XP 🎉", Color.FromRgb(50, 205, 50));
                 DisableInputOnAll();
                 
                 // Track achievement - correct answer
