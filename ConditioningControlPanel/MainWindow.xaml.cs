@@ -2881,11 +2881,19 @@ namespace ConditioningControlPanel
                 // Logout
                 App.ProfileSync?.StopHeartbeat();
                 App.Patreon.Logout();
-                App.Patreon.UnifiedUserId = null;
-                App.UnifiedUserId = null;
-                UpdateQuickPatreonUI();
-                UpdatePatreonUI();
-                UpdateBannerWelcomeMessage();
+                if (App.Discord?.IsAuthenticated != true)
+                {
+                    // No provider left — full logout
+                    ClearAccountData();
+                }
+                else
+                {
+                    // Discord still active — just update Patreon UI
+                    App.Patreon.UnifiedUserId = null;
+                    UpdateQuickPatreonUI();
+                    UpdatePatreonUI();
+                    UpdateBannerWelcomeMessage();
+                }
             }
             else
             {
@@ -2950,10 +2958,18 @@ namespace ConditioningControlPanel
             {
                 // Logout
                 App.Discord.Logout();
-                App.Discord.UnifiedUserId = null;
-                App.UnifiedUserId = null;
-                UpdateQuickDiscordUI();
-                UpdateBannerWelcomeMessage();
+                if (App.Patreon?.IsAuthenticated != true)
+                {
+                    // No provider left — full logout
+                    ClearAccountData();
+                }
+                else
+                {
+                    // Patreon still active — just update Discord UI
+                    App.Discord.UnifiedUserId = null;
+                    UpdateQuickDiscordUI();
+                    UpdateBannerWelcomeMessage();
+                }
             }
             else
             {
@@ -4218,10 +4234,18 @@ namespace ConditioningControlPanel
                 // Logout
                 App.ProfileSync?.StopHeartbeat();
                 App.Patreon.Logout();
-                App.Patreon.UnifiedUserId = null;
-                App.UnifiedUserId = null;
-                UpdatePatreonUI();
-                UpdateBannerWelcomeMessage();
+                if (App.Discord?.IsAuthenticated != true)
+                {
+                    // No provider left — full logout
+                    ClearAccountData();
+                }
+                else
+                {
+                    // Discord still active — just update Patreon UI
+                    App.Patreon.UnifiedUserId = null;
+                    UpdatePatreonUI();
+                    UpdateBannerWelcomeMessage();
+                }
             }
             else
             {
@@ -4280,10 +4304,18 @@ namespace ConditioningControlPanel
             {
                 // Logout
                 App.Discord.Logout();
-                App.Discord.UnifiedUserId = null;
-                App.UnifiedUserId = null;
-                UpdateDiscordUI();
-                UpdateBannerWelcomeMessage();
+                if (App.Patreon?.IsAuthenticated != true)
+                {
+                    // No provider left — full logout
+                    ClearAccountData();
+                }
+                else
+                {
+                    // Patreon still active — just update Discord UI
+                    App.Discord.UnifiedUserId = null;
+                    UpdateDiscordUI();
+                    UpdateBannerWelcomeMessage();
+                }
             }
             else
             {
@@ -6625,6 +6657,9 @@ namespace ConditioningControlPanel
             try
             {
                 App.Logger?.Information("[RemoteControl] Panic triggered from remote");
+
+                // Track panic press for Relapse achievement
+                App.Achievements?.TrackPanicPressed();
 
                 // Kill all audio immediately
                 App.KillAllAudio();
@@ -11304,8 +11339,17 @@ namespace ConditioningControlPanel
             if (App.Discord.IsAuthenticated)
             {
                 App.Discord.Logout();
-                UpdateDiscordTabUI();
-                UpdateDiscordUI();
+                if (App.Patreon?.IsAuthenticated != true)
+                {
+                    // No provider left — full logout
+                    ClearAccountData();
+                }
+                else
+                {
+                    // Patreon still active — just update Discord UI
+                    UpdateDiscordTabUI();
+                    UpdateDiscordUI();
+                }
             }
             else
             {
@@ -12719,6 +12763,9 @@ namespace ConditioningControlPanel
                     }
                 }
                 
+                // Track panic press for Relapse achievement
+                App.Achievements?.TrackPanicPressed();
+
                 // User manually stopping
                 if (App.Settings.Current.SchedulerEnabled && IsInScheduledTimeWindow())
                 {
