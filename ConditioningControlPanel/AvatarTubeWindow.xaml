@@ -10,6 +10,7 @@
         ShowInTaskbar="False"
         ResizeMode="NoResize"
         SizeToContent="WidthAndHeight"
+        UseLayoutRounding="True"
         FontFamily="Comic Sans MS">
 
     <Window.Resources>
@@ -75,7 +76,7 @@
         <!-- Viewbox scales content uniformly to fit any screen size -->
         <Viewbox x:Name="ContentViewbox" Stretch="Uniform" ClipToBounds="False">
             <!-- Design canvas at fixed reference size - will be scaled -->
-            <Grid Width="780" Height="1080" ClipToBounds="False">
+            <Grid Width="780" Height="1080" ClipToBounds="False" SnapsToDevicePixels="True">
             <!-- Tube frame FIRST (behind) - Z-Index 0 implicit -->
             <Image x:Name="ImgTubeFrame"
                    Source="pack://application:,,,/Resources/tube.png"

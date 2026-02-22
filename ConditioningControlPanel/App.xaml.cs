@@ -44,6 +44,9 @@ namespace ConditioningControlPanel
         private static Mutex? _mutex;
         private static bool _mutexOwned = false;
         private const string MutexName = "ConditioningControlPanel_SingleInstance_Mutex";
+        private const string ShowSignalName = "ConditioningControlPanel_ShowWindow_Signal";
+        private static EventWaitHandle? _showSignal;
+        private static Thread? _showSignalThread;
 
         /// <summary>
         /// User data folder path in LocalAppData - persists across updates
@@ -363,6 +366,9 @@ namespace ConditioningControlPanel
                 // Stop autonomy mode
                 Autonomy?.Stop();
 
+                // Stop avatar voice lines
+                AvatarWindow?.StopVoiceLineAudio();
+
                 // Reset audio ducking - CRITICAL for clean exit
                 Audio?.ForceUnduck();
 
@@ -390,16 +396,51 @@ namespace ConditioningControlPanel
             _mutexOwned = createdNew; // Track if we actually own the mutex
             if (!createdNew)
             {
-                // Another instance is already running
+                // Another instance is already running - signal it to show its window
+                try
+                {
+                    var signal = EventWaitHandle.OpenExisting(ShowSignalName);
+                    signal.Set();
+                    signal.Dispose();
+                }
+                catch { }
+
                 splash.Close();
-                MessageBox.Show(
-                    "Conditioning Control Panel is already running.\n\nCheck your system tray if the window is minimized.",
-                    "Already Running",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
                 Shutdown();
                 return;
             }
+
+            // Create signal for other instances to request showing our window
+            _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowSignalName);
+            _showSignalThread = new Thread(() =>
+            {
+                while (_showSignal != null)
+                {
+                    try
+                    {
+                        if (_showSignal.WaitOne(1000))
+                        {
+                            Dispatcher.BeginInvoke(() =>
+                            {
+                                var mainWin = MainWindow as MainWindow;
+                                if (mainWin != null)
+                                {
+                                    mainWin.ShowFromTray();
+                                }
+                            });
+                        }
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        break;
+                    }
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "ShowWindowSignalListener"
+            };
+            _showSignalThread.Start();
 
             base.OnStartup(e);
 
@@ -1911,6 +1952,12 @@ Application State:
 
             // Close and flush the logger
             Log.CloseAndFlush();
+
+            // Dispose show-window signal
+            var signal = _showSignal;
+            _showSignal = null;
+            signal?.Set(); // Unblock the listener thread
+            signal?.Dispose();
 
             // Release single instance mutex (only if we own it)
             if (_mutexOwned && _mutex != null)

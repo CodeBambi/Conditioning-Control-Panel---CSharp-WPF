@@ -39,8 +39,10 @@ namespace ConditioningControlPanel.Services
         public string? SessionCode { get; private set; }
         public string? Tier { get; private set; }
         public bool ControllerConnected { get; private set; }
+        public bool ControllerIdle { get; private set; }
 
         public event EventHandler? ControllerConnectedChanged;
+        public event EventHandler? ControllerIdleChanged;
         public event EventHandler<string>? CommandReceived;
         public event EventHandler? SessionStarted;
         public event EventHandler? SessionEnded;
@@ -145,6 +147,7 @@ namespace ConditioningControlPanel.Services
             IsActive = false;
             SessionCode = null;
             Tier = null;
+            ControllerIdle = false;
 
             // Stop all effects that were triggered by the remote controller
             if (System.Windows.Application.Current?.Dispatcher != null)
@@ -193,7 +196,11 @@ namespace ConditioningControlPanel.Services
                 var json = await response.Content.ReadAsStringAsync();
                 var result = JObject.Parse(json);
 
-                // Update controller connection status
+                // Update controller connection status.
+                // The server only sets controller_connected=false on explicit disconnect
+                // (POST /remote/disconnect), NOT on ping staleness. This means the controller
+                // stays "connected" even if idle for long periods — which is correct for
+                // sessions that last hours with 10-20+ min idle stretches.
                 var connected = result["controller_connected"]?.Value<bool>() ?? false;
                 if (connected != ControllerConnected)
                 {
@@ -209,10 +216,18 @@ namespace ConditioningControlPanel.Services
                     }
                     else
                     {
-                        // Controller disconnected — stop all effects they triggered
+                        // Controller explicitly disconnected — stop all effects
                         StopAllRemoteEffects();
                     }
                     ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
+                }
+
+                // Track idle status for UI purposes (controller still connected but not actively pinging)
+                var idle = result["controller_idle"]?.Value<bool>() ?? false;
+                if (idle != ControllerIdle)
+                {
+                    ControllerIdle = idle;
+                    ControllerIdleChanged?.Invoke(this, EventArgs.Empty);
                 }
 
                 // Execute commands

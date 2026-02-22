@@ -1444,6 +1444,12 @@ namespace ConditioningControlPanel
                 _avatarTubeWindow = new AvatarTubeWindow(this);
                 App.AvatarWindow = _avatarTubeWindow; // Set global reference for services
 
+                // Restore saved mute state
+                if (App.Settings?.Current?.AvatarMuted == true)
+                {
+                    _avatarTubeWindow.SetMuteAvatar(true);
+                }
+
                 // Only show if main window is visible and not minimized
                 if (IsVisible && WindowState != WindowState.Minimized)
                 {
@@ -4865,6 +4871,8 @@ namespace ConditioningControlPanel
 
             // Initialize companion settings
             ChkAvatarEnabledCompanion.IsChecked = settings.AvatarEnabled;
+            ChkMuteAvatarCompanion.IsChecked = settings.AvatarMuted;
+            ChkMuteWhispersCompanion.IsChecked = !settings.SubAudioEnabled;
             ChkAiChat.IsChecked = settings.AiChatEnabled;
             SliderIdleIntervalCompanion.Value = settings.IdleGiggleIntervalSeconds;
             TxtIdleIntervalCompanion.Text = $"{settings.IdleGiggleIntervalSeconds}s";
@@ -6171,6 +6179,7 @@ namespace ConditioningControlPanel
 
                 // Listen for controller connection changes
                 App.RemoteControl.ControllerConnectedChanged += OnRemoteControllerChanged;
+                App.RemoteControl.ControllerIdleChanged += OnRemoteControllerIdleChanged;
                 App.RemoteControl.CommandReceived += OnRemoteCommandReceived;
                 App.RemoteControl.SessionEnded += OnRemoteSessionEnded;
 
@@ -6258,6 +6267,7 @@ namespace ConditioningControlPanel
 
                 // Re-subscribe after restart
                 App.RemoteControl.ControllerConnectedChanged += OnRemoteControllerChanged;
+                App.RemoteControl.ControllerIdleChanged += OnRemoteControllerIdleChanged;
                 App.RemoteControl.CommandReceived += OnRemoteCommandReceived;
                 App.RemoteControl.SessionEnded += OnRemoteSessionEnded;
             }
@@ -6347,6 +6357,20 @@ namespace ConditioningControlPanel
             });
         }
 
+        private void OnRemoteControllerIdleChanged(object? sender, EventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                var idle = App.RemoteControl?.ControllerIdle ?? false;
+                TxtRemoteOverlaySubtitle.Text = idle
+                    ? "Controller may be idle..."
+                    : "Someone else is controlling your app";
+                TxtRemoteOverlaySubtitle.Foreground = new System.Windows.Media.SolidColorBrush(
+                    idle ? System.Windows.Media.Color.FromRgb(0xFF, 0xA5, 0x00)  // orange
+                         : System.Windows.Media.Color.FromRgb(0xA0, 0xA0, 0xA0)); // gray
+            });
+        }
+
         private void OnRemoteSessionEnded(object? sender, EventArgs e)
         {
             Dispatcher.Invoke(() =>
@@ -6389,6 +6413,9 @@ namespace ConditioningControlPanel
             TxtOverlaySessionCode.Text = !string.IsNullOrEmpty(code)
                 ? $"Session: {string.Join(" ", code.ToCharArray())}"
                 : "";
+
+            // Hide browser to avoid WebView2 airspace issue (renders on top of WPF overlays)
+            BrowserContainer.Visibility = System.Windows.Visibility.Hidden;
             RemoteControlOverlay.Visibility = System.Windows.Visibility.Visible;
 
             var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300));
@@ -6405,6 +6432,8 @@ namespace ConditioningControlPanel
             fadeOut.Completed += (s, _) =>
             {
                 RemoteControlOverlay.Visibility = System.Windows.Visibility.Collapsed;
+                // Restore browser visibility now that overlay is gone
+                BrowserContainer.Visibility = System.Windows.Visibility.Visible;
             };
             RemoteControlOverlay.BeginAnimation(OpacityProperty, fadeOut);
             _remoteNotificationTimer?.Stop();
@@ -6716,6 +6745,14 @@ namespace ConditioningControlPanel
             _trayIcon?.ShowWindow();
         }
 
+        /// <summary>
+        /// Called when a second instance signals this instance to show itself.
+        /// </summary>
+        public void ShowFromTray()
+        {
+            _trayIcon?.ShowWindow();
+        }
+
         #endregion
 
         private void ChkMuteAvatar_Changed(object sender, RoutedEventArgs e)
@@ -6724,6 +6761,12 @@ namespace ConditioningControlPanel
             var checkbox = sender as CheckBox;
             var isEnabled = checkbox?.IsChecked == true;
             _avatarTubeWindow?.SetMuteAvatar(isEnabled);
+
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.AvatarMuted = isEnabled;
+                App.Settings.Save();
+            }
         }
 
         private void ChkMuteWhispers_Changed(object sender, RoutedEventArgs e)

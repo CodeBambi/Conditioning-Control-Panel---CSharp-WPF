@@ -89,6 +89,8 @@ public class PhrasePreset : INotifyPropertyChanged
     [JsonIgnore]
     public string DisplayText => $"{Name} ({ActivePhraseCount} phrases)";
 
+    public override string ToString() => DisplayText;
+
     /// <summary>
     /// Create a preset from current settings
     /// </summary>

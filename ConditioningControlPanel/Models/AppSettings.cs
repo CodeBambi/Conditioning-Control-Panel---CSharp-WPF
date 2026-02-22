@@ -1825,6 +1825,13 @@ namespace ConditioningControlPanel.Models
             set { _slutModeEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _avatarMuted = false;
+        public bool AvatarMuted
+        {
+            get => _avatarMuted;
+            set { _avatarMuted = value; OnPropertyChanged(); }
+        }
+
         private CompanionPromptSettings _companionPrompt = new();
         /// <summary>
         /// Custom AI companion prompt settings. Allows users to customize personality,
@@ -2463,8 +2470,9 @@ namespace ConditioningControlPanel.Models
         private bool _keywordTriggersEnabled = false;
         /// <summary>
         /// Enable keyword trigger system — intercepts typed text and fires multi-modal responses.
-        /// Requires Patreon access.
+        /// Requires Patreon access. Not persisted — must be started each session.
         /// </summary>
+        [JsonIgnore]
         public bool KeywordTriggersEnabled
         {
             get => _keywordTriggersEnabled;

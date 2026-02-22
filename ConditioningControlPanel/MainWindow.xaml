@@ -664,11 +664,6 @@
             <Setter Property="CornerRadius" Value="10"/>
             <Setter Property="Padding" Value="9"/>
             <Setter Property="Margin" Value="0,0,0,6"/>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect Color="#0A0A1E" BlurRadius="8" ShadowDepth="1" Opacity="0.25"/>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <!-- TextBox Focus Glow Style -->
@@ -8288,7 +8283,7 @@
                     <TextBlock x:Name="TxtOverlaySessionCode" Text="" Foreground="#808080" FontSize="18"
                                FontFamily="Consolas" HorizontalAlignment="Center" Margin="0,0,0,16"/>
 
-                    <TextBlock Text="Someone else is controlling your app" Foreground="#A0A0A0" FontSize="14"
+                    <TextBlock x:Name="TxtRemoteOverlaySubtitle" Text="Someone else is controlling your app" Foreground="#A0A0A0" FontSize="14"
                                HorizontalAlignment="Center" Margin="0,0,0,24"/>
 
                     <!-- Session info card — always visible -->

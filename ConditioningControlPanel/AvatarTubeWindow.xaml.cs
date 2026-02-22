@@ -2875,7 +2875,7 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Stops any currently playing voice line
         /// </summary>
-        private void StopVoiceLineAudio()
+        public void StopVoiceLineAudio()
         {
             try
             {
@@ -4761,6 +4761,13 @@ namespace ConditioningControlPanel
             if (_isMuted)
             {
                 SpeechBubble.Visibility = Visibility.Collapsed;
+            }
+
+            // Persist to settings
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.AvatarMuted = _isMuted;
+                App.Settings.Save();
             }
 
             // Sync to MainWindow UI
