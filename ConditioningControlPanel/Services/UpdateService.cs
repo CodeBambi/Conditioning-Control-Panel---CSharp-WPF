@@ -22,18 +22,44 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.3";
+        public const string AppVersion = "5.6.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.3 - Privacy & Data Export
+        public const string CurrentPatchNotes = @"v5.6.4 - AI For All + Quality of Life
 
-🔒 PRIVACY
-• Added in-app Data Export button (download all your cloud data as JSON)
-• Added in-app Privacy Policy link
-• Account deletion now cleans up all associated data including settings backups";
+🤖 AI NOW FREE FOR EVERYONE
+• AI Chat is now available to all users with a cloud identity — no Patreon required!
+• Window Awareness is now free for all users
+• Patreon supporters still get exclusive features: Autonomy, Remote Control, Keyword Triggers, Haptics, and more
+
+📋 BETTER HELP & GUIDES
+• Remote Control and Keyword Triggers now have richer in-app descriptions and help content
+• Permission tiers (Light / Standard / Full) explained in the Remote Control help panel
+• XP bar bonus chips now show tooltips explaining each bonus source
+
+🏆 LEADERBOARD FIX
+• Clicking 'Level' column now correctly sorts by level instead of XP
+• Rankings properly re-numbered after sorting
+
+⚖️ BALANCE
+• Bouncing text XP capped at 150 XP/min (was exploitable at 750+ XP/min)
+
+🐛 BUG FIXES
+• Fixed achievement popups spamming on every login (cloud sync no longer re-triggers old achievements)
+• Fixed companion quick controls (Mute Avatar) not saving between sessions
+• Fixed PhrasePreset dropdown showing type name instead of preset name
+• Fixed app not reopenable from Start Menu after tray minimize
+• Fixed UI-wide text blurriness caused by section panel drop shadows
+• Fixed lock card keystroke leakage into other apps (Discord, etc.)
+• Fixed dashboard showing logged-in state after individual provider logout
+
+🎮 OTHER
+• Remote control now shows controller idle status
+• Improved companion window rendering sharpness
+• Keyword triggers must now be started each session (no longer auto-starts)";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
