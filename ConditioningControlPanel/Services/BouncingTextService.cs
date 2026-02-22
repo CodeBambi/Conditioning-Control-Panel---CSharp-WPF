@@ -11,7 +11,7 @@ namespace ConditioningControlPanel.Services;
 
 /// <summary>
 /// Bouncing Text - DVD screensaver style text that bounces across screens
-/// Unlocks at Level 60, awards 10 XP per bounce
+/// Unlocks at Level 60, awards 25 XP per bounce (max 150 XP/min, 10s cooldown between rewards)
 /// </summary>
 public class BouncingTextService : IDisposable
 {
@@ -37,9 +37,12 @@ public class BouncingTextService : IDisposable
     // Corner hit detection - tolerance in pixels (corners are hard to hit exactly)
     private const double CORNER_TOLERANCE = 15.0;
 
-    // Anti-exploit: minimum time between XP-awarding bounces
+    // Anti-exploit: XP rate limiting for bounces
     private DateTime _lastBounceXpTime = DateTime.MinValue;
-    private static readonly TimeSpan BounceXpCooldown = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan BounceXpCooldown = TimeSpan.FromSeconds(10);
+    private int _bounceXpThisMinute;
+    private DateTime _bounceXpMinuteStart = DateTime.MinValue;
+    private const int MaxBounceXpPerMinute = 150;
     
     public bool IsRunning => _isRunning;
     
@@ -275,10 +278,19 @@ public class BouncingTextService : IDisposable
         {
             _currentColor = GetRandomColor();
             var now = DateTime.UtcNow;
-            if (now - _lastBounceXpTime >= BounceXpCooldown)
+
+            // Reset per-minute counter if a new minute has started
+            if ((now - _bounceXpMinuteStart).TotalSeconds >= 60)
+            {
+                _bounceXpThisMinute = 0;
+                _bounceXpMinuteStart = now;
+            }
+
+            if (now - _lastBounceXpTime >= BounceXpCooldown && _bounceXpThisMinute < MaxBounceXpPerMinute)
             {
                 App.Progression?.AddXP(25, XPSource.BouncingText);
                 _lastBounceXpTime = now;
+                _bounceXpThisMinute += 25;
             }
             OnBounce?.Invoke(this, EventArgs.Empty);
 
@@ -291,9 +303,8 @@ public class BouncingTextService : IDisposable
                 SelectRandomText();
                 MeasureTextSize(); // Re-measure when text changes
             }
-            
+
             UpdateWindowsText();
-            App.Logger?.Debug("Bounce! +25 XP");
         }
         
         // Update position in all windows

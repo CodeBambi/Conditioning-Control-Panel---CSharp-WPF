@@ -3946,7 +3946,7 @@
 
                     <!-- Bouncing Text - Lvl 60 -->
                     <Border Background="#1E1E3A" CornerRadius="8" Padding="12" Margin="0,5"
-                            ToolTip="DVD screensaver-style bouncing text!&#x0a;Customizable phrases bounce across screen.&#x0a;Unlocks at Level 60.">
+                            ToolTip="DVD screensaver-style bouncing text!&#x0a;Customizable phrases bounce across screen.&#x0a;+25 XP per bounce (max 150 XP/min).&#x0a;Unlocks at Level 60.">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -6061,8 +6061,9 @@
                                 <StackPanel>
                                     <!-- Header row with toggle -->
                                     <Grid Margin="0,0,0,10">
-                                        <TextBlock Text="Allow another person to remotely trigger actions on your app via a mobile-friendly webpage."
-                                                   Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
+                                        <TextBlock Foreground="#808080" FontSize="11" TextWrapping="Wrap">
+                                            <Run Text="Hand over control to someone you trust. They get a mobile-friendly control panel to trigger flashes, videos, overlays, haptics, and more on your screen in real time. Choose a permission tier to set boundaries. You always keep the panic button."/>
+                                        </TextBlock>
                                     </Grid>
                                     <Grid Margin="0,0,0,10">
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
@@ -6167,8 +6168,9 @@
                                         </StackPanel>
                                     </Grid>
 
-                                    <TextBlock Text="Type keywords anywhere on your computer to trigger audio, visuals, and haptics"
-                                               Foreground="#808080" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock Foreground="#808080" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap">
+                                            <Run Text="Your everyday typing becomes part of your conditioning. Add trigger words that fire audio, visuals, or haptic responses whenever you type them — anywhere on your computer. Enable Screen OCR to react to words you see on screen too."/>
+                                        </TextBlock>
 
                                     <!-- Settings panel -->
                                     <StackPanel x:Name="KeywordTriggersSettingsPanel" Margin="0,10,0,0">
@@ -7320,25 +7322,137 @@
         </ContentControl>
         <!-- Lab Tab -->
         <ContentControl x:Name="LabTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
-            <Border Style="{StaticResource SectionPanel}">
-                <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
-                        <TextBlock Text="🧪" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,15"/>
-                        <TextBlock Text="The Lab" Foreground="White" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center">
-                            <TextBlock.Effect>
-                                <DropShadowEffect Color="#00FF88" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
-                            </TextBlock.Effect>
-                        </TextBlock>
-                        <TextBlock Text="new testing features coming soon :3" Foreground="#666680" FontSize="14"
-                                   HorizontalAlignment="Center" Margin="0,8,0,0" FontStyle="Italic"/>
-                        <Border Background="#1E1E3A" CornerRadius="10" Padding="20,12" Margin="0,25,0,0"
-                                BorderBrush="#00FF88" BorderThickness="1" Opacity="0.6">
-                            <TextBlock Text="This is where experimental features will live before they graduate to the main app."
-                                       Foreground="#808080" FontSize="11" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"/>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="20">
+                    <!-- Header -->
+                    <TextBlock Text="The Lab" Foreground="White" FontSize="24" FontWeight="Bold" Margin="0,0,0,4">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="#00FF88" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                    <TextBlock Text="Experimental features and special modes" Foreground="#666680" FontSize="12" Margin="0,0,0,16"/>
+
+                    <!-- 2x2 Modes Grid -->
+                    <UniformGrid Rows="2" Columns="2">
+                        <!-- Lockdown Mode Card -->
+                        <Border x:Name="LockdownCardBorder" CornerRadius="12" Margin="6" Padding="15">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A1A32" Offset="0"/>
+                                    <GradientStop Color="#201A38" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#FF69B4" Offset="0"/>
+                                    <GradientStop Color="#9B59B6" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.BorderThickness>
+                                <Thickness>2</Thickness>
+                            </Border.BorderThickness>
+                            <StackPanel>
+                                <Border x:Name="LockdownImageBorder" CornerRadius="10" Margin="0,0,0,12"
+                                        BorderThickness="2" ClipToBounds="True">
+                                    <Border.Background>
+                                        <SolidColorBrush Color="#12FFFFFF"/>
+                                    </Border.Background>
+                                    <Border.BorderBrush>
+                                        <SolidColorBrush x:Name="LockdownImageBorderBrush" Color="#FF1493"/>
+                                    </Border.BorderBrush>
+                                    <Border.Effect>
+                                        <DropShadowEffect x:Name="LockdownImageGlow" Color="#FF1493" BlurRadius="12" ShadowDepth="0" Opacity="0.7"/>
+                                    </Border.Effect>
+                                    <Border.Triggers>
+                                        <EventTrigger RoutedEvent="Border.Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                                    <ColorAnimation Storyboard.TargetName="LockdownImageBorderBrush"
+                                                                    Storyboard.TargetProperty="Color"
+                                                                    From="#FF1493" To="#FF69B4" Duration="0:0:1.5"/>
+                                                    <DoubleAnimation Storyboard.TargetName="LockdownImageGlow"
+                                                                     Storyboard.TargetProperty="BlurRadius"
+                                                                     From="12" To="22" Duration="0:0:1.5"/>
+                                                    <DoubleAnimation Storyboard.TargetName="LockdownImageGlow"
+                                                                     Storyboard.TargetProperty="Opacity"
+                                                                     From="0.7" To="1.0" Duration="0:0:1.5"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Border.Triggers>
+                                    <Image Source="Resources/lockdown_icon.png" Stretch="Uniform"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                </Border>
+                                <TextBlock Text="Lockdown Mode" Foreground="White" FontWeight="Bold" FontSize="16" Margin="0,0,0,6"/>
+                                <TextBlock Text="Lock yourself into a timed conditioning session. No escape until the timer runs out."
+                                           Foreground="#808090" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                <!-- Setup Panel (visible when lockdown is NOT active) -->
+                                <StackPanel x:Name="LockdownSetupPanel">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <TextBlock Text="Duration:" Foreground="#808090" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <ComboBox x:Name="CmbLockdownDuration" Width="120" SelectedIndex="1"
+                                                  Background="#1A1A2E" Foreground="Black" FontSize="12" BorderBrush="#404060">
+                                            <ComboBoxItem Content="5 minutes" Tag="5" Foreground="Black"/>
+                                            <ComboBoxItem Content="10 minutes" Tag="10" Foreground="Black"/>
+                                            <ComboBoxItem Content="15 minutes" Tag="15" Foreground="Black"/>
+                                            <ComboBoxItem Content="30 minutes" Tag="30" Foreground="Black"/>
+                                            <ComboBoxItem Content="60 minutes" Tag="60" Foreground="Black"/>
+                                            <ComboBoxItem Content="2 hours" Tag="120" Foreground="Black"/>
+                                            <ComboBoxItem Content="4 hours" Tag="240" Foreground="Black"/>
+                                        </ComboBox>
+                                    </StackPanel>
+                                    <Button x:Name="BtnActivateLockdown" Content="Activate" Cursor="Hand"
+                                            Background="#FF69B4" Foreground="White" FontWeight="Bold" FontSize="12"
+                                            BorderThickness="0" Padding="12,8" HorizontalAlignment="Left"
+                                            Click="BtnActivateLockdown_Click">
+                                        <Button.Resources>
+                                            <Style TargetType="Border">
+                                                <Setter Property="CornerRadius" Value="8"/>
+                                            </Style>
+                                        </Button.Resources>
+                                    </Button>
+                                </StackPanel>
+
+                                <!-- Active Panel (visible when lockdown IS active) -->
+                                <StackPanel x:Name="LockdownActivePanel" Visibility="Collapsed">
+                                    <TextBlock Text="LOCKDOWN ACTIVE" Foreground="#DC143C" FontWeight="Bold" FontSize="14" Margin="0,0,0,6"/>
+                                    <TextBlock x:Name="TxtLockdownTimer" Text="00:00" Foreground="#DC143C" FontWeight="Bold" FontSize="28"
+                                               Margin="0,0,0,6" Cursor="Hand" MouseLeftButtonDown="TxtLockdownTimer_Click"/>
+                                    <TextBox x:Name="TxtLockdownExit" Visibility="Collapsed"
+                                             Background="#1A0A0A" Foreground="#DC143C" BorderBrush="#DC143C" BorderThickness="1"
+                                             FontSize="12" Padding="6,4" Margin="0,6,0,0"
+                                             KeyDown="TxtLockdownExit_KeyDown"/>
+                                </StackPanel>
+                            </StackPanel>
                         </Border>
-                    </StackPanel>
-                </Grid>
-            </Border>
+
+                        <!-- Placeholder Card 2 -->
+                        <Border Background="#12FFFFFF" CornerRadius="12" Margin="6" BorderBrush="#404060" BorderThickness="1">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                <TextBlock Text="Coming Soon" Foreground="#505070" FontSize="14" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Placeholder Card 3 -->
+                        <Border Background="#12FFFFFF" CornerRadius="12" Margin="6" BorderBrush="#404060" BorderThickness="1">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                <TextBlock Text="Coming Soon" Foreground="#505070" FontSize="14" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Placeholder Card 4 -->
+                        <Border Background="#12FFFFFF" CornerRadius="12" Margin="6" BorderBrush="#404060" BorderThickness="1">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                <TextBlock Text="Coming Soon" Foreground="#505070" FontSize="14" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+                </StackPanel>
+            </ScrollViewer>
         </ContentControl>
 
         <!-- Leaderboard Tab -->

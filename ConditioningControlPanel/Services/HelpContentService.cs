@@ -781,22 +781,29 @@ namespace ConditioningControlPanel.Services
                 SectionId = "KeywordTriggers",
                 Icon = "\u2328",
                 Title = "Keyword Triggers",
-                WhatItDoes = "Monitors your keyboard input and detects when you type specific keywords anywhere on your computer. " +
-                             "When a keyword is matched, it fires configured actions like audio cues, visual flashes, or haptic feedback. " +
-                             "Works globally across all applications.",
+                WhatItDoes = "Your everyday typing becomes part of your conditioning. Keywords you encounter while browsing, " +
+                             "chatting, or working can trigger audio, visuals, and haptic responses — blurring the line between " +
+                             "normal computer use and conditioning.\n\n" +
+                             "With Screen OCR enabled, even text that appears on your screen can fire triggers — you don't even " +
+                             "need to type it. The conditioning follows you everywhere on your computer.",
                 Tips = new List<string>
                 {
-                    "Add short, common words for more frequent triggers",
-                    "Use the Buffer Timeout to control how quickly keywords are detected after typing stops",
-                    "Increase the Global Cooldown if triggers are firing too often",
-                    "Session XP Boost rewards you extra XP when triggers fire during an active session",
-                    "Import existing triggers from Trigger Mode to get started quickly"
+                    "Start with words you encounter often — the more natural and unavoidable, the deeper it sinks in",
+                    "Use the Buffer Timeout to control detection speed — lower values catch words faster",
+                    "Increase the Global Cooldown if triggers are firing too often and becoming distracting",
+                    "Enable Screen OCR to extend triggers to any text visible on your screen — no escape",
+                    "Session XP Boost rewards extra XP when triggers fire during an active session",
+                    "Import existing triggers from Trigger Mode to get started quickly",
+                    "Pair keyword triggers with an active session for maximum conditioning immersion"
                 },
                 HowItWorks = "A low-level keyboard hook captures keystrokes system-wide and buffers them. " +
                              "After the buffer timeout expires (no new keystrokes), the buffered text is checked " +
                              "against your configured keyword list. If a match is found and the global cooldown " +
                              "has elapsed, the associated action fires. Each trigger can have its own action type " +
-                             "and individual cooldown."
+                             "and individual cooldown.\n\n" +
+                             "With Screen OCR enabled, periodic screenshots are processed by the Windows OCR engine " +
+                             "locally on your machine and matched against your keyword list. All processing happens " +
+                             "entirely on your device — no images or text are sent anywhere."
             },
 
             ["ScreenOcr"] = new HelpContent
@@ -825,21 +832,29 @@ namespace ConditioningControlPanel.Services
                 SectionId = "RemoteControl",
                 Icon = "\uD83D\uDCE1",
                 Title = "Remote Control",
-                WhatItDoes = "Allows another person to remotely control your app's effects from their phone or browser. " +
-                             "Enable it, share your session code, and they can trigger flashes, videos, overlays, " +
-                             "haptics, and more in real time.",
+                WhatItDoes = "Hand over control to someone you trust — surrendering control deepens the conditioning experience. " +
+                             "They get a mobile-friendly control panel to trigger flashes, videos, overlays, haptics, and more " +
+                             "on your screen in real time.\n\n" +
+                             "Permission tiers let you set boundaries:\n" +
+                             "\u2022 Light — Visual effects only (flashes, overlays)\n" +
+                             "\u2022 Standard — Adds videos and haptic feedback\n" +
+                             "\u2022 Full — Adds autonomy mode and screen lock\n\n" +
+                             "Privacy: The controller cannot see your screen, access your files, or view any personal information. " +
+                             "They can only trigger effects within your chosen permission tier.",
                 Tips = new List<string>
                 {
-                    "Choose a Permission Tier to control how much access the controller has",
-                    "Light tier allows flashes and overlays only — great for starting out",
-                    "The panic button is always available regardless of tier",
+                    "Start with Light tier to ease into giving up control, then work up as trust builds",
+                    "Use remote control during an active session for guided conditioning",
+                    "The panic button is always available regardless of tier — you're never truly trapped",
                     "Share the controller link or session code — they'll need one to connect",
-                    "Only one controller can be connected at a time"
+                    "Only one controller can be connected at a time",
+                    "The controller gets a clean, mobile-friendly page — no app install needed on their end"
                 },
                 HowItWorks = "When enabled, the app connects to a signaling server and generates a unique session code. " +
                              "The controller opens the web-based remote page and enters your code to connect. " +
                              "Commands are sent in real time and executed locally on your machine. " +
-                             "The permission tier limits which effects the controller can trigger."
+                             "The permission tier limits which effects the controller can trigger. " +
+                             "No screen sharing or file access is involved — the controller only sends commands."
             },
 
             ["Leaderboard"] = new HelpContent

@@ -83,6 +83,12 @@ namespace ConditioningControlPanel
         private bool _isCapturingPanicKey = false;
         private bool _exitRequested = false;
         private int _panicPressCount = 0;
+
+        // Lockdown mode
+        private int _lockdownTimerClickCount = 0;
+        private DateTime _lockdownTimerLastClick = DateTime.MinValue;
+        private Brush? _preLockdownWindowBg;
+        private Brush? _preLockdownTitleBarBg;
         private bool _isStreakFixMode = false;
         private DispatcherTimer? _remoteNotificationTimer;
         private DispatcherTimer? _remoteSessionInfoTimer;
@@ -214,6 +220,8 @@ namespace ConditioningControlPanel
             _trayIcon = new TrayIconService(this);
             _trayIcon.OnExitRequested += () =>
             {
+                if (App.Lockdown?.IsActive == true) return;
+
                 _exitRequested = true;
                 if (_isRunning) StopEngine();
 
@@ -250,7 +258,10 @@ namespace ConditioningControlPanel
             {
                 _keyboardHook.Start();
             }
-            
+
+            // Initialize lockdown mode event handlers
+            InitializeLockdown();
+
             // Subscribe to progression events for real-time XP updates
             App.Progression.XPChanged += OnXPChanged;
             App.Progression.LevelUp += OnLevelUp;
@@ -568,6 +579,10 @@ namespace ConditioningControlPanel
 
         private void OnGlobalKeyPressed(Key key)
         {
+            // Lockdown mode: block all key handling (panic key, etc.)
+            if (App.Lockdown?.IsActive == true)
+                return;
+
             // Track Alt+Tab for achievement (Player 2 Disconnected)
             if (key == Key.Tab && (Keyboard.IsKeyDown(Key.LeftAlt) || Keyboard.IsKeyDown(Key.RightAlt)))
             {
@@ -3331,6 +3346,344 @@ namespace ConditioningControlPanel
             }
         }
 
+        #region Lab
+
+        private void InitializeLockdown()
+        {
+            if (App.Lockdown == null) return;
+
+            App.Lockdown.LockdownActivated += OnLockdownActivated;
+            App.Lockdown.LockdownDeactivated += OnLockdownDeactivated;
+            App.Lockdown.CountdownTick += OnLockdownTick;
+        }
+
+        private void BtnActivateLockdown_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Lockdown == null) return;
+
+            // Get duration from combo box
+            var selectedItem = CmbLockdownDuration.SelectedItem as ComboBoxItem;
+            if (selectedItem?.Tag is not string minutesStr || !int.TryParse(minutesStr, out var minutes))
+                return;
+
+            var duration = TimeSpan.FromMinutes(minutes);
+
+            // Show double warning with clear consequences
+            var confirmed = WarningDialog.ShowDoubleWarning(this, "Lockdown Mode",
+                "- You will be LOCKED IN for " + minutes + " minutes\n" +
+                "- Strict Lock will be FORCED ON\n" +
+                "- Panic Key will be DISABLED\n" +
+                "- Alt+F4, Alt+Tab, Windows key, and Escape will be BLOCKED\n" +
+                "- You CANNOT close or minimize the application\n" +
+                "- The only escape is waiting for the timer to expire\n" +
+                "  (or Ctrl+Alt+Del → Task Manager as a safety valve)");
+
+            if (!confirmed) return;
+
+            App.Lockdown.Activate(duration);
+        }
+
+        private void OnLockdownActivated()
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    // Enable system key suppression on the keyboard hook
+                    if (_keyboardHook != null)
+                        _keyboardHook.SuppressSystemKeys = true;
+
+                    // Gray out strict lock and panic key toggles
+                    if (ChkStrictLock != null)
+                    {
+                        ChkStrictLock.IsEnabled = false;
+                        ChkStrictLock.Opacity = 0.4;
+                        ChkStrictLock.ToolTip = "YOU ARE IN LOCKDOWN MODE, THERE IS NO ESCAPE!";
+                    }
+                    if (ChkNoPanic != null)
+                    {
+                        ChkNoPanic.IsEnabled = false;
+                        ChkNoPanic.Opacity = 0.4;
+                        ChkNoPanic.ToolTip = "YOU ARE IN LOCKDOWN MODE, THERE IS NO ESCAPE!";
+                    }
+
+                    // Swap UI panels
+                    if (LockdownSetupPanel != null) LockdownSetupPanel.Visibility = Visibility.Collapsed;
+                    if (LockdownActivePanel != null) LockdownActivePanel.Visibility = Visibility.Visible;
+
+                    // Reset secret exit state
+                    _lockdownTimerClickCount = 0;
+                    if (TxtLockdownExit != null)
+                    {
+                        TxtLockdownExit.Visibility = Visibility.Collapsed;
+                        TxtLockdownExit.Text = "";
+                    }
+
+                    // Apply blood-red theme
+                    ApplyLockdownTheme();
+
+                    // Play activation flash animation
+                    PlayLockdownActivationAnimation();
+
+                    App.Logger?.Information("Lockdown UI activated");
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Error activating lockdown UI");
+                }
+            });
+        }
+
+        private void OnLockdownDeactivated()
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    // Disable system key suppression
+                    if (_keyboardHook != null)
+                        _keyboardHook.SuppressSystemKeys = false;
+
+                    // Restore strict lock and panic key toggles
+                    if (ChkStrictLock != null)
+                    {
+                        ChkStrictLock.IsEnabled = true;
+                        ChkStrictLock.Opacity = 1.0;
+                        ChkStrictLock.ToolTip = null;
+                    }
+                    if (ChkNoPanic != null)
+                    {
+                        ChkNoPanic.IsEnabled = true;
+                        ChkNoPanic.Opacity = 1.0;
+                        ChkNoPanic.ToolTip = null;
+                    }
+
+                    // Swap UI panels back
+                    if (LockdownSetupPanel != null) LockdownSetupPanel.Visibility = Visibility.Visible;
+                    if (LockdownActivePanel != null) LockdownActivePanel.Visibility = Visibility.Collapsed;
+
+                    // Hide secret exit
+                    if (TxtLockdownExit != null)
+                        TxtLockdownExit.Visibility = Visibility.Collapsed;
+
+                    // Restore normal theme
+                    RestoreLockdownTheme();
+
+                    App.Logger?.Information("Lockdown UI deactivated");
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Error deactivating lockdown UI");
+                }
+            });
+        }
+
+        private void OnLockdownTick(TimeSpan remaining)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (TxtLockdownTimer != null)
+                {
+                    if (remaining.TotalHours >= 1)
+                        TxtLockdownTimer.Text = remaining.ToString(@"h\:mm\:ss");
+                    else
+                        TxtLockdownTimer.Text = remaining.ToString(@"mm\:ss");
+                }
+            });
+        }
+
+        private void TxtLockdownTimer_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var now = DateTime.Now;
+
+            // Reset click count if more than 1 second since last click
+            if ((now - _lockdownTimerLastClick).TotalMilliseconds > 1000)
+                _lockdownTimerClickCount = 0;
+
+            _lockdownTimerLastClick = now;
+            _lockdownTimerClickCount++;
+
+            if (_lockdownTimerClickCount >= 5 && TxtLockdownExit != null)
+            {
+                TxtLockdownExit.Visibility = Visibility.Visible;
+                TxtLockdownExit.Focus();
+                _lockdownTimerClickCount = 0;
+            }
+        }
+
+        private void TxtLockdownExit_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter) return;
+
+            if (TxtLockdownExit != null)
+            {
+                var phrase = TxtLockdownExit.Text;
+                var success = App.Lockdown?.TryExitWithPhrase(phrase) ?? false;
+
+                if (!success)
+                {
+                    // Wrong phrase — clear and hide
+                    TxtLockdownExit.Text = "";
+                    TxtLockdownExit.Visibility = Visibility.Collapsed;
+                }
+            }
+        }
+
+        // --- Lockdown Theme ---
+
+        private static readonly Color LockdownCrimson = (Color)ColorConverter.ConvertFromString("#DC143C");
+        private static readonly Color LockdownDarkRed = (Color)ColorConverter.ConvertFromString("#8B0000");
+        private static readonly Color LockdownPanelBg = (Color)ColorConverter.ConvertFromString("#1A0A0A");
+        private static readonly Color LockdownWindowBg = (Color)ColorConverter.ConvertFromString("#100505");
+
+        private void ApplyLockdownTheme()
+        {
+            try
+            {
+                // Save current values for restoration
+                _preLockdownWindowBg = Background;
+                _preLockdownTitleBarBg = TitleBarBorder?.Background;
+
+                // Window background
+                Background = new SolidColorBrush(LockdownWindowBg);
+
+                // Title bar
+                if (TitleBarBorder != null)
+                    TitleBarBorder.Background = new SolidColorBrush(LockdownDarkRed);
+
+                // Player title and glow
+                if (TxtPlayerTitle != null)
+                {
+                    TxtPlayerTitle.Foreground = new SolidColorBrush(LockdownCrimson);
+                    if (TxtPlayerTitle.Effect is DropShadowEffect glow)
+                        glow.Color = LockdownCrimson;
+                }
+
+                // Header version
+                if (TxtHeaderVersion != null)
+                    TxtHeaderVersion.Foreground = new SolidColorBrush(LockdownCrimson);
+
+                // Level label
+                if (TxtLevelLabel != null)
+                    TxtLevelLabel.Foreground = new SolidColorBrush(LockdownCrimson);
+
+                // XP bar
+                if (XPBar != null)
+                    XPBar.Background = new SolidColorBrush(LockdownCrimson);
+
+                // Banner texts
+                if (TxtBannerPrimary != null)
+                    TxtBannerPrimary.Foreground = new SolidColorBrush(LockdownCrimson);
+                if (TxtBannerSecondary != null)
+                    TxtBannerSecondary.Foreground = new SolidColorBrush(LockdownCrimson);
+                if (TxtBannerTertiary != null)
+                    TxtBannerTertiary.Foreground = new SolidColorBrush(LockdownCrimson);
+
+                // Lockdown card border → red glow
+                if (LockdownCardBorder != null)
+                {
+                    LockdownCardBorder.BorderBrush = new SolidColorBrush(LockdownCrimson);
+                    LockdownCardBorder.Background = new SolidColorBrush(LockdownPanelBg);
+                }
+
+                // Update Application-level resource brushes (affects styled controls)
+                var res = Application.Current.Resources;
+                res["PinkBrush"] = new SolidColorBrush(LockdownCrimson);
+                res["DarkPinkBrush"] = new SolidColorBrush(LockdownDarkRed);
+                res["TransparentPinkBrush"] = new SolidColorBrush(Color.FromArgb(0x30, 0xDC, 0x14, 0x3C));
+                res["PinkButtonHoveredBrush"] = new SolidColorBrush(LockdownCrimson);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to apply lockdown theme");
+            }
+        }
+
+        private void RestoreLockdownTheme()
+        {
+            try
+            {
+                // Restore saved values
+                if (_preLockdownWindowBg != null)
+                    Background = _preLockdownWindowBg;
+                if (_preLockdownTitleBarBg != null && TitleBarBorder != null)
+                    TitleBarBorder.Background = _preLockdownTitleBarBg;
+
+                // Restore resource brushes from theme
+                var res = Application.Current.Resources;
+                res["PinkBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
+                res["DarkPinkBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF1493"));
+                res["TransparentPinkBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#30FF69B4"));
+                res["PinkButtonHoveredBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF8FAF"));
+
+                // Restore lockdown card to normal gradient border
+                if (LockdownCardBorder != null)
+                {
+                    var borderBrush = new LinearGradientBrush
+                    {
+                        StartPoint = new System.Windows.Point(0, 0),
+                        EndPoint = new System.Windows.Point(1, 1)
+                    };
+                    borderBrush.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#FF69B4"), 0));
+                    borderBrush.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#9B59B6"), 1));
+                    LockdownCardBorder.BorderBrush = borderBrush;
+
+                    var bgBrush = new LinearGradientBrush
+                    {
+                        StartPoint = new System.Windows.Point(0, 0),
+                        EndPoint = new System.Windows.Point(1, 1)
+                    };
+                    bgBrush.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#1A1A32"), 0));
+                    bgBrush.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#201A38"), 1));
+                    LockdownCardBorder.Background = bgBrush;
+                }
+
+                // Re-apply mode-aware theme colors
+                RefreshThemeAwareElements();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to restore lockdown theme");
+            }
+        }
+
+        private void PlayLockdownActivationAnimation()
+        {
+            try
+            {
+                // Create a full-screen red flash overlay
+                var flash = new System.Windows.Controls.Border
+                {
+                    Background = new SolidColorBrush(Color.FromArgb(180, 220, 20, 60)), // semi-transparent crimson
+                    IsHitTestVisible = false
+                };
+
+                RootGrid.Children.Add(flash);
+
+                // Fade out over 600ms
+                var fadeOut = new System.Windows.Media.Animation.DoubleAnimation
+                {
+                    From = 1.0,
+                    To = 0.0,
+                    Duration = TimeSpan.FromMilliseconds(600),
+                    EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+                };
+
+                fadeOut.Completed += (_, _) =>
+                {
+                    try { RootGrid.Children.Remove(flash); } catch { }
+                };
+
+                flash.BeginAnimation(OpacityProperty, fadeOut);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to play lockdown animation");
+            }
+        }
+
+        #endregion
+
         #region Leaderboard
 
         private async void LeaderboardColumnHeader_Click(object sender, RoutedEventArgs e)
@@ -3355,8 +3708,9 @@ namespace ConditioningControlPanel
 
                 if (sortField != null)
                 {
-                    // Server-side sort
+                    // Fetch fresh data then sort client-side (server always returns XP order)
                     await RefreshLeaderboardAsync(sortField);
+                    ApplyLeaderboardSort(sortField);
                 }
                 else if (headerText == "Name")
                 {
@@ -3466,7 +3820,8 @@ namespace ConditioningControlPanel
 
                 if (success)
                 {
-                    LstLeaderboard.ItemsSource = App.Leaderboard.Entries;
+                    // Apply client-side sort (server always returns XP order from sorted set)
+                    ApplyLeaderboardSort(sortBy ?? App.Leaderboard.CurrentSortBy);
                     TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users";
 
                     // Update season flavour text
@@ -3491,6 +3846,25 @@ namespace ConditioningControlPanel
             {
                 BtnRefreshLeaderboard.IsEnabled = true;
             }
+        }
+
+        private void ApplyLeaderboardSort(string sortBy)
+        {
+            if (App.Leaderboard?.Entries == null || LstLeaderboard == null) return;
+
+            var sorted = sortBy switch
+            {
+                "level" => App.Leaderboard.Entries.OrderByDescending(x => x.Level).ThenByDescending(x => x.Xp).ToList(),
+                "xp" => App.Leaderboard.Entries.OrderByDescending(x => x.Xp).ToList(),
+                "is_patreon" => App.Leaderboard.Entries.OrderByDescending(x => x.PatreonTier).ThenByDescending(x => x.Level).ToList(),
+                _ => App.Leaderboard.Entries.OrderByDescending(x => x.Xp).ToList()
+            };
+
+            // Re-number ranks
+            for (int i = 0; i < sorted.Count; i++)
+                sorted[i].Rank = i + 1;
+
+            LstLeaderboard.ItemsSource = sorted;
         }
 
         /// <summary>
@@ -13999,6 +14373,13 @@ namespace ConditioningControlPanel
 
         private void BtnExit_Click(object sender, RoutedEventArgs e)
         {
+            if (App.Lockdown?.IsActive == true)
+            {
+                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nTHERE IS NO ESCAPE!", "LOCKDOWN",
+                    MessageBoxButton.OK, MessageBoxImage.Stop);
+                return;
+            }
+
             if (_isRunning)
             {
                 var result = MessageBox.Show("Engine is running. Stop and exit?", "Confirm Exit",
@@ -14361,7 +14742,8 @@ namespace ConditioningControlPanel
                     Background = new SolidColorBrush(Color.FromRgb(42, 42, 74)), // #2A2A4A - matches stat pills
                     CornerRadius = new CornerRadius(10),
                     Padding = new Thickness(6, 3, 6, 3),
-                    Margin = new Thickness(0, 0, 8, 0)
+                    Margin = new Thickness(0, 0, 8, 0),
+                    ToolTip = GetBonusChipTooltip(source)
                 };
 
                 chip.Child = new TextBlock
@@ -14374,6 +14756,21 @@ namespace ConditioningControlPanel
 
                 XPBarBonusList.Children.Add(chip);
             }
+        }
+
+        private static string? GetBonusChipTooltip(string source)
+        {
+            if (source.StartsWith("Streak Power")) return "Skill tree bonus: +0.5% XP per day of consecutive use (max 15%)";
+            return source switch
+            {
+                "Sparkle Boost" => "Skill tree bonus: +10% XP from Sparkle Boost",
+                "Extra Sparkly" => "Skill tree bonus: +15% XP from Extra Sparkly (stacks with Sparkle Boost)",
+                "Maximum Sparkle" => "Skill tree bonus: +20% XP from Maximum Sparkle (stacks with other Sparkle skills)",
+                "Night Shift" => "Skill tree bonus: +50% XP for conditioning between 11 PM and 5 AM",
+                "Early Bird Bimbo" => "Skill tree bonus: +50% XP for conditioning between 5 AM and 8 AM",
+                "PINK RUSH ACTIVE!" => "Skill tree bonus: 3x XP multiplier! Random 60-second windows of boosted XP",
+                _ => null
+            };
         }
 
         /// <summary>
@@ -18895,6 +19292,13 @@ namespace ConditioningControlPanel
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
+            // Lockdown mode: block all close attempts
+            if (App.Lockdown?.IsActive == true)
+            {
+                e.Cancel = true;
+                return;
+            }
+
             // Only allow actual close if exit was explicitly requested
             if (_exitRequested)
             {
