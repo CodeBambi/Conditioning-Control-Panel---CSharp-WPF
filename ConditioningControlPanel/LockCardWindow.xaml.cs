@@ -32,6 +32,9 @@ namespace ConditioningControlPanel
         private static int _totalErrors = 0;
         private static int _totalCharsTyped = 0;
 
+        // Debounced focus reclaim — prevents rapid focus flickering that leaks keystrokes
+        private DispatcherTimer? _focusReclaimTimer;
+
         /// <summary>
         /// Check if any lock card window is currently open
         /// </summary>
@@ -97,24 +100,30 @@ namespace ConditioningControlPanel
             // Register this window
             _allWindows.Add(this);
 
-            // Reclaim focus when stolen by other windows (e.g., subliminal overlays)
-            // Only primary window needs keyboard focus for input
+            // Reclaim focus when lost — debounced to prevent rapid focus flickering
+            // that causes keystrokes to leak into other apps (e.g., Discord)
             if (_isPrimary)
             {
                 Deactivated += (s, e) =>
                 {
-                    // If game is still active and we lost focus, reclaim it immediately
-                    if (!_isCompleted)
+                    if (_isCompleted) return;
+
+                    // Stop any pending reclaim and restart the timer (debounce)
+                    _focusReclaimTimer?.Stop();
+                    _focusReclaimTimer = new DispatcherTimer
                     {
-                        Dispatcher.BeginInvoke(new Action(() =>
+                        Interval = TimeSpan.FromMilliseconds(500)
+                    };
+                    _focusReclaimTimer.Tick += (_, _) =>
+                    {
+                        _focusReclaimTimer?.Stop();
+                        if (!_isCompleted)
                         {
-                            if (!_isCompleted)
-                            {
-                                Activate();
-                                TxtInput.Focus();
-                            }
-                        }), System.Windows.Threading.DispatcherPriority.Input);
-                    }
+                            Activate();
+                            TxtInput.Focus();
+                        }
+                    };
+                    _focusReclaimTimer.Start();
                 };
             }
         }
@@ -337,6 +346,7 @@ namespace ConditioningControlPanel
             foreach (var window in _allWindows)
             {
                 window._isCompleted = true;
+                window._focusReclaimTimer?.Stop();
                 window.TxtInput.IsEnabled = false;
                 window.TxtHint.Visibility = Visibility.Collapsed;
                 window.CompletionPanel.Visibility = Visibility.Visible;
@@ -436,6 +446,7 @@ namespace ConditioningControlPanel
                 return;
             }
             
+            _focusReclaimTimer?.Stop();
             _closeTimer?.Stop();
             _allWindows.Remove(this);
             base.OnClosing(e);
