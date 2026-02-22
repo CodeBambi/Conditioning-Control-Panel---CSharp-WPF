@@ -22,7 +22,13 @@ public class AchievementService : IDisposable
     private DateTime _lastMindWipeCheck = DateTime.Now;
     
     public event EventHandler<Achievement>? AchievementUnlocked;
-    
+
+    /// <summary>
+    /// When true, TryUnlock still records achievements but suppresses popup notifications.
+    /// Used during post-login sync to silently restore cloud achievements.
+    /// </summary>
+    public bool SuppressPopups { get; set; }
+
     public AchievementProgress Progress => _progress;
     
     public AchievementService()
@@ -564,9 +570,12 @@ public class AchievementService : IDisposable
         _progress.Unlock(achievementId);
         _isDirty = true;
         Save(); // Save immediately on unlock
-        
-        App.Logger?.Information("🏆 Achievement unlocked: {Name} (ID: {Id})", achievement.Name, achievementId);
-        
+
+        App.Logger?.Information("🏆 Achievement unlocked: {Name} (ID: {Id}){Suppressed}", achievement.Name, achievementId,
+            SuppressPopups ? " (popup suppressed)" : "");
+
+        if (SuppressPopups) return true;
+
         // Fire event to show popup
         try
         {

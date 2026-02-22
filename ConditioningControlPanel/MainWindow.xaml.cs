@@ -2726,8 +2726,18 @@ namespace ConditioningControlPanel
                     await Task.Delay(500); // Let auth tokens settle
                     if (App.ProfileSync != null)
                     {
-                        await App.ProfileSync.SyncProfileAsync();
-                        await App.ProfileSync.LoadProfileAsync();
+                        // Suppress achievement popups during post-login sync
+                        // (achievements were just cleared and will be restored from cloud)
+                        if (App.Achievements != null) App.Achievements.SuppressPopups = true;
+                        try
+                        {
+                            await App.ProfileSync.SyncProfileAsync();
+                            await App.ProfileSync.LoadProfileAsync();
+                        }
+                        finally
+                        {
+                            if (App.Achievements != null) App.Achievements.SuppressPopups = false;
+                        }
 
                         // Refresh UI on the dispatcher thread after sync completes
                         Application.Current?.Dispatcher?.Invoke(() =>
@@ -4530,6 +4540,9 @@ namespace ConditioningControlPanel
                 BtnPatreonLogin.Content = hasUnifiedId ? "Link Patreon" : "Login";
             }
 
+            // AI Features lock overlay - hide when user is logged in (any provider)
+            AiFeaturesLockOverlay.Visibility = App.HasCloudIdentity ? Visibility.Collapsed : Visibility.Visible;
+
             // Update feature lockboxes
             // All features are now Tier 1 (or whitelisted)
             var hasPremiumAccess = App.Patreon?.HasPremiumAccess == true;
@@ -4538,12 +4551,6 @@ namespace ConditioningControlPanel
 
             // Master overlay for the entire features grid
             PatreonFeaturesOverlay.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
-
-            AiChatLocked.Visibility = level1Unlocked ? Visibility.Collapsed : Visibility.Visible;
-            AiChatUnlocked.Visibility = level1Unlocked ? Visibility.Visible : Visibility.Collapsed;
-
-            AwarenessLocked.Visibility = level2Unlocked ? Visibility.Collapsed : Visibility.Visible;
-            AwarenessUnlocked.Visibility = level2Unlocked ? Visibility.Visible : Visibility.Collapsed;
 
             // Haptics - unlock for all Patreon supporters
             var hasHapticsAccess = hasPremiumAccess;
@@ -4561,24 +4568,16 @@ namespace ConditioningControlPanel
             if (AutonomyLocked != null) AutonomyLocked.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
             if (AutonomyUnlocked != null) AutonomyUnlocked.Visibility = hasPremiumAccess ? Visibility.Visible : Visibility.Collapsed;
 
-            // Update connection status
+            // Update AI connection status
             if (TxtAiStatus != null)
             {
-                if (!isAuthenticated)
-                {
-                    TxtAiStatus.Text = "Login with Patreon to access AI features";
-                }
-                else if (hasPremiumAccess && App.Ai?.IsAvailable == true)
+                if (App.Ai?.IsAvailable == true)
                 {
                     TxtAiStatus.Text = $"AI Ready - {App.Ai.DailyRequestsRemaining} requests remaining today";
                 }
-                else if (hasPremiumAccess)
-                {
-                    TxtAiStatus.Text = "Patreon verified - AI service ready";
-                }
                 else
                 {
-                    TxtAiStatus.Text = "Subscribe to Level 1 ($5/mo) to unlock AI Chat";
+                    TxtAiStatus.Text = "AI initializing...";
                 }
             }
 
@@ -5251,9 +5250,9 @@ namespace ConditioningControlPanel
             SliderIdleIntervalCompanion.Value = settings.IdleGiggleIntervalSeconds;
             TxtIdleIntervalCompanion.Text = $"{settings.IdleGiggleIntervalSeconds}s";
 
-            // Awareness Mode settings (now Tier 1 / whitelisted)
-            var awarenessAvailable = App.Patreon?.HasPremiumAccess == true;
-            ChkAwarenessMode.IsChecked = awarenessAvailable && settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
+            // Awareness Mode settings (free for all users)
+            var awarenessAvailable = true;
+            ChkAwarenessMode.IsChecked = settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
             SliderAwarenessCooldown.Value = settings.AwarenessReactionCooldownSeconds;
             TxtAwarenessCooldown.Text = $"{settings.AwarenessReactionCooldownSeconds}s";
 
@@ -5448,18 +5447,6 @@ namespace ConditioningControlPanel
             if (_isLoading) return;
 
             var isEnabled = ChkAwarenessMode.IsChecked == true;
-
-            // Check Patreon access (Tier 1+ or whitelisted)
-            if (isEnabled && App.Patreon?.HasPremiumAccess != true)
-            {
-                ChkAwarenessMode.IsChecked = false;
-                MessageBox.Show(
-                    "Window Awareness requires Patreon subscription.",
-                    "Patreon Only",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-                return;
-            }
 
             // Show/hide awareness settings panel
             AwarenessSettingsPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
