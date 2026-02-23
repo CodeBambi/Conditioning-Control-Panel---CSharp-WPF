@@ -1406,6 +1406,8 @@ namespace ConditioningControlPanel.Services
             nameof(AppSettings.PatreonPremiumValidUntil),
             nameof(AppSettings.LastPatreonVerification),
             nameof(AppSettings.AuthToken),
+            nameof(AppSettings.CustomAssetsPath),
+            nameof(AppSettings.DiscordWebhookUrl),
         };
 
         /// <summary>

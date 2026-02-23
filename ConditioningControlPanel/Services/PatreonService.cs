@@ -488,8 +488,8 @@ namespace ConditioningControlPanel.Services
                 // Check if user needs to complete registration (choose display name)
                 NeedsRegistration = subscription.NeedsRegistration;
 
-                App.Logger?.Debug("Server whitelist check: Email={Email}, Whitelisted={Whitelisted}, NeedsRegistration={NeedsReg}",
-                    subscription.PatronEmail, userIsWhitelisted, subscription.NeedsRegistration);
+                App.Logger?.Debug("Server whitelist check: Whitelisted={Whitelisted}, NeedsRegistration={NeedsReg}",
+                    userIsWhitelisted, subscription.NeedsRegistration);
 
                 // Set unified user ID for cross-provider account linking
                 // Only set App.UnifiedUserId if not already set by another provider (to allow conflict detection)
@@ -575,8 +575,8 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
-                App.Logger?.Information("Patreon subscription validated: Tier={Tier}, ProxyActive={ProxyActive}, EffectiveActive={EffectiveActive}, Email={Email}, Whitelisted={Whitelisted}",
-                    newTier, subscription.IsActive, effectivelyActive, subscription.PatronEmail, userIsWhitelisted);
+                App.Logger?.Information("Patreon subscription validated: Tier={Tier}, ProxyActive={ProxyActive}, EffectiveActive={EffectiveActive}, Whitelisted={Whitelisted}",
+                    newTier, subscription.IsActive, effectivelyActive, userIsWhitelisted);
 
                 return newTier;
             }
@@ -650,7 +650,7 @@ namespace ConditioningControlPanel.Services
             // Log whitelist status
             if (IsWhitelisted)
             {
-                App.Logger?.Information("User {Email} is whitelisted - granting premium access", PatronEmail);
+                App.Logger?.Information("User is whitelisted - granting premium access");
             }
         }
 

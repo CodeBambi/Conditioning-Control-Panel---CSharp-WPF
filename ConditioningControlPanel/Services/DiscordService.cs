@@ -466,7 +466,7 @@ namespace ConditioningControlPanel.Services
                     CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours)
                 });
 
-                App.Logger?.Information("Discord user validated: {Username} ({Id}), NeedsRegistration={NeedsReg}", Username, UserId, user.NeedsRegistration);
+                App.Logger?.Information("Discord user validated: {Id}, NeedsRegistration={NeedsReg}", UserId, user.NeedsRegistration);
             }
             catch (Exception ex)
             {
