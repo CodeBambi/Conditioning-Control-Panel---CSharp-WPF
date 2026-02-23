@@ -89,7 +89,7 @@ namespace ConditioningControlPanel.Models
                 Name = "Slut Mode",
                 Description = "Explicit, horny, cock-obsessed",
                 IsBuiltIn = true,
-                RequiresPremium = true,
+                RequiresPremium = false,
                 PromptSettings = new CompanionPromptSettings
                 {
                     UseCustomPrompt = true,

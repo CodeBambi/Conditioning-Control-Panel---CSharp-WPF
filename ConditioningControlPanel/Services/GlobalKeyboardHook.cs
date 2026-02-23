@@ -21,6 +21,11 @@ public class GlobalKeyboardHook : IDisposable
     public event Action<Key>? KeyPressed;
     public event Action<Key, int>? KeyPressedWithVkCode;
 
+    /// <summary>
+    /// When true, suppresses system keys (Win, Alt+Tab, Alt+F4, Escape) for lockdown mode.
+    /// </summary>
+    public bool SuppressSystemKeys { get; set; }
+
     public GlobalKeyboardHook()
     {
         _proc = HookCallback;
@@ -55,7 +60,41 @@ public class GlobalKeyboardHook : IDisposable
         {
             int vkCode = Marshal.ReadInt32(lParam);
             var key = KeyInterop.KeyFromVirtualKey(vkCode);
-            
+
+            // Lockdown mode: suppress system/escape keys
+            // NOTE: Ctrl+Alt+Del is kernel-level and cannot be hooked — intentional safety valve
+            if (SuppressSystemKeys)
+            {
+                bool suppress = false;
+
+                // Windows keys (LWin=0x5B, RWin=0x5C)
+                if (vkCode == 0x5B || vkCode == 0x5C)
+                    suppress = true;
+
+                // Alt+anything (WM_SYSKEYDOWN = Alt held). Blocks Alt+Tab, Alt+F4, Alt+Esc, etc.
+                if (wParam == (IntPtr)WM_SYSKEYDOWN)
+                    suppress = true;
+
+                // Alt keys themselves (LMenu=0xA4, RMenu=0xA5) — block the press entirely
+                if (vkCode == 0xA4 || vkCode == 0xA5)
+                    suppress = true;
+
+                // Escape
+                if (vkCode == 0x1B)
+                    suppress = true;
+
+                // Ctrl+Shift+Esc (direct Task Manager shortcut)
+                if (vkCode == 0x1B && GetAsyncKeyState(0x11) < 0 && GetAsyncKeyState(0x10) < 0)
+                    suppress = true;
+
+                // Ctrl+Esc (opens Start menu)
+                if (vkCode == 0x1B && GetAsyncKeyState(0x11) < 0)
+                    suppress = true;
+
+                if (suppress)
+                    return (IntPtr)1;
+            }
+
             try
             {
                 KeyPressed?.Invoke(key);
@@ -93,6 +132,9 @@ public class GlobalKeyboardHook : IDisposable
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
 
     #endregion
 }

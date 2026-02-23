@@ -71,13 +71,6 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
-            // Check premium requirement
-            if (preset.RequiresPremium && App.Patreon?.HasPremiumAccess != true)
-            {
-                App.Logger?.Warning("PersonalityService: Premium required for preset: {Id}", presetId);
-                return false;
-            }
-
             // Update settings
             if (App.Settings?.Current != null)
             {

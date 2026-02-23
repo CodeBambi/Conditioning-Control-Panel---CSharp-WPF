@@ -1617,24 +1617,22 @@ namespace ConditioningControlPanel
             var clickCount = App.Achievements?.Progress.AvatarClickCount ?? 0;
             App.Logger?.Debug("Avatar clicked! Count: {Count}/20, RapidClicks: {RapidCount}/50", clickCount, _rapidClickTimestamps.Count);
 
-            // Double-click detection for activity comment / random thought
+            // Double-click detection — open chat input if AI available, otherwise activity comment
             if ((now - _lastClickTime).TotalMilliseconds < 300)
             {
-                // Don't trigger if a message is currently showing or we're waiting for AI
-                if (_isGiggling || _isWaitingForAi)
+                if (App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true)
+                {
+                    // Open the chat input panel (same as "Talk to" menu item)
+                    ShowInputPanel();
+                }
+                else if (_isGiggling || _isWaitingForAi)
                 {
                     App.Logger?.Debug("Skipping double-click - message still showing");
                 }
-                // Check cooldown (1.5 seconds)
                 else if ((now - _lastInteractionTime).TotalSeconds >= 1.5)
                 {
                     _lastInteractionTime = now;
-                    // Trigger context-aware comment or random AI thought
                     _ = TriggerActivityCommentAsync();
-                }
-                else
-                {
-                    App.Logger?.Debug("Interaction cooldown active (1.5s)");
                 }
             }
             _lastClickTime = now;
@@ -4618,14 +4616,7 @@ namespace ConditioningControlPanel
 
         private void MenuItemTalkToBambi_Click(object sender, RoutedEventArgs e)
         {
-            // Check Patreon access (AI chat requires Level 1+)
-            if (App.Patreon?.HasAiAccess != true)
-            {
-                Giggle("Patreon only~ *pouts*");
-                return;
-            }
-
-            // Show input panel for user to type to Bambi
+            // Show input panel for user to type to companion
             ShowInputPanel();
         }
 
@@ -4702,14 +4693,6 @@ namespace ConditioningControlPanel
                         : new SolidColorBrush(Colors.White)
                 };
 
-                // Check if locked (premium required but user doesn't have access)
-                if (preset.RequiresPremium && App.Patreon?.HasPremiumAccess != true)
-                {
-                    menuItem.Header = $"🔒 {preset.Name}";
-                    menuItem.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
-                    menuItem.IsEnabled = false;
-                }
-
                 menuItem.Click += PersonalityMenuItem_Click;
                 MenuItemPersonality.Items.Add(menuItem);
             }
@@ -4735,13 +4718,6 @@ namespace ConditioningControlPanel
             {
                 var preset = App.Personality?.GetPresetById(presetId);
                 if (preset == null) return;
-
-                // Check premium access
-                if (preset.RequiresPremium && App.Patreon?.HasPremiumAccess != true)
-                {
-                    Giggle("Patreon only~ *pouts*");
-                    return;
-                }
 
                 // Set the new personality
                 if (App.Personality?.SetActivePreset(presetId) == true)
@@ -4844,10 +4820,10 @@ namespace ConditioningControlPanel
         /// </summary>
         public void UpdateQuickMenuState()
         {
-            // Talk to companion (Patreon only) - mode-aware label
+            // Talk to companion - mode-aware label
             var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
             var talkToLabel = Models.ContentModeConfig.GetTalkToLabel(mode);
-            var chatAvailable = App.Patreon?.HasAiAccess == true;
+            var chatAvailable = App.Ai?.IsAvailable == true;
             MenuItemTalkToBambi.IsEnabled = chatAvailable;
             if (chatAvailable)
             {

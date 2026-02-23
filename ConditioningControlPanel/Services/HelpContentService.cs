@@ -646,14 +646,13 @@ namespace ConditioningControlPanel.Services
                 SectionId = "PatreonExclusives",
                 Icon = "\u2B50",
                 Title = "Patreon Exclusives",
-                WhatItDoes = "Premium features available to Patreon supporters. Unlock AI chat, window " +
-                             "awareness, haptic device integration, and more. Login with Patreon to " +
+                WhatItDoes = "Premium features available to Patreon supporters. Unlock Autonomy, Remote Control, " +
+                             "Keyword Triggers, haptic device integration, and more. Login with Patreon to " +
                              "activate your benefits.",
                 Tips = new List<string>
                 {
                     "Login with Patreon to unlock your tier benefits",
-                    "Different tiers unlock different features",
-                    "AI features require an active Patreon subscription",
+                    "AI Chat and Window Awareness are free for all users",
                     "Discord login enables additional community features",
                     "Benefits activate immediately after login"
                 },
@@ -670,7 +669,7 @@ namespace ConditioningControlPanel.Services
                 Title = "AI Chatbot",
                 WhatItDoes = "Have conversations with your AI companion! Double-click the avatar to open " +
                              "a chat window. The AI responds based on its personality and your conversation " +
-                             "history. A premium Patreon feature.",
+                             "history. Free for all users with a cloud identity.",
                 Tips = new List<string>
                 {
                     "Double-click the avatar to start chatting",
@@ -691,8 +690,8 @@ namespace ConditioningControlPanel.Services
                 Icon = "\uD83D\uDC41",
                 Title = "Window Awareness",
                 WhatItDoes = "Your companion reacts to what you're doing on your computer! It reads the " +
-                             "active window title and can comment on your activities. A premium Patreon " +
-                             "feature with privacy controls.",
+                             "active window title and can comment on your activities. Free for all users " +
+                             "with privacy controls.",
                 Tips = new List<string>
                 {
                     "The companion only sees window titles, not content",

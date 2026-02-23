@@ -22,44 +22,41 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.4";
+        public const string AppVersion = "5.6.6";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.4 - AI For All + Quality of Life
+        public const string CurrentPatchNotes = @"v5.6.6 - Security Hardening + AI for All
 
-🤖 AI NOW FREE FOR EVERYONE
-• AI Chat is now available to all users with a cloud identity — no Patreon required!
-• Window Awareness is now free for all users
-• Patreon supporters still get exclusive features: Autonomy, Remote Control, Keyword Triggers, Haptics, and more
+🛡️ SECURITY & PRIVACY
+• Strengthened authentication across all server endpoints
+• Added comprehensive request monitoring
+• Purged all stored billing names from the server as a precaution
+• Updated privacy policy with full data transparency
+• Full data export now available in Settings
 
-📋 BETTER HELP & GUIDES
-• Remote Control and Keyword Triggers now have richer in-app descriptions and help content
-• Permission tiers (Light / Standard / Full) explained in the Remote Control help panel
-• XP bar bonus chips now show tooltips explaining each bonus source
+🤖 AI FOR ALL
+• AI Chat is now FREE for all logged-in users
+• Window Awareness is now FREE for all users
+• All personality presets unlocked for everyone
+• No Patreon required, just log in
 
-🏆 LEADERBOARD FIX
-• Clicking 'Level' column now correctly sorts by level instead of XP
-• Rankings properly re-numbered after sorting
+🧪 THE LAB (Patreon T2)
+• New Lab tab with experimental features
+• Non-T2 users can preview behind a smokescreen
 
-⚖️ BALANCE
-• Bouncing text XP capped at 150 XP/min (was exploitable at 750+ XP/min)
+🔒 LOCKDOWN MODE (Lab)
+• Lock yourself into a timed conditioning session, no escape
+• Configurable from 5 minutes to 4 hours
 
-🐛 BUG FIXES
-• Fixed achievement popups spamming on every login (cloud sync no longer re-triggers old achievements)
-• Fixed companion quick controls (Mute Avatar) not saving between sessions
-• Fixed PhrasePreset dropdown showing type name instead of preset name
-• Fixed app not reopenable from Start Menu after tray minimize
-• Fixed UI-wide text blurriness caused by section panel drop shadows
-• Fixed lock card keystroke leakage into other apps (Discord, etc.)
-• Fixed dashboard showing logged-in state after individual provider logout
-
-🎮 OTHER
-• Remote control now shows controller idle status
-• Improved companion window rendering sharpness
-• Keyword triggers must now be started each session (no longer auto-starts)";
+📝 Some of you may have seen security concerns being raised
+online. A leaderboard bug briefly showed patreon display names
+as fallbacks, it was fixed a month ago but I should have
+communicated about it. Billing names were never exposed but
+I purged them from the server anyways. More context here:
+https://www.reddit.com/r/EroticHypnosis/comments/1rcii7n/";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

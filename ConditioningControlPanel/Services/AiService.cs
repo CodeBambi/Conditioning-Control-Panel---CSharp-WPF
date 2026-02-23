@@ -13,7 +13,7 @@ namespace ConditioningControlPanel.Services
     /// <summary>
     /// Handles AI-powered chat responses for the Bambi Companion widget.
     /// Uses hosted proxy that forwards to OpenRouter for roleplay.
-    /// Requires Patreon Level 1 or higher for AI chat features.
+    /// Free for all users with a cloud identity; falls back to Patreon auth.
     /// </summary>
     public class AiService : IDisposable
     {
@@ -26,8 +26,14 @@ namespace ConditioningControlPanel.Services
         // Circuit breaker tracking (client-side)
         private int _dailyRequestCount;
         private DateTime _lastResetDate;
-        private const int DailyLimit = 1000;
+        private const int FreeDailyLimit = 100;     // Free users (logged in, no Patreon)
+        private const int PatreonDailyLimit = 1000;  // Patreon supporters
         private const int MaxTokensHardCap = 100; // Hard cap on response tokens to control costs (~50 words, enough for video names)
+
+        /// <summary>
+        /// Effective daily limit based on user tier
+        /// </summary>
+        private int DailyLimit => App.Patreon?.HasAiAccess == true ? PatreonDailyLimit : FreeDailyLimit;
 
         // Fallback response when API unavailable or limit reached
         private static string GetFallbackResponse()
@@ -39,9 +45,9 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Whether AI is available (requires Patreon Level 1+ or whitelist)
+        /// Whether AI is available (cloud identity or Patreon access)
         /// </summary>
-        public bool IsAvailable => App.Patreon?.HasAiAccess == true;
+        public bool IsAvailable => App.HasCloudIdentity || App.Patreon?.HasAiAccess == true;
 
         /// <summary>
         /// Daily requests remaining (client-side tracking)
@@ -60,7 +66,7 @@ namespace ConditioningControlPanel.Services
             _lastResetDate = DateTime.Today;
             _dailyRequestCount = 0;
 
-            App.Logger?.Information("AiService initialized (proxy mode, requires Patreon Level 1+)");
+            App.Logger?.Information("AiService initialized (proxy mode, V2 auth or Patreon)");
         }
 
         /// <summary>
@@ -135,11 +141,11 @@ namespace ConditioningControlPanel.Services
                 return null;
             }
 
-            // Check Patreon access (tier 1+ or whitelisted)
-            if (App.Patreon?.HasAiAccess != true)
+            // Check access (cloud identity or Patreon)
+            if (!IsAvailable)
             {
-                App.Logger?.Warning("AiService: No AI access - Tier={Tier}, HasAiAccess={HasAi}, HasPremium={HasPremium}",
-                    App.Patreon?.CurrentTier, App.Patreon?.HasAiAccess, App.Patreon?.HasPremiumAccess);
+                App.Logger?.Debug("AiService: No AI access - HasCloudIdentity={Cloud}, HasAiAccess={HasAi}",
+                    App.HasCloudIdentity, App.Patreon?.HasAiAccess);
                 return null;
             }
 
@@ -158,36 +164,53 @@ namespace ConditioningControlPanel.Services
                 return null;
             }
 
-            // Get Patreon access token
-            var accessToken = App.Patreon?.GetAccessToken();
-            if (string.IsNullOrEmpty(accessToken))
-            {
-                App.Logger?.Warning("AiService: No Patreon access token available - IsAuthenticated={IsAuth}",
-                    App.Patreon?.IsAuthenticated);
-                return null;
-            }
-
             try
             {
                 _dailyRequestCount++;
 
-                // Build request for proxy
-                var request = new ProxyChatRequest
+                // Build messages array
+                var messages = new[]
                 {
-                    Messages = new[]
-                    {
-                        new ProxyChatMessage { Role = "system", Content = systemPrompt },
-                        new ProxyChatMessage { Role = "user", Content = userInput }
-                    },
-                    MaxTokens = MaxTokensHardCap,  // Hard capped to control costs (~25 words max)
-                    Temperature = 0.7
+                    new ProxyChatMessage { Role = "system", Content = systemPrompt },
+                    new ProxyChatMessage { Role = "user", Content = userInput }
                 };
 
-                // Add Patreon bearer token for authorization
-                _httpClient.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", accessToken);
+                HttpResponseMessage response;
 
-                var response = await _httpClient.PostAsJsonAsync("/ai/chat", request);
+                // Try V2 auth first (unified_id + X-Auth-Token) — free for all cloud users
+                var unifiedId = App.UnifiedUserId;
+                var authToken = App.Settings?.Current?.AuthToken;
+                if (!string.IsNullOrEmpty(unifiedId))
+                {
+                    var v2Request = new V2ChatRequest
+                    {
+                        UnifiedId = unifiedId,
+                        Messages = messages,
+                        MaxTokens = MaxTokensHardCap,
+                        Temperature = 0.7
+                    };
+
+                    using var v2Msg = new HttpRequestMessage(HttpMethod.Post, "/v2/ai/chat");
+                    if (!string.IsNullOrEmpty(authToken))
+                        v2Msg.Headers.TryAddWithoutValidation("X-Auth-Token", authToken);
+                    v2Msg.Content = JsonContent.Create(v2Request);
+
+                    response = await _httpClient.SendAsync(v2Msg);
+
+                    // If V2 endpoint not deployed yet (404), fall back to legacy Patreon auth
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    {
+                        App.Logger?.Debug("AiService: V2 endpoint not available, trying legacy auth");
+                        response.Dispose();
+                        response = await SendLegacyRequestAsync(messages);
+                        if (response == null) return null;
+                    }
+                }
+                else
+                {
+                    response = await SendLegacyRequestAsync(messages);
+                    if (response == null) return null;
+                }
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -274,6 +297,32 @@ namespace ConditioningControlPanel.Services
             }
 
             return sanitized;
+        }
+
+        /// <summary>
+        /// Sends AI request via legacy Patreon Bearer auth. Returns null if no Patreon token available.
+        /// </summary>
+        private async Task<HttpResponseMessage?> SendLegacyRequestAsync(ProxyChatMessage[] messages)
+        {
+            var accessToken = App.Patreon?.GetAccessToken();
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                App.Logger?.Warning("AiService: No auth method available (no Patreon token)");
+                return null;
+            }
+
+            var legacyRequest = new ProxyChatRequest
+            {
+                Messages = messages,
+                MaxTokens = MaxTokensHardCap,
+                Temperature = 0.7
+            };
+
+            using var legacyMsg = new HttpRequestMessage(HttpMethod.Post, "/ai/chat");
+            legacyMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            legacyMsg.Content = JsonContent.Create(legacyRequest);
+
+            return await _httpClient.SendAsync(legacyMsg);
         }
 
         public void Dispose()

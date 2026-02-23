@@ -329,13 +329,6 @@ namespace ConditioningControlPanel.Services
         {
             if (_isRunning || _isDisposed) return;
 
-            // Check Patreon access (Tier 1+ or whitelisted)
-            if (App.Patreon?.HasPremiumAccess != true)
-            {
-                App.Logger?.Debug("WindowAwareness: Not starting - Patreon Level 1+ or whitelist required");
-                return;
-            }
-
             // Check if feature is enabled and consent given
             if (App.Settings?.Current?.AwarenessModeEnabled != true ||
                 App.Settings?.Current?.AwarenessConsentGiven != true)

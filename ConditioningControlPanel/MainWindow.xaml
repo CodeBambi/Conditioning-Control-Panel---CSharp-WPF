@@ -1738,8 +1738,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.6.4 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.5.22 - Overlay &amp; Focus Fixes"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.6.6 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.6.6 - Security + AI for All"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -7311,6 +7311,7 @@
         </ContentControl>
         <!-- Lab Tab -->
         <ContentControl x:Name="LabTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+            <Grid>
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="20">
                     <!-- Header -->
@@ -7442,6 +7443,25 @@
                     </UniformGrid>
                 </StackPanel>
             </ScrollViewer>
+
+            <!-- Lab Smokescreen Overlay (Patreon T2 / Whitelist gate) -->
+            <Border x:Name="LabSmokescreen" Background="#CC1A1A2E" IsHitTestVisible="True" Visibility="Visible">
+                <Border Background="#20FFFFFF" CornerRadius="16" Padding="32,28" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        MaxWidth="360" BorderBrush="#60FF69B4" BorderThickness="1.5">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="30" ShadowDepth="0" Opacity="0.3"/>
+                    </Border.Effect>
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="&#x1F512;" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                        <Border Background="#30FF69B4" CornerRadius="8" Padding="12,4" HorizontalAlignment="Center" Margin="0,0,0,12">
+                            <TextBlock Text="Beta Testing" Foreground="#FF69B4" FontWeight="Bold" FontSize="14"/>
+                        </Border>
+                        <TextBlock Text="These experimental features are currently being tested by Patreon supporters."
+                                   Foreground="#B0B0C8" FontSize="13" TextWrapping="Wrap" TextAlignment="Center" LineHeight="20" Margin="0,0,0,4"/>
+                    </StackPanel>
+                </Border>
+            </Border>
+            </Grid>
         </ContentControl>
 
         <!-- Leaderboard Tab -->
