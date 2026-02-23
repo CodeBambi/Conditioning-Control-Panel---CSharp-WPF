@@ -209,6 +209,7 @@ namespace ConditioningControlPanel
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
         public static RemoteControlService RemoteControl { get; private set; } = null!;
         public static CompanionPhraseService CompanionPhrases { get; private set; } = null!;
+        public static LockdownService Lockdown { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with either Patreon or Discord (required for progression tracking)
@@ -642,6 +643,9 @@ namespace ConditioningControlPanel
             // Initialize content packs service
             ContentPacks = new ContentPackService();
 
+            // Initialize lockdown service (ephemeral — not persisted)
+            Lockdown = new LockdownService();
+
             // Initialize Patreon (validate subscription in background)
             // Then load cloud profile if authenticated
             _ = InitializePatreonAndSyncAsync();
@@ -806,6 +810,9 @@ namespace ConditioningControlPanel
                 Logger?.Information("Validating restored session for {Id}...", UnifiedUserId);
 
                 using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                var storedToken = Settings?.Current?.AuthToken;
+                if (!string.IsNullOrEmpty(storedToken))
+                    http.DefaultRequestHeaders.Add("X-Auth-Token", storedToken);
                 var body = new Newtonsoft.Json.Linq.JObject
                 {
                     ["unified_id"] = UnifiedUserId,
@@ -844,6 +851,15 @@ namespace ConditioningControlPanel
                         Logger?.Debug("Failed to parse restore-session auth token: {Error}", parseEx.Message);
                     }
                     Logger?.Information("Restored session validated successfully.");
+                }
+                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    Logger?.Warning("Restored session rejected (invalid token). Clearing auth token.");
+                    if (Settings?.Current != null)
+                    {
+                        Settings.Current.AuthToken = null;
+                        Settings.Save();
+                    }
                 }
                 else
                 {

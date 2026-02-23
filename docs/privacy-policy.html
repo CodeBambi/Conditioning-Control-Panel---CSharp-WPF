@@ -77,6 +77,10 @@
                     <li><strong>Email address</strong> &mdash; from your OAuth provider (Discord or Patreon)</li>
                     <li><strong>Discord ID / Patreon ID</strong> &mdash; used to link your account</li>
                     <li><strong>Patreon subscription tier</strong> &mdash; to verify premium access</li>
+                    <li><strong>Avatar URL</strong> &mdash; Discord profile picture, if you opt in to sharing it</li>
+                    <li><strong>Privacy preferences</strong> &mdash; online status visibility, profile picture sharing</li>
+                    <li><strong>Auth token hash</strong> &mdash; SHA-256 hash of your session token (not the plaintext token)</li>
+                    <li><strong>Timestamps</strong> &mdash; account creation, last seen, last synced, client version</li>
                 </ul>
 
                 <h3>Progression Data</h3>
@@ -85,12 +89,17 @@
                     <li>Level, XP, and seasonal statistics (flash clicks, video watches, bubble pops, etc.)</li>
                     <li>Achievement progress and unlock status</li>
                     <li>Quest completion data</li>
-                    <li>Skill tree selections</li>
-                    <li>Total conditioning minutes and companion progress</li>
+                    <li>Skill tree data (skill points and unlocked skills)</li>
+                    <li>Total lifetime conditioning minutes</li>
+                    <li>Companion AI progression (per-companion level and XP)</li>
+                    <li>All-time aggregate statistics across seasons</li>
                 </ul>
 
                 <h3>Settings Backup</h3>
                 <p>If you use the cloud settings backup feature, your application preferences are stored on the server so they can be restored on a fresh install.</p>
+
+                <h3>Anti-Cheat Data</h3>
+                <p>To maintain fair leaderboards, we monitor XP earning rates, session timing, and statistics consistency. Sessions are signed with HMAC to verify integrity. This data is used solely for detecting anomalies and is not shared with other users.</p>
 
                 <h3>What We Do NOT Collect</h3>
                 <ul>
@@ -98,6 +107,7 @@
                     <li>Content of your media files (images, videos, sounds stay local)</li>
                     <li>Browsing history or screen content</li>
                     <li>System information beyond what's needed for the app</li>
+                    <li>Patreon billing name &mdash; used transiently during login for verification but NOT stored on the server</li>
                 </ul>
             </section>
 
@@ -131,6 +141,10 @@
                         <tr>
                             <td>Settings backup/restore</td>
                             <td>Application preferences</td>
+                        </tr>
+                        <tr>
+                            <td>AI companion chat</td>
+                            <td>Messages sent to OpenRouter for AI responses (not stored on our server)</td>
                         </tr>
                     </tbody>
                 </table>
