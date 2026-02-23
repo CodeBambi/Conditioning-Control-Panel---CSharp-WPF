@@ -63,11 +63,6 @@ namespace ConditioningControlPanel.Services
         public bool IsVerifying { get; private set; }
 
         /// <summary>
-        /// Patron display name if available
-        /// </summary>
-        public string? PatronName { get; private set; }
-
-        /// <summary>
         /// Patron email if available (used for whitelist checking)
         /// </summary>
         public string? PatronEmail { get; private set; }
@@ -417,7 +412,7 @@ namespace ConditioningControlPanel.Services
                             : cachedState.Tier;
                         var cachedEffectivelyActive = cachedState.IsActive || cachedState.IsWhitelisted;
 
-                        UpdateTier(cachedEffectiveTier, cachedEffectivelyActive, cachedState.PatronName, cachedState.PatronEmail, cachedState.DisplayName);
+                        UpdateTier(cachedEffectiveTier, cachedEffectivelyActive, cachedState.PatronEmail, cachedState.DisplayName);
                         return CurrentTier;
                     }
                 }
@@ -493,8 +488,8 @@ namespace ConditioningControlPanel.Services
                 // Check if user needs to complete registration (choose display name)
                 NeedsRegistration = subscription.NeedsRegistration;
 
-                App.Logger?.Debug("Server whitelist check: Email={Email}, Name={Name}, Whitelisted={Whitelisted}, NeedsRegistration={NeedsReg}",
-                    subscription.PatronEmail, subscription.PatronName, userIsWhitelisted, subscription.NeedsRegistration);
+                App.Logger?.Debug("Server whitelist check: Email={Email}, Whitelisted={Whitelisted}, NeedsRegistration={NeedsReg}",
+                    subscription.PatronEmail, userIsWhitelisted, subscription.NeedsRegistration);
 
                 // Set unified user ID for cross-provider account linking
                 // Only set App.UnifiedUserId if not already set by another provider (to allow conflict detection)
@@ -522,7 +517,7 @@ namespace ConditioningControlPanel.Services
                 var newTier = effectivelyActive
                     ? (subscription.Tier > PatreonTier.None ? subscription.Tier : (userIsWhitelisted ? PatreonTier.Level2 : PatreonTier.Level1))
                     : PatreonTier.None;
-                UpdateTier(newTier, effectivelyActive, subscription.PatronName, subscription.PatronEmail);
+                UpdateTier(newTier, effectivelyActive, subscription.PatronEmail);
 
                 // Use DisplayName from server if available, otherwise preserve existing local one
                 // Also check Discord as a fallback (for linked accounts)
@@ -563,7 +558,6 @@ namespace ConditioningControlPanel.Services
                     IsActive = effectivelyActive,
                     LastVerified = DateTime.UtcNow,
                     CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours),
-                    PatronName = subscription.PatronName,
                     PatronEmail = subscription.PatronEmail,
                     DisplayName = effectiveDisplayName,
                     IsWhitelisted = userIsWhitelisted,
@@ -581,8 +575,8 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
-                App.Logger?.Information("Patreon subscription validated: Tier={Tier}, ProxyActive={ProxyActive}, EffectiveActive={EffectiveActive}, Name={Name}, Email={Email}, Whitelisted={Whitelisted}",
-                    newTier, subscription.IsActive, effectivelyActive, subscription.PatronName, subscription.PatronEmail, userIsWhitelisted);
+                App.Logger?.Information("Patreon subscription validated: Tier={Tier}, ProxyActive={ProxyActive}, EffectiveActive={EffectiveActive}, Email={Email}, Whitelisted={Whitelisted}",
+                    newTier, subscription.IsActive, effectivelyActive, subscription.PatronEmail, userIsWhitelisted);
 
                 return newTier;
             }
@@ -636,12 +630,11 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void UpdateTier(PatreonTier tier, bool isActive, string? patronName, string? patronEmail = null, string? displayName = null)
+        private void UpdateTier(PatreonTier tier, bool isActive, string? patronEmail = null, string? displayName = null)
         {
             var tierChanged = CurrentTier != tier;
             CurrentTier = tier;
             IsActivePatron = isActive;
-            PatronName = patronName;
             PatronEmail = patronEmail;
             // Only update DisplayName if provided (preserve existing)
             if (displayName != null)
@@ -832,7 +825,6 @@ namespace ConditioningControlPanel.Services
                         ? (cachedState.IsWhitelisted ? PatreonTier.Level2 : PatreonTier.Level1)
                         : cachedState.Tier;
                     IsActivePatron = effectivelyActive;
-                    PatronName = cachedState.PatronName;
                     PatronEmail = cachedState.PatronEmail;
                     DisplayName = cachedState.DisplayName;
 

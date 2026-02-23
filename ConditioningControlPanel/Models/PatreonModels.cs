@@ -90,10 +90,6 @@ namespace ConditioningControlPanel.Models
         [JsonPropertyName("patreon_user_id")]
         public string? PatreonUserId { get; set; }
 
-        [JsonProperty("patron_name")]
-        [JsonPropertyName("patron_name")]
-        public string? PatronName { get; set; }
-
         [JsonProperty("patron_email")]
         [JsonPropertyName("patron_email")]
         public string? PatronEmail { get; set; }
@@ -145,9 +141,6 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("cache_expires_at")]
         public DateTime CacheExpiresAt { get; set; }
 
-        [JsonProperty("patron_name")]
-        public string? PatronName { get; set; }
-
         [JsonProperty("patron_email")]
         public string? PatronEmail { get; set; }
 
@@ -193,14 +186,38 @@ namespace ConditioningControlPanel.Models
     }
 
     /// <summary>
+    /// V2 AI chat request using unified auth (free for all cloud users)
+    /// </summary>
+    public class V2ChatRequest
+    {
+        [JsonProperty("unified_id")]
+        [JsonPropertyName("unified_id")]
+        public string UnifiedId { get; set; } = string.Empty;
+
+        [JsonProperty("messages")]
+        [JsonPropertyName("messages")]
+        public ProxyChatMessage[] Messages { get; set; } = Array.Empty<ProxyChatMessage>();
+
+        [JsonProperty("max_tokens")]
+        [JsonPropertyName("max_tokens")]
+        public int MaxTokens { get; set; } = 60;
+
+        [JsonProperty("temperature")]
+        [JsonPropertyName("temperature")]
+        public double Temperature { get; set; } = 0.9;
+    }
+
+    /// <summary>
     /// Chat message for proxy request
     /// </summary>
     public class ProxyChatMessage
     {
         [JsonProperty("role")]
+        [JsonPropertyName("role")]
         public string Role { get; set; } = string.Empty;
 
         [JsonProperty("content")]
+        [JsonPropertyName("content")]
         public string Content { get; set; } = string.Empty;
     }
 

@@ -1621,9 +1621,6 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("user_id")]
             public string? UserId { get; set; }
 
-            [JsonProperty("patron_name")]
-            public string? PatronName { get; set; }
-
             [JsonProperty("profile")]
             public CloudProfile? Profile { get; set; }
         }

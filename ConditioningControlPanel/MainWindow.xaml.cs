@@ -4504,7 +4504,6 @@ namespace ConditioningControlPanel
             // Update login status
             if (isAuthenticated)
             {
-                var patronName = App.Patreon?.PatronName;
                 var patronEmail = App.Patreon?.PatronEmail;
                 var isWhitelisted = App.Patreon?.IsWhitelisted == true;
 
@@ -4512,12 +4511,8 @@ namespace ConditioningControlPanel
                 var unifiedDisplayName = App.Settings?.Current?.UserDisplayName;
                 var patreonDisplayName = App.Patreon?.DisplayName;
 
-                // Debug: Log what we're getting
-                App.Logger?.Debug("Patreon UI Update: UnifiedName={UnifiedName}, PatreonName={PatreonName}, Email={Email}, Tier={Tier}, Whitelisted={Whitelisted}",
-                    unifiedDisplayName, patronName, patronEmail, tier, isWhitelisted);
-
-                // Show unified DisplayName if available, otherwise Patreon display name, otherwise patron name
-                var nameToShow = unifiedDisplayName ?? patreonDisplayName ?? patronName;
+                // Show unified DisplayName if available, otherwise Patreon display name
+                var nameToShow = unifiedDisplayName ?? patreonDisplayName;
                 TxtPatreonStatus.Text = string.IsNullOrEmpty(nameToShow) ? "Connected to Patreon" : $"Welcome, {nameToShow}!";
                 TxtPatreonTier.Text = tier switch
                 {
@@ -5226,7 +5221,11 @@ namespace ConditioningControlPanel
 
         private void OnPatreonTierChanged(object? sender, PatreonTier tier)
         {
-            Dispatcher.Invoke(() => UpdatePatreonUI());
+            Dispatcher.Invoke(() =>
+            {
+                UpdatePatreonUI();
+                UpdateUnlockablesVisibility(App.Settings?.Current?.PlayerLevel ?? 1);
+            });
         }
 
         private void InitializePatreonTab()
@@ -14987,6 +14986,10 @@ namespace ConditioningControlPanel
                 if (BrainDrainLocked != null) BrainDrainLocked.Visibility = level70Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (BrainDrainUnlocked != null) BrainDrainUnlocked.Visibility = level70Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level70Unlocked);
+
+                // Lab Tab: Requires Patreon T2 / whitelist
+                var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2;
+                if (LabSmokescreen != null) LabSmokescreen.Visibility = labUnlocked ? Visibility.Collapsed : Visibility.Visible;
 
                 // Bambi Takeover: Requires Patreon (any tier)
                 var autonomyUnlocked = App.Patreon?.HasPremiumAccess == true;
