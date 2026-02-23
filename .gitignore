@@ -84,3 +84,13 @@ installer-output/
 
 # Admin reference (local only)
 ADMIN_ENDPOINTS.md
+
+# Sensitive files (admin tokens, config payloads)
+marquee.json
+banner.json
+update-marquee.ps1
+
+# Backup files (contain user data)
+backup_all_users*.json
+*leaderboard*.json
+nul
