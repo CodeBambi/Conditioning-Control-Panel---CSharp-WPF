@@ -447,9 +447,19 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.05, "Initializing logging...");
 
-            // Setup logging
-            var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
-            Directory.CreateDirectory(logPath);
+            // Setup logging - use UserDataPath (writable) instead of BaseDirectory (may be in Program Files)
+            string logPath;
+            try
+            {
+                logPath = Path.Combine(UserDataPath, "logs");
+                Directory.CreateDirectory(logPath);
+            }
+            catch
+            {
+                // Last resort fallback to temp directory if even UserDataPath fails
+                logPath = Path.Combine(Path.GetTempPath(), "ConditioningControlPanel", "logs");
+                try { Directory.CreateDirectory(logPath); } catch { }
+            }
 
             Logger = new LoggerConfiguration()
                 .MinimumLevel.Information() // Security: Changed from Debug to avoid exposing sensitive data in logs
@@ -1712,7 +1722,7 @@ namespace ConditioningControlPanel
                 Logger?.Error(ex, "UNHANDLED {Source} EXCEPTION: {Message}", source, ex.Message);
 
                 // Also write to dedicated crash log with full details
-                var crashLogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "crash.log");
+                var crashLogPath = Path.Combine(UserDataPath, "logs", "crash.log");
                 var crashInfo = $@"
 ================================================================================
 CRASH REPORT - {DateTime.Now:yyyy-MM-dd HH:mm:ss}

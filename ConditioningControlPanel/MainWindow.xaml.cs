@@ -18882,7 +18882,7 @@ namespace ConditioningControlPanel
 
         private void BtnViewLog_Click(object sender, RoutedEventArgs e)
         {
-            var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+            var logPath = Path.Combine(App.UserDataPath, "logs");
             if (Directory.Exists(logPath))
             {
                 Process.Start("explorer.exe", logPath);
