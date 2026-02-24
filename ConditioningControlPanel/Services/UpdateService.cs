@@ -22,41 +22,40 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.6";
+        public const string AppVersion = "5.6.7";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.6 - Security Hardening + AI for All
+        public const string CurrentPatchNotes = @"v5.6.7 - Security Transparency Update
 
-🛡️ SECURITY & PRIVACY
-• Strengthened authentication across all server endpoints
-• Added comprehensive request monitoring
-• Purged all stored billing names from the server as a precaution
-• Updated privacy policy with full data transparency
-• Full data export now available in Settings
+🛡️ SECURITY FIXES
+• All server endpoints now require authenticated sessions
+• Remote session endpoints secured with full auth validation
+• Admin endpoints hardened with timing-safe token verification
+• Rate limiting and request monitoring on all routes
+• CORS restricted to known origins
+• Request body size limits enforced
 
-🤖 AI FOR ALL
-• AI Chat is now FREE for all logged-in users
-• Window Awareness is now FREE for all users
-• All personality presets unlocked for everyone
-• No Patreon required, just log in
+🔒 DATA PRIVACY
+• All stored email addresses replaced with secure hashes
+• Whitelist migrated from source code to encrypted database
+• Git history scrubbed of any accidentally committed data
+• All server credentials rotated
+• Added Terms of Service page
 
-🧪 THE LAB (Patreon T2)
-• New Lab tab with experimental features
-• Non-T2 users can preview behind a smokescreen
+🛠️ FIXES & IMPROVEMENTS
+• Bubble pop volume slider added
+• Session subliminal phrases now respect content mode
+• Flash/video windows no longer steal focus
+• Restored server.js after git history cleanup
 
-🔒 LOCKDOWN MODE (Lab)
-• Lock yourself into a timed conditioning session, no escape
-• Configurable from 5 minutes to 4 hours
-
-📝 Some of you may have seen security concerns being raised
-online. A leaderboard bug briefly showed patreon display names
-as fallbacks, it was fixed a month ago but I should have
-communicated about it. Billing names were never exposed but
-I purged them from the server anyways. More context here:
-https://www.reddit.com/r/EroticHypnosis/comments/1rcii7n/";
+📝 A security researcher publicly disclosed several vulnerabilities
+in CCP. The concerns were valid — endpoints lacked proper auth,
+some data was committed to git history, and admin access wasn't
+properly secured. Everything was patched within 24 hours. Full
+details in the Discord announcement and on our website.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

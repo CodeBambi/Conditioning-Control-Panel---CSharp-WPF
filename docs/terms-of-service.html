@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service | Conditioning Control Panel</title>
+    <meta name="description" content="Terms of Service for Conditioning Control Panel — rules, responsibilities, and legal terms for using the application.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📜</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="guide-styles.css">
+</head>
+<body>
+    <div class="bg-animation"></div>
+
+    <nav>
+        <a href="index.html" class="logo">CCP</a>
+        <ul class="nav-links">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="guide.html">Guide</a></li>
+            <li><a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">GitHub</a></li>
+        </ul>
+        <div class="menu-toggle" onclick="toggleMenu()">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="index.html" onclick="toggleMenu()">Home</a>
+        <a href="guide.html" onclick="toggleMenu()">Guide</a>
+        <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank" onclick="toggleMenu()">GitHub</a>
+    </div>
+
+    <main class="guide-main">
+        <div class="guide-header">
+            <div class="breadcrumb">
+                <a href="index.html">Home</a>
+                <span>/</span>
+                <span>Terms of Service</span>
+            </div>
+            <h1>Terms of Service</h1>
+            <p>Rules and responsibilities for using Conditioning Control Panel</p>
+        </div>
+
+        <div class="guide-content">
+            <!-- Table of Contents -->
+            <div class="toc">
+                <h4>On This Page</h4>
+                <ul>
+                    <li><a href="#acceptance">Acceptance of Terms</a></li>
+                    <li><a href="#description">Description of Service</a></li>
+                    <li><a href="#accounts">Account Terms</a></li>
+                    <li><a href="#acceptable-use">Acceptable Use</a></li>
+                    <li><a href="#anti-cheat">Anti-Cheat Policy</a></li>
+                    <li><a href="#ai-disclaimer">AI Disclaimer</a></li>
+                    <li><a href="#intellectual-property">Intellectual Property</a></li>
+                    <li><a href="#warranties">Disclaimer of Warranties</a></li>
+                    <li><a href="#liability">Limitation of Liability</a></li>
+                    <li><a href="#termination">Termination</a></li>
+                    <li><a href="#changes">Changes to Terms</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                </ul>
+            </div>
+
+            <section id="acceptance">
+                <h2>Acceptance of Terms</h2>
+                <p>By downloading, installing, or using Conditioning Control Panel ("CCP", "the application"), you agree to be bound by these Terms of Service. If you do not agree to these terms, do not use the application.</p>
+                <p>These terms apply to all users of the application, including those who use it without an account (offline mode) and those who connect to cloud services.</p>
+            </section>
+
+            <section id="description">
+                <h2>Description of Service</h2>
+                <p>Conditioning Control Panel is a <strong>free, open-source</strong> desktop application for Windows that provides conditioning and hypnosis tools. The application includes features such as flash images, video playback, subliminal overlays, an AI companion, achievement system, and progression tracking.</p>
+                <p>Optional <strong>premium features</strong> are available to users who support the project through <a href="https://www.patreon.com/CodeBambi" target="_blank">Patreon</a>. Cloud features (sync, leaderboards, remote sessions) require signing in with Discord or Patreon.</p>
+                <p>The service is provided on a best-effort basis. We do not guarantee uptime, availability, or uninterrupted access to cloud features.</p>
+            </section>
+
+            <section id="accounts">
+                <h2>Account Terms</h2>
+                <ul>
+                    <li>Accounts are created by signing in through <strong>Discord</strong> or <strong>Patreon</strong> OAuth. We do not manage passwords.</li>
+                    <li>You are responsible for maintaining the security of the accounts you use to sign in.</li>
+                    <li>You must not share your account or session tokens with others.</li>
+                    <li>You must not create multiple accounts to circumvent bans, rate limits, or anti-cheat measures.</li>
+                    <li>You are responsible for all activity that occurs under your account.</li>
+                </ul>
+            </section>
+
+            <section id="acceptable-use">
+                <h2>Acceptable Use</h2>
+                <p>You agree not to:</p>
+                <ul>
+                    <li><strong>Abuse cloud services</strong> &mdash; do not spam API endpoints, attempt to overload the server, or exploit vulnerabilities.</li>
+                    <li><strong>Harass others</strong> &mdash; do not use remote sessions, leaderboards, or any social features to harass, stalk, or target other users.</li>
+                    <li><strong>Reverse engineer cloud services</strong> &mdash; while the client is open source, you may not probe, scrape, or reverse engineer the server infrastructure beyond what the public API provides.</li>
+                    <li><strong>Impersonate others</strong> &mdash; do not use display names or profile information to impersonate other users or project maintainers.</li>
+                    <li><strong>Circumvent access controls</strong> &mdash; do not bypass Patreon tier checks, rate limits, or other restrictions.</li>
+                </ul>
+            </section>
+
+            <section id="anti-cheat">
+                <h2>Anti-Cheat Policy</h2>
+                <p>CCP includes server-side anti-cheat measures to ensure fair leaderboards and progression integrity. These measures include:</p>
+                <ul>
+                    <li>XP earning rate limits and consistency checks</li>
+                    <li>Session timing and idle detection</li>
+                    <li>HMAC-signed session data verified server-side</li>
+                    <li>Statistics validation and anomaly detection</li>
+                </ul>
+
+                <div class="info-box warning">
+                    <h5>Consequences</h5>
+                    <p>Manipulation of XP, statistics, levels, or leaderboard standings may result in stat resets, temporary suspension, or permanent account termination at our discretion.</p>
+                </div>
+            </section>
+
+            <section id="ai-disclaimer">
+                <h2>AI Disclaimer</h2>
+                <p>The AI companion feature is powered by third-party language models via <a href="https://openrouter.ai" target="_blank">OpenRouter</a>. Please be aware that:</p>
+                <ul>
+                    <li>AI responses are generated by external models and may be <strong>inaccurate, inappropriate, or unexpected</strong>.</li>
+                    <li>The AI companion is for <strong>entertainment purposes only</strong> and does not provide professional, medical, psychological, or legal advice.</li>
+                    <li>Messages you send to the AI companion are processed by third-party services subject to their own privacy policies.</li>
+                    <li>We do not control, endorse, or guarantee the content generated by AI models.</li>
+                </ul>
+            </section>
+
+            <section id="intellectual-property">
+                <h2>Intellectual Property</h2>
+                <h3>Application Code</h3>
+                <p>Conditioning Control Panel is open-source software released under the <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/blob/main/LICENSE" target="_blank">MIT License</a>. You are free to use, modify, and distribute the source code in accordance with that license.</p>
+
+                <h3>User Content</h3>
+                <p>Any media files (images, videos, audio) you use with the application remain your property. CCP does not claim ownership over user-provided content.</p>
+            </section>
+
+            <section id="warranties">
+                <h2>Disclaimer of Warranties</h2>
+                <p>The application and all associated cloud services are provided <strong>"as is"</strong> and <strong>"as available"</strong> without warranties of any kind, whether express or implied, including but not limited to implied warranties of merchantability, fitness for a particular purpose, and non-infringement.</p>
+                <p>We do not warrant that the application will be error-free, secure, or available at all times. You use the application at your own risk.</p>
+            </section>
+
+            <section id="liability">
+                <h2>Limitation of Liability</h2>
+                <p>To the maximum extent permitted by applicable law, CodeBambi and any contributors to the project shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or any loss of data, use, or profits, arising out of or related to your use of the application.</p>
+                <p>This limitation applies regardless of the theory of liability (contract, tort, strict liability, or otherwise), even if we have been advised of the possibility of such damages.</p>
+            </section>
+
+            <section id="termination">
+                <h2>Termination</h2>
+                <p>We reserve the right to suspend or terminate your access to cloud services at any time, with or without notice, for conduct that we determine violates these terms or is harmful to other users or the project.</p>
+                <p>Upon termination, your right to access cloud features ceases immediately. The offline functionality of the application is not affected by account termination.</p>
+                <p>You may delete your account at any time through the application's Settings tab. See our <a href="privacy-policy.html">Privacy Policy</a> for details on data deletion.</p>
+            </section>
+
+            <section id="changes">
+                <h2>Changes to Terms</h2>
+                <p>We may update these Terms of Service from time to time. Changes will be reflected on this page with an updated revision date. Continued use of the application after changes are posted constitutes acceptance of the revised terms.</p>
+                <p>For significant changes, we may notify users through the application's update banner or Discord server.</p>
+            </section>
+
+            <section id="contact">
+                <h2>Contact</h2>
+                <p>If you have questions about these terms:</p>
+                <ul>
+                    <li><strong>GitHub Issues:</strong> <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/issues" target="_blank">Open an issue</a></li>
+                    <li><strong>Discord:</strong> <a href="https://discord.gg/YxVAMt4qaZ" target="_blank">Join the Discord server</a></li>
+                </ul>
+
+                <p><em>Last updated: February 2026</em></p>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-links">
+            <a href="index.html">Home</a>
+            <a href="guide.html">Guide</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF">GitHub</a>
+            <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases">Releases</a>
+            <a href="https://www.patreon.com/CodeBambi">Patreon</a>
+            <a href="privacy-policy.html">Privacy Policy</a>
+            <a href="terms-of-service.html">Terms of Service</a>
+        </div>
+        <p class="footer-tagline">Good girls condition daily</p>
+        <p class="footer-copy">&copy; 2025-2026 CodeBambi. Open source under MIT License.</p>
+    </footer>
+
+    <script>
+        function toggleMenu() {
+            const toggle = document.querySelector('.menu-toggle');
+            const menu = document.getElementById('mobileMenu');
+            toggle.classList.toggle('active');
+            menu.classList.toggle('active');
+            document.body.style.overflow = menu.classList.contains('active') ? 'hidden' : '';
+        }
+    </script>
+</body>
+</html>
