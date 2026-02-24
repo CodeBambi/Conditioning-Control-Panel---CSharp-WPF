@@ -798,10 +798,12 @@ namespace ConditioningControlPanel.Services
                         current.SubliminalPool[key] = false;
                     }
 
-                    // Add/enable session phrases
+                    // Add/enable session phrases (mode-aware: transform Bambi triggers for SissyHypno mode)
+                    var contentMode = App.Settings?.Current?.ContentMode ?? ContentMode.BambiSleep;
                     foreach (var phrase in settings.SubliminalPhrases)
                     {
-                        current.SubliminalPool[phrase] = true;
+                        var modePhrase = Session.MakeModeAware(phrase, contentMode);
+                        current.SubliminalPool[modePhrase] = true;
                     }
 
                     App.Logger?.Information("Session: Using subliminal phrases: {Phrases}",

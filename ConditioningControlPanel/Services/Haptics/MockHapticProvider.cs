@@ -87,6 +87,7 @@ namespace ConditioningControlPanel.Services.Haptics
                     System.Windows.Media.Color.FromArgb(230, 255, 105, 180)),
                 Topmost = true,
                 ShowInTaskbar = false,
+                ShowActivated = false,
                 ResizeMode = ResizeMode.NoResize
             };
 

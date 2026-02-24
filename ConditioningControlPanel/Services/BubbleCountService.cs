@@ -359,6 +359,7 @@ public class BubbleCountService : IDisposable
                     Background = Brushes.Black,
                     Topmost = true,
                     ShowInTaskbar = false,
+                    ShowActivated = false,
                     WindowStartupLocation = WindowStartupLocation.Manual,
                     Left = screen.Bounds.X + 100,
                     Top = screen.Bounds.Y + 100,

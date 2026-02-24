@@ -1738,8 +1738,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.6.6 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.6.6 - Security + AI for All"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.6.7 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.6.7 - Security Transparency Update"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -3743,6 +3743,19 @@
                                             Margin="10,0" ValueChanged="SliderBubbleFreq_Changed"
                                             ToolTip="Bubble spawn rate"/>
                                     <TextBlock x:Name="TxtBubbleFreq" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="5"/>
+                                </Grid>
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="40"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="Volume"
+                                               ToolTip="Volume of bubble pop sounds"/>
+                                    <Slider Grid.Column="1" x:Name="SliderBubbleVolume" Minimum="0" Maximum="100" Value="50"
+                                            Margin="10,0" ValueChanged="SliderBubbleVolume_Changed"
+                                            ToolTip="Bubble pop sound volume"/>
+                                    <TextBlock x:Name="TxtBubbleVolume" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="50%"/>
                                 </Grid>
                             </StackPanel>
                             </Grid>

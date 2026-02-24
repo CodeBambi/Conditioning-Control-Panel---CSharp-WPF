@@ -94,7 +94,7 @@ namespace ConditioningControlPanel.Models
         /// <summary>
         /// Replaces Bambi-specific references with generic equivalents for SH mode.
         /// </summary>
-        private static string MakeModeAware(string text, ContentMode mode)
+        internal static string MakeModeAware(string text, ContentMode mode)
         {
             if (string.IsNullOrEmpty(text) || mode == ContentMode.BambiSleep) return text;
 

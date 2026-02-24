@@ -631,6 +631,7 @@ namespace ConditioningControlPanel.Services
                 WindowStyle = WindowStyle.None,
                 Topmost = true,
                 ShowInTaskbar = false,
+                ShowActivated = false,
                 Background = System.Windows.Media.Brushes.Black,
                 ResizeMode = ResizeMode.NoResize
             };
