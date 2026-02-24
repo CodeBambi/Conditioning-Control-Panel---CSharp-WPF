@@ -4504,7 +4504,6 @@ namespace ConditioningControlPanel
             // Update login status
             if (isAuthenticated)
             {
-                var patronEmail = App.Patreon?.PatronEmail;
                 var isWhitelisted = App.Patreon?.IsWhitelisted == true;
 
                 // Use unified display name first (what user chose), then fall back to Patreon-specific
@@ -13932,6 +13931,7 @@ namespace ConditioningControlPanel
             SliderPinkOpacity.Value = s.PinkFilterOpacity;
             ChkBubblesEnabled.IsChecked = s.BubblesEnabled;
             SliderBubbleFreq.Value = s.BubblesFrequency;
+            SliderBubbleVolume.Value = s.BubblesVolume;
             ChkLockCardEnabled.IsChecked = s.LockCardEnabled;
             SliderLockCardFreq.Value = s.LockCardFrequency;
             SliderLockCardRepeats.Value = s.LockCardRepeats;
@@ -14160,6 +14160,7 @@ namespace ConditioningControlPanel
             if (TxtSpiralOpacity != null) TxtSpiralOpacity.Text = $"{(int)SliderSpiralOpacity.Value}%";
             if (TxtPinkOpacity != null) TxtPinkOpacity.Text = $"{(int)SliderPinkOpacity.Value}%";
             if (TxtBubbleFreq != null) TxtBubbleFreq.Text = ((int)SliderBubbleFreq.Value).ToString();
+            if (TxtBubbleVolume != null) TxtBubbleVolume.Text = $"{(int)SliderBubbleVolume.Value}%";
             if (TxtLockCardFreq != null) TxtLockCardFreq.Text = ((int)SliderLockCardFreq.Value).ToString();
             if (TxtLockCardRepeats != null) TxtLockCardRepeats.Text = $"{(int)SliderLockCardRepeats.Value}x";
             if (TxtBouncingTextSize != null) TxtBouncingTextSize.Text = $"{(int)SliderBouncingTextSize.Value}%";
@@ -15268,6 +15269,14 @@ namespace ConditioningControlPanel
                 App.Bubbles.RefreshFrequency();
             }
 
+            App.Settings.Save();
+        }
+
+        private void SliderBubbleVolume_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtBubbleVolume == null) return;
+            TxtBubbleVolume.Text = $"{(int)e.NewValue}%";
+            App.Settings.Current.BubblesVolume = (int)e.NewValue;
             App.Settings.Save();
         }
 

@@ -60,11 +60,6 @@ namespace ConditioningControlPanel.Services
         public string? Avatar { get; private set; }
 
         /// <summary>
-        /// Discord email (if scope granted)
-        /// </summary>
-        public string? Email { get; private set; }
-
-        /// <summary>
         /// Whether the user is authenticated with Discord
         /// </summary>
         public bool IsAuthenticated => _tokenStorage.HasValidTokens();
@@ -451,7 +446,6 @@ namespace ConditioningControlPanel.Services
                 Username = user.Username;
                 DisplayName = user.DisplayName;
                 Avatar = user.Avatar;
-                Email = user.Email;
                 NeedsRegistration = user.NeedsRegistration;
 
                 // Cache result for 24 hours
@@ -461,7 +455,6 @@ namespace ConditioningControlPanel.Services
                     Username = user.Username,
                     GlobalName = user.GlobalName,
                     Avatar = user.Avatar,
-                    Email = user.Email,
                     LastVerified = DateTime.UtcNow,
                     CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours)
                 });
@@ -522,7 +515,6 @@ namespace ConditioningControlPanel.Services
             Username = cachedState.Username;
             DisplayName = cachedState.DisplayName;
             Avatar = cachedState.Avatar;
-            Email = cachedState.Email;
             CustomDisplayName = cachedState.CustomDisplayName;
         }
 
@@ -532,7 +524,6 @@ namespace ConditioningControlPanel.Services
             Username = null;
             DisplayName = null;
             Avatar = null;
-            Email = null;
             CustomDisplayName = null;
         }
 

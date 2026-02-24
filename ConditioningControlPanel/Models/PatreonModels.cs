@@ -90,10 +90,6 @@ namespace ConditioningControlPanel.Models
         [JsonPropertyName("patreon_user_id")]
         public string? PatreonUserId { get; set; }
 
-        [JsonProperty("patron_email")]
-        [JsonPropertyName("patron_email")]
-        public string? PatronEmail { get; set; }
-
         [JsonProperty("display_name")]
         [JsonPropertyName("display_name")]
         public string? DisplayName { get; set; }
@@ -140,9 +136,6 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("cache_expires_at")]
         public DateTime CacheExpiresAt { get; set; }
-
-        [JsonProperty("patron_email")]
-        public string? PatronEmail { get; set; }
 
         /// <summary>
         /// Custom display name chosen by user on first login (can only be set once)

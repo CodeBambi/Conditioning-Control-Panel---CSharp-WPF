@@ -85,10 +85,6 @@ namespace ConditioningControlPanel.Models
         [JsonPropertyName("avatar")]
         public string? Avatar { get; set; }
 
-        [JsonProperty("email")]
-        [JsonPropertyName("email")]
-        public string? Email { get; set; }
-
         [JsonProperty("verified")]
         [JsonPropertyName("verified")]
         public bool Verified { get; set; }
@@ -140,9 +136,6 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("avatar")]
         public string? Avatar { get; set; }
-
-        [JsonProperty("email")]
-        public string? Email { get; set; }
 
         [JsonProperty("custom_display_name")]
         public string? CustomDisplayName { get; set; }

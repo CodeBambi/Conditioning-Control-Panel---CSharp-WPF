@@ -150,9 +150,6 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("name")]
             public string? Name { get; set; }
 
-            [JsonProperty("email")]
-            public string? Email { get; set; }
-
             [JsonProperty("tier")]
             public int Tier { get; set; }
 

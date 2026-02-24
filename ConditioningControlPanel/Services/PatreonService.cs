@@ -63,11 +63,6 @@ namespace ConditioningControlPanel.Services
         public bool IsVerifying { get; private set; }
 
         /// <summary>
-        /// Patron email if available (used for whitelist checking)
-        /// </summary>
-        public string? PatronEmail { get; private set; }
-
-        /// <summary>
         /// Custom display name chosen by user on first login
         /// </summary>
         public string? DisplayName { get; set; }
@@ -412,7 +407,7 @@ namespace ConditioningControlPanel.Services
                             : cachedState.Tier;
                         var cachedEffectivelyActive = cachedState.IsActive || cachedState.IsWhitelisted;
 
-                        UpdateTier(cachedEffectiveTier, cachedEffectivelyActive, cachedState.PatronEmail, cachedState.DisplayName);
+                        UpdateTier(cachedEffectiveTier, cachedEffectivelyActive, cachedState.DisplayName);
                         return CurrentTier;
                     }
                 }
@@ -421,7 +416,7 @@ namespace ConditioningControlPanel.Services
                 var tokens = _tokenStorage.RetrieveTokens();
                 if (tokens == null)
                 {
-                    UpdateTier(PatreonTier.None, false, null);
+                    UpdateTier(PatreonTier.None, false);
                     return PatreonTier.None;
                 }
 
@@ -431,13 +426,13 @@ namespace ConditioningControlPanel.Services
                     var refreshed = await RefreshTokensAsync(tokens.RefreshToken);
                     if (!refreshed)
                     {
-                        UpdateTier(PatreonTier.None, false, null);
+                        UpdateTier(PatreonTier.None, false);
                         return PatreonTier.None;
                     }
                     tokens = _tokenStorage.RetrieveTokens();
                     if (tokens == null)
                     {
-                        UpdateTier(PatreonTier.None, false, null);
+                        UpdateTier(PatreonTier.None, false);
                         return PatreonTier.None;
                     }
                 }
@@ -461,7 +456,7 @@ namespace ConditioningControlPanel.Services
                     else
                     {
                         _tokenStorage.ClearTokens();
-                        UpdateTier(PatreonTier.None, false, null);
+                        UpdateTier(PatreonTier.None, false);
                         return PatreonTier.None;
                     }
                 }
@@ -517,7 +512,7 @@ namespace ConditioningControlPanel.Services
                 var newTier = effectivelyActive
                     ? (subscription.Tier > PatreonTier.None ? subscription.Tier : (userIsWhitelisted ? PatreonTier.Level2 : PatreonTier.Level1))
                     : PatreonTier.None;
-                UpdateTier(newTier, effectivelyActive, subscription.PatronEmail);
+                UpdateTier(newTier, effectivelyActive);
 
                 // Use DisplayName from server if available, otherwise preserve existing local one
                 // Also check Discord as a fallback (for linked accounts)
@@ -558,7 +553,6 @@ namespace ConditioningControlPanel.Services
                     IsActive = effectivelyActive,
                     LastVerified = DateTime.UtcNow,
                     CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours),
-                    PatronEmail = subscription.PatronEmail,
                     DisplayName = effectiveDisplayName,
                     IsWhitelisted = userIsWhitelisted,
                     UnifiedId = subscription.UnifiedId
@@ -630,12 +624,11 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void UpdateTier(PatreonTier tier, bool isActive, string? patronEmail = null, string? displayName = null)
+        private void UpdateTier(PatreonTier tier, bool isActive, string? displayName = null)
         {
             var tierChanged = CurrentTier != tier;
             CurrentTier = tier;
             IsActivePatron = isActive;
-            PatronEmail = patronEmail;
             // Only update DisplayName if provided (preserve existing)
             if (displayName != null)
             {
@@ -825,7 +818,6 @@ namespace ConditioningControlPanel.Services
                         ? (cachedState.IsWhitelisted ? PatreonTier.Level2 : PatreonTier.Level1)
                         : cachedState.Tier;
                     IsActivePatron = effectivelyActive;
-                    PatronEmail = cachedState.PatronEmail;
                     DisplayName = cachedState.DisplayName;
 
                     // Restore unified user ID (don't overwrite if another provider already set it)
@@ -874,7 +866,7 @@ namespace ConditioningControlPanel.Services
                 App.Settings.Save(); // Force save immediately
             }
 
-            UpdateTier(PatreonTier.None, false, null);
+            UpdateTier(PatreonTier.None, false);
             App.Logger?.Information("Patreon logout completed, all premium access cleared");
         }
 
