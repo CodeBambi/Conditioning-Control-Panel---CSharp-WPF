@@ -22,13 +22,13 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.7";
+        public const string AppVersion = "5.6.8";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.7 - Security Transparency Update
+        public const string CurrentPatchNotes = @"v5.6.8 - Security Transparency Update
 
 🛡️ SECURITY FIXES
 • All server endpoints now require authenticated sessions
@@ -51,6 +51,7 @@ namespace ConditioningControlPanel.Services
 • Flash/video windows no longer steal focus
 • Fixed Knowledge Link dialog buttons being cut off
 • Fixed progress reset on login (cloud profile now loads before syncing)
+• Fixed remote control sessions failing (missing auth token after security hardening)
 • Restored server.js after git history cleanup
 
 📝 A security researcher publicly disclosed several vulnerabilities
