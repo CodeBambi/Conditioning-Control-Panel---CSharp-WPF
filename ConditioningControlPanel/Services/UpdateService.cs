@@ -49,6 +49,7 @@ namespace ConditioningControlPanel.Services
 • Bubble pop volume slider added
 • Session subliminal phrases now respect content mode
 • Flash/video windows no longer steal focus
+• Fixed Knowledge Link dialog buttons being cut off
 • Restored server.js after git history cleanup
 
 📝 A security researcher publicly disclosed several vulnerabilities
