@@ -2731,8 +2731,12 @@ namespace ConditioningControlPanel
                         if (App.Achievements != null) App.Achievements.SuppressPopups = true;
                         try
                         {
-                            await App.ProfileSync.SyncProfileAsync();
+                            // IMPORTANT: Load FIRST, then sync. ClearProgressionData() zeroed local data,
+                            // so we must restore from cloud before syncing UP — otherwise we'd push
+                            // level=1/xp=0 to the server, which can permanently erase progress if the
+                            // server also has low values (e.g. right after migration/season reset).
                             await App.ProfileSync.LoadProfileAsync();
+                            await App.ProfileSync.SyncProfileAsync();
                         }
                         finally
                         {
