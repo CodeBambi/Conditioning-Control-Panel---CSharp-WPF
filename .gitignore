@@ -91,6 +91,24 @@ banner.json
 update-marquee.ps1
 
 # Backup files (contain user data)
-backup_all_users*.json
+backup_*.json
 *leaderboard*.json
+lb_*.json
+
+# Temp scripts and data dumps (often contain tokens/PII)
+tmp_*
+find_*.js
+merge_*.js
+fix_*.js
+scan_*.js
+bulk_*.js
+cleanup_*.js
+investigate_*.js
+check_*.js
+reset_*.js
+set_force_*.js
+
+# Environment and secrets
+*.env
+*.env.*
 nul
