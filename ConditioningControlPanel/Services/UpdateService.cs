@@ -50,6 +50,7 @@ namespace ConditioningControlPanel.Services
 • Session subliminal phrases now respect content mode
 • Flash/video windows no longer steal focus
 • Fixed Knowledge Link dialog buttons being cut off
+• Fixed progress reset on login (cloud profile now loads before syncing)
 • Restored server.js after git history cleanup
 
 📝 A security researcher publicly disclosed several vulnerabilities
