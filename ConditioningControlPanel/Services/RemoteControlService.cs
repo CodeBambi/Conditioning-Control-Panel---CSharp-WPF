@@ -63,6 +63,22 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Creates a POST request with the X-Auth-Token header attached.
+        /// All V2 endpoints require authentication.
+        /// </summary>
+        private async Task<HttpResponseMessage> AuthPostAsync(string url, string jsonBody)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+            };
+            var token = App.Settings?.Current?.AuthToken;
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Add("X-Auth-Token", token);
+            return await _httpClient.SendAsync(request);
+        }
+
+        /// <summary>
         /// Starts a remote control session with the given tier.
         /// </summary>
         public async Task<string?> StartSessionAsync(string tier)
@@ -77,9 +93,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 var body = JsonConvert.SerializeObject(new { unified_id = unifiedId, tier });
-                var response = await _httpClient.PostAsync(
-                    $"{ProxyBaseUrl}/v2/remote/start",
-                    new StringContent(body, Encoding.UTF8, "application/json"));
+                var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/start", body);
 
                 var json = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
@@ -126,9 +140,7 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     var body = JsonConvert.SerializeObject(new { unified_id = unifiedId });
-                    await _httpClient.PostAsync(
-                        $"{ProxyBaseUrl}/v2/remote/stop",
-                        new StringContent(body, Encoding.UTF8, "application/json"));
+                    await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/stop", body);
                 }
                 catch (Exception ex)
                 {
@@ -178,9 +190,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 var body = JsonConvert.SerializeObject(new { unified_id = unifiedId });
-                var response = await _httpClient.PostAsync(
-                    $"{ProxyBaseUrl}/v2/remote/poll",
-                    new StringContent(body, Encoding.UTF8, "application/json"));
+                var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/poll", body);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -300,9 +310,7 @@ namespace ConditioningControlPanel.Services
                     session_info = sessionInfo
                 });
 
-                await _httpClient.PostAsync(
-                    $"{ProxyBaseUrl}/v2/remote/status",
-                    new StringContent(body, Encoding.UTF8, "application/json"));
+                await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/status", body);
             }
             catch (Exception ex)
             {
