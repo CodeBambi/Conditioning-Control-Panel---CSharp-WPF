@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services
 {
@@ -93,6 +94,9 @@ namespace ConditioningControlPanel.Services
                         // The cloud level may be higher than the local level, and we don't want to
                         // incorrectly disable features. Validation happens after cloud sync completes.
 
+                        // Migrate plaintext auth_token from settings.json to DPAPI-encrypted storage
+                        MigrateAuthToken(json);
+
                         // Merge any new default subliminal triggers that were added in updates
                         MergeNewDefaultSubliminalTriggers(settings);
 
@@ -112,6 +116,36 @@ namespace ConditioningControlPanel.Services
             WasSettingsFileMissing = true;
             App.Logger?.Information("Using default settings (fresh install detected)");
             return new AppSettings();
+        }
+
+        /// <summary>
+        /// Migrate plaintext auth_token from settings.json to DPAPI-encrypted storage.
+        /// Runs once — after migration, auth_token is removed from the JSON file on next save.
+        /// </summary>
+        private void MigrateAuthToken(string rawJson)
+        {
+            try
+            {
+                var obj = JObject.Parse(rawJson);
+                var token = obj["auth_token"]?.ToString();
+                if (!string.IsNullOrEmpty(token))
+                {
+                    // Only migrate if encrypted store is empty (don't overwrite a newer token)
+                    if (string.IsNullOrEmpty(SecureAuthTokenStore.Retrieve()))
+                    {
+                        SecureAuthTokenStore.Store(token);
+                        App.Logger?.Information("Migrated auth token from plaintext settings to DPAPI-encrypted storage");
+                    }
+
+                    // Re-save settings to strip the plaintext auth_token from the JSON file
+                    // (AuthToken is now [JsonIgnore] so it won't be written back)
+                    Save();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Auth token migration failed: {Error}", ex.Message);
+            }
         }
 
         /// <summary>

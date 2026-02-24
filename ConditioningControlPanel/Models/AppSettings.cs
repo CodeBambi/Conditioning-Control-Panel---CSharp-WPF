@@ -2335,15 +2335,15 @@ namespace ConditioningControlPanel.Models
             set { _unifiedId = value; OnPropertyChanged(); }
         }
 
-        private string? _authToken = null;
         /// <summary>
         /// Server-issued auth token for V2 API requests. Rotated on each auth event.
+        /// Stored in DPAPI-encrypted file, NOT in settings.json.
         /// </summary>
-        [JsonProperty("auth_token")]
+        [JsonIgnore]
         public string? AuthToken
         {
-            get => _authToken;
-            set { _authToken = value; OnPropertyChanged(); }
+            get => Services.SecureAuthTokenStore.Retrieve();
+            set { Services.SecureAuthTokenStore.Store(value); OnPropertyChanged(); }
         }
 
         private string? _userDisplayName = null;
