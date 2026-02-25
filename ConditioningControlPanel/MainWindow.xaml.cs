@@ -18549,10 +18549,22 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    // External packs open in browser (e.g. MEGA link)
+                    // External packs: fetch URL via authenticated endpoint, then open in browser
                     if (pack.IsExternal)
                     {
-                        Process.Start(new ProcessStartInfo(pack.ExternalUrl!) { UseShellExecute = true });
+                        try
+                        {
+                            var externalUrl = pack.ExternalUrl ?? await App.ContentPacks!.GetExternalPackDownloadUrlAsync(pack.Id);
+                            if (!string.IsNullOrEmpty(externalUrl))
+                            {
+                                Process.Start(new ProcessStartInfo(externalUrl) { UseShellExecute = true });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Error(ex, "Failed to get external pack URL for {PackId}", pack.Id);
+                            MessageBox.Show($"Failed to get download link: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        }
                         return;
                     }
 

@@ -17,6 +17,12 @@ namespace ConditioningControlPanel.Services
         private static readonly HttpClient _http = new();
         private const string SERVER_URL = "https://codebambi-proxy.vercel.app";
 
+        static V2AuthService()
+        {
+            _http.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
+            _http.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
+        }
+
         #region Response Models
 
         public class V2AuthResponse

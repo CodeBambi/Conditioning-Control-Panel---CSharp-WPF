@@ -44,6 +44,8 @@ public class LeaderboardService : IDisposable
     public LeaderboardService()
     {
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
 
         // Auto-refresh every 30 minutes (server caches leaderboard in memory for 30s)
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };

@@ -72,6 +72,8 @@ public class QuestDefinitionService : IDisposable
     public QuestDefinitionService()
     {
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
 
         // Set up cache directories
         var appDataPath = Path.Combine(

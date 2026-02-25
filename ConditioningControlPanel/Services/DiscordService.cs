@@ -113,6 +113,8 @@ namespace ConditioningControlPanel.Services
                 BaseAddress = new Uri(ProxyBaseUrl),
                 Timeout = TimeSpan.FromSeconds(30)
             };
+            _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
 
             // Load cached state on startup
             LoadCachedState();

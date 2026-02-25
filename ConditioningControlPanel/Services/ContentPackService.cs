@@ -86,6 +86,8 @@ namespace ConditioningControlPanel.Services
         {
             _httpClient = new HttpClient();
             _httpClient.Timeout = TimeSpan.FromMinutes(30); // Allow long downloads for large packs
+            _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
 
             // Use hidden folder in user's chosen assets folder (where they want heavy files)
             _packsFolder = Path.Combine(App.EffectiveAssetsPath, ".packs");
@@ -633,6 +635,28 @@ namespace ConditioningControlPanel.Services
                 packId, successResponse.RateLimit?.Remaining ?? -1);
 
             return successResponse.DownloadUrl;
+        }
+
+        /// <summary>
+        /// Gets the authenticated download URL for an external pack (e.g. Mega.nz).
+        /// Requires Patreon authentication. Returns null if not authenticated.
+        /// </summary>
+        public async Task<string?> GetExternalPackDownloadUrlAsync(string packId)
+        {
+            if (App.Patreon == null || !App.Patreon.IsAuthenticated)
+            {
+                AuthenticationRequired?.Invoke(this, "Please log in with Patreon to download content packs.\nA free Patreon account gives you 10 GB/month — no payment needed!");
+                return null;
+            }
+
+            var accessToken = App.Patreon.GetAccessToken();
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                AuthenticationRequired?.Invoke(this, "Your Patreon session has expired. Please log in again.");
+                return null;
+            }
+
+            return await GetSignedDownloadUrlAsync(packId, accessToken);
         }
 
         /// <summary>

@@ -128,7 +128,15 @@ namespace ConditioningControlPanel.Models
             set { _externalUrl = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsExternal)); OnPropertyChanged(nameof(ShowExternalButtons)); OnPropertyChanged(nameof(DownloadButtonText)); }
         }
 
-        public bool IsExternal => !string.IsNullOrEmpty(ExternalUrl);
+        private bool _isExternalFlag;
+        [JsonProperty("isExternal")]
+        public bool IsExternalFlag
+        {
+            get => _isExternalFlag;
+            set { _isExternalFlag = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsExternal)); OnPropertyChanged(nameof(ShowExternalButtons)); OnPropertyChanged(nameof(DownloadButtonText)); }
+        }
+
+        public bool IsExternal => _isExternalFlag || !string.IsNullOrEmpty(ExternalUrl);
         public bool ShowExternalButtons => IsExternal && !IsDownloaded;
 
         private string _version = "1.0.0";

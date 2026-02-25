@@ -60,6 +60,8 @@ namespace ConditioningControlPanel.Services
             {
                 Timeout = TimeSpan.FromSeconds(15)
             };
+            _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
         }
 
         /// <summary>

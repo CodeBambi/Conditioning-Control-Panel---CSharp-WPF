@@ -18,6 +18,12 @@ public static class AccountService
     private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
     private static readonly HttpClient _httpClient = new() { Timeout = TimeSpan.FromSeconds(30) };
 
+    static AccountService()
+    {
+        _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
+    }
+
     /// <summary>
     /// Handle post-authentication flow for any provider.
     /// This is called after OAuth completes to check for existing account and prompt for registration if needed.

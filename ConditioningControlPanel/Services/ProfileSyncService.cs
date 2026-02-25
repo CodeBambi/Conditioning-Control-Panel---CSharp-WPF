@@ -71,6 +71,8 @@ namespace ConditioningControlPanel.Services
             {
                 Timeout = TimeSpan.FromSeconds(30)
             };
+            _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
         }
 
         #region Heartbeat
