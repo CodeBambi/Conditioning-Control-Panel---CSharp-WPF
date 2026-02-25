@@ -353,6 +353,7 @@ public class BubbleCountService : IDisposable
 
             foreach (var screen in screens)
             {
+                var dpiScale = BubbleCountWindow.GetDpiForScreen(screen);
                 var win = new Window
                 {
                     WindowStyle = WindowStyle.None,
@@ -361,8 +362,8 @@ public class BubbleCountService : IDisposable
                     ShowInTaskbar = false,
                     ShowActivated = false,
                     WindowStartupLocation = WindowStartupLocation.Manual,
-                    Left = screen.Bounds.X + 100,
-                    Top = screen.Bounds.Y + 100,
+                    Left = (screen.Bounds.X + 100) / dpiScale,
+                    Top = (screen.Bounds.Y + 100) / dpiScale,
                     Width = 400,
                     Height = 300,
                     Content = new TextBlock

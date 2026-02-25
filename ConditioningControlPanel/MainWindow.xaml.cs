@@ -12321,7 +12321,8 @@ namespace ConditioningControlPanel
 
             // Stats from local data
             var level = App.Settings?.Current?.PlayerLevel ?? 1;
-            var xp = App.Settings?.Current?.PlayerXP ?? 0;
+            var localXp = App.Settings?.Current?.PlayerXP ?? 0;
+            var xp = App.Progression?.GetTotalXP(level, localXp) ?? localXp;
             var progress = App.Achievements?.Progress;
 
             if (TxtProfileViewerLevel != null) TxtProfileViewerLevel.Text = level.ToString();
@@ -12358,7 +12359,7 @@ namespace ConditioningControlPanel
             {
                 var unlocked = App.Achievements?.GetUnlockedCount() ?? 0;
                 var total = Models.Achievement.All.Values.Count;
-                TxtProfileViewerAchievements.Text = $"{unlocked}/{total}";
+                TxtProfileViewerAchievements.Text = $"{unlocked} / {total}";
             }
 
             // Patreon badge - use settings tier (works for Discord-only login with linked Patreon)
@@ -13941,6 +13942,7 @@ namespace ConditioningControlPanel
             SliderLockCardRepeats.Value = s.LockCardRepeats;
             ChkLockCardStrict.IsChecked = s.LockCardStrict;
             ChkBubbleCountEnabled.IsChecked = s.BubbleCountEnabled;
+            ChkBubbleCountStrict.IsChecked = s.BubbleCountStrictLock;
             ChkBouncingTextEnabled.IsChecked = s.BouncingTextEnabled;
 
             // Mind Wipe
@@ -16644,32 +16646,31 @@ namespace ConditioningControlPanel
             dialog.ShowDialog();
         }
 
-        private void ChkLockCardStrict_Checked(object sender, RoutedEventArgs e)
+        private void ChkLockCardStrict_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
 
-            // Show warning
-            var confirmed = WarningDialog.ShowDoubleWarning(this,
-                "Strict Lock Card",
-                "• You will NOT be able to escape lock cards with ESC\n" +
-                "• You MUST type the phrase the required number of times\n" +
-                "• This can be very restrictive!");
+            var isEnabled = ChkLockCardStrict.IsChecked ?? false;
 
-            if (!confirmed)
+            // Show warning when enabling strict mode
+            if (isEnabled)
             {
-                ChkLockCardStrict.IsChecked = false;
-            }
-            else
-            {
-                App.Settings.Current.LockCardStrict = true;
-                App.Settings?.Save();
-            }
-        }
+                var confirmed = WarningDialog.ShowDoubleWarning(this,
+                    "Strict Lock Card",
+                    "• You will NOT be able to escape lock cards with ESC\n" +
+                    "• You MUST type the phrase the required number of times\n" +
+                    "• This can be very restrictive!");
 
-        private void ChkLockCardStrict_Unchecked(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            App.Settings.Current.LockCardStrict = false;
+                if (!confirmed)
+                {
+                    _isLoading = true;
+                    ChkLockCardStrict.IsChecked = false;
+                    _isLoading = false;
+                    return;
+                }
+            }
+
+            App.Settings.Current.LockCardStrict = isEnabled;
             App.Settings?.Save();
         }
 
@@ -18926,54 +18927,59 @@ namespace ConditioningControlPanel
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
-        private void ChkStrictLock_Checked(object sender, RoutedEventArgs e)
+        private void ChkStrictLock_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
 
-            // Show double warning
-            var confirmed = WarningDialog.ShowDoubleWarning(this,
-                "Strict Lock",
-                "• You will NOT be able to skip or close videos\n" +
-                "• Videos MUST be watched to completion\n" +
-                "• The only way out is the panic key (if enabled)\n" +
-                "• This can be very intense and restrictive");
+            var isEnabled = ChkStrictLock.IsChecked ?? false;
 
-            if (!confirmed)
+            // Show warning when enabling strict mode
+            if (isEnabled)
             {
-                ChkStrictLock.IsChecked = false;
-            }
-            else
-            {
-                App.Settings.Current.StrictLockEnabled = true;
-                App.Settings?.Save();
-            }
-        }
+                var confirmed = WarningDialog.ShowDoubleWarning(this,
+                    "Strict Lock",
+                    "• You will NOT be able to skip or close videos\n" +
+                    "• Videos MUST be watched to completion\n" +
+                    "• The only way out is the panic key (if enabled)\n" +
+                    "• This can be very intense and restrictive");
 
-        private void ChkStrictLock_Unchecked(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            App.Settings.Current.StrictLockEnabled = false;
+                if (!confirmed)
+                {
+                    _isLoading = true;
+                    ChkStrictLock.IsChecked = false;
+                    _isLoading = false;
+                    return;
+                }
+            }
+
+            App.Settings.Current.StrictLockEnabled = isEnabled;
             App.Settings?.Save();
         }
 
-        private void ChkNoPanic_Checked(object sender, RoutedEventArgs e)
+        private void ChkNoPanic_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
 
-            // Show double warning
-            var confirmed = WarningDialog.ShowDoubleWarning(this,
-                "Disable Panic Key",
-                "• You will have NO emergency escape option\n" +
-                "• The ONLY way to exit will be the Exit button\n" +
-                "• Combined with Strict Lock, this is VERY restrictive\n" +
-                "• Make sure you know what you're doing!");
+            var isNoPanic = ChkNoPanic.IsChecked ?? false;
 
-            if (!confirmed)
+            // Show warning when enabling no-panic mode
+            if (isNoPanic)
             {
-                ChkNoPanic.IsChecked = false;
-            }
-            else
-            {
+                var confirmed = WarningDialog.ShowDoubleWarning(this,
+                    "Disable Panic Key",
+                    "• You will have NO emergency escape option\n" +
+                    "• The ONLY way to exit will be the Exit button\n" +
+                    "• Combined with Strict Lock, this is VERY restrictive\n" +
+                    "• Make sure you know what you're doing!");
+
+                if (!confirmed)
+                {
+                    _isLoading = true;
+                    ChkNoPanic.IsChecked = false;
+                    _isLoading = false;
+                    return;
+                }
+
                 // Stop keyboard hook when panic key is disabled (privacy improvement)
                 // But keep it running if keyword triggers need it
                 if (App.Settings.Current.KeywordTriggersEnabled != true)
@@ -18982,17 +18988,14 @@ namespace ConditioningControlPanel
                 App.Settings?.Save();
                 App.Logger?.Information("Keyboard hook stopped - panic key disabled");
             }
-        }
-
-        private void ChkNoPanic_Unchecked(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            // Start keyboard hook when panic key is re-enabled
-            _keyboardHook?.Start();
-            App.Settings.Current.PanicKeyEnabled = true;
-            App.Settings?.Save();
-            App.Logger?.Information("Keyboard hook started - panic key enabled");
+            else
+            {
+                // Start keyboard hook when panic key is re-enabled
+                _keyboardHook?.Start();
+                App.Settings.Current.PanicKeyEnabled = true;
+                App.Settings?.Save();
+                App.Logger?.Information("Keyboard hook started - panic key enabled");
+            }
         }
 
         private void ChkOfflineMode_Changed(object sender, RoutedEventArgs e)

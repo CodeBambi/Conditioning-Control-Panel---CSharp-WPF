@@ -38,10 +38,11 @@ namespace ConditioningControlPanel
             _screen = screen ?? System.Windows.Forms.Screen.PrimaryScreen!;
             _isPrimary = isPrimary;
             
-            // Position on screen
+            // Position on screen — convert physical pixels to WPF DIPs using per-screen DPI
+            var dpiScale = BubbleCountWindow.GetDpiForScreen(_screen);
             WindowStartupLocation = WindowStartupLocation.Manual;
-            Left = _screen.Bounds.X + 100;
-            Top = _screen.Bounds.Y + 100;
+            Left = (_screen.Bounds.X + 100) / dpiScale;
+            Top = (_screen.Bounds.Y + 100) / dpiScale;
             Width = 400;
             Height = 300;
             

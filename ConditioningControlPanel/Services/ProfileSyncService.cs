@@ -449,10 +449,10 @@ namespace ConditioningControlPanel.Services
                             settings.PendingSkillsResetAck = false;
                             App.Settings?.Save();
                         }
-                        else if (v2Result?.SkillPoints.HasValue == true && v2Result.SkillPoints.Value != settings.SkillPoints)
+                        else if (v2Result?.SkillPoints.HasValue == true && v2Result.SkillPoints.Value > settings.SkillPoints)
                         {
-                            // Server is source of truth for skill points
-                            App.Logger?.Information("V2 Sync: Skill points server={Server} local={Local} — using server value",
+                            // Take higher value to prevent progress loss
+                            App.Logger?.Information("V2 Sync: Skill points server={Server} > local={Local} — syncing DOWN",
                                 v2Result.SkillPoints.Value, settings.SkillPoints);
                             settings.SkillPoints = v2Result.SkillPoints.Value;
                             App.Settings?.Save();
@@ -936,15 +936,20 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Merge skill tree data - server is source of truth for skill points
+            // Merge skill tree data - take HIGHER value to prevent progress loss
             if (cloudProfile.SkillPoints.HasValue)
             {
-                if (cloudProfile.SkillPoints.Value != settings.SkillPoints)
+                if (cloudProfile.SkillPoints.Value > settings.SkillPoints)
                 {
-                    App.Logger?.Information("Skill tree sync: Server has {Cloud} skill points, local has {Local} — using server value",
+                    App.Logger?.Information("Skill tree sync: Cloud has more skill points ({Cloud}) > local ({Local}), syncing DOWN",
                         cloudProfile.SkillPoints.Value, settings.SkillPoints);
                     settings.SkillPoints = cloudProfile.SkillPoints.Value;
                     needsSave = true;
+                }
+                else if (settings.SkillPoints > cloudProfile.SkillPoints.Value)
+                {
+                    App.Logger?.Information("Skill tree sync: Local has more skill points ({Local}) > cloud ({Cloud}), will sync UP",
+                        settings.SkillPoints, cloudProfile.SkillPoints.Value);
                 }
             }
 

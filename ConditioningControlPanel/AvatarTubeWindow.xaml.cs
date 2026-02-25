@@ -2167,18 +2167,10 @@ namespace ConditioningControlPanel
             // Reset scroll position to top when new text is shown
             SpeechScroller?.ScrollToTop();
 
-            // Position bubble next to avatar - anchored at bottom, grows upward
-            // Margin = left, top, right, bottom
-            if (_isAttached)
-            {
-                // Position to the right of the avatar
-                SpeechBubble.Margin = new Thickness(0, 0, 125, 550);
-            }
-            else
-            {
-                // Position to the left of the avatar (detached mode) - 175px more to the left
-                SpeechBubble.Margin = new Thickness(0, 0, 410, 550);
-            }
+            // Position bubble next to avatar - same position in both attached and detached modes.
+            // In detached mode the avatar shifts left inside the tube, but the bubble stays
+            // on the right side of the tube where it's clearly visible (not behind the tube PNG).
+            SpeechBubble.Margin = new Thickness(0, 0, 125, 550);
         }
 
         /// <summary>
@@ -4100,16 +4092,18 @@ namespace ConditioningControlPanel
             // Move avatar position when detached (6px more left from previous)
             AvatarBorder.Margin = new Thickness(5, 100, 426, 203);
 
-            // Speech bubble position when detached - left side of avatar (110px more to the left)
-            // If a bubble is currently visible, recalculate its position for detached mode
+            // Speech bubble stays at same position in both modes (right side of tube, clearly visible)
             if (SpeechBubble.Visibility == Visibility.Visible && !string.IsNullOrEmpty(TxtSpeech.Text))
             {
                 AdjustBubbleSize(TxtSpeech.Text);
             }
             else
             {
-                SpeechBubble.Margin = new Thickness(0, 0, 410, 550);
+                SpeechBubble.Margin = new Thickness(0, 0, 125, 550);
             }
+
+            // Input panel position when detached (match avatar's horizontal offset)
+            InputPanel.Margin = new Thickness(0, 0, 426, 520);
 
             // Title box position when detached (120px to the left)
             TitleBox.Margin = new Thickness(0, 0, 416, 193);
@@ -4148,8 +4142,7 @@ namespace ConditioningControlPanel
             // Restore avatar position when attached (matches XAML default)
             AvatarBorder.Margin = new Thickness(5, 100, 126, 205);
 
-            // Restore speech bubble position when attached - right side of avatar
-            // If a bubble is currently visible, recalculate its position for attached mode
+            // Restore speech bubble position when attached (matches XAML default - centered with right offset)
             if (SpeechBubble.Visibility == Visibility.Visible && !string.IsNullOrEmpty(TxtSpeech.Text))
             {
                 AdjustBubbleSize(TxtSpeech.Text);
@@ -4158,6 +4151,9 @@ namespace ConditioningControlPanel
             {
                 SpeechBubble.Margin = new Thickness(0, 0, 125, 550);
             }
+
+            // Restore input panel position when attached (matches XAML default)
+            InputPanel.Margin = new Thickness(0, 0, 126, 520);
 
             // Restore title box position when attached (matches XAML default)
             TitleBox.Margin = new Thickness(0, 0, 121, 180);

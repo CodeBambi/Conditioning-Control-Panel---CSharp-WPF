@@ -35,13 +35,13 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private int DailyLimit => App.Patreon?.HasAiAccess == true ? PatreonDailyLimit : FreeDailyLimit;
 
-        // Fallback response when API unavailable or limit reached
+        // Fallback response when API unavailable or limit reached — pick from idle phrases for variety
+        private static readonly Random _fallbackRandom = new();
         private static string GetFallbackResponse()
         {
             var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            return mode == Models.ContentMode.BambiSleep
-                ? "Bambi's head is so empty right now~ *giggles*"
-                : "My head is so empty right now~ *giggles*";
+            var phrases = Models.ContentModeConfig.GetIdlePhrases(mode);
+            return phrases[_fallbackRandom.Next(phrases.Length)];
         }
 
         /// <summary>
@@ -77,6 +77,16 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public async Task<string> GetBambiReplyAsync(string userInput)
         {
+            // Return a clear hint when AI is not available (not logged in / offline)
+            if (App.Settings?.Current?.OfflineMode == true)
+                return GetFallbackResponse();
+
+            if (!IsAvailable)
+            {
+                App.Logger?.Debug("AiService: AI not available — user needs to log in for AI chat");
+                return "Log in with Discord or Patreon to chat with me~ *giggles*";
+            }
+
             // Get prompt from active personality preset (handles all personalities including slut mode)
             var prompt = _bambiSprite.GetSystemPrompt();
 

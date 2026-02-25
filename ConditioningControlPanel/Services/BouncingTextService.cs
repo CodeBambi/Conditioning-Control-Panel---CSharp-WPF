@@ -39,7 +39,7 @@ public class BouncingTextService : IDisposable
 
     // Anti-exploit: XP rate limiting for bounces
     private DateTime _lastBounceXpTime = DateTime.MinValue;
-    private static readonly TimeSpan BounceXpCooldown = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan BounceXpCooldown = TimeSpan.FromSeconds(2); // Short cooldown to prevent double-count on corner hits
     private int _bounceXpThisMinute;
     private DateTime _bounceXpMinuteStart = DateTime.MinValue;
     private const int MaxBounceXpPerMinute = 150;
@@ -288,9 +288,9 @@ public class BouncingTextService : IDisposable
 
             if (now - _lastBounceXpTime >= BounceXpCooldown && _bounceXpThisMinute < MaxBounceXpPerMinute)
             {
-                App.Progression?.AddXP(25, XPSource.BouncingText);
+                App.Progression?.AddXP(15, XPSource.BouncingText);
                 _lastBounceXpTime = now;
-                _bounceXpThisMinute += 25;
+                _bounceXpThisMinute += 15;
             }
             OnBounce?.Invoke(this, EventArgs.Empty);
 

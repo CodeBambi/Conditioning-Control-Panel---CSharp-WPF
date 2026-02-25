@@ -245,6 +245,9 @@ namespace ConditioningControlPanel.Services
                 _brainDrainActive = false;
             }
 
+            // Force-unduck audio before restoring settings (subliminals/flashes may have left it ducked)
+            App.Audio?.ForceUnduck();
+
             // Restore original settings
             RestoreSettings();
             

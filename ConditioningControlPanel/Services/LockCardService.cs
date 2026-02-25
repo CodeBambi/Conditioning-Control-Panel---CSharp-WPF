@@ -90,7 +90,7 @@ namespace ConditioningControlPanel.Services
             ShowLockCard();
         }
 
-        public void ShowLockCard()
+        public void ShowLockCard(bool isTest = false)
         {
             Application.Current.Dispatcher.Invoke(() =>
             {
@@ -146,7 +146,7 @@ namespace ConditioningControlPanel.Services
                     var strict = settings.LockCardStrict;
 
                     // Show on all monitors with synced input
-                    LockCardWindow.ShowOnAllMonitors(phrase, repeats, strict);
+                    LockCardWindow.ShowOnAllMonitors(phrase, repeats, strict, isTest);
 
                     _lastShown = DateTime.Now;
 
@@ -165,7 +165,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void TestLockCard()
         {
-            ShowLockCard();
+            ShowLockCard(isTest: true);
         }
 
         public void Dispose()

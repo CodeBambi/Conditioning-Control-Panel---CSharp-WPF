@@ -698,9 +698,10 @@ namespace ConditioningControlPanel
             try
             {
                 // Convert relative position to screen coordinates, then to WPF DIPs
+                // size is in DIPs, so subtract centering offset after DPI conversion
                 var dpiScale = GetDpiForScreen(_screen);
-                var screenX = (_screen.Bounds.X + (relX * _screen.Bounds.Width) - size / 2) / dpiScale;
-                var screenY = (_screen.Bounds.Y + (relY * _screen.Bounds.Height) - size / 2) / dpiScale;
+                var screenX = (_screen.Bounds.X + (relX * _screen.Bounds.Width)) / dpiScale - size / 2.0;
+                var screenY = (_screen.Bounds.Y + (relY * _screen.Bounds.Height)) / dpiScale - size / 2.0;
 
                 PlayPopSound();
 
@@ -911,7 +912,7 @@ namespace ConditioningControlPanel
 
         #region Per-Screen DPI
 
-        private static double GetDpiForScreen(Screen screen)
+        internal static double GetDpiForScreen(Screen screen)
         {
             try
             {

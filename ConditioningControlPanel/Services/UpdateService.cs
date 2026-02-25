@@ -22,43 +22,31 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.8";
+        public const string AppVersion = "5.6.9";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.8 - Security Transparency Update
+        public const string CurrentPatchNotes = @"v5.6.9 - Bug Fix Update
 
-🛡️ SECURITY FIXES
-• All server endpoints now require authenticated sessions
-• Remote session endpoints secured with full auth validation
-• Admin endpoints hardened with timing-safe token verification
-• Rate limiting and request monitoring on all routes
-• CORS restricted to known origins
-• Request body size limits enforced
+🛠️ BUG FIXES
+• Fixed strict mode toggles enabling when cancelling the warning dialog (Strict Lock, No Panic, Lock Card Strict)
+• Fixed Bubble Count Strict setting not loading on startup
+• Fixed sparkle points being lost/reset on app restart (cloud sync now takes higher value)
+• Fixed XP display showing current-level XP instead of total XP in profile
+• Fixed bubble count minigame elements spawning off-screen on high-DPI monitors
+• Fixed AI companion always giving the same fallback response
+• Fixed audio ducking staying active after session ends
+• Fixed bouncing text XP only awarding every ~4 bounces (reduced cooldown, adjusted XP per bounce)
+• Fixed online user count showing far fewer users than actual
+• Removed XP from test lock cards (anti-exploit)
 
-🔒 DATA PRIVACY
-• All stored email addresses replaced with secure hashes
-• Whitelist migrated from source code to encrypted database
-• Git history scrubbed of any accidentally committed data
-• All server credentials rotated
-• Added Terms of Service page
-
-🛠️ FIXES & IMPROVEMENTS
-• Bubble pop volume slider added
-• Session subliminal phrases now respect content mode
-• Flash/video windows no longer steal focus
-• Fixed Knowledge Link dialog buttons being cut off
-• Fixed progress reset on login (cloud profile now loads before syncing)
-• Fixed remote control sessions failing (missing auth token after security hardening)
-• Restored server.js after git history cleanup
-
-📝 A security researcher publicly disclosed several vulnerabilities
-in CCP. The concerns were valid — endpoints lacked proper auth,
-some data was committed to git history, and admin access wasn't
-properly secured. Everything was patched within 24 hours. Full
-details in the Discord announcement and on our website.";
+🛡️ SECURITY
+• IP rate limiting now enforces blocking (was log-only)
+• Redis-backed IP blocking shared across all server instances
+• Per-user backup-settings cooldown to prevent abuse
+• Client now sends X-Client-Version and User-Agent headers";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

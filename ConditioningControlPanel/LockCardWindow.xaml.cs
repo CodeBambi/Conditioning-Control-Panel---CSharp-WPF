@@ -32,6 +32,9 @@ namespace ConditioningControlPanel
         private static int _totalErrors = 0;
         private static int _totalCharsTyped = 0;
 
+        // Test mode — no XP or achievements
+        private static bool _isTest = false;
+
         // Debounced focus reclaim — prevents rapid focus flickering that leaks keystrokes
         private DispatcherTimer? _focusReclaimTimer;
 
@@ -328,20 +331,23 @@ namespace ConditioningControlPanel
             // Calculate completion time
             var completionTime = (DateTime.Now - _startTime).TotalSeconds;
             
-            // Award XP (only once)
-            try
+            // Award XP (only once, skip for test lock cards)
+            if (!_isTest)
             {
-                var xpAmount = (50 * _requiredRepeats) + 200;
-                if (_strictMode) xpAmount = (int)(xpAmount * 1.5);
-                App.Progression?.AddXP(xpAmount, XPSource.LockCard);
+                try
+                {
+                    var xpAmount = (50 * _requiredRepeats) + 200;
+                    if (_strictMode) xpAmount = (int)(xpAmount * 1.5);
+                    App.Progression?.AddXP(xpAmount, XPSource.LockCard);
+                }
+                catch { }
+
+                // Track achievement
+                App.Achievements?.TrackLockCardCompletion(completionTime, _totalCharsTyped, _totalErrors, _requiredRepeats);
             }
-            catch { }
-            
-            App.Logger?.Information("Lock Card completed - {Repeats} repeats in {Time:F1}s with {Errors} errors", 
-                _requiredRepeats, completionTime, _totalErrors);
-            
-            // Track achievement
-            App.Achievements?.TrackLockCardCompletion(completionTime, _totalCharsTyped, _totalErrors, _requiredRepeats);
+
+            App.Logger?.Information("Lock Card completed - {Repeats} repeats in {Time:F1}s with {Errors} errors{Test}",
+                _requiredRepeats, completionTime, _totalErrors, _isTest ? " (TEST)" : "");
             
             foreach (var window in _allWindows)
             {
@@ -476,16 +482,17 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Create lock card windows for all monitors
         /// </summary>
-        public static void ShowOnAllMonitors(string phrase, int repeats, bool strictMode)
+        public static void ShowOnAllMonitors(string phrase, int repeats, bool strictMode, bool isTest = false)
         {
             // Clear any existing windows
             _allWindows.Clear();
             _sharedInput = "";
-            
+
             // Reset achievement tracking
             _startTime = DateTime.Now;
             _totalErrors = 0;
             _totalCharsTyped = 0;
+            _isTest = isTest;
             
             var screens = App.GetAllScreensCached();
             if (screens.Length == 0)
