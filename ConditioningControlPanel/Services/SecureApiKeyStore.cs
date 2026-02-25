@@ -1,0 +1,105 @@
+using System;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace ConditioningControlPanel.Services
+{
+    /// <summary>
+    /// DPAPI-encrypted storage for the OpenRouter API key.
+    /// Replaces plaintext storage in settings.json.
+    /// </summary>
+    public static class SecureApiKeyStore
+    {
+        private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("ConditioningControlPanel_ApiKey_v1");
+        private static readonly string StoragePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ConditioningControlPanel",
+            "api_key.dat");
+
+        private static string? _cached;
+        private static bool _loaded;
+
+        public static void Store(string? key)
+        {
+            _cached = key;
+            _loaded = true;
+
+            try
+            {
+                if (string.IsNullOrEmpty(key))
+                {
+                    Clear();
+                    return;
+                }
+
+                var plainBytes = Encoding.UTF8.GetBytes(key);
+                var encryptedBytes = ProtectedData.Protect(plainBytes, Entropy, DataProtectionScope.CurrentUser);
+                File.WriteAllBytes(StoragePath, encryptedBytes);
+                SecurityHelper.SecureClear(plainBytes);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to store API key securely");
+            }
+        }
+
+        public static string? Retrieve()
+        {
+            if (_loaded) return _cached;
+
+            try
+            {
+                if (!File.Exists(StoragePath))
+                {
+                    _loaded = true;
+                    return null;
+                }
+
+                var encryptedBytes = File.ReadAllBytes(StoragePath);
+                var plainBytes = ProtectedData.Unprotect(encryptedBytes, Entropy, DataProtectionScope.CurrentUser);
+                _cached = Encoding.UTF8.GetString(plainBytes);
+                SecurityHelper.SecureClear(plainBytes);
+                _loaded = true;
+                return _cached;
+            }
+            catch (CryptographicException ex)
+            {
+                App.Logger?.Warning(ex, "Failed to decrypt API key - may be corrupted or from different user");
+                Clear();
+                return null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to retrieve API key");
+                _loaded = true;
+                return null;
+            }
+        }
+
+        public static void Clear()
+        {
+            _cached = null;
+            _loaded = true;
+
+            try
+            {
+                if (File.Exists(StoragePath))
+                {
+                    var fileInfo = new FileInfo(StoragePath);
+                    var randomBytes = new byte[fileInfo.Length];
+                    using (var rng = RandomNumberGenerator.Create())
+                    {
+                        rng.GetBytes(randomBytes);
+                    }
+                    File.WriteAllBytes(StoragePath, randomBytes);
+                    File.Delete(StoragePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to clear API key file");
+            }
+        }
+    }
+}

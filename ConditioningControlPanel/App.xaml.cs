@@ -864,11 +864,29 @@ namespace ConditioningControlPanel
                 }
                 else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
-                    Logger?.Warning("Restored session rejected (invalid token). Clearing auth token.");
-                    if (Settings?.Current != null)
+                    // Check if this is a legacy user that needs full re-auth
+                    var errorJson = await response.Content.ReadAsStringAsync();
+                    var isLegacyReauth = errorJson.Contains("legacy_user_reauth_required");
+
+                    if (isLegacyReauth)
                     {
-                        Settings.Current.AuthToken = null;
-                        Settings.Save();
+                        Logger?.Warning("Restored session rejected (legacy user, no token ever issued). Clearing all auth state — user must re-login via OAuth.");
+                        UnifiedUserId = null;
+                        if (Settings?.Current != null)
+                        {
+                            Settings.Current.UnifiedId = null;
+                            Settings.Current.AuthToken = null;
+                            Settings.Save();
+                        }
+                    }
+                    else
+                    {
+                        Logger?.Warning("Restored session rejected (invalid token). Clearing auth token.");
+                        if (Settings?.Current != null)
+                        {
+                            Settings.Current.AuthToken = null;
+                            Settings.Save();
+                        }
                     }
                 }
                 else

@@ -217,7 +217,7 @@ namespace ConditioningControlPanel.Services
             settings.AreDefaultContextMenusEnabled = true;
             settings.AreDevToolsEnabled = false; // Disable dev tools for end users
             settings.IsZoomControlEnabled = true;
-            settings.AreHostObjectsAllowed = true;
+            settings.AreHostObjectsAllowed = false; // No host objects are used — disable to reduce attack surface
             settings.IsWebMessageEnabled = true;
             settings.AreBrowserAcceleratorKeysEnabled = true;
 

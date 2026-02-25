@@ -1805,14 +1805,33 @@ namespace ConditioningControlPanel.Models
 
         #region AI Configuration
 
-        private string _openRouterApiKey = "";
         /// <summary>
-        /// OpenRouter API key for AI chat features
+        /// OpenRouter API key for AI chat features.
+        /// Stored in DPAPI-encrypted file, NOT in settings.json.
         /// </summary>
+        [JsonIgnore]
         public string OpenRouterApiKey
         {
-            get => _openRouterApiKey;
-            set { _openRouterApiKey = value ?? ""; OnPropertyChanged(); }
+            get => Services.SecureApiKeyStore.Retrieve() ?? "";
+            set { Services.SecureApiKeyStore.Store(string.IsNullOrEmpty(value) ? null : value); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Legacy plaintext key — only used for one-time migration to DPAPI.
+        /// After migration this will be null in settings.json.
+        /// </summary>
+        [JsonProperty("OpenRouterApiKey")]
+        public string? OpenRouterApiKeyLegacy
+        {
+            get => null; // Never write back to JSON
+            set
+            {
+                // Migrate: if there's a plaintext key in settings.json, move it to DPAPI
+                if (!string.IsNullOrEmpty(value) && string.IsNullOrEmpty(Services.SecureApiKeyStore.Retrieve()))
+                {
+                    Services.SecureApiKeyStore.Store(value);
+                }
+            }
         }
 
         private bool _slutModeEnabled = false;

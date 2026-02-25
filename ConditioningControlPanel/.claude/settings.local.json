@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git gc:*)",
+      "Bash(git clone:*)",
+      "Bash(copy:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git -C \"C:\\\\Projects\\\\ccp-scrub-mirror\" remote set-url origin https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF.git)",
+      "Bash(git apply:*)",
+      "Bash(cmd.exe /c \"rename \\\\\"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\\" \\\\\"Conditioning-Control-Panel---CSharp-WPF-OLD\\\\\"\":*)",
+      "Bash(git -C \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\" diff .gitignore)",
+      "Bash(git -C \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\" add .gitignore)",
+      "Bash(git -C \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\" commit -m \"$\\(cat <<''EOF''\nHarden .gitignore to prevent future PII/secret leaks\n\nAdd patterns for temp scripts \\(tmp_*, find_*, merge_*, fix_*, scan_*,\nbulk_*, cleanup_*, investigate_*, check_*, reset_*, set_force_*\\),\nbackup files \\(backup_*.json, lb_*.json\\), and environment files \\(*.env\\).\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\" push origin main)",
+      "Bash(git remote remove:*)",
+      "Bash(start \"\" \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\docs\\\\terms-of-service.html\")",
+      "Bash(git -C \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\" log --oneline -5 -- patreon-proxy-server/server.js)",
+      "Bash(git -C \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\" show HEAD:patreon-proxy-server/server.js)",
+      "Bash(start \"\" \"https://vercel.com/codebambis-projects/codebambi-proxy/dpl_EouBfLkW59EzXKhYnjMNfoco4aRe\")",
+      "Bash(git hash-object:*)",
+      "Bash(git -C \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\" diff --stat HEAD)",
+      "Bash(git -C \"C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\" diff HEAD -- ConditioningControlPanel/Services/FlashService.cs ConditioningControlPanel/Services/VideoService.cs ConditioningControlPanel/Services/BubbleCountService.cs ConditioningControlPanel/Services/SessionEngine.cs ConditioningControlPanel/MainWindow.xaml ConditioningControlPanel/Models/Session.cs)",
+      "Bash(cmd /c \"build-installer.bat < nul\")",
+      "Bash(powershell.exe -NoProfile -Command \"Start-Sleep -Seconds 5; Copy-Item -Path ''C:\\\\Projects\\\\Conditioning-Control-Panel---CSharp-WPF\\\\installer-output\\\\ConditioningControlPanel-5.6.7-Setup.exe'' -Destination ''C:\\\\Users\\\\PC\\\\AppData\\\\Local\\\\Temp\\\\ConditioningControlPanel-5.6.7-Setup.exe'' -Force\")",
+      "Bash(python3:*)",
+      "Bash(dotnet build:*)",
+      "Bash(node:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nSecurity hardening: fix 10 vulnerabilities from full server audit\n\nP0: Restrict /v2/user/update to admin-only for XP/level/stats,\nstrip download URLs from public /packs/manifest endpoint,\nfix X-Forwarded-For IP spoofing \\(use x-real-ip/rightmost XFF\\)\n\nP1: Fix settings-backup auth bypass, reject legacy users without\nauth tokens, enable HMAC enforcement on sync, fail-hard on\nmissing EMAIL_HASH_KEY in production\n\nP2: Validate OAuth redirect_uri against allowlist, remove /user/lookup\nSCAN DoS vector, validate leaderboard season format and cap cache\n\nClient: add authenticated flow for external pack downloads,\nadd X-Client-Version and User-Agent headers to all HttpClients\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}
