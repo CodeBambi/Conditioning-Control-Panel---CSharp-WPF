@@ -1,7 +1,7 @@
 <Window x:Class="ConditioningControlPanel.LoginDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Login" Height="400" Width="420"
+        Title="Login" Height="560" Width="420"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Background="#1A1A2E" WindowStyle="None" AllowsTransparency="True"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
@@ -49,9 +49,84 @@
                     </StackPanel>
                 </Button>
 
+                <Button x:Name="BtnLoginAccount"
+                        Padding="20,15" Margin="0,0,0,15"
+                        Background="#352545" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="16"
+                        Cursor="Hand" Click="BtnLoginAccount_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x1F512;" FontSize="20" Margin="0,0,10,0"/>
+                        <TextBlock Text="Anonymous Login" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
                 <TextBlock Text="If you had an account before v5.5, use the same login method you originally used."
                            FontSize="11" Foreground="#808080" TextWrapping="Wrap"
                            HorizontalAlignment="Center" Margin="0,10,0,0"/>
+            </StackPanel>
+
+            <!-- Account Login/Register Panel -->
+            <StackPanel x:Name="AccountPanel" Grid.Row="2" Visibility="Collapsed" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtAccountTitle" Text="Login"
+                           FontSize="16" FontWeight="Bold" Foreground="White"
+                           HorizontalAlignment="Center" Margin="0,0,0,15"/>
+
+                <!-- Invite code field (register mode only) -->
+                <TextBlock x:Name="LblInviteCode" Text="Invite Code"
+                           FontSize="12" Foreground="#B0B0B0" Margin="0,0,0,4"
+                           Visibility="Collapsed"/>
+                <TextBox x:Name="TxtInviteCode" FontSize="14" Padding="10,8"
+                         Background="#252542" Foreground="White" BorderBrush="#FF69B4"
+                         MaxLength="8" HorizontalAlignment="Stretch" Visibility="Collapsed"
+                         CharacterCasing="Upper"/>
+
+                <!-- Display name field (login mode only) -->
+                <TextBlock x:Name="LblDisplayName" Text="Display Name"
+                           FontSize="12" Foreground="#B0B0B0" Margin="0,0,0,4"
+                           Visibility="Collapsed"/>
+                <TextBox x:Name="TxtLoginDisplayName" FontSize="14" Padding="10,8"
+                         Background="#252542" Foreground="White" BorderBrush="#FF69B4"
+                         MaxLength="30" HorizontalAlignment="Stretch" Visibility="Collapsed"/>
+
+                <!-- Password -->
+                <TextBlock x:Name="LblPassword" Text="Password"
+                           FontSize="12" Foreground="#B0B0B0" Margin="0,10,0,4"/>
+                <PasswordBox x:Name="TxtPassword" FontSize="14" Padding="10,8"
+                             Background="#252542" Foreground="White" BorderBrush="#FF69B4"
+                             MaxLength="128"/>
+
+                <!-- Confirm password (register mode only) -->
+                <TextBlock x:Name="LblPasswordConfirm" Text="Confirm Password"
+                           FontSize="12" Foreground="#B0B0B0" Margin="0,10,0,4"
+                           Visibility="Collapsed"/>
+                <PasswordBox x:Name="TxtPasswordConfirm" FontSize="14" Padding="10,8"
+                             Background="#252542" Foreground="White" BorderBrush="#FF69B4"
+                             MaxLength="128" Visibility="Collapsed"/>
+
+                <TextBlock x:Name="TxtAccountError" FontSize="11" Margin="0,8,0,0"
+                           Foreground="Orange" Text="" TextWrapping="Wrap"
+                           HorizontalAlignment="Center"/>
+
+                <Button x:Name="BtnAccountSubmit"
+                        Content="Login"
+                        Padding="30,12" Margin="0,15,0,0"
+                        Background="#FF69B4" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="14"
+                        Cursor="Hand" HorizontalAlignment="Center"
+                        Click="BtnAccountSubmit_Click"/>
+
+                <TextBlock x:Name="TxtAccountToggle" Margin="0,12,0,0"
+                           FontSize="12" Foreground="#B0B0B0"
+                           HorizontalAlignment="Center" Cursor="Hand"
+                           MouseLeftButtonDown="TxtAccountToggle_Click">
+                    <Run Text="Don't have an account? "/>
+                    <Run Text="Create one" Foreground="#FF69B4" TextDecorations="Underline"/>
+                </TextBlock>
+
+                <TextBlock Text="Back" Margin="0,10,0,0"
+                           FontSize="12" Foreground="#808080"
+                           HorizontalAlignment="Center" Cursor="Hand"
+                           MouseLeftButtonDown="BtnAccountBack_Click"/>
             </StackPanel>
 
             <!-- Not Found Panel (shown when user not in Season 0) -->
