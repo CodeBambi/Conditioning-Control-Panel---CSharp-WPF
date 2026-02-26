@@ -12,6 +12,7 @@ namespace ConditioningControlPanel.Services
     public class SettingsService
     {
         private readonly string _settingsPath;
+        private DateTime _lastBackupAttempt = DateTime.MinValue;
 
         public AppSettings Current { get; private set; }
 
@@ -257,8 +258,11 @@ namespace ConditioningControlPanel.Services
                     _settingsPath, Current.CustomTriggers?.Count ?? 0, Current.ActivePackIds?.Count ?? 0);
 
                 // Auto-backup settings to cloud (fire-and-forget, debounced)
-                if (App.HasCloudIdentity && App.ProfileSync != null)
+                // Gate here to prevent concurrent Task.Run calls from racing past BackupSettingsAsync's debounce
+                if (App.HasCloudIdentity && App.ProfileSync != null
+                    && (DateTime.Now - _lastBackupAttempt).TotalSeconds >= 30)
                 {
+                    _lastBackupAttempt = DateTime.Now;
                     _ = Task.Run(async () =>
                     {
                         try { await App.ProfileSync.BackupSettingsAsync(); }
