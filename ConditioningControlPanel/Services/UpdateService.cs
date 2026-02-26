@@ -31,7 +31,7 @@ namespace ConditioningControlPanel.Services
         public const string CurrentPatchNotes = @"v5.6.9 - Bug Fix Update
 
 🛠️ BUG FIXES
-• Fixed strict mode toggles enabling when cancelling the warning dialog (Strict Lock, No Panic, Lock Card Strict)
+• Fixed strict mode toggles enabling when cancelling the warning dialog (all 4 strict toggles)
 • Fixed Bubble Count Strict setting not loading on startup
 • Fixed sparkle points being lost/reset on app restart (cloud sync now takes higher value)
 • Fixed XP display showing current-level XP instead of total XP in profile
@@ -41,6 +41,13 @@ namespace ConditioningControlPanel.Services
 • Fixed bouncing text XP only awarding every ~4 bounces (reduced cooldown, adjusted XP per bounce)
 • Fixed online user count showing far fewer users than actual
 • Removed XP from test lock cards (anti-exploit)
+• Fixed app hang/freeze during long sessions (~2hrs) caused by flash image memory leak
+• Fixed overlay spiral BitmapSource not frozen (rendering optimization)
+
+⚡ PERFORMANCE
+• Flash images now cached in memory (50 images / 200MB cap) — no more repeated disk reads
+• Audio ducking no longer does slow process lookups on every duck call (cached WebView2 PIDs)
+• Flash window cleanup now releases bitmap memory immediately instead of waiting for GC
 
 🛡️ SECURITY
 • IP rate limiting now enforces blocking (was log-only)
