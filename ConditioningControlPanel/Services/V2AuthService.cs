@@ -17,6 +17,13 @@ namespace ConditioningControlPanel.Services
         private static readonly HttpClient _http = new();
         private const string SERVER_URL = "https://codebambi-proxy.vercel.app";
 
+        /// <summary>Redact auth_token values from JSON strings before logging.</summary>
+        private static string RedactAuthToken(string json)
+        {
+            return System.Text.RegularExpressions.Regex.Replace(
+                json, @"""auth_token""\s*:\s*""[^""]+""", @"""auth_token"":""[REDACTED]""");
+        }
+
         static V2AuthService()
         {
             _http.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
@@ -206,7 +213,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/discord", content);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] Discord auth response: {Json}", json);
+                Log.Debug("[V2Auth] Discord auth response: {Json}", RedactAuthToken(json));
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -250,7 +257,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/patreon", content);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] Patreon auth response: {Json}", json);
+                Log.Debug("[V2Auth] Patreon auth response: {Json}", RedactAuthToken(json));
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -292,7 +299,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/link", content);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] Link response: {Json}", json);
+                Log.Debug("[V2Auth] Link response: {Json}", RedactAuthToken(json));
 
                 if (!response.IsSuccessStatusCode)
                 {

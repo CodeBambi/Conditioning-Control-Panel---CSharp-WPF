@@ -31,6 +31,11 @@ namespace ConditioningControlPanel.Services
 
         private bool _disposed;
 
+        // Cached WebView2 process IDs to avoid slow Process.GetProcessById() on every duck
+        private HashSet<int> _webView2Pids = new();
+        private DateTime _webView2PidsCacheTime = DateTime.MinValue;
+        private static readonly TimeSpan WebView2CacheExpiry = TimeSpan.FromSeconds(30);
+
         // Crash recovery file for ducking state
         private static readonly string DuckingRecoveryFile = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -242,6 +247,32 @@ namespace ConditioningControlPanel.Services
                     // Check if we should exclude BambiCloud (WebView2) from ducking
                     var excludeWebView2 = App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true;
 
+                    // Refresh WebView2 PID cache if expired (avoids slow Process.GetProcessById per session)
+                    if (excludeWebView2 && DateTime.UtcNow - _webView2PidsCacheTime > WebView2CacheExpiry)
+                    {
+                        try
+                        {
+                            var newPids = new HashSet<int>();
+                            foreach (var proc in Process.GetProcesses())
+                            {
+                                try
+                                {
+                                    var name = proc.ProcessName.ToLowerInvariant();
+                                    if (name.Contains("msedgewebview2") || name.Contains("webview2"))
+                                        newPids.Add(proc.Id);
+                                }
+                                catch { }
+                                finally { proc.Dispose(); }
+                            }
+                            _webView2Pids = newPids;
+                            _webView2PidsCacheTime = DateTime.UtcNow;
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("Failed to refresh WebView2 PID cache: {Error}", ex.Message);
+                        }
+                    }
+
                     for (int i = 0; i < sessions.Count; i++)
                     {
                         try
@@ -253,23 +284,8 @@ namespace ConditioningControlPanel.Services
                             if (processId == currentProcessId || processId == 0) continue;
 
                             // Skip WebView2 processes if setting is enabled (for BambiCloud audio)
-                            if (excludeWebView2 && processId > 0)
-                            {
-                                try
-                                {
-                                    var process = Process.GetProcessById(processId);
-                                    var processName = process.ProcessName.ToLowerInvariant();
-                                    if (processName.Contains("msedgewebview2") || processName.Contains("webview2"))
-                                    {
-                                        continue; // Don't duck WebView2 audio
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    // Process may have ended, continue with ducking
-                                    App.Logger?.Debug("Could not check process {ProcessId}: {Error}", processId, ex.Message);
-                                }
-                            }
+                            if (excludeWebView2 && _webView2Pids.Contains(processId))
+                                continue;
 
                             var currentVolume = session.SimpleAudioVolume.Volume;
 

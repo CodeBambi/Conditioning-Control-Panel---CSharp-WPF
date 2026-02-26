@@ -77,6 +77,16 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Clear the in-memory cached key (call on app exit to reduce memory exposure).
+        /// Does NOT delete the on-disk encrypted file.
+        /// </summary>
+        public static void ClearMemoryCache()
+        {
+            _cached = null;
+            _loaded = false;
+        }
+
         public static void Clear()
         {
             _cached = null;

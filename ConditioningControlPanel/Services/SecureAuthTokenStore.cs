@@ -84,6 +84,16 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Clear the in-memory cached token (call on app exit to reduce memory exposure).
+        /// Does NOT delete the on-disk encrypted file.
+        /// </summary>
+        public static void ClearMemoryCache()
+        {
+            _cached = null;
+            _loaded = false;
+        }
+
+        /// <summary>
         /// Securely delete the stored auth token.
         /// </summary>
         public static void Clear()

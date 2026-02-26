@@ -1435,6 +1435,11 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
+            // Set timestamp BEFORE the HTTP call to prevent concurrent/retry storms.
+            // Without this, failed backups (429) never set the timestamp, so every
+            // subsequent Save() fires another backup attempt in an infinite loop.
+            _lastSettingsBackupTime = DateTime.Now;
+
             try
             {
                 var settings = App.Settings?.Current;
@@ -1494,7 +1499,6 @@ namespace ConditioningControlPanel.Services
                     return false;
                 }
 
-                _lastSettingsBackupTime = DateTime.Now;
                 App.Logger?.Information("Settings backed up to cloud ({Size} bytes compressed)", compressedBytes.Length);
                 return true;
             }

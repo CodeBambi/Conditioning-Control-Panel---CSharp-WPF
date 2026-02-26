@@ -39,7 +39,14 @@ namespace ConditioningControlPanel.Services.Haptics
         {
             var handler = new HttpClientHandler
             {
-                ServerCertificateCustomValidationCallback = (msg, cert, chain, errors) => true
+                // Only bypass SSL validation for localhost connections (Lovense local API uses self-signed certs).
+                // Remote/LAN connections must use proper certificate validation.
+                ServerCertificateCustomValidationCallback = (msg, cert, chain, errors) =>
+                {
+                    if (errors == System.Net.Security.SslPolicyErrors.None) return true;
+                    var host = msg.RequestUri?.Host;
+                    return host == "127.0.0.1" || host == "localhost";
+                }
             };
             _client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
         }

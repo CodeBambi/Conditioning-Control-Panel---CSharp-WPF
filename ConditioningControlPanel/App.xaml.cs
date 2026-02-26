@@ -1994,6 +1994,10 @@ Application State:
             QuestDefinitions?.Dispose();
             Audio?.Dispose();
 
+            // Clear in-memory secrets before exit to reduce memory exposure
+            SecureAuthTokenStore.ClearMemoryCache();
+            SecureApiKeyStore.ClearMemoryCache();
+
             // Close and flush the logger
             Log.CloseAndFlush();
 
