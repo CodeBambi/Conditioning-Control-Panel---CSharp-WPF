@@ -22,42 +22,24 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.10";
+        public const string AppVersion = "5.6.11";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.10 - Anonymous Login Update
-
-🔑 ANONYMOUS LOGIN
-• No email required — register with just an invite code, display name, and password
-• Your account is fully anonymous — no personal information collected or stored
-• Existing Patreon/Discord logins still work as before
+        public const string CurrentPatchNotes = @"v5.6.11 - Bug Fix Update
 
 🛠️ BUG FIXES
-• Fixed strict mode toggles enabling when cancelling the warning dialog (all 4 strict toggles)
-• Fixed Bubble Count Strict setting not loading on startup
-• Fixed sparkle points being lost/reset on app restart (cloud sync now takes higher value)
-• Fixed XP display showing current-level XP instead of total XP in profile
-• Fixed bubble count minigame elements spawning off-screen on high-DPI monitors
-• Fixed AI companion always giving the same fallback response
-• Fixed audio ducking staying active after session ends
-• Fixed bouncing text XP only awarding every ~4 bounces (reduced cooldown, adjusted XP per bounce)
-• Fixed online user count showing far fewer users than actual
-• Removed XP from test lock cards (anti-exploit)
-• Fixed app hang/freeze during long sessions (~2hrs) caused by flash image memory leak
+• Fixed content packs not showing for some users (rate limiter was blocking manifest fetch)
+• Fixed Discord Rich Presence toggle turning on after dismissing 'not linked' dialog
+• Fixed settings backup firing too many requests on startup, causing rate limit blocks
+• Reduced Burst.mp3 sound effect volume by 50%
 
-⚡ PERFORMANCE
-• Flash images now cached in memory (50 images / 200MB cap) — no more repeated disk reads
-• Audio ducking no longer does slow process lookups on every duck call (cached WebView2 PIDs)
-• Flash window cleanup now releases bitmap memory immediately instead of waiting for GC
-
-🛡️ SECURITY
-• 6 rounds of server-side security hardening (30+ fixes)
-• Rate limiting on all legacy and modern endpoints
-• Admin operations protected with scan cooldowns
-• Client now sends X-Client-Version and User-Agent headers";
+✨ NEW
+• Bouncing text 'Show Over Videos' option — keeps text visible over fullscreen videos
+• Added invite code hint text to registration form
+• Login button renamed to 'Anonymous Login' for clarity";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
