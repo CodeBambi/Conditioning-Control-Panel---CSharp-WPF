@@ -604,6 +604,7 @@ namespace ConditioningControlPanel
                 BtnAccountSubmit.Content = "Next";
 
                 // Show invite code + password + confirm; hide display name
+                LblInviteCodeHint.Visibility = Visibility.Visible;
                 LblInviteCode.Visibility = Visibility.Visible;
                 TxtInviteCode.Visibility = Visibility.Visible;
                 LblDisplayName.Visibility = Visibility.Collapsed;
@@ -623,6 +624,7 @@ namespace ConditioningControlPanel
                 BtnAccountSubmit.Content = "Login";
 
                 // Show display name + password; hide invite code + confirm
+                LblInviteCodeHint.Visibility = Visibility.Collapsed;
                 LblInviteCode.Visibility = Visibility.Collapsed;
                 TxtInviteCode.Visibility = Visibility.Collapsed;
                 LblDisplayName.Visibility = Visibility.Visible;

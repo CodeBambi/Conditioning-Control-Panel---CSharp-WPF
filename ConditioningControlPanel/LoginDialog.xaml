@@ -72,6 +72,11 @@
                            HorizontalAlignment="Center" Margin="0,0,0,15"/>
 
                 <!-- Invite code field (register mode only) -->
+                <TextBlock x:Name="LblInviteCodeHint"
+                           Text="For an invite code please ask a discord mod/admin or CodeBambi directly :3"
+                           FontSize="11" Foreground="#808080" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" Margin="0,0,0,8"
+                           Visibility="Collapsed"/>
                 <TextBlock x:Name="LblInviteCode" Text="Invite Code"
                            FontSize="12" Foreground="#B0B0B0" Margin="0,0,0,4"
                            Visibility="Collapsed"/>
