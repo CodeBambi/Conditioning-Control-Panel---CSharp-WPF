@@ -15567,9 +15567,13 @@ namespace ConditioningControlPanel
 
                 if (!confirmed)
                 {
-                    _isLoading = true;
+                    // Detach handlers before reverting to avoid re-entrancy
+                    // (_isLoading can be clobbered by other methods during the dialog's message pump)
+                    ChkBubbleCountStrict.Checked -= ChkBubbleCountStrict_Changed;
+                    ChkBubbleCountStrict.Unchecked -= ChkBubbleCountStrict_Changed;
                     ChkBubbleCountStrict.IsChecked = false;
-                    _isLoading = false;
+                    ChkBubbleCountStrict.Checked += ChkBubbleCountStrict_Changed;
+                    ChkBubbleCountStrict.Unchecked += ChkBubbleCountStrict_Changed;
                     return;
                 }
             }
@@ -16663,9 +16667,11 @@ namespace ConditioningControlPanel
 
                 if (!confirmed)
                 {
-                    _isLoading = true;
+                    ChkLockCardStrict.Checked -= ChkLockCardStrict_Changed;
+                    ChkLockCardStrict.Unchecked -= ChkLockCardStrict_Changed;
                     ChkLockCardStrict.IsChecked = false;
-                    _isLoading = false;
+                    ChkLockCardStrict.Checked += ChkLockCardStrict_Changed;
+                    ChkLockCardStrict.Unchecked += ChkLockCardStrict_Changed;
                     return;
                 }
             }
@@ -18945,9 +18951,11 @@ namespace ConditioningControlPanel
 
                 if (!confirmed)
                 {
-                    _isLoading = true;
+                    ChkStrictLock.Checked -= ChkStrictLock_Changed;
+                    ChkStrictLock.Unchecked -= ChkStrictLock_Changed;
                     ChkStrictLock.IsChecked = false;
-                    _isLoading = false;
+                    ChkStrictLock.Checked += ChkStrictLock_Changed;
+                    ChkStrictLock.Unchecked += ChkStrictLock_Changed;
                     return;
                 }
             }
@@ -18974,9 +18982,11 @@ namespace ConditioningControlPanel
 
                 if (!confirmed)
                 {
-                    _isLoading = true;
+                    ChkNoPanic.Checked -= ChkNoPanic_Changed;
+                    ChkNoPanic.Unchecked -= ChkNoPanic_Changed;
                     ChkNoPanic.IsChecked = false;
-                    _isLoading = false;
+                    ChkNoPanic.Checked += ChkNoPanic_Changed;
+                    ChkNoPanic.Unchecked += ChkNoPanic_Changed;
                     return;
                 }
 
