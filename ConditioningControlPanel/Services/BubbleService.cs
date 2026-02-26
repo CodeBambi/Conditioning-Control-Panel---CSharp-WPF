@@ -318,7 +318,7 @@ public class BubbleService : IDisposable
                 {
                     var masterVolume = App.Settings.Current.MasterVolume / 100f;
                     var bubblesVolume = App.Settings.Current.BubblesVolume / 100f;
-                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5);
+                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5) * 0.5f;
                     PlaySoundAsync(burstPath, volume);
                     App.Logger?.Information("🎉 Lucky Bubble! 10x XP!");
                     return;

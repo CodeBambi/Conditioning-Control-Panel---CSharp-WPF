@@ -4024,11 +4024,20 @@
                                                HorizontalAlignment="Center" Margin="0,8,0,0"/>
                                     
                                     <!-- Edit Phrases -->
-                                    <Button Content="✏ Edit Phrases" 
-                                            Background="#40FFFFFF" Foreground="White" 
+                                    <Button Content="✏ Edit Phrases"
+                                            Background="#40FFFFFF" Foreground="White"
                                             BorderThickness="0" Padding="10,5" Margin="0,10,0,0"
                                             Cursor="Hand" Click="BtnEditBouncingText_Click"
                                             ToolTip="Customize the bouncing text phrases"/>
+
+                                    <!-- Show Over Videos -->
+                                    <Grid Margin="0,10,0,0">
+                                        <TextBlock Text="Show Over Videos" Style="{StaticResource SettingLabel}"
+                                                   ToolTip="Keep bouncing text visible on top of fullscreen videos"/>
+                                        <CheckBox x:Name="ChkBouncingTextAlwaysOnTop" Style="{StaticResource ToggleStyle}"
+                                                  HorizontalAlignment="Right"
+                                                  Checked="ChkBouncingTextAlwaysOnTop_Changed" Unchecked="ChkBouncingTextAlwaysOnTop_Changed"/>
+                                    </Grid>
                                 </StackPanel>
                             </StackPanel>
                             </Grid>

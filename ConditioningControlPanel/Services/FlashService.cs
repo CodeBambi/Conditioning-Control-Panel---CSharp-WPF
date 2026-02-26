@@ -1269,7 +1269,7 @@ namespace ConditioningControlPanel.Services
                             using var outputDevice = new WaveOutEvent();
 
                             var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                            var volume = (float)Math.Pow(masterVolume, 1.5);
+                            var volume = (float)Math.Pow(masterVolume, 1.5) * 0.5f;
                             audioFile.Volume = volume;
 
                             outputDevice.Init(audioFile);

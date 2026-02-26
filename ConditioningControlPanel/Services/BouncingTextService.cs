@@ -44,8 +44,11 @@ public class BouncingTextService : IDisposable
     private DateTime _bounceXpMinuteStart = DateTime.MinValue;
     private const int MaxBounceXpPerMinute = 150;
     
+    // Z-order re-assertion counter (every ~30 ticks = ~500ms at 60 FPS)
+    private int _topmostTickCount;
+
     public bool IsRunning => _isRunning;
-    
+
     public event EventHandler? OnBounce;
 
     public void Start(bool bypassLevelCheck = false)
@@ -307,6 +310,15 @@ public class BouncingTextService : IDisposable
             UpdateWindowsText();
         }
         
+        // Re-assert z-order every ~500ms when setting is enabled
+        _topmostTickCount++;
+        if (_topmostTickCount >= 30 && App.Settings?.Current?.BouncingTextAlwaysOnTop == true)
+        {
+            _topmostTickCount = 0;
+            foreach (var window in _windows)
+                window.ReassertTopmost();
+        }
+
         // Update position in all windows
         UpdateWindowsPosition();
     }
@@ -422,6 +434,7 @@ internal class BouncingTextWindow : Window
     private readonly TextBlock _textBlock;
     private readonly System.Windows.Forms.Screen _screen;
     private readonly double _dpiScale;
+    private IntPtr _hwnd;
 
     public BouncingTextWindow(System.Windows.Forms.Screen screen, int fontSize = 48, int opacity = 100)
     {
@@ -506,12 +519,18 @@ internal class BouncingTextWindow : Window
 
     private void MakeClickThrough()
     {
-        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        var extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        _hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        var extendedStyle = GetWindowLong(_hwnd, GWL_EXSTYLE);
         // WS_EX_TRANSPARENT: clicks pass through
         // WS_EX_TOOLWINDOW: not shown in alt-tab
         // WS_EX_NOACTIVATE: never steals keyboard/mouse focus
-        SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+        SetWindowLong(_hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+    }
+
+    public void ReassertTopmost()
+    {
+        if (_hwnd != IntPtr.Zero)
+            SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     private double GetDpiScale()
@@ -534,6 +553,14 @@ internal class BouncingTextWindow : Window
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOACTIVATE = 0x0010;
 
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TRANSPARENT = 0x00000020;

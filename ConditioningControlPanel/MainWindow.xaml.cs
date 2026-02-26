@@ -13944,6 +13944,7 @@ namespace ConditioningControlPanel
             ChkBubbleCountEnabled.IsChecked = s.BubbleCountEnabled;
             ChkBubbleCountStrict.IsChecked = s.BubbleCountStrictLock;
             ChkBouncingTextEnabled.IsChecked = s.BouncingTextEnabled;
+            ChkBouncingTextAlwaysOnTop.IsChecked = s.BouncingTextAlwaysOnTop;
 
             // Mind Wipe
             ChkMindWipeEnabled.IsChecked = s.MindWipeEnabled;
@@ -15645,13 +15646,20 @@ namespace ConditioningControlPanel
         {
             var editor = new TextEditorDialog("Bouncing Text Phrases", App.Settings.Current.BouncingTextPool);
             editor.Owner = this;
-            
+
             if (editor.ShowDialog() == true && editor.ResultData != null)
             {
                 App.Settings.Current.BouncingTextPool = editor.ResultData;
                 App.Logger?.Information("Bouncing text phrases updated: {Count} items", editor.ResultData.Count);
                 App.Settings.Save();
             }
+        }
+
+        private void ChkBouncingTextAlwaysOnTop_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.BouncingTextAlwaysOnTop = ChkBouncingTextAlwaysOnTop.IsChecked ?? false;
+            App.Settings.Save();
         }
 
         #endregion

@@ -1509,6 +1509,13 @@ namespace ConditioningControlPanel.Models
             set { _bouncingTextPool = value ?? new(); OnPropertyChanged(); }
         }
 
+        private bool _bouncingTextAlwaysOnTop = false;
+        public bool BouncingTextAlwaysOnTop
+        {
+            get => _bouncingTextAlwaysOnTop;
+            set { _bouncingTextAlwaysOnTop = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Pink Filter (Unlocks Lv.10)
