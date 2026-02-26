@@ -26,6 +26,9 @@ namespace ConditioningControlPanel
         private string? _firstProviderToken;
         private bool _isNameAvailable;
         private bool _isOgUser;  // Track if this is an OG user recovering their account
+        private bool _isAccountRegisterMode;  // True = register mode, false = login mode
+        private string? _pendingInviteCode;
+        private string? _pendingPassword;
 
         /// <summary>
         /// Result of the login process
@@ -54,6 +57,26 @@ namespace ConditioningControlPanel
                 DragMove();
         }
 
+        /// <summary>Clear all sensitive data from memory and UI fields.</summary>
+        private void ClearSensitiveData()
+        {
+            _pendingInviteCode = null;
+            _pendingPassword = null;
+            TxtPassword.Password = "";
+            TxtPasswordConfirm.Password = "";
+        }
+
+        /// <summary>Sanitize server error messages before showing to user (audit C3).</summary>
+        private static string SanitizeError(string? error)
+        {
+            if (string.IsNullOrEmpty(error)) return "An error occurred";
+            // Strip anything that looks like internal info (stack traces, paths, Redis keys)
+            if (error.Contains("ECONNREFUSED") || error.Contains("Redis") || error.Contains("redis")
+                || error.Contains("stack") || error.Contains("\\") || error.Contains("/api/"))
+                return "Server error. Please try again later.";
+            return error;
+        }
+
         #region Provider Selection
 
         private async void BtnLoginDiscord_Click(object sender, RoutedEventArgs e)
@@ -64,6 +87,11 @@ namespace ConditioningControlPanel
         private async void BtnLoginPatreon_Click(object sender, RoutedEventArgs e)
         {
             await TryLoginWithProviderAsync("patreon");
+        }
+
+        private void BtnLoginAccount_Click(object sender, RoutedEventArgs e)
+        {
+            ShowAccountPanel(isRegister: false);
         }
 
         private async Task TryLoginWithProviderAsync(string provider)
@@ -114,7 +142,7 @@ namespace ConditioningControlPanel
 
                 if (!authResponse.Success)
                 {
-                    ShowError(authResponse.Error ?? "Authentication failed");
+                    ShowError(SanitizeError(authResponse.Error));
                     return;
                 }
 
@@ -171,7 +199,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Login failed for {Provider}", provider);
-                ShowError($"Login failed: {ex.Message}");
+                ShowError("Login failed. Please try again.");
             }
         }
 
@@ -200,6 +228,7 @@ namespace ConditioningControlPanel
             LoadingPanel.Visibility = Visibility.Collapsed;
             NotFoundPanel.Visibility = Visibility.Visible;
             UsernamePanel.Visibility = Visibility.Collapsed;
+            AccountPanel.Visibility = Visibility.Collapsed;
         }
 
         private async void BtnTryOtherProvider_Click(object sender, RoutedEventArgs e)
@@ -258,7 +287,7 @@ namespace ConditioningControlPanel
 
                 if (!authResponse.Success)
                 {
-                    ShowError(authResponse.Error ?? "Authentication failed");
+                    ShowError(SanitizeError(authResponse.Error));
                     return;
                 }
 
@@ -336,7 +365,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Link other provider failed");
-                ShowError($"Failed: {ex.Message}");
+                ShowError("Failed to link accounts. Please try again.");
             }
         }
 
@@ -356,6 +385,7 @@ namespace ConditioningControlPanel
             LoadingPanel.Visibility = Visibility.Collapsed;
             NotFoundPanel.Visibility = Visibility.Collapsed;
             UsernamePanel.Visibility = Visibility.Visible;
+            AccountPanel.Visibility = Visibility.Collapsed;
 
             // Set different text for OG users vs new users
             if (_isOgUser)
@@ -421,7 +451,8 @@ namespace ConditioningControlPanel
             catch (TaskCanceledException) { }
             catch (Exception ex)
             {
-                SetAvailabilityStatus($"Error: {ex.Message}", Brushes.Orange, false);
+                SetAvailabilityStatus("Error checking name", Brushes.Orange, false);
+                App.Logger?.Warning(ex, "Name availability check failed");
             }
         }
 
@@ -437,10 +468,20 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Use the appropriate endpoint based on provider
-                var endpoint = _firstProvider == "discord"
-                    ? $"{_serverUrl}/user/check-display-name-discord?name={Uri.EscapeDataString(name)}"
-                    : $"{_serverUrl}/user/check-display-name?name={Uri.EscapeDataString(name)}";
+                string endpoint;
+                if (_firstProvider == "invite")
+                {
+                    // Invite code flow: use lightweight unauthenticated endpoint
+                    endpoint = $"{_serverUrl}/v2/auth/check-name?name={Uri.EscapeDataString(name)}";
+                }
+                else if (_firstProvider == "discord")
+                {
+                    endpoint = $"{_serverUrl}/user/check-display-name-discord?name={Uri.EscapeDataString(name)}";
+                }
+                else
+                {
+                    endpoint = $"{_serverUrl}/user/check-display-name?name={Uri.EscapeDataString(name)}";
+                }
 
                 var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
                 if (!string.IsNullOrEmpty(_firstProviderToken))
@@ -465,9 +506,15 @@ namespace ConditioningControlPanel
 
         private async void BtnConfirmUsername_Click(object sender, RoutedEventArgs e)
         {
-            if (!_isNameAvailable || string.IsNullOrEmpty(_firstProviderToken)) return;
+            if (!_isNameAvailable) return;
+
+            // Invite code registration doesn't use _firstProviderToken
+            if (_firstProvider != "invite" && string.IsNullOrEmpty(_firstProviderToken)) return;
 
             var displayName = TxtUsername.Text.Trim();
+
+            // Disable button during async (audit C2)
+            BtnConfirmUsername.IsEnabled = false;
             ShowLoading("Creating your account...");
 
             try
@@ -475,17 +522,29 @@ namespace ConditioningControlPanel
                 var v2Auth = new V2AuthService();
                 V2AuthResponse authResponse;
 
-                if (_firstProvider == "discord")
-                    authResponse = await v2Auth.AuthenticateWithDiscordAsync(_firstProviderToken, displayName);
+                if (_firstProvider == "invite")
+                {
+                    if (string.IsNullOrEmpty(_pendingInviteCode) || string.IsNullOrEmpty(_pendingPassword))
+                    {
+                        ClearSensitiveData();
+                        ShowError("Session expired. Please try again.");
+                        return;
+                    }
+                    authResponse = await v2Auth.RegisterAsync(_pendingInviteCode, displayName, _pendingPassword);
+                    ClearSensitiveData(); // Clear immediately after use (audit C1)
+                }
+                else if (_firstProvider == "discord")
+                    authResponse = await v2Auth.AuthenticateWithDiscordAsync(_firstProviderToken!, displayName);
                 else
-                    authResponse = await v2Auth.AuthenticateWithPatreonAsync(_firstProviderToken, displayName);
+                    authResponse = await v2Auth.AuthenticateWithPatreonAsync(_firstProviderToken!, displayName);
 
                 if (authResponse.Success && authResponse.User != null)
                 {
                     v2Auth.ApplyUserDataToSettings(authResponse.User, authResponse.AuthToken);
                     App.UnifiedUserId = authResponse.User.UnifiedId;
 
-                    UpdateServiceProperties(_firstProvider!, authResponse.User.UnifiedId, authResponse.User.DisplayName);
+                    if (_firstProvider != "invite")
+                        UpdateServiceProperties(_firstProvider!, authResponse.User.UnifiedId, authResponse.User.DisplayName);
 
                     // If this was an OG user picking a new name (old one taken), they still get OG status
                     var isOg = _isOgUser || authResponse.User.IsSeason0Og;
@@ -505,13 +564,201 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    ShowError(authResponse.Error ?? "Failed to create account");
+                    ClearSensitiveData();
+                    ShowError(SanitizeError(authResponse.Error));
                 }
             }
             catch (Exception ex)
             {
+                ClearSensitiveData();
                 App.Logger?.Error(ex, "Failed to create account");
-                ShowError($"Failed: {ex.Message}");
+                ShowError("Failed to create account. Please try again.");
+            }
+        }
+
+        #endregion
+
+        #region Account Login (Invite Code + Password)
+
+        private void ShowAccountPanel(bool isRegister)
+        {
+            _isAccountRegisterMode = isRegister;
+
+            ProviderPanel.Visibility = Visibility.Collapsed;
+            LoadingPanel.Visibility = Visibility.Collapsed;
+            NotFoundPanel.Visibility = Visibility.Collapsed;
+            UsernamePanel.Visibility = Visibility.Collapsed;
+            AccountPanel.Visibility = Visibility.Visible;
+
+            // Clear all fields
+            TxtInviteCode.Text = "";
+            TxtLoginDisplayName.Text = "";
+            TxtPassword.Password = "";
+            TxtPasswordConfirm.Password = "";
+            TxtAccountError.Text = "";
+            BtnAccountSubmit.IsEnabled = true;
+
+            if (isRegister)
+            {
+                TxtAccountTitle.Text = "Create Account";
+                BtnAccountSubmit.Content = "Next";
+
+                // Show invite code + password + confirm; hide display name
+                LblInviteCode.Visibility = Visibility.Visible;
+                TxtInviteCode.Visibility = Visibility.Visible;
+                LblDisplayName.Visibility = Visibility.Collapsed;
+                TxtLoginDisplayName.Visibility = Visibility.Collapsed;
+                LblPasswordConfirm.Visibility = Visibility.Visible;
+                TxtPasswordConfirm.Visibility = Visibility.Visible;
+
+                TxtAccountToggle.Inlines.Clear();
+                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run("Already have an account? ") { Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0)) });
+                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run("Login") { Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)), TextDecorations = TextDecorations.Underline });
+
+                TxtInviteCode.Focus();
+            }
+            else
+            {
+                TxtAccountTitle.Text = "Login";
+                BtnAccountSubmit.Content = "Login";
+
+                // Show display name + password; hide invite code + confirm
+                LblInviteCode.Visibility = Visibility.Collapsed;
+                TxtInviteCode.Visibility = Visibility.Collapsed;
+                LblDisplayName.Visibility = Visibility.Visible;
+                TxtLoginDisplayName.Visibility = Visibility.Visible;
+                LblPasswordConfirm.Visibility = Visibility.Collapsed;
+                TxtPasswordConfirm.Visibility = Visibility.Collapsed;
+
+                TxtAccountToggle.Inlines.Clear();
+                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run("Don't have an account? ") { Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0)) });
+                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run("Create one") { Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)), TextDecorations = TextDecorations.Underline });
+
+                TxtLoginDisplayName.Focus();
+            }
+        }
+
+        private void TxtAccountToggle_Click(object sender, MouseButtonEventArgs e)
+        {
+            ShowAccountPanel(!_isAccountRegisterMode);
+        }
+
+        private void BtnAccountBack_Click(object sender, MouseButtonEventArgs e)
+        {
+            ClearSensitiveData();
+            ShowProviderSelection();
+        }
+
+        private async void BtnAccountSubmit_Click(object sender, RoutedEventArgs e)
+        {
+            var password = TxtPassword.Password;
+
+            // Validate password (shared for both modes)
+            if (password.Length < 8)
+            {
+                TxtAccountError.Text = "Password must be at least 8 characters";
+                return;
+            }
+
+            // Disable button during async (audit C2)
+            BtnAccountSubmit.IsEnabled = false;
+
+            if (_isAccountRegisterMode)
+            {
+                var inviteCode = TxtInviteCode.Text.Trim();
+
+                // Validate invite code
+                if (string.IsNullOrWhiteSpace(inviteCode))
+                {
+                    TxtAccountError.Text = "Please enter your invite code";
+                    BtnAccountSubmit.IsEnabled = true;
+                    return;
+                }
+
+                // Validate confirm password
+                if (TxtPasswordConfirm.Password != password)
+                {
+                    TxtAccountError.Text = "Passwords do not match";
+                    BtnAccountSubmit.IsEnabled = true;
+                    return;
+                }
+
+                // Save credentials and go to username panel
+                _pendingInviteCode = inviteCode;
+                _pendingPassword = password;
+                _firstProvider = "invite";
+                _isOgUser = false;
+                ShowUsernamePanel();
+            }
+            else
+            {
+                var displayName = TxtLoginDisplayName.Text.Trim();
+
+                // Validate display name
+                if (string.IsNullOrWhiteSpace(displayName))
+                {
+                    TxtAccountError.Text = "Please enter your display name";
+                    BtnAccountSubmit.IsEnabled = true;
+                    return;
+                }
+
+                // Login mode
+                await TryAccountLoginAsync(displayName, password);
+            }
+        }
+
+        private async Task TryAccountLoginAsync(string displayName, string password)
+        {
+            ShowLoading("Logging in...");
+
+            try
+            {
+                var v2Auth = new V2AuthService();
+                var authResponse = await v2Auth.LoginAsync(displayName, password);
+
+                // Clear password from memory immediately after use (audit C1)
+                ClearSensitiveData();
+
+                if (!authResponse.Success)
+                {
+                    ShowAccountPanel(_isAccountRegisterMode);
+                    TxtLoginDisplayName.Text = displayName;
+                    TxtAccountError.Text = SanitizeError(authResponse.Error);
+                    return;
+                }
+
+                if (authResponse.User != null)
+                {
+                    v2Auth.ApplyUserDataToSettings(authResponse.User, authResponse.AuthToken);
+                    App.UnifiedUserId = authResponse.User.UnifiedId;
+
+                    Result = new LoginResult
+                    {
+                        Success = true,
+                        IsLegacyUser = false,
+                        ShouldShowOgWelcome = false,
+                        UnifiedId = authResponse.User.UnifiedId,
+                        DisplayName = authResponse.User.DisplayName,
+                        Provider = "account"
+                    };
+
+                    DialogResult = true;
+                    Close();
+                }
+                else
+                {
+                    ShowAccountPanel(_isAccountRegisterMode);
+                    TxtLoginDisplayName.Text = displayName;
+                    TxtAccountError.Text = "Unexpected response from server";
+                }
+            }
+            catch (Exception ex)
+            {
+                ClearSensitiveData();
+                App.Logger?.Error(ex, "Account login failed");
+                ShowAccountPanel(_isAccountRegisterMode);
+                TxtLoginDisplayName.Text = displayName;
+                TxtAccountError.Text = "Login failed. Please try again.";
             }
         }
 
@@ -525,6 +772,7 @@ namespace ConditioningControlPanel
             LoadingPanel.Visibility = Visibility.Collapsed;
             NotFoundPanel.Visibility = Visibility.Collapsed;
             UsernamePanel.Visibility = Visibility.Collapsed;
+            AccountPanel.Visibility = Visibility.Collapsed;
             BtnLoginDiscord.IsEnabled = true;
             BtnLoginPatreon.IsEnabled = true;
         }
@@ -536,6 +784,7 @@ namespace ConditioningControlPanel
             LoadingPanel.Visibility = Visibility.Visible;
             NotFoundPanel.Visibility = Visibility.Collapsed;
             UsernamePanel.Visibility = Visibility.Collapsed;
+            AccountPanel.Visibility = Visibility.Collapsed;
         }
 
         private void ShowError(string message)
@@ -565,6 +814,9 @@ namespace ConditioningControlPanel
                 App.Discord?.Logout();
             else if (_firstProvider == "patreon")
                 App.Patreon?.Logout();
+
+            // Clear sensitive data (audit C1)
+            ClearSensitiveData();
 
             DialogResult = false;
             Close();

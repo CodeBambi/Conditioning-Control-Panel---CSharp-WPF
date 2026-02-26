@@ -17,11 +17,28 @@ namespace ConditioningControlPanel.Services
         private static readonly HttpClient _http = new();
         private const string SERVER_URL = "https://codebambi-proxy.vercel.app";
 
-        /// <summary>Redact auth_token values from JSON strings before logging.</summary>
-        private static string RedactAuthToken(string json)
+        /// <summary>Redact auth_token and password values from JSON strings before logging.</summary>
+        private static string RedactSensitiveFields(string json)
         {
-            return System.Text.RegularExpressions.Regex.Replace(
+            json = System.Text.RegularExpressions.Regex.Replace(
                 json, @"""auth_token""\s*:\s*""[^""]+""", @"""auth_token"":""[REDACTED]""");
+            json = System.Text.RegularExpressions.Regex.Replace(
+                json, @"""password""\s*:\s*""[^""]+""", @"""password"":""[REDACTED]""");
+            return json;
+        }
+
+        /// <summary>Safely extract error message from a response body that may not be JSON.</summary>
+        private static string ParseErrorMessage(string body, System.Net.HttpStatusCode statusCode)
+        {
+            try
+            {
+                var obj = JObject.Parse(body);
+                return obj["error"]?.ToString() ?? $"HTTP {(int)statusCode}";
+            }
+            catch
+            {
+                return $"HTTP {(int)statusCode}";
+            }
         }
 
         static V2AuthService()
@@ -213,15 +230,14 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/discord", content);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] Discord auth response: {Json}", RedactAuthToken(json));
+                Log.Debug("[V2Auth] Discord auth response: {Json}", RedactSensitiveFields(json));
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    var error = JObject.Parse(json);
                     return new V2AuthResponse
                     {
                         Success = false,
-                        Error = error["error"]?.ToString() ?? $"HTTP {response.StatusCode}"
+                        Error = ParseErrorMessage(json, response.StatusCode)
                     };
                 }
 
@@ -257,15 +273,14 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/patreon", content);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] Patreon auth response: {Json}", RedactAuthToken(json));
+                Log.Debug("[V2Auth] Patreon auth response: {Json}", RedactSensitiveFields(json));
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    var error = JObject.Parse(json);
                     return new V2AuthResponse
                     {
                         Success = false,
-                        Error = error["error"]?.ToString() ?? $"HTTP {response.StatusCode}"
+                        Error = ParseErrorMessage(json, response.StatusCode)
                     };
                 }
 
@@ -275,6 +290,81 @@ namespace ConditioningControlPanel.Services
             {
                 Log.Error(ex, "[V2Auth] Patreon auth failed");
                 return new V2AuthResponse { Success = false, Error = ex.Message };
+            }
+        }
+
+        /// <summary>
+        /// Register a new account with invite code, display name, and password
+        /// </summary>
+        public async Task<V2AuthResponse> RegisterAsync(string inviteCode, string displayName, string password)
+        {
+            try
+            {
+                var payload = new JObject
+                {
+                    ["invite_code"] = inviteCode,
+                    ["display_name"] = displayName,
+                    ["password"] = password
+                };
+
+                var content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
+                var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/register", content);
+                var json = await response.Content.ReadAsStringAsync();
+
+                Log.Debug("[V2Auth] Register response: {Json}", RedactSensitiveFields(json));
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return new V2AuthResponse
+                    {
+                        Success = false,
+                        Error = ParseErrorMessage(json, response.StatusCode)
+                    };
+                }
+
+                return JsonConvert.DeserializeObject<V2AuthResponse>(json) ?? new V2AuthResponse { Success = false, Error = "Invalid response" };
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[V2Auth] Register failed");
+                return new V2AuthResponse { Success = false, Error = "Registration failed. Please try again." };
+            }
+        }
+
+        /// <summary>
+        /// Login with display name and password
+        /// </summary>
+        public async Task<V2AuthResponse> LoginAsync(string displayName, string password)
+        {
+            try
+            {
+                var payload = new JObject
+                {
+                    ["display_name"] = displayName,
+                    ["password"] = password
+                };
+
+                var content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
+                var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/login", content);
+                var json = await response.Content.ReadAsStringAsync();
+
+                Log.Debug("[V2Auth] Login response: {Json}", RedactSensitiveFields(json));
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return new V2AuthResponse
+                    {
+                        Success = false,
+                        Error = ParseErrorMessage(json, response.StatusCode)
+                    };
+                }
+
+                return JsonConvert.DeserializeObject<V2AuthResponse>(json) ?? new V2AuthResponse { Success = false, Error = "Invalid response" };
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[V2Auth] Login failed");
+                return new V2AuthResponse { Success = false, Error = "Login failed. Please try again." };
             }
         }
 
@@ -299,15 +389,14 @@ namespace ConditioningControlPanel.Services
                 var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/link", content);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log.Debug("[V2Auth] Link response: {Json}", RedactAuthToken(json));
+                Log.Debug("[V2Auth] Link response: {Json}", RedactSensitiveFields(json));
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    var error = JObject.Parse(json);
                     return new LinkResponse
                     {
                         Success = false,
-                        Error = error["error"]?.ToString() ?? $"HTTP {response.StatusCode}"
+                        Error = ParseErrorMessage(json, response.StatusCode)
                     };
                 }
 

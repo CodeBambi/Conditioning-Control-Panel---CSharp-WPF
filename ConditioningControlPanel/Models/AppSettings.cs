@@ -2445,6 +2445,16 @@ namespace ConditioningControlPanel.Models
             set { _highestLevelEver = Math.Max(0, value); OnPropertyChanged(); }
         }
 
+        private bool _hasAcceptedAgeVerification = false;
+        /// <summary>
+        /// Whether the user has accepted the 18+ age verification prompt.
+        /// </summary>
+        public bool HasAcceptedAgeVerification
+        {
+            get => _hasAcceptedAgeVerification;
+            set { _hasAcceptedAgeVerification = value; OnPropertyChanged(); }
+        }
+
         private bool _hasShownOgWelcome = false;
         /// <summary>
         /// Whether the OG welcome popup has been shown to this user.

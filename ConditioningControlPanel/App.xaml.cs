@@ -212,9 +212,10 @@ namespace ConditioningControlPanel
         public static LockdownService Lockdown { get; private set; } = null!;
 
         /// <summary>
-        /// Whether user is logged in with either Patreon or Discord (required for progression tracking)
+        /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
+        /// HasCloudIdentity covers email login (has UnifiedId) and restored sessions.
         /// </summary>
-        public static bool IsLoggedIn => (Patreon?.IsAuthenticated == true) || (Discord?.IsAuthenticated == true);
+        public static bool IsLoggedIn => (Patreon?.IsAuthenticated == true) || (Discord?.IsAuthenticated == true) || HasCloudIdentity;
 
         /// <summary>
         /// Whether a conditioning session is currently running. Set by MainWindow.
@@ -633,9 +634,10 @@ namespace ConditioningControlPanel
                 _ = AutoConnectHapticsAsync();
             }
 
-            // Initialize Discord Rich Presence
+            // Initialize Discord Rich Presence (only if Discord is linked — prevents
+            // accidental exposure for users who chose anonymous invite-code accounts)
             DiscordRpc = new DiscordRichPresenceService();
-            if (Settings.Current.DiscordRichPresenceEnabled)
+            if (Settings.Current.DiscordRichPresenceEnabled && Settings.Current.HasLinkedDiscord)
             {
                 DiscordRpc.IsEnabled = true;
             }
@@ -701,6 +703,28 @@ namespace ConditioningControlPanel
             // Close splash screen with fade animation
             splash.SetProgress(1.0, "Ready!");
             splash.FadeOutAndClose();
+
+            // Age verification gate (first launch only, shown after app is fully loaded)
+            if (Settings?.Current?.HasAcceptedAgeVerification != true)
+            {
+                var result = MessageBox.Show(mainWindow,
+                    "This application contains adult content intended for users aged 18 and older.\n\n" +
+                    "By clicking \"Yes\", you confirm that you are at least 18 years old and that viewing adult content is legal in your jurisdiction.\n\n" +
+                    "Do you wish to continue?",
+                    "Age Verification",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+
+                if (result != MessageBoxResult.Yes)
+                {
+                    Shutdown();
+                    return;
+                }
+
+                Settings.Current.HasAcceptedAgeVerification = true;
+                Settings.Save();
+            }
         }
         
         private void OnAchievementUnlocked(object? sender, Models.Achievement achievement)
