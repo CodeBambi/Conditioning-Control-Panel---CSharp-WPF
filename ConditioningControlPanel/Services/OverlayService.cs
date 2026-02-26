@@ -749,6 +749,7 @@ public class OverlayService : IDisposable
                 bitmapData.Stride * bitmap.Height,
                 bitmapData.Stride);
 
+            bitmapSource.Freeze();
             return bitmapSource;
         }
         finally
