@@ -22,13 +22,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.9";
+        public const string AppVersion = "5.6.10";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.9 - Bug Fix Update
+        public const string CurrentPatchNotes = @"v5.6.10 - Anonymous Login Update
+
+🔑 ANONYMOUS LOGIN
+• No email required — register with just an invite code, display name, and password
+• Your account is fully anonymous — no personal information collected or stored
+• Existing Patreon/Discord logins still work as before
 
 🛠️ BUG FIXES
 • Fixed strict mode toggles enabling when cancelling the warning dialog (all 4 strict toggles)
@@ -42,7 +47,6 @@ namespace ConditioningControlPanel.Services
 • Fixed online user count showing far fewer users than actual
 • Removed XP from test lock cards (anti-exploit)
 • Fixed app hang/freeze during long sessions (~2hrs) caused by flash image memory leak
-• Fixed overlay spiral BitmapSource not frozen (rendering optimization)
 
 ⚡ PERFORMANCE
 • Flash images now cached in memory (50 images / 200MB cap) — no more repeated disk reads
@@ -50,9 +54,9 @@ namespace ConditioningControlPanel.Services
 • Flash window cleanup now releases bitmap memory immediately instead of waiting for GC
 
 🛡️ SECURITY
-• IP rate limiting now enforces blocking (was log-only)
-• Redis-backed IP blocking shared across all server instances
-• Per-user backup-settings cooldown to prevent abuse
+• 6 rounds of server-side security hardening (30+ fixes)
+• Rate limiting on all legacy and modern endpoints
+• Admin operations protected with scan cooldowns
 • Client now sends X-Client-Version and User-Agent headers";
 
         private const string GitHubOwner = "CodeBambi";
