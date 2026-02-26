@@ -3092,13 +3092,32 @@ namespace ConditioningControlPanel
 
         private void ChkDiscordRichPresence_Changed(object sender, RoutedEventArgs e)
         {
+            if (_isLoading) return;
+
             // Get the state from whichever checkbox was clicked
             var checkbox = sender as CheckBox;
             var isEnabled = checkbox?.IsChecked == true;
 
-            // Sync both checkboxes
+            // Block enabling Rich Presence if Discord is not linked — prevents accidental
+            // exposure for users who chose anonymous invite-code accounts
+            if (isEnabled && App.Settings?.Current?.HasLinkedDiscord != true)
+            {
+                _isLoading = true;
+                ChkDiscordRichPresence.IsChecked = false;
+                ChkQuickDiscordRichPresence.IsChecked = false;
+                if (ChkDiscordTabRichPresence != null) ChkDiscordTabRichPresence.IsChecked = false;
+                _isLoading = false;
+                MessageBox.Show("Discord Rich Presence requires a linked Discord account.\n\nLink your Discord in the Profile tab first.",
+                    "Discord Not Linked", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // Sync all checkboxes without re-entrancy
+            _isLoading = true;
             ChkDiscordRichPresence.IsChecked = isEnabled;
             ChkQuickDiscordRichPresence.IsChecked = isEnabled;
+            if (ChkDiscordTabRichPresence != null) ChkDiscordTabRichPresence.IsChecked = isEnabled;
+            _isLoading = false;
 
             App.Settings.Current.DiscordRichPresenceEnabled = isEnabled;
 
