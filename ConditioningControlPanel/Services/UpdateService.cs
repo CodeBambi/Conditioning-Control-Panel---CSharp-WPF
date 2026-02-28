@@ -28,12 +28,20 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.12 - Legacy Migration Update
+        public const string CurrentPatchNotes = @"v5.6.12 - Stability Update
 
-🔄 MIGRATION
-• OAuth users (Patreon/Discord) are now automatically upgraded to V2 accounts on launch
-• No action needed — your progress, level, and achievements carry over seamlessly
-• Prepares all users for the March 2026 season launch";
+🛠️ BUG FIXES
+• Fixed stats and sparkle points resetting when syncing with cloud
+• Fixed audio ducking getting stuck at 0% volume
+• Fixed multi-monitor DPI scaling for video and bubble count windows
+• Fixed bubble count not finding content pack videos
+• Fixed invite-code users losing progress on sync
+• Fixed main window failing to load after update
+• Fixed bubble count frequency setting not saving
+
+✨ IMPROVEMENTS
+• Patreon and Discord accounts now seamlessly link to your profile on launch
+• Preparing for the March 2026 season";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
