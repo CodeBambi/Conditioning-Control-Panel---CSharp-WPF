@@ -633,6 +633,7 @@ namespace ConditioningControlPanel.Services
 
         private Window CreateLibVLCUrlWindow(string url, Screen screen, bool withAudio)
         {
+            var dpiScale = BubbleCountWindow.GetDpiForScreen(screen);
             var win = new Window
             {
                 WindowStyle = WindowStyle.None,
@@ -642,10 +643,10 @@ namespace ConditioningControlPanel.Services
                 Topmost = true,
                 Background = Brushes.Black,
                 WindowStartupLocation = WindowStartupLocation.Manual,
-                Left = screen.Bounds.X,
-                Top = screen.Bounds.Y,
-                Width = screen.Bounds.Width,
-                Height = screen.Bounds.Height
+                Left = screen.Bounds.X / dpiScale,
+                Top = screen.Bounds.Y / dpiScale,
+                Width = screen.Bounds.Width / dpiScale,
+                Height = screen.Bounds.Height / dpiScale
             };
 
             var videoView = new VideoView
@@ -947,6 +948,7 @@ namespace ConditioningControlPanel.Services
 
             try
             {
+                var dpiScale = BubbleCountWindow.GetDpiForScreen(screen);
                 win = new Window
                 {
                     WindowStyle = WindowStyle.None,
@@ -956,8 +958,8 @@ namespace ConditioningControlPanel.Services
                     Topmost = true,
                     Background = Brushes.Black,
                     WindowStartupLocation = WindowStartupLocation.Manual,
-                    Left = screen.Bounds.X + 100,
-                    Top = screen.Bounds.Y + 100,
+                    Left = (screen.Bounds.X + 100) / dpiScale,
+                    Top = (screen.Bounds.Y + 100) / dpiScale,
                     Width = 400,
                     Height = 300
                 };
@@ -1168,6 +1170,7 @@ namespace ConditioningControlPanel.Services
                 catch { /* Ignore cleanup errors */ }
 
                 // Create a black placeholder window so we don't crash
+                var fallbackDpi = BubbleCountWindow.GetDpiForScreen(screen);
                 var fallbackWin = new Window
                 {
                     WindowStyle = WindowStyle.None,
@@ -1176,10 +1179,10 @@ namespace ConditioningControlPanel.Services
                     ShowInTaskbar = false,
                     ShowActivated = false,
                     WindowStartupLocation = WindowStartupLocation.Manual,
-                    Left = screen.Bounds.X,
-                    Top = screen.Bounds.Y,
-                    Width = screen.Bounds.Width,
-                    Height = screen.Bounds.Height
+                    Left = screen.Bounds.X / fallbackDpi,
+                    Top = screen.Bounds.Y / fallbackDpi,
+                    Width = screen.Bounds.Width / fallbackDpi,
+                    Height = screen.Bounds.Height / fallbackDpi
                 };
                 fallbackWin.Show();
                 fallbackWin.WindowState = WindowState.Maximized;
@@ -1199,6 +1202,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private (Window win, MediaElement media) CreateMediaElementVideoWindow(string path, Screen screen, bool strict)
         {
+            var mediaDpi = BubbleCountWindow.GetDpiForScreen(screen);
             var win = new Window
             {
                 WindowStyle = WindowStyle.None,
@@ -1208,8 +1212,8 @@ namespace ConditioningControlPanel.Services
                 Topmost = true,
                 Background = Brushes.Black,
                 WindowStartupLocation = WindowStartupLocation.Manual,
-                Left = screen.Bounds.X + 100,
-                Top = screen.Bounds.Y + 100,
+                Left = (screen.Bounds.X + 100) / mediaDpi,
+                Top = (screen.Bounds.Y + 100) / mediaDpi,
                 Width = 400,
                 Height = 300
             };
@@ -1303,6 +1307,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private Window CreateMirrorVideoWindow(MediaElement sourceMedia, Screen screen, bool strict)
         {
+            var mirrorDpi = BubbleCountWindow.GetDpiForScreen(screen);
             var win = new Window
             {
                 WindowStyle = WindowStyle.None,
@@ -1312,8 +1317,8 @@ namespace ConditioningControlPanel.Services
                 Topmost = true,
                 Background = Brushes.Black,
                 WindowStartupLocation = WindowStartupLocation.Manual,
-                Left = screen.Bounds.X + 100,
-                Top = screen.Bounds.Y + 100,
+                Left = (screen.Bounds.X + 100) / mirrorDpi,
+                Top = (screen.Bounds.Y + 100) / mirrorDpi,
                 Width = 400,
                 Height = 300
             };
@@ -1747,6 +1752,7 @@ namespace ConditioningControlPanel.Services
 
             foreach (var screen in screens)
             {
+                var msgDpi = BubbleCountWindow.GetDpiForScreen(screen);
                 var win = new Window
                 {
                     WindowStyle = WindowStyle.None,
@@ -1755,8 +1761,8 @@ namespace ConditioningControlPanel.Services
                     ShowInTaskbar = false,
                     ShowActivated = false,
                     WindowStartupLocation = WindowStartupLocation.Manual,
-                    Left = screen.Bounds.X + 100,
-                    Top = screen.Bounds.Y + 100,
+                    Left = (screen.Bounds.X + 100) / msgDpi,
+                    Top = (screen.Bounds.Y + 100) / msgDpi,
                     Width = 400,
                     Height = 300,
                     Content = new TextBlock

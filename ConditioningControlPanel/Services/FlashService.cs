@@ -592,19 +592,14 @@ namespace ConditioningControlPanel.Services
                     if (settings.AudioDuckingEnabled)
                     {
                         App.Audio.Duck(settings.DuckingLevel);
-                        
+                        var duckGen = App.Audio?.DuckGeneration ?? -1;
+
                         // Schedule unduck
                         var unduckDelay = (int)(duration * 1000) + 1500;
                         Task.Delay(unduckDelay).ContinueWith(_ =>
                         {
-                            try
-                            {
-                                System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
-                                {
-                                    App.Audio.Unduck();
-                                });
-                            }
-                            catch { }
+                            try { App.Audio?.Unduck(duckGen); }
+                            catch (Exception ex) { App.Logger?.Debug("FlashService unduck failed: {Error}", ex.Message); }
                         });
                     }
                 }

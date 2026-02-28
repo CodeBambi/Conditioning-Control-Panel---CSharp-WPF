@@ -2735,8 +2735,26 @@ namespace ConditioningControlPanel
                             // so we must restore from cloud before syncing UP — otherwise we'd push
                             // level=1/xp=0 to the server, which can permanently erase progress if the
                             // server also has low values (e.g. right after migration/season reset).
-                            await App.ProfileSync.LoadProfileAsync();
-                            await App.ProfileSync.SyncProfileAsync();
+                            var loaded = await App.ProfileSync.LoadProfileAsync();
+                            if (loaded)
+                            {
+                                await App.ProfileSync.SyncProfileAsync();
+                            }
+                            else
+                            {
+                                // LoadProfileAsync fails for invite-code users (no OAuth token).
+                                // For V2 users, SyncProfileAsync still works and returns server data,
+                                // but only sync if we have non-zeroed data to avoid pushing zeros.
+                                var s = App.Settings?.Current;
+                                if (s != null && (s.PlayerLevel > 1 || s.PlayerXP > 0 || (s.UnlockedSkills?.Count ?? 0) > 0))
+                                {
+                                    await App.ProfileSync.SyncProfileAsync();
+                                }
+                                else
+                                {
+                                    App.Logger?.Warning("Skipping post-login sync — profile load failed and local data is zeroed");
+                                }
+                            }
                         }
                         finally
                         {
@@ -13962,6 +13980,9 @@ namespace ConditioningControlPanel
             ChkLockCardStrict.IsChecked = s.LockCardStrict;
             ChkBubbleCountEnabled.IsChecked = s.BubbleCountEnabled;
             ChkBubbleCountStrict.IsChecked = s.BubbleCountStrictLock;
+            SliderBubbleCountFreq.Value = s.BubbleCountFrequency;
+            TxtBubbleCountFreq.Text = s.BubbleCountFrequency.ToString();
+            CmbBubbleCountDifficulty.SelectedIndex = s.BubbleCountDifficulty;
             ChkBouncingTextEnabled.IsChecked = s.BouncingTextEnabled;
             ChkBouncingTextAlwaysOnTop.IsChecked = s.BouncingTextAlwaysOnTop;
 

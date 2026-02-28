@@ -46,6 +46,7 @@ namespace ConditioningControlPanel
         private const string MutexName = "ConditioningControlPanel_SingleInstance_Mutex";
         private const string ShowSignalName = "ConditioningControlPanel_ShowWindow_Signal";
         private static EventWaitHandle? _showSignal;
+        private SplashScreen? _splash;
         private static Thread? _showSignalThread;
 
         /// <summary>
@@ -386,7 +387,8 @@ namespace ConditioningControlPanel
         {
             // Show splash screen IMMEDIATELY - before anything else
             // This ensures users see feedback right away after update/launch
-            var splash = new SplashScreen();
+            _splash = new SplashScreen();
+            var splash = _splash;
             splash.Show();
             splash.SetProgress(0.0, "Starting...");
 
@@ -488,6 +490,11 @@ namespace ConditioningControlPanel
                 if (!errorDialogShown)
                 {
                     errorDialogShown = true;
+
+                    // Close splash screen if still open so error dialog is visible
+                    try { _splash?.Close(); } catch { }
+                    _splash = null;
+
                     try
                     {
                         MessageBox.Show($"An error occurred:\n\n{args.Exception.Message}\n\nDetails logged to crash log.",
@@ -693,9 +700,20 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.95, "Opening main window...");
 
-            // Show main window
-            var mainWindow = new MainWindow();
-            mainWindow.Show();
+            // Show main window — wrapped in try-catch to ensure splash closes on failure
+            MainWindow mainWindow;
+            try
+            {
+                mainWindow = new MainWindow();
+                mainWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                Logger?.Error(ex, "Failed to create main window");
+                try { splash.Close(); } catch { }
+                _splash = null;
+                throw; // Re-throw to let DispatcherUnhandledException show the error
+            }
 
             // Give RemoteControlService a direct reference (Application.Current.MainWindow is null when hidden to tray)
             if (RemoteControl != null) RemoteControl.MainWindowRef = mainWindow;
@@ -703,27 +721,31 @@ namespace ConditioningControlPanel
             // Close splash screen with fade animation
             splash.SetProgress(1.0, "Ready!");
             splash.FadeOutAndClose();
+            _splash = null;
 
-            // Age verification gate (first launch only, shown after app is fully loaded)
+            // Age verification gate (first launch only, deferred to ensure splash is fully closed)
             if (Settings?.Current?.HasAcceptedAgeVerification != true)
             {
-                var result = MessageBox.Show(mainWindow,
-                    "This application contains adult content intended for users aged 18 and older.\n\n" +
-                    "By clicking \"Yes\", you confirm that you are at least 18 years old and that viewing adult content is legal in your jurisdiction.\n\n" +
-                    "Do you wish to continue?",
-                    "Age Verification",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning,
-                    MessageBoxResult.No);
-
-                if (result != MessageBoxResult.Yes)
+                Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    Shutdown();
-                    return;
-                }
+                    var result = MessageBox.Show(mainWindow,
+                        "This application contains adult content intended for users aged 18 and older.\n\n" +
+                        "By clicking \"Yes\", you confirm that you are at least 18 years old and that viewing adult content is legal in your jurisdiction.\n\n" +
+                        "Do you wish to continue?",
+                        "Age Verification",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning,
+                        MessageBoxResult.No);
 
-                Settings.Current.HasAcceptedAgeVerification = true;
-                Settings.Save();
+                    if (result != MessageBoxResult.Yes)
+                    {
+                        Shutdown();
+                        return;
+                    }
+
+                    Settings.Current.HasAcceptedAgeVerification = true;
+                    Settings.Save();
+                }), System.Windows.Threading.DispatcherPriority.Loaded);
             }
         }
         

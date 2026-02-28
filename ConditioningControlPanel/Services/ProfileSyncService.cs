@@ -198,6 +198,13 @@ namespace ConditioningControlPanel.Services
                 var accessToken = GetAccessToken();
                 if (string.IsNullOrEmpty(accessToken))
                 {
+                    // For V2 invite-code users: no OAuth token, but we can load via V2 sync
+                    var unifiedId = App.Settings?.Current?.UnifiedId;
+                    if (!string.IsNullOrEmpty(unifiedId))
+                    {
+                        App.Logger?.Information("No OAuth token — loading profile via V2 sync for invite-code user");
+                        return await SyncProfileAsync();
+                    }
                     App.Logger?.Warning("No access token available for profile sync");
                     return false;
                 }
@@ -833,6 +840,160 @@ namespace ConditioningControlPanel.Services
                     {
                         App.Logger?.Debug("Stats sync: TotalBubblesPopped cloud ({Cloud}) > local ({Local})", b, progress.TotalBubblesPopped);
                         progress.TotalBubblesPopped = b;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_video_minutes", out var videoMin))
+                {
+                    var v = Convert.ToDouble(videoMin);
+                    if (v > progress.TotalVideoMinutes)
+                    {
+                        progress.TotalVideoMinutes = v;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_lock_cards_completed", out var lockCards))
+                {
+                    var lc = Convert.ToInt32(lockCards);
+                    if (lc > progress.TotalLockCardsCompleted)
+                    {
+                        progress.TotalLockCardsCompleted = lc;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("highest_streak", out var hStreak))
+                {
+                    var hs = Convert.ToInt32(hStreak);
+                    var settings2 = App.Settings?.Current;
+                    if (settings2 != null && hs > settings2.HighestStreak)
+                    {
+                        settings2.HighestStreak = hs;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_attention_checks_passed", out var attPassed))
+                {
+                    var ap = Convert.ToInt32(attPassed);
+                    if (ap > progress.TotalAttentionChecksPassed)
+                    {
+                        progress.TotalAttentionChecksPassed = ap;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("video_attention_checks_passed", out var vidAttPassed))
+                {
+                    var vap = Convert.ToInt32(vidAttPassed);
+                    if (vap > progress.VideoAttentionChecksPassed)
+                    {
+                        progress.VideoAttentionChecksPassed = vap;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("video_attention_checks_failed", out var vidAttFailed))
+                {
+                    var vaf = Convert.ToInt32(vidAttFailed);
+                    if (vaf > progress.VideoAttentionChecksFailed)
+                    {
+                        progress.VideoAttentionChecksFailed = vaf;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_attention_check_failures", out var attFail))
+                {
+                    var af = Convert.ToInt32(attFail);
+                    if (af > progress.AttentionCheckFailures)
+                    {
+                        progress.AttentionCheckFailures = af;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_bubble_count_games", out var bcGames))
+                {
+                    var bg = Convert.ToInt32(bcGames);
+                    if (bg > progress.TotalBubbleCountGames)
+                    {
+                        progress.TotalBubbleCountGames = bg;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_bubble_count_correct", out var bcCorrect))
+                {
+                    var bc = Convert.ToInt32(bcCorrect);
+                    if (bc > progress.TotalBubbleCountCorrect)
+                    {
+                        progress.TotalBubbleCountCorrect = bc;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_bubble_count_failed", out var bcFailed))
+                {
+                    var bf = Convert.ToInt32(bcFailed);
+                    if (bf > progress.TotalBubbleCountFailed)
+                    {
+                        progress.TotalBubbleCountFailed = bf;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("bubble_count_best_streak", out var bcStreak))
+                {
+                    var bs = Convert.ToInt32(bcStreak);
+                    if (bs > progress.BubbleCountBestStreak)
+                    {
+                        progress.BubbleCountBestStreak = bs;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_sessions_started", out var sessStarted))
+                {
+                    var ss = Convert.ToInt32(sessStarted);
+                    if (ss > progress.TotalSessionsStarted)
+                    {
+                        progress.TotalSessionsStarted = ss;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_sessions_abandoned", out var sessAbandoned))
+                {
+                    var sa = Convert.ToInt32(sessAbandoned);
+                    if (sa > progress.TotalSessionsAbandoned)
+                    {
+                        progress.TotalSessionsAbandoned = sa;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_xp_earned", out var xpEarned))
+                {
+                    var xe = Convert.ToDouble(xpEarned);
+                    if (xe > progress.TotalXPEarned)
+                    {
+                        progress.TotalXPEarned = xe;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_skill_points_earned", out var spEarned))
+                {
+                    var sp = Convert.ToInt32(spEarned);
+                    if (sp > progress.TotalSkillPointsEarned)
+                    {
+                        progress.TotalSkillPointsEarned = sp;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_pink_filter_minutes", out var pinkMin))
+                {
+                    var pm = Convert.ToDouble(pinkMin);
+                    if (pm > progress.TotalPinkFilterMinutes)
+                    {
+                        progress.TotalPinkFilterMinutes = pm;
+                        needsSave = true;
+                    }
+                }
+                if (cloudProfile.Stats.TryGetValue("total_spiral_minutes", out var spiralMin))
+                {
+                    var sm = Convert.ToDouble(spiralMin);
+                    if (sm > progress.TotalSpiralMinutes)
+                    {
+                        progress.TotalSpiralMinutes = sm;
                         needsSave = true;
                     }
                 }

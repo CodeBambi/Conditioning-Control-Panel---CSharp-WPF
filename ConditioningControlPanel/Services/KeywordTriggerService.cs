@@ -559,6 +559,7 @@ namespace ConditioningControlPanel.Services
 
         private async Task DispatchResponseAsync(KeywordTrigger trigger, List<OcrWordHit>? matchedWords = null)
         {
+            long duckGen = -1;
             try
             {
                 if (_disposed) return;
@@ -579,6 +580,7 @@ namespace ConditioningControlPanel.Services
                 if (trigger.DuckAudio && App.Settings?.Current?.AudioDuckingEnabled == true)
                 {
                     App.Audio?.Duck(App.Settings?.Current?.DuckingLevel ?? 80);
+                    duckGen = App.Audio?.DuckGeneration ?? -1;
                 }
 
                 // 2. Play audio
@@ -635,13 +637,13 @@ namespace ConditioningControlPanel.Services
                 if (trigger.DuckAudio && audioDuration > 0)
                 {
                     await Task.Delay(TimeSpan.FromSeconds(audioDuration + 0.5));
-                    App.Audio?.Unduck();
+                    App.Audio?.Unduck(duckGen);
                 }
                 else if (trigger.DuckAudio)
                 {
                     // No audio but ducking was enabled — unduck after a brief delay
                     await Task.Delay(500);
-                    App.Audio?.Unduck();
+                    App.Audio?.Unduck(duckGen);
                 }
             }
             catch (Exception ex)
@@ -650,7 +652,7 @@ namespace ConditioningControlPanel.Services
 
                 // Make sure we unduck on error
                 if (trigger.DuckAudio)
-                    App.Audio?.Unduck();
+                    App.Audio?.Unduck(duckGen);
             }
         }
 

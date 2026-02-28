@@ -28,6 +28,7 @@ namespace ConditioningControlPanel.Services
         private int _duckCount; // Reference count — unduck only when all duckers release
         private bool _isDucked;
         private float _duckAmount = 0.8f; // Default: reduce to 20%
+        private long _duckGeneration; // Incremented on ForceUnduck to invalidate stale Unduck callbacks
 
         private bool _disposed;
 
@@ -220,6 +221,14 @@ namespace ConditioningControlPanel.Services
         #region Audio Ducking
 
         /// <summary>
+        /// Current duck generation — capture this when calling Duck() and pass to Unduck() to avoid stale callbacks.
+        /// </summary>
+        public long DuckGeneration
+        {
+            get { lock (_lockObj) { return _duckGeneration; } }
+        }
+
+        /// <summary>
         /// Lower the volume of other applications
         /// </summary>
         /// <param name="strength">0-100 (0 = no ducking, 100 = full mute)</param>
@@ -318,15 +327,27 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Restore the original volume of other applications
+        /// Restore the original volume of other applications.
+        /// Pass the generation from DuckGeneration captured at Duck() time to prevent stale callbacks
+        /// from interfering with newer ducking sessions.
         /// </summary>
-        public void Unduck()
+        /// <param name="generation">Duck generation to validate against. Pass -1 to skip generation check (legacy callers).</param>
+        public void Unduck(long generation = -1)
         {
-            if (!_isDucked || _deviceEnumerator == null) return;
-
             lock (_lockObj)
             {
-                if (!_isDucked) return;
+                // If a generation was specified and doesn't match current, this is a stale callback — ignore
+                if (generation >= 0 && generation != _duckGeneration)
+                {
+                    App.Logger?.Debug("Ignoring stale Unduck (gen {Old} vs current {Current})", generation, _duckGeneration);
+                    return;
+                }
+
+                if (!_isDucked || _deviceEnumerator == null)
+                {
+                    _duckCount = Math.Max(0, _duckCount - 1);
+                    return;
+                }
 
                 _duckCount = Math.Max(0, _duckCount - 1);
                 if (_duckCount > 0) return; // Other consumers still need ducking
@@ -343,7 +364,7 @@ namespace ConditioningControlPanel.Services
                         {
                             var session = sessions[i];
                             var processId = (int)session.GetProcessID;
-                            
+
                             if (_originalVolumes.TryGetValue(processId, out var originalVolume))
                             {
                                 session.SimpleAudioVolume.Volume = originalVolume;
@@ -377,14 +398,18 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Force-unduck regardless of reference count. Used for panic key / app exit.
+        /// Increments the duck generation to invalidate all pending stale Unduck callbacks.
         /// </summary>
         public void ForceUnduck()
         {
+            long gen;
             lock (_lockObj)
             {
+                _duckGeneration++; // Invalidate all pending stale Unduck callbacks
                 _duckCount = 1; // Force next Unduck() to actually restore
+                gen = _duckGeneration;
             }
-            Unduck();
+            Unduck(gen);
         }
 
         #endregion
