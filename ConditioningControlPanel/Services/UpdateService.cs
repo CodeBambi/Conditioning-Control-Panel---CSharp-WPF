@@ -22,24 +22,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.11";
+        public const string AppVersion = "5.6.12";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.11 - Bug Fix Update
+        public const string CurrentPatchNotes = @"v5.6.12 - Legacy Migration Update
 
-🛠️ BUG FIXES
-• Fixed content packs not showing for some users (rate limiter was blocking manifest fetch)
-• Fixed Discord Rich Presence toggle turning on after dismissing 'not linked' dialog
-• Fixed settings backup firing too many requests on startup, causing rate limit blocks
-• Reduced Burst.mp3 sound effect volume by 50%
-
-✨ NEW
-• Bouncing text 'Show Over Videos' option — keeps text visible over fullscreen videos
-• Added invite code hint text to registration form
-• Login button renamed to 'Anonymous Login' for clarity";
+🔄 MIGRATION
+• OAuth users (Patreon/Discord) are now automatically upgraded to V2 accounts on launch
+• No action needed — your progress, level, and achievements carry over seamlessly
+• Prepares all users for the March 2026 season launch";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

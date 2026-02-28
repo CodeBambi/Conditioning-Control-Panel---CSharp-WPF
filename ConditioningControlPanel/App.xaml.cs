@@ -790,6 +790,39 @@ namespace ConditioningControlPanel
                 // If authenticated, load cloud profile and start heartbeat
                 if (Patreon.IsAuthenticated)
                 {
+                    // Auto-upgrade: if Patreon is authenticated but no V2 identity, migrate via /v2/auth/patreon
+                    if (string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken))
+                    {
+                        try
+                        {
+                            var accessToken = Patreon.GetAccessToken();
+                            if (!string.IsNullOrEmpty(accessToken))
+                            {
+                                Logger?.Information("Auto-upgrading Patreon user to V2...");
+                                var v2Auth = new V2AuthService();
+                                var result = await v2Auth.AuthenticateWithPatreonAsync(accessToken);
+                                if (result.Success && result.User != null)
+                                {
+                                    v2Auth.ApplyUserDataToSettings(result.User, result.AuthToken);
+                                    UnifiedUserId = result.User.UnifiedId;
+                                    Logger?.Information("Auto-upgrade complete: {Id}", UnifiedUserId);
+                                }
+                                else if (result.NeedsRegistration)
+                                {
+                                    Logger?.Information("Patreon auto-upgrade: needs registration (new user), skipping");
+                                }
+                                else
+                                {
+                                    Logger?.Warning("Patreon auto-upgrade failed: {Error}", result.Error);
+                                }
+                            }
+                        }
+                        catch (Exception upgradeEx)
+                        {
+                            Logger?.Warning(upgradeEx, "Patreon auto-upgrade failed (non-fatal, will retry next launch)");
+                        }
+                    }
+
                     Logger?.Information("Patreon authenticated, loading cloud profile...");
                     await ProfileSync.LoadProfileAsync();
                     ProfileSync.StartHeartbeat();
@@ -826,6 +859,39 @@ namespace ConditioningControlPanel
                 if (Discord.IsAuthenticated)
                 {
                     Logger?.Information("Discord authenticated: {Id}", Discord.UserId);
+
+                    // Auto-upgrade: if Discord is authenticated but no V2 identity, migrate via /v2/auth/discord
+                    if (string.IsNullOrEmpty(UnifiedUserId))
+                    {
+                        try
+                        {
+                            var accessToken = Discord.GetAccessToken();
+                            if (!string.IsNullOrEmpty(accessToken))
+                            {
+                                Logger?.Information("Auto-upgrading Discord user to V2...");
+                                var v2Auth = new V2AuthService();
+                                var result = await v2Auth.AuthenticateWithDiscordAsync(accessToken);
+                                if (result.Success && result.User != null)
+                                {
+                                    v2Auth.ApplyUserDataToSettings(result.User, result.AuthToken);
+                                    UnifiedUserId = result.User.UnifiedId;
+                                    Logger?.Information("Auto-upgrade complete: {Id}", UnifiedUserId);
+                                }
+                                else if (result.NeedsRegistration)
+                                {
+                                    Logger?.Information("Discord auto-upgrade: needs registration (new user), skipping");
+                                }
+                                else
+                                {
+                                    Logger?.Warning("Discord auto-upgrade failed: {Error}", result.Error);
+                                }
+                            }
+                        }
+                        catch (Exception upgradeEx)
+                        {
+                            Logger?.Warning(upgradeEx, "Discord auto-upgrade failed (non-fatal, will retry next launch)");
+                        }
+                    }
 
                     // If not already syncing via Patreon, load cloud profile and start heartbeat for Discord-only users
                     if (Patreon?.IsAuthenticated != true && ProfileSync != null)
