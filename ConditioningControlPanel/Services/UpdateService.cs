@@ -39,9 +39,16 @@ namespace ConditioningControlPanel.Services
 • Fixed main window failing to load after update
 • Fixed bubble count frequency setting not saving
 
+🔒 REMOTE CONTROL
+• Session codes increased from 6 to 8 characters
+• Controllers now require a 4-digit PIN to connect
+• PIN displayed below session code — copy button includes both
+• Web controller page updated with PIN input
+
 ✨ IMPROVEMENTS
 • Patreon and Discord accounts now seamlessly link to your profile on launch
-• Preparing for the March 2026 season";
+• Preparing for the March 2026 season
+• Hardened server-side data validation and privacy filtering";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
