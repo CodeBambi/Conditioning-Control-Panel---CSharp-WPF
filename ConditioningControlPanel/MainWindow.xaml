@@ -6138,9 +6138,13 @@
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <TextBlock Text="S E S S I O N   C O D E" Foreground="#808080" FontSize="10" FontWeight="Bold"
                                                                HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                                                    <TextBlock x:Name="TxtRemoteCode" Text="- - - - - -" Foreground="#FF69B4"
-                                                               FontSize="32" FontWeight="Bold" FontFamily="Consolas"
+                                                    <TextBlock x:Name="TxtRemoteCode" Text="- - - - - - - -" Foreground="#FF69B4"
+                                                               FontSize="28" FontWeight="Bold" FontFamily="Consolas"
                                                                HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="TxtRemotePin" Text="" Foreground="#9B59B6"
+                                                               FontSize="16" FontWeight="Bold" FontFamily="Consolas"
+                                                               HorizontalAlignment="Center" Margin="0,4,0,0"
+                                                               Visibility="Collapsed"/>
                                                 </StackPanel>
                                                 <Button x:Name="BtnCopyRemoteCode" Content="Copy" Background="#353550" Foreground="White"
                                                         FontSize="11" Padding="10,4" BorderThickness="0" Cursor="Hand"

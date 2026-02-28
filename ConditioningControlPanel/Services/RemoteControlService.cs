@@ -35,8 +35,11 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _pollTimer;
         private bool _disposed;
 
+        private static readonly Random _pinRng = new();
+
         public bool IsActive { get; private set; }
         public string? SessionCode { get; private set; }
+        public string? ConnectPin { get; private set; }
         public string? Tier { get; private set; }
         public bool ControllerConnected { get; private set; }
         public bool ControllerIdle { get; private set; }
@@ -94,7 +97,10 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var body = JsonConvert.SerializeObject(new { unified_id = unifiedId, tier });
+                // Generate a random 4-digit PIN for controller authentication
+                var pin = _pinRng.Next(0, 10000).ToString("D4");
+
+                var body = JsonConvert.SerializeObject(new { unified_id = unifiedId, tier, connect_pin = pin });
                 var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/start", body);
 
                 var json = await response.Content.ReadAsStringAsync();
@@ -106,6 +112,7 @@ namespace ConditioningControlPanel.Services
 
                 var result = JObject.Parse(json);
                 SessionCode = result["code"]?.ToString();
+                ConnectPin = pin;
                 Tier = tier;
                 IsActive = true;
 
@@ -160,6 +167,7 @@ namespace ConditioningControlPanel.Services
             _pollTimer = null;
             IsActive = false;
             SessionCode = null;
+            ConnectPin = null;
             Tier = null;
             ControllerIdle = false;
 

@@ -6571,6 +6571,10 @@ namespace ConditioningControlPanel
                 }
 
                 TxtRemoteCode.Text = string.Join(" ", code.ToCharArray());
+                var pin = App.RemoteControl?.ConnectPin;
+                TxtRemotePin.Text = !string.IsNullOrEmpty(pin) ? $"PIN: {pin}" : "";
+                TxtRemotePin.Visibility = !string.IsNullOrEmpty(pin)
+                    ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
                 RemoteLinkPanel.Visibility = System.Windows.Visibility.Visible;
                 RemoteCodePanel.Visibility = System.Windows.Visibility.Visible;
                 RemoteStatusPanel.Visibility = System.Windows.Visibility.Visible;
@@ -6662,6 +6666,10 @@ namespace ConditioningControlPanel
                 if (code != null)
                 {
                     TxtRemoteCode.Text = string.Join(" ", code.ToCharArray());
+                    var reconnectPin = App.RemoteControl?.ConnectPin;
+                    TxtRemotePin.Text = !string.IsNullOrEmpty(reconnectPin) ? $"PIN: {reconnectPin}" : "";
+                    TxtRemotePin.Visibility = !string.IsNullOrEmpty(reconnectPin)
+                        ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
                     UpdateRemoteStatus(false);
                 }
 
@@ -6680,7 +6688,9 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    System.Windows.Clipboard.SetText(code);
+                    var pin = App.RemoteControl?.ConnectPin;
+                    var copyText = !string.IsNullOrEmpty(pin) ? $"{code} (PIN: {pin})" : code;
+                    System.Windows.Clipboard.SetText(copyText);
                     BtnCopyRemoteCode.Content = "Copied!";
                 }
                 catch (Exception ex)
@@ -6810,9 +6820,13 @@ namespace ConditioningControlPanel
         private void ShowRemoteControlOverlay()
         {
             var code = App.RemoteControl?.SessionCode;
-            TxtOverlaySessionCode.Text = !string.IsNullOrEmpty(code)
+            var overlayPin = App.RemoteControl?.ConnectPin;
+            var sessionText = !string.IsNullOrEmpty(code)
                 ? $"Session: {string.Join(" ", code.ToCharArray())}"
                 : "";
+            if (!string.IsNullOrEmpty(overlayPin))
+                sessionText += $"  PIN: {overlayPin}";
+            TxtOverlaySessionCode.Text = sessionText;
 
             // Hide browser to avoid WebView2 airspace issue (renders on top of WPF overlays)
             BrowserContainer.Visibility = System.Windows.Visibility.Hidden;

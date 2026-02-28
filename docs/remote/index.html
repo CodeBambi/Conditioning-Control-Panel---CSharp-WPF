@@ -93,8 +93,8 @@
         }
 
         .code-char {
-            width: 48px;
-            height: 58px;
+            width: 42px;
+            height: 54px;
             background: var(--bg-primary);
             border: 2px solid var(--bg-secondary);
             border-radius: 10px;
@@ -112,6 +112,16 @@
         .code-char:focus {
             border-color: var(--accent-pink);
             box-shadow: 0 0 12px rgba(255,105,180,0.3);
+        }
+
+        .pin-char {
+            color: var(--accent-purple);
+            width: 44px;
+        }
+
+        .pin-char:focus {
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 12px rgba(155,89,182,0.3);
         }
 
         .btn-connect {
@@ -853,6 +863,16 @@
                 <input class="code-char" type="text" maxlength="1" inputmode="text" autocomplete="off" autocapitalize="characters">
                 <input class="code-char" type="text" maxlength="1" inputmode="text" autocomplete="off" autocapitalize="characters">
                 <input class="code-char" type="text" maxlength="1" inputmode="text" autocomplete="off" autocapitalize="characters">
+                <input class="code-char" type="text" maxlength="1" inputmode="text" autocomplete="off" autocapitalize="characters">
+                <input class="code-char" type="text" maxlength="1" inputmode="text" autocomplete="off" autocapitalize="characters">
+            </div>
+
+            <div class="code-label" style="margin-top:16px">Enter PIN</div>
+            <div class="code-input-group" id="pin-inputs">
+                <input class="code-char pin-char" type="text" maxlength="1" inputmode="numeric" autocomplete="off" pattern="[0-9]">
+                <input class="code-char pin-char" type="text" maxlength="1" inputmode="numeric" autocomplete="off" pattern="[0-9]">
+                <input class="code-char pin-char" type="text" maxlength="1" inputmode="numeric" autocomplete="off" pattern="[0-9]">
+                <input class="code-char pin-char" type="text" maxlength="1" inputmode="numeric" autocomplete="off" pattern="[0-9]">
             </div>
 
             <button class="btn-connect" id="btn-connect" disabled>Connect</button>
@@ -1269,6 +1289,7 @@
 
         // State
         let sessionCode = '';
+        let sessionPin = '';
         let controllerId = '';
         let sessionTier = 'light';
         let pollTimer = null;
@@ -1295,45 +1316,64 @@
         const feedbackLog = $('feedback-log');
 
         // ═══════ Code Input Handling ═══════
-        codeInputs.forEach((input, i) => {
-            input.addEventListener('input', (e) => {
-                const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                e.target.value = val;
-                if (val && i < 5) codeInputs[i + 1].focus();
-                updateConnectButton();
-            });
+        const pinInputs = document.querySelectorAll('.pin-char');
 
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Backspace' && !e.target.value && i > 0) {
-                    codeInputs[i - 1].focus();
-                    codeInputs[i - 1].value = '';
+        function setupInputGroup(inputs, allowedPattern, nextGroup) {
+            inputs.forEach((input, i) => {
+                input.addEventListener('input', (e) => {
+                    const val = e.target.value.toUpperCase().replace(allowedPattern, '');
+                    e.target.value = val;
+                    if (val && i < inputs.length - 1) {
+                        inputs[i + 1].focus();
+                    } else if (val && i === inputs.length - 1 && nextGroup && nextGroup.length) {
+                        nextGroup[0].focus();
+                    }
                     updateConnectButton();
-                }
-                if (e.key === 'Enter') {
-                    btnConnect.click();
-                }
-            });
+                });
 
-            input.addEventListener('paste', (e) => {
-                e.preventDefault();
-                const text = (e.clipboardData.getData('text') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-                for (let j = 0; j < 6 && j < text.length; j++) {
-                    codeInputs[j].value = text[j];
-                }
-                if (text.length >= 6) codeInputs[5].focus();
-                updateConnectButton();
-            });
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Backspace' && !e.target.value && i > 0) {
+                        inputs[i - 1].focus();
+                        inputs[i - 1].value = '';
+                        updateConnectButton();
+                    }
+                    if (e.key === 'Enter') {
+                        btnConnect.click();
+                    }
+                });
 
-            input.addEventListener('focus', () => input.select());
-        });
+                input.addEventListener('paste', (e) => {
+                    e.preventDefault();
+                    const text = (e.clipboardData.getData('text') || '').toUpperCase().replace(allowedPattern, '');
+                    for (let j = 0; j < inputs.length && j < text.length; j++) {
+                        inputs[j].value = text[j];
+                    }
+                    if (text.length >= inputs.length) {
+                        if (nextGroup && nextGroup.length) nextGroup[0].focus();
+                        else inputs[inputs.length - 1].focus();
+                    }
+                    updateConnectButton();
+                });
+
+                input.addEventListener('focus', () => input.select());
+            });
+        }
+
+        setupInputGroup(codeInputs, /[^A-Z0-9]/g, pinInputs);
+        setupInputGroup(pinInputs, /[^0-9]/g, null);
 
         function getCode() {
             return Array.from(codeInputs).map(i => i.value).join('');
         }
 
+        function getPin() {
+            return Array.from(pinInputs).map(i => i.value).join('');
+        }
+
         function updateConnectButton() {
             const code = getCode();
-            btnConnect.disabled = code.length < 6;
+            const pin = getPin();
+            btnConnect.disabled = code.length < 6 || pin.length < 4;
         }
 
         // ═══════ Last Used Code ═══════
@@ -1342,17 +1382,19 @@
             lastCodeHint.style.display = 'block';
             lastCodeHint.textContent = `Last used: ${lastUsedCode}`;
             lastCodeHint.addEventListener('click', () => {
-                for (let i = 0; i < 6 && i < lastUsedCode.length; i++) {
+                for (let i = 0; i < codeInputs.length && i < lastUsedCode.length; i++) {
                     codeInputs[i].value = lastUsedCode[i];
                 }
                 updateConnectButton();
+                if (pinInputs.length) pinInputs[0].focus();
             });
         }
 
         // ═══════ Connect ═══════
         btnConnect.addEventListener('click', async () => {
             const code = getCode();
-            if (code.length < 6) return;
+            const pin = getPin();
+            if (code.length < 6 || pin.length < 4) return;
 
             btnConnect.disabled = true;
             btnConnect.innerHTML = '<span class="spinner"></span>Connecting...';
@@ -1362,7 +1404,7 @@
                 const res = await fetch(`${API_BASE}/remote/connect`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code })
+                    body: JSON.stringify({ code, pin })
                 });
 
                 const data = await res.json();
@@ -1376,6 +1418,7 @@
 
                 // Success
                 sessionCode = code;
+                sessionPin = pin;
                 controllerId = data.controller_id;
                 sessionTier = data.tier;
 
@@ -1426,12 +1469,14 @@
             btnConnect.innerHTML = 'Connect';
             btnConnect.disabled = false;
             codeInputs.forEach(i => i.value = '');
+            pinInputs.forEach(i => i.value = '');
             toggleStates = {};
             logEntries = [];
             availableSessions = [];
             renderLog();
             updateSessionProgress(null);
             sessionCode = '';
+            sessionPin = '';
             controllerId = '';
         }
 
@@ -1762,7 +1807,7 @@
                 const res = await fetch(`${API_BASE}/remote/connect`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code: sessionCode })
+                    body: JSON.stringify({ code: sessionCode, pin: sessionPin })
                 });
 
                 if (res.ok) {
@@ -1926,20 +1971,20 @@
             }
         });
 
-        // ═══════ Auto-connect from URL code ═══════
+        // ═══════ Pre-fill from URL code ═══════
         const urlParams = new URLSearchParams(window.location.search);
         const urlCode = (urlParams.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-        if (urlCode.length === 6) {
-            // Fill in code inputs and auto-connect
-            for (let i = 0; i < 6; i++) {
+        if (urlCode.length >= 6 && urlCode.length <= 8) {
+            // Fill in code inputs (PIN still required, so don't auto-connect)
+            for (let i = 0; i < codeInputs.length && i < urlCode.length; i++) {
                 codeInputs[i].value = urlCode[i];
             }
-            // Remove code from URL so refreshing doesn't re-connect
+            // Remove code from URL for privacy
             window.history.replaceState({}, '', window.location.pathname);
-            // Trigger connect
-            btnConnect.disabled = false;
-            btnConnect.click();
+            // Focus PIN input so user can type PIN
+            pinInputs[0].focus();
+            updateConnectButton();
         } else {
             codeInputs[0].focus();
         }
