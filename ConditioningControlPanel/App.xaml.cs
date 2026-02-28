@@ -988,7 +988,7 @@ namespace ConditioningControlPanel
                         {
                             Settings.Current.UnifiedId = null;
                             Settings.Current.AuthToken = null;
-                            Settings.Save();
+                            Settings.Save(suppressCloudBackup: true);
                         }
                     }
                     else
@@ -997,7 +997,7 @@ namespace ConditioningControlPanel
                         if (Settings?.Current != null)
                         {
                             Settings.Current.AuthToken = null;
-                            Settings.Save();
+                            Settings.Save(suppressCloudBackup: true);
                         }
                     }
                 }

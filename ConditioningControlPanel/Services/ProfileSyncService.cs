@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
@@ -1517,7 +1518,10 @@ namespace ConditioningControlPanel.Services
                 if (App.Settings?.Current != null)
                 {
                     App.Settings.Current.AuthToken = null;
-                    App.Settings.Save();
+                    // Save to disk but suppress the cloud backup that Save() normally triggers —
+                    // we just cleared the auth token, so any backup attempt would 401 again,
+                    // creating a 401 → Save() → backup → 401 storm loop.
+                    App.Settings.Save(suppressCloudBackup: true);
                 }
                 return true;
             }
@@ -1551,8 +1555,8 @@ namespace ConditioningControlPanel.Services
 
         #region Settings Backup/Restore
 
-        private DateTime _lastSettingsBackupTime = DateTime.MinValue;
-        private static readonly TimeSpan SettingsBackupDebounce = TimeSpan.FromMinutes(5);
+        private long _lastSettingsBackupTicks = 0;
+        private static readonly long SettingsBackupDebounceTicks = TimeSpan.FromMinutes(5).Ticks;
 
         /// <summary>
         /// Properties to exclude from settings backup (server-authoritative or identity fields).
@@ -1589,22 +1593,44 @@ namespace ConditioningControlPanel.Services
             if (string.IsNullOrEmpty(unifiedId)) return false;
 
             // Debounce: skip if backed up recently (unless forced)
-            if (!force && (DateTime.Now - _lastSettingsBackupTime) < SettingsBackupDebounce)
+            // Uses Interlocked for thread safety — multiple async paths can call this concurrently
+            var nowTicks = DateTime.UtcNow.Ticks;
+            if (force)
             {
-                App.Logger?.Debug("Settings backup skipped (debounce, last backup {Ago}s ago)",
-                    (int)(DateTime.Now - _lastSettingsBackupTime).TotalSeconds);
-                return false;
+                // Forced backup (user-initiated): skip debounce, just stamp the time
+                Interlocked.Exchange(ref _lastSettingsBackupTicks, nowTicks);
             }
+            else
+            {
+                var lastTicks = Interlocked.Read(ref _lastSettingsBackupTicks);
+                if ((nowTicks - lastTicks) < SettingsBackupDebounceTicks)
+                {
+                    App.Logger?.Debug("Settings backup skipped (debounce, last backup {Ago}s ago)",
+                        (nowTicks - lastTicks) / TimeSpan.TicksPerSecond);
+                    return false;
+                }
 
-            // Set timestamp BEFORE the HTTP call to prevent concurrent/retry storms.
-            // Without this, failed backups (429) never set the timestamp, so every
-            // subsequent Save() fires another backup attempt in an infinite loop.
-            _lastSettingsBackupTime = DateTime.Now;
+                // Atomically claim this backup slot — if another thread won the race, bail out.
+                // Set timestamp BEFORE the HTTP call to prevent concurrent/retry storms.
+                if (Interlocked.CompareExchange(ref _lastSettingsBackupTicks, nowTicks, lastTicks) != lastTicks)
+                {
+                    App.Logger?.Debug("Settings backup skipped (another thread claimed the slot)");
+                    return false;
+                }
+            }
 
             try
             {
                 var settings = App.Settings?.Current;
                 if (settings == null) return false;
+
+                // Bail early if no auth token — request would just 401
+                var authToken = settings.AuthToken;
+                if (string.IsNullOrEmpty(authToken))
+                {
+                    App.Logger?.Debug("Settings backup skipped (no auth token)");
+                    return false;
+                }
 
                 // Serialize settings, then strip excluded properties
                 var fullJson = JsonConvert.SerializeObject(settings, Formatting.None);

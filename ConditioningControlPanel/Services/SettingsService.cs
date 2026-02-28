@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
@@ -12,7 +13,7 @@ namespace ConditioningControlPanel.Services
     public class SettingsService
     {
         private readonly string _settingsPath;
-        private DateTime _lastBackupAttempt = DateTime.MinValue;
+        private long _lastBackupAttemptTicks = 0;
 
         public AppSettings Current { get; private set; }
 
@@ -239,7 +240,7 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        public void Save()
+        public void Save(bool suppressCloudBackup = false)
         {
             try
             {
@@ -258,19 +259,26 @@ namespace ConditioningControlPanel.Services
                     _settingsPath, Current.CustomTriggers?.Count ?? 0, Current.ActivePackIds?.Count ?? 0);
 
                 // Auto-backup settings to cloud (fire-and-forget, debounced)
-                // Gate here to prevent concurrent Task.Run calls from racing past BackupSettingsAsync's debounce
-                if (App.HasCloudIdentity && App.ProfileSync != null
-                    && (DateTime.Now - _lastBackupAttempt).TotalSeconds >= 30)
+                // suppressCloudBackup is used when auth token was just cleared (401 handler) to prevent
+                // a 401 → Save() → backup → 401 storm loop
+                // Uses Interlocked.CompareExchange for thread-safe gate (multiple async paths call Save concurrently)
+                if (!suppressCloudBackup && App.HasCloudIdentity && App.ProfileSync != null)
                 {
-                    _lastBackupAttempt = DateTime.Now;
-                    _ = Task.Run(async () =>
+                    var nowTicks = DateTime.UtcNow.Ticks;
+                    var lastTicks = Interlocked.Read(ref _lastBackupAttemptTicks);
+                    var elapsedSeconds = (nowTicks - lastTicks) / TimeSpan.TicksPerSecond;
+                    if (elapsedSeconds >= 30 &&
+                        Interlocked.CompareExchange(ref _lastBackupAttemptTicks, nowTicks, lastTicks) == lastTicks)
                     {
-                        try { await App.ProfileSync.BackupSettingsAsync(); }
-                        catch (Exception backupEx)
+                        _ = Task.Run(async () =>
                         {
-                            App.Logger?.Debug("Auto settings backup failed: {Error}", backupEx.Message);
-                        }
-                    });
+                            try { await App.ProfileSync.BackupSettingsAsync(); }
+                            catch (Exception backupEx)
+                            {
+                                App.Logger?.Debug("Auto settings backup failed: {Error}", backupEx.Message);
+                            }
+                        });
+                    }
                 }
             }
             catch (Exception ex)
