@@ -2626,6 +2626,39 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Mantra Lab
+
+        private List<string> _mantraPool = new()
+        {
+            "I am deeply relaxed",
+            "My mind is open and receptive",
+            "I feel calm and peaceful",
+            "I surrender to the process",
+            "Every breath takes me deeper"
+        };
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> MantraPool
+        {
+            get => _mantraPool;
+            set { _mantraPool = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private int _mantraDefaultCount = 10;
+        public int MantraDefaultCount
+        {
+            get => _mantraDefaultCount;
+            set { _mantraDefaultCount = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+        }
+
+        private double _mantraDroneVolume = 30;
+        public double MantraDroneVolume
+        {
+            get => _mantraDroneVolume;
+            set { _mantraDroneVolume = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Validation
 
         /// <summary>

@@ -639,24 +639,65 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Gets the authenticated download URL for an external pack (e.g. Mega.nz).
-        /// Requires Patreon authentication. Returns null if not authenticated.
+        /// Any authenticated user can download external packs (V2 auth).
+        /// Returns null if not authenticated.
         /// </summary>
         public async Task<string?> GetExternalPackDownloadUrlAsync(string packId)
         {
-            if (App.Patreon == null || !App.Patreon.IsAuthenticated)
+            // External packs use V2 auth — any authenticated user (invite code, Discord, Patreon)
+            var unifiedId = App.UnifiedUserId;
+            var authToken = App.Settings?.Current?.AuthToken;
+
+            if (string.IsNullOrEmpty(unifiedId) || string.IsNullOrEmpty(authToken))
             {
-                AuthenticationRequired?.Invoke(this, "Please log in with Patreon to download content packs.\nA free Patreon account gives you 10 GB/month — no payment needed!");
+                AuthenticationRequired?.Invoke(this, "Please log in to download content packs.");
                 return null;
             }
 
-            var accessToken = App.Patreon.GetAccessToken();
-            if (string.IsNullOrEmpty(accessToken))
+            try
             {
-                AuthenticationRequired?.Invoke(this, "Your Patreon session has expired. Please log in again.");
-                return null;
-            }
+                var requestUrl = $"{ProxyBaseUrl}/pack/download-url";
+                var requestBody = new { packId, unified_id = unifiedId };
+                var jsonContent = new StringContent(
+                    JsonConvert.SerializeObject(requestBody),
+                    Encoding.UTF8,
+                    "application/json");
 
-            return await GetSignedDownloadUrlAsync(packId, accessToken);
+                using var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
+                request.Headers.Add("X-Auth-Token", authToken);
+                request.Content = jsonContent;
+
+                using var response = await _httpClient.SendAsync(request);
+                var responseJson = await response.Content.ReadAsStringAsync();
+
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    App.Logger?.Warning("External pack download auth failed for pack {PackId}", packId);
+                    AuthenticationRequired?.Invoke(this, "Your session has expired. Please log in again.");
+                    return null;
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorResponse = JsonConvert.DeserializeObject<PackDownloadErrorResponse>(responseJson);
+                    App.Logger?.Warning("External pack download failed: {Status} - {Message}", response.StatusCode, errorResponse?.Message);
+                    throw new Exception(errorResponse?.Message ?? $"Failed to get download URL: {response.StatusCode}");
+                }
+
+                var successResponse = JsonConvert.DeserializeObject<PackDownloadUrlResponse>(responseJson);
+                if (string.IsNullOrEmpty(successResponse?.DownloadUrl))
+                {
+                    throw new Exception("Server returned empty download URL");
+                }
+
+                App.Logger?.Information("Got external download URL for pack: {PackId}", packId);
+                return successResponse.DownloadUrl;
+            }
+            catch (Exception ex) when (ex is not UnauthorizedAccessException)
+            {
+                App.Logger?.Error(ex, "Failed to get external pack download URL for {PackId}", packId);
+                throw;
+            }
         }
 
         /// <summary>

@@ -23,37 +23,9 @@ namespace ConditioningControlPanel
         /// </summary>
         public string? ChosenDisplayName { get; private set; }
 
-        /// <summary>
-        /// Whether this is a legacy/OG user
-        /// </summary>
-        public bool IsLegacyUser { get; set; }
-
-        /// <summary>
-        /// Suggested name from legacy data
-        /// </summary>
-        public string? SuggestedName { get; set; }
-
         public UsernamePickerDialog()
         {
             InitializeComponent();
-        }
-
-        /// <summary>
-        /// Show the dialog configured for a legacy user returning
-        /// </summary>
-        public void ConfigureForLegacyUser(string? suggestedName)
-        {
-            IsLegacyUser = true;
-            SuggestedName = suggestedName;
-
-            OgWelcomePanel.Visibility = Visibility.Visible;
-            TxtSubtitle.Text = "Your Season 0 data has been found! Choose your display name for the new season.";
-
-            if (!string.IsNullOrWhiteSpace(suggestedName))
-            {
-                SuggestionPanel.Visibility = Visibility.Visible;
-                BtnUseSuggestion.Content = $"Use \"{suggestedName}\"";
-            }
         }
 
         /// <summary>
@@ -61,7 +33,6 @@ namespace ConditioningControlPanel
         /// </summary>
         public void ConfigureForNewUser()
         {
-            IsLegacyUser = false;
             OgWelcomePanel.Visibility = Visibility.Collapsed;
             SuggestionPanel.Visibility = Visibility.Collapsed;
             TxtSubtitle.Text = "This name will be shown on the leaderboard and to other users.";
@@ -161,10 +132,7 @@ namespace ConditioningControlPanel
 
         private void BtnUseSuggestion_Click(object sender, RoutedEventArgs e)
         {
-            if (!string.IsNullOrWhiteSpace(SuggestedName))
-            {
-                TxtUsername.Text = SuggestedName;
-            }
+            // Legacy suggestion panel - always collapsed, kept for XAML compatibility
         }
 
         private void BtnCancel_Click(object sender, RoutedEventArgs e)

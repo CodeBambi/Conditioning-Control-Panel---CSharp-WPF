@@ -266,14 +266,20 @@ namespace ConditioningControlPanel.Services
             if (completed && _currentSession != null)
             {
                 // Calculate XP with pause penalty (100 XP per pause)
-                App.Logger?.Debug("Session XP calculation: Session={Name}, Source={Source}, BonusXP={BonusXP}, Penalty={Penalty}",
-                    _currentSession.Name, _currentSession.Source, _currentSession.BonusXP, XPPenalty);
+                App.Logger?.Debug("Session XP calculation: Session={Name}, Source={Source}, BonusXP={BonusXP}, Penalty={Penalty}, Duration={Duration:F1}min",
+                    _currentSession.Name, _currentSession.Source, _currentSession.BonusXP, XPPenalty, finalElapsedTime.TotalMinutes);
 
                 int baseXP = Math.Max(0, _currentSession.BonusXP - XPPenalty);
 
-                // Apply level-based XP multiplier for high-level players
-                double multiplier = App.Progression?.GetSessionXPMultiplier(App.Settings.Current.PlayerLevel) ?? 1.0;
-                int finalXP = (int)Math.Round(baseXP * multiplier);
+                // Apply level-based XP multiplier
+                int level = App.Settings?.Current?.PlayerLevel ?? 1;
+                double multiplier = App.Progression?.GetSessionXPMultiplier(level) ?? 1.0;
+
+                // Duration bonus: reward time investment (sessions under 2 min don't count)
+                double durationMinutes = Math.Max(0, finalElapsedTime.TotalMinutes - 2);
+                int durationBonus = (int)Math.Round(durationMinutes * (8 + level * 0.15));
+
+                int finalXP = (int)Math.Round(baseXP * multiplier) + durationBonus;
 
                 // Track achievement using settings captured at session START (not current settings).
                 // AutonomyService.TriggerVideoSafely() temporarily sets StrictLockEnabled=false mid-session,

@@ -211,6 +211,7 @@ namespace ConditioningControlPanel
         public static RemoteControlService RemoteControl { get; private set; } = null!;
         public static CompanionPhraseService CompanionPhrases { get; private set; } = null!;
         public static LockdownService Lockdown { get; private set; } = null!;
+        public static MantraService Mantra { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -365,6 +366,9 @@ namespace ConditioningControlPanel
 
                 // Stop lock card if active
                 LockCard?.Stop();
+
+                // Stop mantra lab audio
+                Mantra?.Dispose();
 
                 // Stop autonomy mode
                 Autonomy?.Stop();
@@ -664,6 +668,9 @@ namespace ConditioningControlPanel
 
             // Initialize lockdown service (ephemeral — not persisted)
             Lockdown = new LockdownService();
+
+            // Initialize mantra lab service
+            Mantra = new MantraService();
 
             // Initialize Patreon (validate subscription in background)
             // Then load cloud profile if authenticated

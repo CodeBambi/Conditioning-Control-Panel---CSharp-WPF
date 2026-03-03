@@ -22,33 +22,30 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.12";
+        public const string AppVersion = "5.6.13";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.12 - Stability Update
+        public const string CurrentPatchNotes = @"v5.6.13 - Mindless March Update
 
 🛠️ BUG FIXES
-• Fixed stats and sparkle points resetting when syncing with cloud
-• Fixed audio ducking getting stuck at 0% volume
-• Fixed multi-monitor DPI scaling for video and bubble count windows
-• Fixed bubble count not finding content pack videos
-• Fixed invite-code users losing progress on sync
-• Fixed main window failing to load after update
-• Fixed bubble count frequency setting not saving
-
-🔒 REMOTE CONTROL
-• Session codes increased from 6 to 8 characters
-• Controllers now require a 4-digit PIN to connect
-• PIN displayed below session code — copy button includes both
-• Web controller page updated with PIN input
+• Fixed progression data (level, achievements, unlocks) resetting after sign-out/sign-in
+• Fixed profile rank showing '-' for players outside the top 200
+• Fixed Discord linking showing errors despite succeeding
+• Fixed lockdown mode not actually preventing session stop/pause
+• Fixed content packs only downloadable via Patreon — all auth methods now work
+• Removed outdated Season 0 migration prompts from login flow
 
 ✨ IMPROVEMENTS
-• Patreon and Discord accounts now seamlessly link to your profile on launch
-• Preparing for the March 2026 season
-• Hardened server-side data validation and privacy filtering";
+• Achievements now sync to cloud — won't be lost on re-login or device change
+• Leaderboard rank is now server-calculated — accurate for all players
+• Quest XP scales harder with level (+4% per level, doubled from before)
+• Sessions reward duration — longer sessions give significantly more XP
+• Session level multiplier kicks in at level 30 (was 100)
+• Weekly quests now reset on Monday instead of Sunday
+• Welcome to Mindless March!";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

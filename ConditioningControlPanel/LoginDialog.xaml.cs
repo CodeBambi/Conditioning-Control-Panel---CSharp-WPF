@@ -12,8 +12,7 @@ using static ConditioningControlPanel.Services.V2AuthService;
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// Unified login dialog that handles provider selection, Season 0 recognition,
-    /// cross-provider linking, and new user registration.
+    /// Unified login dialog that handles provider selection and new user registration.
     /// </summary>
     public partial class LoginDialog : Window
     {
@@ -21,11 +20,10 @@ namespace ConditioningControlPanel
         private readonly string _serverUrl = "https://codebambi-proxy.vercel.app";
         private CancellationTokenSource? _checkCts;
 
-        // Track which provider was tried first (for cross-provider linking)
+        // Track which provider was tried first
         private string? _firstProvider;
         private string? _firstProviderToken;
         private bool _isNameAvailable;
-        private bool _isOgUser;  // Track if this is an OG user recovering their account
         private bool _isAccountRegisterMode;  // True = register mode, false = login mode
         private string? _pendingInviteCode;
         private string? _pendingPassword;
@@ -170,27 +168,10 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                // User needs registration - check if this is a legacy user
-                if (authResponse.IsLegacyUser && authResponse.LegacyData != null)
-                {
-                    var legacyDisplayName = authResponse.LegacyData.DisplayName;
-
-                    // ALL legacy/OG users go to username picker so they can confirm or change their name
-                    // Their legacy name is pre-filled but they can modify it
-                    _firstProvider = provider;
-                    _firstProviderToken = accessToken;
-                    _isOgUser = true;  // Mark as OG for different UI text and OG badge
-                    ShowUsernamePanel();
-                    TxtUsername.Text = legacyDisplayName ?? "";  // Pre-fill with old name
-                    return;
-                }
-
-                // Not found in Season 0 for this provider
-                // Save this provider info and ask if they had an account with the other provider
+                // User needs registration - go straight to username picker
                 _firstProvider = provider;
                 _firstProviderToken = accessToken;
-
-                ShowNotFoundPanel(provider);
+                ShowUsernamePanel();
             }
             catch (OperationCanceledException)
             {
@@ -205,199 +186,17 @@ namespace ConditioningControlPanel
 
         #endregion
 
-        #region Not Found Panel
-
-        private void ShowNotFoundPanel(string triedProvider)
-        {
-            var otherProvider = triedProvider == "discord" ? "Patreon" : "Discord";
-
-            TxtNotFoundMessage.Text = $"We couldn't find a Season 0 account linked to your {triedProvider}.";
-            TxtTryOtherProvider.Text = $"Yes, I used {otherProvider}";
-
-            // Style the button based on the other provider
-            if (otherProvider == "Discord")
-            {
-                BtnTryOtherProvider.Background = new SolidColorBrush(Color.FromRgb(0x58, 0x65, 0xF2));
-            }
-            else
-            {
-                BtnTryOtherProvider.Background = new SolidColorBrush(Color.FromRgb(0xFF, 0x42, 0x4D));
-            }
-
-            ProviderPanel.Visibility = Visibility.Collapsed;
-            LoadingPanel.Visibility = Visibility.Collapsed;
-            NotFoundPanel.Visibility = Visibility.Visible;
-            UsernamePanel.Visibility = Visibility.Collapsed;
-            AccountPanel.Visibility = Visibility.Collapsed;
-        }
-
-        private async void BtnTryOtherProvider_Click(object sender, RoutedEventArgs e)
-        {
-            if (_firstProvider == null) return;
-
-            var otherProvider = _firstProvider == "discord" ? "patreon" : "discord";
-            await TryLinkOtherProviderAsync(otherProvider);
-        }
-
-        private async Task TryLinkOtherProviderAsync(string provider)
-        {
-            ShowLoading($"Connecting to {provider}...");
-
-            try
-            {
-                // Start OAuth for the other provider
-                string? accessToken = null;
-                if (provider == "discord")
-                {
-                    if (App.Discord == null)
-                    {
-                        ShowError("Discord service not available");
-                        return;
-                    }
-                    await App.Discord.StartOAuthFlowAsync();
-                    accessToken = App.Discord.GetAccessToken();
-                }
-                else
-                {
-                    if (App.Patreon == null)
-                    {
-                        ShowError("Patreon service not available");
-                        return;
-                    }
-                    await App.Patreon.StartOAuthFlowAsync();
-                    accessToken = App.Patreon.GetAccessToken();
-                }
-
-                if (string.IsNullOrEmpty(accessToken))
-                {
-                    ShowNotFoundPanel(_firstProvider!);
-                    return;
-                }
-
-                ShowLoading("Checking account...");
-
-                // Try V2 authentication for this provider
-                var v2Auth = new V2AuthService();
-                V2AuthResponse authResponse;
-
-                if (provider == "discord")
-                    authResponse = await v2Auth.AuthenticateWithDiscordAsync(accessToken);
-                else
-                    authResponse = await v2Auth.AuthenticateWithPatreonAsync(accessToken);
-
-                if (!authResponse.Success)
-                {
-                    ShowError(SanitizeError(authResponse.Error));
-                    return;
-                }
-
-                // Check if this provider has Season 0 data
-                if (authResponse.IsLegacyUser && authResponse.LegacyData != null)
-                {
-                    // Found Season 0 data! Create account with legacy name
-                    var displayName = authResponse.LegacyData.DisplayName;
-
-                    ShowLoading("Restoring your account...");
-
-                    // Register with the legacy display name
-                    if (provider == "discord")
-                        authResponse = await v2Auth.AuthenticateWithDiscordAsync(accessToken, displayName);
-                    else
-                        authResponse = await v2Auth.AuthenticateWithPatreonAsync(accessToken, displayName);
-
-                    if (authResponse.Success && authResponse.User != null)
-                    {
-                        // Now link the first provider
-                        ShowLoading("Linking accounts...");
-
-                        var linkResult = await v2Auth.LinkProviderAsync(
-                            authResponse.User.UnifiedId!,
-                            _firstProvider!,
-                            _firstProviderToken!);
-
-                        // Use link token if available (rotated), otherwise fall back to auth token
-                        var effectiveToken = linkResult.AuthToken ?? authResponse.AuthToken;
-                        v2Auth.ApplyUserDataToSettings(authResponse.User, effectiveToken);
-                        App.UnifiedUserId = authResponse.User.UnifiedId;
-
-                        // Update both service properties
-                        UpdateServiceProperties(provider, authResponse.User.UnifiedId, authResponse.User.DisplayName);
-                        UpdateServiceProperties(_firstProvider!, authResponse.User.UnifiedId, authResponse.User.DisplayName);
-
-                        // Update linking status
-                        if (App.Settings?.Current != null)
-                        {
-                            App.Settings.Current.HasLinkedDiscord = true;
-                            App.Settings.Current.HasLinkedPatreon = true;
-                        }
-
-                        Result = new LoginResult
-                        {
-                            Success = true,
-                            IsLegacyUser = true,
-                            ShouldShowOgWelcome = App.Settings?.Current?.HasShownOgWelcome != true,
-                            UnifiedId = authResponse.User.UnifiedId,
-                            DisplayName = authResponse.User.DisplayName,
-                            Provider = provider,
-                            LinkedProvider = _firstProvider
-                        };
-
-                        DialogResult = true;
-                        Close();
-                        return;
-                    }
-                }
-
-                // Still not found - they're not in Season 0
-                MessageBox.Show(this,
-                    "We couldn't find a Season 0 account for either login method.\n\n" +
-                    "You can create a new account instead.",
-                    "Account Not Found",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-
-                ShowUsernamePanel();
-            }
-            catch (OperationCanceledException)
-            {
-                ShowNotFoundPanel(_firstProvider!);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "Link other provider failed");
-                ShowError("Failed to link accounts. Please try again.");
-            }
-        }
-
-        private void BtnNewAccount_Click(object sender, RoutedEventArgs e)
-        {
-            _isOgUser = false;
-            ShowUsernamePanel();
-        }
-
-        #endregion
-
         #region Username Entry
 
         private void ShowUsernamePanel()
         {
             ProviderPanel.Visibility = Visibility.Collapsed;
             LoadingPanel.Visibility = Visibility.Collapsed;
-            NotFoundPanel.Visibility = Visibility.Collapsed;
             UsernamePanel.Visibility = Visibility.Visible;
             AccountPanel.Visibility = Visibility.Collapsed;
 
-            // Set different text for OG users vs new users
-            if (_isOgUser)
-            {
-                TxtUsernameTitle.Text = "What was your username?";
-                TxtUsernameSubtitle.Text = "Enter the name you used before v5.5";
-            }
-            else
-            {
-                TxtUsernameTitle.Text = "Choose your display name";
-                TxtUsernameSubtitle.Text = "This will be shown on the leaderboard";
-            }
+            TxtUsernameTitle.Text = "Choose your display name";
+            TxtUsernameSubtitle.Text = "This will be shown on the leaderboard";
 
             TxtUsername.Focus();
         }
@@ -546,14 +345,11 @@ namespace ConditioningControlPanel
                     if (_firstProvider != "invite")
                         UpdateServiceProperties(_firstProvider!, authResponse.User.UnifiedId, authResponse.User.DisplayName);
 
-                    // If this was an OG user picking a new name (old one taken), they still get OG status
-                    var isOg = _isOgUser || authResponse.User.IsSeason0Og;
-
                     Result = new LoginResult
                     {
                         Success = true,
-                        IsLegacyUser = isOg,
-                        ShouldShowOgWelcome = isOg && App.Settings?.Current?.HasShownOgWelcome != true,
+                        IsLegacyUser = false,
+                        ShouldShowOgWelcome = false,
                         UnifiedId = authResponse.User.UnifiedId,
                         DisplayName = authResponse.User.DisplayName,
                         Provider = _firstProvider
@@ -586,7 +382,6 @@ namespace ConditioningControlPanel
 
             ProviderPanel.Visibility = Visibility.Collapsed;
             LoadingPanel.Visibility = Visibility.Collapsed;
-            NotFoundPanel.Visibility = Visibility.Collapsed;
             UsernamePanel.Visibility = Visibility.Collapsed;
             AccountPanel.Visibility = Visibility.Visible;
 
@@ -689,7 +484,6 @@ namespace ConditioningControlPanel
                 _pendingInviteCode = inviteCode;
                 _pendingPassword = password;
                 _firstProvider = "invite";
-                _isOgUser = false;
                 ShowUsernamePanel();
             }
             else
@@ -772,7 +566,6 @@ namespace ConditioningControlPanel
         {
             ProviderPanel.Visibility = Visibility.Visible;
             LoadingPanel.Visibility = Visibility.Collapsed;
-            NotFoundPanel.Visibility = Visibility.Collapsed;
             UsernamePanel.Visibility = Visibility.Collapsed;
             AccountPanel.Visibility = Visibility.Collapsed;
             BtnLoginDiscord.IsEnabled = true;
@@ -784,7 +577,6 @@ namespace ConditioningControlPanel
             TxtLoadingMessage.Text = message;
             ProviderPanel.Visibility = Visibility.Collapsed;
             LoadingPanel.Visibility = Visibility.Visible;
-            NotFoundPanel.Visibility = Visibility.Collapsed;
             UsernamePanel.Visibility = Visibility.Collapsed;
             AccountPanel.Visibility = Visibility.Collapsed;
         }

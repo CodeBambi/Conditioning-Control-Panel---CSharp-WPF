@@ -552,6 +552,29 @@ namespace ConditioningControlPanel.Services
                             }
                         }
 
+                        // Merge achievements from server (union — never lose achievements)
+                        if (v2Result?.User?.Achievements != null && v2Result.User.Achievements.Count > 0)
+                        {
+                            var achievementSvc = App.Achievements;
+                            if (achievementSvc?.Progress != null)
+                            {
+                                var restoredCount = 0;
+                                foreach (var achievementId in v2Result.User.Achievements)
+                                {
+                                    if (!achievementSvc.Progress.IsUnlocked(achievementId))
+                                    {
+                                        achievementSvc.Progress.Unlock(achievementId);
+                                        restoredCount++;
+                                    }
+                                }
+                                if (restoredCount > 0)
+                                {
+                                    App.Logger?.Information("V2 Sync: Restored {Count} achievements from server", restoredCount);
+                                    achievementSvc.Save();
+                                }
+                            }
+                        }
+
                         // Merge total conditioning minutes from server (take higher)
                         if (v2Result?.TotalConditioningMinutes.HasValue == true && v2Result.TotalConditioningMinutes.Value > settings.TotalConditioningMinutes)
                         {
@@ -2000,6 +2023,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("highest_level_ever")]
             public int? HighestLevelEver { get; set; }
+
+            [JsonProperty("achievements")]
+            public List<string>? Achievements { get; set; }
         }
 
         private class OopsieSuccessResponse

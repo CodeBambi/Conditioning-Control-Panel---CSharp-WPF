@@ -2714,8 +2714,25 @@ namespace ConditioningControlPanel
                 UpdateBannerWelcomeMessage();
                 UpdateAccountLinkingUI();
 
+                // Save new account's identity/lifetime data set by ApplyUserDataToSettings inside LoginDialog.
+                // ClearProgressionData will zero these, so we restore them after clearing.
+                var savedHighestLevelEver = App.Settings?.Current?.HighestLevelEver ?? 0;
+                var savedIsSeason0Og = App.Settings?.Current?.IsSeason0Og ?? false;
+                var savedCurrentSeason = App.Settings?.Current?.CurrentSeason;
+                var savedPatreonTier = App.Settings?.Current?.PatreonTier ?? 0;
+
                 // Clear stale progression data from previous account before syncing
                 ClearProgressionData();
+
+                // Restore the new account's lifetime data that ClearProgressionData just zeroed
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.HighestLevelEver = savedHighestLevelEver;
+                    App.Settings.Current.IsSeason0Og = savedIsSeason0Og;
+                    App.Settings.Current.CurrentSeason = savedCurrentSeason;
+                    App.Settings.Current.PatreonTier = savedPatreonTier;
+                    App.Settings.Save();
+                }
 
                 // Start profile sync
                 App.ProfileSync?.StartHeartbeat();
@@ -2731,10 +2748,8 @@ namespace ConditioningControlPanel
                         if (App.Achievements != null) App.Achievements.SuppressPopups = true;
                         try
                         {
-                            // IMPORTANT: Load FIRST, then sync. ClearProgressionData() zeroed local data,
-                            // so we must restore from cloud before syncing UP — otherwise we'd push
-                            // level=1/xp=0 to the server, which can permanently erase progress if the
-                            // server also has low values (e.g. right after migration/season reset).
+                            // Load profile from cloud, then sync. Server is authoritative for
+                            // progression data after login (local was just cleared).
                             var loaded = await App.ProfileSync.LoadProfileAsync();
                             if (loaded)
                             {
@@ -2743,17 +2758,10 @@ namespace ConditioningControlPanel
                             else
                             {
                                 // LoadProfileAsync fails for invite-code users (no OAuth token).
-                                // For V2 users, SyncProfileAsync still works and returns server data,
-                                // but only sync if we have non-zeroed data to avoid pushing zeros.
-                                var s = App.Settings?.Current;
-                                if (s != null && (s.PlayerLevel > 1 || s.PlayerXP > 0 || (s.UnlockedSkills?.Count ?? 0) > 0))
-                                {
-                                    await App.ProfileSync.SyncProfileAsync();
-                                }
-                                else
-                                {
-                                    App.Logger?.Warning("Skipping post-login sync — profile load failed and local data is zeroed");
-                                }
+                                // For V2 users with UnifiedId, LoadProfileAsync calls SyncProfileAsync
+                                // internally and returns its result. If it still returns false here,
+                                // force a sync anyway — server will return authoritative data.
+                                await App.ProfileSync.SyncProfileAsync();
                             }
                         }
                         finally
@@ -2773,11 +2781,6 @@ namespace ConditioningControlPanel
                     }
                 });
 
-                // Show OG welcome if applicable
-                if (result.ShouldShowOgWelcome)
-                {
-                    ShowOgWelcomePopup();
-                }
             }
         }
 
@@ -2964,12 +2967,6 @@ namespace ConditioningControlPanel
                         UpdatePatreonUI();
                         UpdateBannerWelcomeMessage();
                         UpdateAccountLinkingUI();
-
-                        // Show OG welcome popup if applicable
-                        if (result.ShouldShowOgWelcome)
-                        {
-                            ShowOgWelcomePopup();
-                        }
                     }
                 }
                 catch (OperationCanceledException)
@@ -3042,12 +3039,6 @@ namespace ConditioningControlPanel
                         UpdateQuickDiscordUI();
                         UpdateBannerWelcomeMessage();
                         UpdateAccountLinkingUI();
-
-                        // Show OG welcome popup if applicable
-                        if (result.ShouldShowOgWelcome)
-                        {
-                            ShowOgWelcomePopup();
-                        }
                     }
                 }
                 catch (OperationCanceledException)
@@ -9983,6 +9974,13 @@ namespace ConditioningControlPanel
         {
             if (_sessionEngine == null || !_sessionEngine.IsRunning) return;
 
+            if (App.Lockdown?.IsActive == true)
+            {
+                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nYou cannot end a session during lockdown!", "LOCKDOWN",
+                    MessageBoxButton.OK, MessageBoxImage.Stop);
+                return;
+            }
+
             var session = _sessionEngine.CurrentSession;
             var elapsed = _sessionEngine.ElapsedTime;
             var remaining = _sessionEngine.RemainingTime;
@@ -10015,6 +10013,13 @@ namespace ConditioningControlPanel
         private void BtnPauseSession_Click(object sender, RoutedEventArgs e)
         {
             if (_sessionEngine == null || !_sessionEngine.IsRunning) return;
+
+            if (App.Lockdown?.IsActive == true)
+            {
+                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nYou cannot pause during lockdown!", "LOCKDOWN",
+                    MessageBoxButton.OK, MessageBoxImage.Stop);
+                return;
+            }
 
             if (_sessionEngine.IsPaused)
             {
@@ -12381,21 +12386,30 @@ namespace ConditioningControlPanel
             // Rank (own rank from leaderboard, if available)
             if (TxtProfileViewerRank != null)
             {
-                // Try to find own rank: unified_id first, then display name fallback
-                var unifiedId = App.UnifiedUserId;
-                var displayName = App.Settings?.Current?.UserDisplayName;
+                // Prefer server-provided rank (works even beyond top 200)
+                var serverRank = App.Leaderboard?.YourRank;
+                if (serverRank.HasValue && serverRank.Value > 0)
+                {
+                    TxtProfileViewerRank.Text = $"#{serverRank.Value}";
+                }
+                else
+                {
+                    // Fallback: scan local entries by unified_id or display name
+                    var unifiedId = App.UnifiedUserId;
+                    var displayName = App.Settings?.Current?.UserDisplayName;
 
-                var ownEntry = !string.IsNullOrEmpty(unifiedId)
-                    ? App.Leaderboard?.Entries?.FirstOrDefault(e =>
-                        e.UnifiedId == unifiedId)
-                    : null;
+                    var ownEntry = !string.IsNullOrEmpty(unifiedId)
+                        ? App.Leaderboard?.Entries?.FirstOrDefault(e =>
+                            e.UnifiedId == unifiedId)
+                        : null;
 
-                ownEntry ??= !string.IsNullOrEmpty(displayName)
-                    ? App.Leaderboard?.Entries?.FirstOrDefault(e =>
-                        e.DisplayName?.Equals(displayName, StringComparison.OrdinalIgnoreCase) == true)
-                    : null;
+                    ownEntry ??= !string.IsNullOrEmpty(displayName)
+                        ? App.Leaderboard?.Entries?.FirstOrDefault(e =>
+                            e.DisplayName?.Equals(displayName, StringComparison.OrdinalIgnoreCase) == true)
+                        : null;
 
-                TxtProfileViewerRank.Text = ownEntry?.Rank > 0 ? $"#{ownEntry.Rank}" : "#-";
+                    TxtProfileViewerRank.Text = ownEntry?.Rank > 0 ? $"#{ownEntry.Rank}" : "#-";
+                }
             }
             if (TxtProfileViewerXp != null) TxtProfileViewerXp.Text = FormatNumber(xp);
             if (TxtProfileViewerBubbles != null) TxtProfileViewerBubbles.Text = FormatNumber(progress?.TotalBubblesPopped ?? 0);
@@ -13178,6 +13192,13 @@ namespace ConditioningControlPanel
         {
             // Don't allow manual start/stop while remote controller is connected
             if (App.RemoteControl?.ControllerConnected == true) return;
+
+            if (_isRunning && App.Lockdown?.IsActive == true)
+            {
+                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nYou cannot stop during lockdown!", "LOCKDOWN",
+                    MessageBoxButton.OK, MessageBoxImage.Stop);
+                return;
+            }
 
             if (_isRunning)
             {
@@ -17060,17 +17081,15 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
-                // Show login prompt
-                var result = MessageBox.Show(
-                    $"{message}\n\nWould you like to log in with Patreon now?",
-                    "Patreon Login Required (Free Account Works!)",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information);
-
-                if (result == MessageBoxResult.Yes)
+                // Show login prompt — direct to appropriate login method
+                if (App.HasCloudIdentity)
                 {
-                    // Trigger Patreon login
-                    _ = App.Patreon?.StartOAuthFlowAsync();
+                    // User is logged in but token may be expired
+                    MessageBox.Show(message, "Authentication Required", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show($"{message}\n\nPlease log in from the Settings tab.", "Login Required", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             });
         }

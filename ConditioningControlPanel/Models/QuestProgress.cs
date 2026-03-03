@@ -120,7 +120,7 @@ public class QuestProgress
     }
 
     /// <summary>
-    /// Check if weekly quest has expired (new week - resets Sunday)
+    /// Check if weekly quest has expired (new week - resets Monday)
     /// </summary>
     public bool IsWeeklyExpired()
     {
@@ -130,11 +130,11 @@ public class QuestProgress
     }
 
     /// <summary>
-    /// Get the start of the current week (Sunday)
+    /// Get the start of the current week (Monday)
     /// </summary>
     private static DateTime GetStartOfWeek(DateTime date)
     {
-        int diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        int diff = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
         return date.AddDays(-diff).Date;
     }
 }

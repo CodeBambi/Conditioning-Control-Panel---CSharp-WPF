@@ -360,7 +360,7 @@ public class QuestService : IDisposable
 
     private static DateTime GetStartOfWeek(DateTime date)
     {
-        int diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        int diff = (7 + (date.DayOfWeek - DayOfWeek.Monday)) % 7;
         return date.AddDays(-diff).Date;
     }
 
@@ -589,6 +589,11 @@ public class QuestService : IDisposable
         UpdateQuestProgress(QuestCategory.BubbleCount, 1);
     }
 
+    public void TrackMantraCompleted()
+    {
+        UpdateQuestProgress(QuestCategory.Mantra, 1);
+    }
+
     /// <summary>
     /// Track XP earned (for "earn X XP" quests)
     /// </summary>
@@ -747,13 +752,13 @@ public class QuestService : IDisposable
             Progress.TotalWeeklyQuestsCompleted++;
         }
 
-        // Scale XP reward based on player level (+2% per level)
+        // Scale XP reward based on player level (+4% per level)
         var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
         var betterQuestsMultiplier = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
         // Quest streak bonus: +3% per consecutive day
         var questStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
         var streakMultiplier = 1.0 + (questStreak * 0.03);
-        var scaledXP = (int)Math.Round(def.XPReward * (1 + playerLevel * 0.02) * betterQuestsMultiplier * streakMultiplier);
+        var scaledXP = (int)Math.Round(def.XPReward * (1 + playerLevel * 0.04) * betterQuestsMultiplier * streakMultiplier);
 
         Progress.TotalXPFromQuests += scaledXP;
 

@@ -181,10 +181,11 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public double GetSessionXPMultiplier(int level)
         {
-            if (level < 100) return 1.0;
-            if (level < 125) return 1.0 + ((level - 100) * 0.02); // 1.0x to 1.5x
-            if (level < 150) return 1.5 + ((level - 125) * 0.02); // 1.5x to 2.0x
-            return 2.0 + ((level - 150) * 0.02); // 2.0x+ for 150+
+            if (level < 30) return 1.0;
+            if (level < 80) return 1.0 + ((level - 30) * 0.01);   // 1.0x → 1.5x
+            if (level < 125) return 1.5 + ((level - 80) * 0.02);  // 1.5x → 2.4x
+            if (level < 150) return 2.4 + ((level - 125) * 0.03); // 2.4x → 3.15x
+            return 3.15 + ((level - 150) * 0.03);                 // 3.15x+
         }
 
         /// <summary>

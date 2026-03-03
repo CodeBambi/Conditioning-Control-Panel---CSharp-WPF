@@ -281,15 +281,7 @@ public static class AccountService
                 };
                 dialog.Activated += (s, args) => dialog.Topmost = false;
 
-                // Configure for legacy (OG) user or new user
-                if (authResponse.IsLegacyUser && authResponse.LegacyData != null)
-                {
-                    dialog.ConfigureForLegacyUser(authResponse.LegacyData.DisplayName);
-                }
-                else
-                {
-                    dialog.ConfigureForNewUser();
-                }
+                dialog.ConfigureForNewUser();
 
                 if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.ChosenDisplayName))
                 {
@@ -384,15 +376,11 @@ public static class AccountService
                 // Start profile sync heartbeat
                 App.ProfileSync?.StartHeartbeat();
 
-                // Determine if we should show OG welcome
-                bool shouldShowOgWelcome = authResponse.User.IsSeason0Og &&
-                                           App.Settings?.Current?.HasShownOgWelcome != true;
-
                 return new V2AuthResult
                 {
                     Success = true,
-                    IsLegacyUser = authResponse.User.IsSeason0Og,
-                    ShouldShowOgWelcome = shouldShowOgWelcome,
+                    IsLegacyUser = false,
+                    ShouldShowOgWelcome = false,
                     UnifiedId = authResponse.User.UnifiedId,
                     DisplayName = authResponse.User.DisplayName
                 };
@@ -439,9 +427,15 @@ public static class AccountService
             // Call V2 link endpoint
             var result = await v2Auth.LinkProviderAsync(unifiedId, provider, accessToken);
 
-            if (result.Success)
+            // Treat "already linked to this account" as success — it means the link is already done
+            var alreadyLinked = !result.Success &&
+                                result.Error != null &&
+                                result.Error.Contains("already linked to this account", StringComparison.OrdinalIgnoreCase);
+
+            if (result.Success || alreadyLinked)
             {
-                App.Logger?.Information("AccountService: Successfully linked {Provider} to {UnifiedId}", provider, unifiedId);
+                App.Logger?.Information("AccountService: {Status} {Provider} to {UnifiedId}",
+                    alreadyLinked ? "Already linked" : "Successfully linked", provider, unifiedId);
 
                 // Update settings
                 if (provider == "discord")
@@ -449,7 +443,7 @@ public static class AccountService
                 else if (provider == "patreon")
                     App.Settings!.Current!.HasLinkedPatreon = true;
 
-                // Store new auth token from link response
+                // Store new auth token from link response (not available when already linked)
                 if (!string.IsNullOrEmpty(result.AuthToken) && App.Settings?.Current != null)
                     App.Settings.Current.AuthToken = result.AuthToken;
 

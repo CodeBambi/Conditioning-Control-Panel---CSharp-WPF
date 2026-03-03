@@ -60,9 +60,6 @@
                     </StackPanel>
                 </Button>
 
-                <TextBlock Text="If you had an account before v5.5, use the same login method you originally used."
-                           FontSize="11" Foreground="#808080" TextWrapping="Wrap"
-                           HorizontalAlignment="Center" Margin="0,10,0,0"/>
             </StackPanel>
 
             <!-- Account Login/Register Panel -->
@@ -134,34 +131,7 @@
                            MouseLeftButtonDown="BtnAccountBack_Click"/>
             </StackPanel>
 
-            <!-- Not Found Panel (shown when user not in Season 0) -->
-            <StackPanel x:Name="NotFoundPanel" Grid.Row="2" Visibility="Collapsed" VerticalAlignment="Center">
-                <TextBlock x:Name="TxtNotFoundMessage"
-                           Text="We couldn't find an existing account."
-                           FontSize="14" Foreground="White" TextWrapping="Wrap"
-                           HorizontalAlignment="Center" Margin="0,0,0,20"/>
-
-                <TextBlock Text="Did you have an account before v5.5?"
-                           FontSize="13" Foreground="#B0B0B0"
-                           HorizontalAlignment="Center" Margin="0,0,0,15"/>
-
-                <Button x:Name="BtnTryOtherProvider"
-                        Padding="15,12" Margin="0,0,0,10"
-                        Background="#5865F2" Foreground="White"
-                        BorderThickness="0" FontWeight="Bold" FontSize="14"
-                        Cursor="Hand" Click="BtnTryOtherProvider_Click">
-                    <TextBlock x:Name="TxtTryOtherProvider" Text="Yes, I used Discord"/>
-                </Button>
-
-                <Button x:Name="BtnNewAccount"
-                        Content="No, create new account"
-                        Padding="15,12" Margin="0,0,0,10"
-                        Background="#352545" Foreground="White"
-                        BorderThickness="0" FontWeight="Bold" FontSize="14"
-                        Cursor="Hand" Click="BtnNewAccount_Click"/>
-            </StackPanel>
-
-            <!-- Username Entry Panel (for new accounts or OG recovery) -->
+            <!-- Username Entry Panel (for new accounts) -->
             <StackPanel x:Name="UsernamePanel" Grid.Row="2" Visibility="Collapsed" VerticalAlignment="Center">
                 <TextBlock x:Name="TxtUsernameTitle" Text="Choose your display name"
                            FontSize="16" FontWeight="Bold" Foreground="White"

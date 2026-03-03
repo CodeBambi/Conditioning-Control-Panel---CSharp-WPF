@@ -19,6 +19,7 @@ namespace ConditioningControlPanel.Services
         BouncingText,
         AvatarInteraction,
         KeywordTrigger,
+        Mantra,
         Other
     }
 

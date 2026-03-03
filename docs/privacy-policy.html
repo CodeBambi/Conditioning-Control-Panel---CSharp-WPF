@@ -50,16 +50,43 @@
             <div class="toc">
                 <h4>On This Page</h4>
                 <ul>
+                    <li><a href="#summary">Summary</a></li>
                     <li><a href="#data-controller">Data Controller</a></li>
                     <li><a href="#what-we-collect">What Data We Collect</a></li>
                     <li><a href="#why-we-collect">Why We Collect It</a></li>
+                    <li><a href="#legal-bases">Legal Bases for Processing</a></li>
                     <li><a href="#how-stored">How Data Is Stored</a></li>
+                    <li><a href="#international-transfers">International Data Transfers</a></li>
                     <li><a href="#third-party">Third-Party Services</a></li>
+                    <li><a href="#cookies">Cookies &amp; Tracking</a></li>
                     <li><a href="#data-retention">Data Retention</a></li>
+                    <li><a href="#age-requirement">Age Requirement</a></li>
                     <li><a href="#your-rights">Your Rights</a></li>
+                    <li><a href="#california-rights">California Privacy Rights</a></li>
+                    <li><a href="#do-not-track">Do-Not-Track</a></li>
+                    <li><a href="#policy-changes">Changes to This Policy</a></li>
                     <li><a href="#contact">Contact</a></li>
                 </ul>
             </div>
+
+            <section id="summary">
+                <h2>Summary</h2>
+
+                <div class="info-box">
+                    <p>This summary provides key points from our privacy policy. You can find full details in the sections below.</p>
+                </div>
+
+                <ul>
+                    <li><strong>What we collect:</strong> Display name, hashed email, OAuth provider IDs, progression data, and application settings &mdash; only if you opt into cloud features.</li>
+                    <li><strong>What we don't collect:</strong> IP addresses, media file content, browsing history, billing names, or any sensitive personal information.</li>
+                    <li><strong>Offline by default:</strong> The application works fully offline. Cloud sync, leaderboards, and accounts are entirely optional.</li>
+                    <li><strong>Open source:</strong> Our source code is <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF" target="_blank">publicly available</a> so you can verify exactly how your data is handled.</li>
+                    <li><strong>Self-service data control:</strong> You can export or permanently delete all your data at any time directly from the app &mdash; no need to contact us.</li>
+                    <li><strong>No tracking or analytics:</strong> We do not use cookies, Google Analytics, or any tracking technologies.</li>
+                    <li><strong>Where data is stored:</strong> Server-side data is stored in the United States via Vercel and Upstash. All data is transmitted over HTTPS.</li>
+                    <li><strong>Age requirement:</strong> You must be at least 18 years old to use this application.</li>
+                </ul>
+            </section>
 
             <section id="data-controller">
                 <h2>Data Controller</h2>
@@ -74,7 +101,7 @@
                 <p>If you sign in with Discord or Patreon, we store:</p>
                 <ul>
                     <li><strong>Display name</strong> &mdash; your chosen username</li>
-                    <li><strong>Email address</strong> &mdash; from your OAuth provider (Discord or Patreon)</li>
+                    <li><strong>Email hash</strong> &mdash; a one-way HMAC-SHA256 hash of your email from your OAuth provider (Discord or Patreon). We do not store your plaintext email address.</li>
                     <li><strong>Discord ID / Patreon ID</strong> &mdash; used to link your account</li>
                     <li><strong>Patreon subscription tier</strong> &mdash; to verify premium access</li>
                     <li><strong>Avatar URL</strong> &mdash; Discord profile picture, if you opt in to sharing it</li>
@@ -101,13 +128,18 @@
                 <h3>Anti-Cheat Data</h3>
                 <p>To maintain fair leaderboards, we monitor XP earning rates, session timing, and statistics consistency. Sessions are signed with HMAC to verify integrity. This data is used solely for detecting anomalies and is not shared with other users.</p>
 
+                <h3>Automatically Collected Data</h3>
+                <p>Our application does <strong>not</strong> log IP addresses, device fingerprints, or usage analytics. However, our hosting infrastructure (Vercel) may temporarily retain standard connection metadata (such as IP addresses) in their own server logs as part of normal operations. This is governed by <a href="https://vercel.com/legal/privacy-policy" target="_blank">Vercel's privacy policy</a> and is outside our control. We do not access or use this infrastructure-level data.</p>
+
                 <h3>What We Do NOT Collect</h3>
                 <ul>
+                    <li>Plaintext email addresses (only one-way hashes are stored)</li>
                     <li>IP addresses (not logged by the application)</li>
                     <li>Content of your media files (images, videos, sounds stay local)</li>
                     <li>Browsing history or screen content</li>
                     <li>System information beyond what's needed for the app</li>
                     <li>Patreon billing name &mdash; used transiently during login for verification but NOT stored on the server</li>
+                    <li>Sensitive personal information (race, religion, health data, biometrics, etc.)</li>
                 </ul>
             </section>
 
@@ -124,7 +156,7 @@
                     <tbody>
                         <tr>
                             <td>Account sync across devices</td>
-                            <td>Discord/Patreon ID, display name, email</td>
+                            <td>Discord/Patreon ID, display name, email hash</td>
                         </tr>
                         <tr>
                             <td>Leaderboards</td>
@@ -150,6 +182,34 @@
                 </table>
             </section>
 
+            <section id="legal-bases">
+                <h2>Legal Bases for Processing</h2>
+
+                <p>We only process your personal data when we have a valid legal reason to do so. Depending on your location, the following legal bases apply:</p>
+
+                <h3>If You Are in the EU, EEA, or UK (GDPR / UK GDPR)</h3>
+                <ul>
+                    <li><strong>Consent:</strong> Cloud features are entirely opt-in. By creating an account and enabling cloud sync, you consent to the processing described in this policy. You can withdraw consent at any time (see <a href="#withdrawing-consent">Withdrawing Consent</a> below).</li>
+                    <li><strong>Legitimate Interests:</strong> We process anti-cheat data to maintain fair leaderboards and protect the integrity of the service. We believe this interest does not override your rights, as the data is minimal and not shared externally.</li>
+                    <li><strong>Legal Obligations:</strong> We may process or retain data if required by applicable law (e.g., responding to a lawful request from authorities).</li>
+                </ul>
+
+                <h3>If You Are in Canada</h3>
+                <p>We process your information based on your express consent when you create an account and enable cloud features. You may withdraw consent at any time. In limited circumstances, we may process data without consent as permitted by Canadian law (e.g., fraud prevention, legal compliance).</p>
+
+                <h3>If You Are in Switzerland</h3>
+                <p>Processing is based on your consent and our legitimate interests as described above. You may contact the <a href="https://www.edoeb.admin.ch/edoeb/en/home.html" target="_blank">Federal Data Protection and Information Commissioner</a> if you believe your data is being processed unlawfully.</p>
+
+                <h3 id="withdrawing-consent">Withdrawing Consent</h3>
+                <p>You can withdraw your consent to data processing at any time by:</p>
+                <ul>
+                    <li><strong>Deleting your account</strong> using the Delete Account button in Settings &mdash; this removes all server-side data immediately</li>
+                    <li><strong>Disabling cloud sync</strong> to stop ongoing data transmission while keeping your account</li>
+                    <li><strong>Contacting us</strong> at <a href="mailto:privacy@codebambi.com">privacy@codebambi.com</a> to request data deletion or processing restrictions</li>
+                </ul>
+                <p>Withdrawing consent does not affect the lawfulness of processing that occurred before withdrawal. The application will continue to work fully offline after consent is withdrawn.</p>
+            </section>
+
             <section id="how-stored">
                 <h2>How Data Is Stored</h2>
 
@@ -162,6 +222,25 @@
                     <li><strong>OAuth tokens</strong> (Discord/Patreon) are encrypted locally using <strong>Windows DPAPI</strong> (Data Protection API), tied to your Windows user account</li>
                     <li><strong>Auth tokens</strong> for the sync server are stored in application settings and validated via SHA-256 hashing</li>
                 </ul>
+            </section>
+
+            <section id="international-transfers">
+                <h2>International Data Transfers</h2>
+
+                <p>Our servers and infrastructure are located in the <strong>United States</strong>. If you are accessing our services from outside the United States &mdash; including from the European Economic Area (EEA), United Kingdom (UK), Switzerland, or Canada &mdash; your data will be transferred to, stored, and processed in the United States.</p>
+
+                <p>The United States may not have data protection laws as comprehensive as those in your country. However, we take the following measures to protect your data:</p>
+                <ul>
+                    <li>All data is transmitted over <strong>HTTPS</strong> (TLS encryption in transit)</li>
+                    <li>Email addresses are <strong>hashed</strong> before storage (not stored in plaintext)</li>
+                    <li>Auth tokens are stored as <strong>SHA-256 hashes</strong> (not plaintext)</li>
+                    <li>OAuth tokens are encrypted locally with <strong>Windows DPAPI</strong></li>
+                    <li>Our source code is <strong>open source</strong>, allowing public verification of data handling practices</li>
+                </ul>
+
+                <p>Our third-party infrastructure providers (Vercel and Upstash) maintain their own data protection practices and compliance measures. Please refer to their respective privacy policies linked in the <a href="#third-party">Third-Party Services</a> section.</p>
+
+                <p>If you are located in the EEA or UK and believe your data is being processed unlawfully, you have the right to lodge a complaint with your local <a href="https://edpb.europa.eu/about-edpb/about-edpb/members_en" target="_blank">data protection authority</a>.</p>
             </section>
 
             <section id="third-party">
@@ -208,6 +287,22 @@
                         </tr>
                     </tbody>
                 </table>
+
+                <h3>Business Transfers</h3>
+                <p>If this project is transferred to a new maintainer or organization, your data may be transferred as part of that transition. In such an event, the new data controller will be bound by this privacy policy or will notify you of any changes before they take effect. You will always retain the right to delete your account and data.</p>
+            </section>
+
+            <section id="cookies">
+                <h2>Cookies &amp; Tracking Technologies</h2>
+
+                <p>We do <strong>not</strong> use cookies, web beacons, pixels, or any other tracking technologies on our website or in the application.</p>
+                <ul>
+                    <li>Our website is a <strong>static site</strong> hosted on GitHub Pages with no analytics scripts</li>
+                    <li>We do <strong>not</strong> use Google Analytics, Google Tag Manager, or any third-party analytics</li>
+                    <li>We do <strong>not</strong> serve interest-based or targeted advertising</li>
+                    <li>The desktop application does <strong>not</strong> phone home or transmit usage telemetry</li>
+                </ul>
+                <p>Third-party services you interact with (Discord, Patreon) may set their own cookies when you authenticate through their OAuth flows. These are governed by their respective privacy policies.</p>
             </section>
 
             <section id="data-retention">
@@ -218,46 +313,185 @@
                     <li><strong>Inactive accounts:</strong> There is currently no automatic deletion of inactive accounts. Your data persists until you request deletion.</li>
                     <li><strong>Deleted accounts:</strong> When you delete your account, all associated data (user record, index entries, leaderboard entries, legacy keys) is removed immediately and permanently.</li>
                     <li><strong>IP addresses:</strong> The application does not log IP addresses. Standard Vercel infrastructure logs may briefly retain connection metadata per their own policy.</li>
+                    <li><strong>AI chat messages:</strong> Messages sent to the AI companion are forwarded to OpenRouter in real-time and are not stored on our server. Refer to <a href="https://openrouter.ai/privacy" target="_blank">OpenRouter's privacy policy</a> for their retention practices.</li>
                 </ul>
+            </section>
+
+            <section id="age-requirement">
+                <h2>Age Requirement</h2>
+
+                <p>You must be at least <strong>18 years of age</strong> to use this application. By using Conditioning Control Panel, you represent and warrant that you are 18 years of age or older.</p>
+
+                <p>We do not knowingly collect personal information from anyone under 18. If we become aware that a user is under 18, we will:</p>
+                <ul>
+                    <li>Deactivate the account immediately</li>
+                    <li>Delete all associated data from our servers</li>
+                    <li>Remove all leaderboard entries and index records</li>
+                </ul>
+
+                <p>If you believe that we have inadvertently collected data from someone under 18, please contact us immediately at <a href="mailto:privacy@codebambi.com">privacy@codebambi.com</a> so we can take appropriate action.</p>
             </section>
 
             <section id="your-rights">
                 <h2>Your Rights</h2>
 
-                <p>You have the following rights regarding your data:</p>
+                <p>Depending on your location, you may have some or all of the following rights regarding your personal data:</p>
 
                 <h3>Access &amp; Export Your Data</h3>
                 <p>You can export a full copy of your data at any time using the <strong>Export Data</strong> button in the app's Settings tab (under Account). This calls the <code>/v2/user/export-data</code> endpoint and returns all stored data associated with your account.</p>
+
+                <h3>Rectification</h3>
+                <p>You can update your display name through the application. If other data is incorrect, contact us and we will correct it.</p>
 
                 <h3>Delete Your Account</h3>
                 <p>You can permanently delete your account and all associated data using the <strong>Delete Account</strong> button in the app's Settings tab. This removes:</p>
                 <ul>
                     <li>Your user record and all progression data</li>
-                    <li>All index entries (email, display name, Discord ID, Patreon ID)</li>
+                    <li>All index entries (email hash, display name, Discord ID, Patreon ID)</li>
                     <li>All leaderboard entries across all seasons</li>
                     <li>Settings backups</li>
                     <li>Legacy data from previous versions</li>
                 </ul>
 
                 <div class="info-box warning">
-                    <h5>⚠️ Deletion Is Permanent</h5>
+                    <h5>Deletion Is Permanent</h5>
                     <p>Account deletion cannot be undone. All data is removed immediately from the server.</p>
                 </div>
 
+                <h3>Restrict or Object to Processing</h3>
+                <p>If you are in the EEA, UK, or Switzerland, you may request that we restrict or stop processing your personal data. Contact us at <a href="mailto:privacy@codebambi.com">privacy@codebambi.com</a> to make such a request.</p>
+
+                <h3>Data Portability</h3>
+                <p>The Export Data feature provides your data in a structured, machine-readable JSON format that you can take to another service.</p>
+
+                <h3>Withdraw Consent</h3>
+                <p>See <a href="#withdrawing-consent">Withdrawing Consent</a> in the Legal Bases section above.</p>
+
                 <h3>Offline Use</h3>
                 <p>You are not required to create an account or use any cloud features. The application works fully offline &mdash; cloud sync, leaderboards, and account features are entirely optional.</p>
+
+                <h3>Lodge a Complaint</h3>
+                <p>If you are in the EEA, UK, or Switzerland and believe we are processing your data unlawfully, you have the right to lodge a complaint with your local data protection authority.</p>
+            </section>
+
+            <section id="california-rights">
+                <h2>California Privacy Rights (CCPA)</h2>
+
+                <p>If you are a California resident, the California Consumer Privacy Act (CCPA) grants you specific rights regarding your personal information.</p>
+
+                <h3>Categories of Personal Information Collected</h3>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Collected?</th>
+                            <th>Examples</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>A. Identifiers</td>
+                            <td>YES (limited)</td>
+                            <td>Display name, hashed email, Discord/Patreon IDs</td>
+                        </tr>
+                        <tr>
+                            <td>B. Personal info (CA Customer Records)</td>
+                            <td>NO</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>C. Protected classifications</td>
+                            <td>NO</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>D. Commercial information</td>
+                            <td>NO</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>E. Biometric information</td>
+                            <td>NO</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>F. Internet/network activity</td>
+                            <td>NO</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>G. Geolocation data</td>
+                            <td>NO</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>H. Audio/visual information</td>
+                            <td>NO</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>I. Professional/employment info</td>
+                            <td>NO</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>J. Education information</td>
+                            <td>NO</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>K. Inferences</td>
+                            <td>NO</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>L. Sensitive personal information</td>
+                            <td>NO</td>
+                            <td>&mdash;</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Your California Rights</h3>
+                <ul>
+                    <li><strong>Right to Know:</strong> You can request what personal information we have collected about you. Use the Export Data button in the app for immediate access.</li>
+                    <li><strong>Right to Delete:</strong> You can request deletion of your personal information. Use the Delete Account button in the app for immediate deletion.</li>
+                    <li><strong>Right to Non-Discrimination:</strong> We will not discriminate against you for exercising any of your privacy rights.</li>
+                    <li><strong>Right to Opt Out of Sale:</strong> We do <strong>not</strong> sell or share your personal information with third parties for monetary or other valuable consideration. There is nothing to opt out of.</li>
+                </ul>
+
+                <p>To exercise any of these rights, you can use the self-service tools in the app or contact us at <a href="mailto:privacy@codebambi.com">privacy@codebambi.com</a>.</p>
+            </section>
+
+            <section id="do-not-track">
+                <h2>Do-Not-Track</h2>
+                <p>We do not track users across websites or applications. Because we do not use cookies, analytics, or tracking technologies of any kind, Do-Not-Track (DNT) browser signals are not applicable to our service. We respect your privacy regardless of your DNT settings.</p>
+            </section>
+
+            <section id="policy-changes">
+                <h2>Changes to This Policy</h2>
+                <p>We may update this privacy policy from time to time. When we do:</p>
+                <ul>
+                    <li>The "Last updated" date at the bottom of this page will be revised</li>
+                    <li><strong>Material changes</strong> (e.g., new data collection, new third-party sharing) will be communicated via an in-app notification or announcement in our <a href="https://discord.gg/YxVAMt4qaZ" target="_blank">Discord server</a></li>
+                    <li>The previous version of this policy will remain accessible in our <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/commits/main/docs/privacy-policy.html" target="_blank">public git history</a></li>
+                </ul>
+                <p>We encourage you to review this policy periodically. Your continued use of the application after changes are posted constitutes acceptance of the updated policy.</p>
             </section>
 
             <section id="contact">
                 <h2>Contact</h2>
 
-                <p>If you have questions about your data or this privacy policy:</p>
+                <p>If you have questions about your data, want to exercise your privacy rights, or have concerns about this policy:</p>
                 <ul>
+                    <li><strong>Privacy email:</strong> <a href="mailto:privacy@codebambi.com">privacy@codebambi.com</a></li>
                     <li><strong>GitHub Issues:</strong> <a href="https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/issues" target="_blank">Open an issue</a></li>
                     <li><strong>Discord:</strong> <a href="https://discord.gg/YxVAMt4qaZ" target="_blank">Join the Discord server</a></li>
                 </ul>
 
-                <p><em>Last updated: February 2026</em></p>
+                <p>We will respond to privacy-related requests within 30 days.</p>
+
+                <p><em>Last updated: February 28, 2026</em></p>
             </section>
         </div>
     </main>

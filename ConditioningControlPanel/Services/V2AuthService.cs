@@ -385,8 +385,12 @@ namespace ConditioningControlPanel.Services
                     ["access_token"] = accessToken
                 };
 
-                var content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
-                var response = await _http.PostAsync($"{SERVER_URL}/v2/auth/link", content);
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/auth/link")
+                {
+                    Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json")
+                };
+                AddAuthHeader(request);
+                var response = await _http.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
 
                 Log.Debug("[V2Auth] Link response: {Json}", RedactSensitiveFields(json));

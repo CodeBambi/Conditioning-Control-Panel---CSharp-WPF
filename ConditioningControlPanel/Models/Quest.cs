@@ -21,6 +21,7 @@ public enum QuestCategory
     Session,        // Complete sessions
     Streak,         // Daily streak
     BubbleCount,    // Bubble count minigame
+    Mantra,         // Complete mantras
     Combined        // Multiple activities (overlay time, XP earned)
 }
 
