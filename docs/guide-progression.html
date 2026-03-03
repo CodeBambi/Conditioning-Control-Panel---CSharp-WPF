@@ -51,7 +51,15 @@
             <div class="toc">
                 <h4>On This Page</h4>
                 <ul>
-                    <li><a href="#xp-system">XP System</a></li>
+                    <li><a href="#xp-system">XP System</a>
+                        <ul>
+                            <li><a href="#xp-system">Session XP</a></li>
+                            <li><a href="#xp-system">Activity XP</a></li>
+                            <li><a href="#xp-system">Quest XP</a></li>
+                            <li><a href="#xp-system">Streak &amp; Milestone XP</a></li>
+                            <li><a href="#xp-multipliers">XP Multipliers</a></li>
+                        </ul>
+                    </li>
                     <li><a href="#level-titles">Level Titles</a></li>
                     <li><a href="#unlockables">Unlockable Features</a></li>
                     <li><a href="#achievements">Achievements</a></li>
@@ -61,77 +69,272 @@
             <section id="xp-system">
                 <h2>XP System</h2>
 
-                <p>Earn XP (experience points) through various interactions in the app. XP accumulates to level you up and unlock new features.</p>
+                <p>Earn XP (experience points) through various interactions in the app. XP accumulates to level you up, unlock new features, and climb the <a href="guide-leaderboard.html">leaderboard</a>. All base XP values below are further multiplied by your <a href="#xp-multipliers">global XP multiplier</a> from the Skill Tree.</p>
 
-                <h3>XP Sources</h3>
+                <h3>Session XP</h3>
+                <p>Sessions are the biggest XP source. The base reward depends on difficulty, and is then boosted by your level multiplier and a duration bonus for longer sessions.</p>
+
                 <table class="settings-table">
                     <thead>
                         <tr>
-                            <th>Action</th>
-                            <th>XP Gained</th>
+                            <th>Session Difficulty</th>
+                            <th>Base XP</th>
+                            <th>Notes</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td>Clicking flash images</td>
-                            <td>+5 XP</td>
+                            <td>Easy</td>
+                            <td>400 XP</td>
+                            <td>e.g. Morning Drift</td>
                         </tr>
                         <tr>
-                            <td>Popping bubbles</td>
-                            <td>+2 XP</td>
+                            <td>Medium</td>
+                            <td>800 XP</td>
+                            <td>e.g. Random Drop, Gamer Girl</td>
                         </tr>
                         <tr>
-                            <td>Completing attention checks</td>
-                            <td>+10 XP</td>
+                            <td>Hard</td>
+                            <td>1,200 XP</td>
+                            <td>e.g. Good Girls Don't Cum, Deep Dive</td>
                         </tr>
                         <tr>
-                            <td>Watching videos</td>
-                            <td>+20 XP</td>
+                            <td>Extreme</td>
+                            <td>2,000 XP</td>
+                            <td>e.g. Bambi Time</td>
                         </tr>
                         <tr>
-                            <td>Completing Easy session</td>
-                            <td>+400 XP</td>
+                            <td>Remote Control</td>
+                            <td>200 XP</td>
+                            <td>Controlled by another user</td>
                         </tr>
                         <tr>
-                            <td>Completing Medium session</td>
-                            <td>+800 XP</td>
+                            <td>Custom (Timeline)</td>
+                            <td>Varies</td>
+                            <td>Based on duration + enabled features</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <p><strong>Pause penalty:</strong> -100 XP per pause during a session.</p>
+
+                <h4>Session Level Multiplier</h4>
+                <p>Higher-level players earn more session XP. This multiplier kicks in at level 30 and scales up:</p>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Level Range</th>
+                            <th>Multiplier</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1 - 29</td><td>1.0x</td></tr>
+                        <tr><td>30 - 79</td><td>1.0x - 1.5x</td></tr>
+                        <tr><td>80 - 124</td><td>1.5x - 2.4x</td></tr>
+                        <tr><td>125 - 149</td><td>2.4x - 3.15x</td></tr>
+                        <tr><td>150+</td><td>3.15x+</td></tr>
+                    </tbody>
+                </table>
+
+                <h4>Duration Bonus</h4>
+                <p>Sessions longer than 2 minutes award extra XP based on duration and level:</p>
+                <div class="code-block">
+                    <pre>Duration Bonus = (minutes - 2) × (8 + level × 0.15)
+
+Example: Level 50, 30-minute session
+  = (30 - 2) × (8 + 50 × 0.15)
+  = 28 × 15.5 = 434 bonus XP</pre>
+                </div>
+
+                <h3>Activity XP</h3>
+                <p>XP earned from individual activities during or outside of sessions:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Activity</th>
+                            <th>Base XP</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Flash Image (with audio)</td>
+                            <td>5 XP</td>
+                            <td>1% chance of 5x with Lucky Bimbo skill</td>
                         </tr>
                         <tr>
-                            <td>Completing Hard session</td>
-                            <td>+1,200 XP</td>
+                            <td>Flash Image (no audio)</td>
+                            <td>2 XP</td>
+                            <td>1% chance of 5x with Lucky Bimbo skill</td>
                         </tr>
                         <tr>
-                            <td>Completing Extreme session</td>
-                            <td>+2,000 XP</td>
+                            <td>Bubble Pop</td>
+                            <td>2 XP</td>
+                            <td>5% chance of 10x with Lucky Bubbles skill</td>
                         </tr>
                         <tr>
-                            <td>Daily quest completion</td>
-                            <td>+100–250 XP</td>
+                            <td>Subliminal (known trigger)</td>
+                            <td>20 XP</td>
+                            <td>e.g. "Bambi Freeze"</td>
                         </tr>
                         <tr>
-                            <td>Weekly quest completion</td>
-                            <td>+500–1,000 XP</td>
+                            <td>Subliminal (custom/other)</td>
+                            <td>10 XP</td>
+                            <td></td>
                         </tr>
                         <tr>
-                            <td>Streak milestone bonus</td>
-                            <td>+50–300 XP/day</td>
+                            <td>Bouncing Text</td>
+                            <td>15 XP</td>
+                            <td>2s cooldown, max 150 XP/min</td>
+                        </tr>
+                        <tr>
+                            <td>Video Target Hit</td>
+                            <td>10 XP</td>
+                            <td>Per target clicked during video</td>
+                        </tr>
+                        <tr>
+                            <td>Video Attention Pass</td>
+                            <td>250+ XP</td>
+                            <td>+50 XP per replay penalty</td>
+                        </tr>
+                        <tr>
+                            <td>Bubble Count (completion)</td>
+                            <td>100 XP</td>
+                            <td>Scaled if video &lt; 60s. 3-min cooldown</td>
+                        </tr>
+                        <tr>
+                            <td>Bubble Count (correct answer)</td>
+                            <td>250 XP</td>
+                            <td>Bonus for guessing the right count</td>
+                        </tr>
+                        <tr>
+                            <td>Lock Card</td>
+                            <td>250+ XP</td>
+                            <td>+50 per extra repeat. 1.5x in strict mode</td>
+                        </tr>
+                        <tr>
+                            <td>Keyword Trigger</td>
+                            <td>10 XP</td>
+                            <td>Configurable 0-100. 1.5x during sessions</td>
+                        </tr>
+                        <tr>
+                            <td>Avatar Bubble Pop</td>
+                            <td>5 XP</td>
+                            <td>Random bubbles in avatar tube</td>
                         </tr>
                     </tbody>
                 </table>
 
                 <div class="info-box">
-                    <h5>📜 Quests & Skills</h5>
-                    <p>Quests and the Skill Tree are major XP sources added in v5.5. See the <a href="guide-quests.html">Daily & Weekly Quests</a> and <a href="guide-skill-tree.html">Skill Tree</a> guides for details on maximizing your XP gains.</p>
+                    <h5>💤 Idle Detection</h5>
+                    <p>Flash, Subliminal, and Bouncing Text XP are suppressed when you're detected as idle. Active interactions like Bubbles, Videos, and Lock Cards still award XP.</p>
                 </div>
 
-                <h3>XP Formula</h3>
-                <p>Each level requires <code>50 + (level × 20)</code> XP to advance.</p>
+                <h3>Quest XP</h3>
+                <p>Quests are a major XP source that scales with your level. See the <a href="guide-quests.html">Quests guide</a> for the full list.</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Quest Type</th>
+                            <th>Base XP</th>
+                            <th>Scaling</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Daily Quests</td>
+                            <td>100 - 250 XP</td>
+                            <td>+4% per level</td>
+                        </tr>
+                        <tr>
+                            <td>Weekly Quests</td>
+                            <td>500 - 1,000 XP</td>
+                            <td>+4% per level</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <p><strong>Quest bonuses:</strong></p>
+                <ul>
+                    <li><strong>Better Quests skill:</strong> +25% quest XP</li>
+                    <li><strong>Quest streak:</strong> +3% per consecutive day of daily quest completion</li>
+                </ul>
+
+                <h3>Streak &amp; Milestone XP</h3>
+                <p>Log in daily to build your streak. With the <strong>Milestone Rewards</strong> skill unlocked, you earn bonus XP each day:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Streak</th>
+                            <th>Daily Bonus</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1 - 3 days</td><td>50 XP</td></tr>
+                        <tr><td>4 - 6 days</td><td>100 XP</td></tr>
+                        <tr><td>7 - 13 days</td><td>150 XP</td></tr>
+                        <tr><td>14 - 29 days</td><td>200 XP</td></tr>
+                        <tr><td>30+ days</td><td>300 XP</td></tr>
+                    </tbody>
+                </table>
+                <p>Streak bonuses also scale with level (+3% per level).</p>
+
+                <p>With the <strong>Perfect Bimbo Week</strong> skill, you earn large milestone bonuses:</p>
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Milestone</th>
+                            <th>Bonus XP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>7-day streak</td><td>3,000 XP</td></tr>
+                        <tr><td>14-day streak</td><td>6,000 XP</td></tr>
+                        <tr><td>30-day streak</td><td>10,000 XP</td></tr>
+                    </tbody>
+                </table>
+                <p>Milestone bonuses scale with level (+2% per level).</p>
+
+                <h3 id="xp-multipliers">XP Multipliers (Skill Tree)</h3>
+                <p>All XP sources are multiplied by your global multiplier from <a href="guide-skill-tree.html">Skill Tree</a> unlocks. These stack additively:</p>
+
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>Skill</th>
+                            <th>Bonus</th>
+                            <th>Condition</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Base</td><td>1.0x</td><td>Always</td></tr>
+                        <tr><td>Sparkle Boost 1</td><td>+10%</td><td>Skill unlocked</td></tr>
+                        <tr><td>Sparkle Boost 2</td><td>+15%</td><td>Skill unlocked</td></tr>
+                        <tr><td>Sparkle Boost 3</td><td>+20%</td><td>Skill unlocked</td></tr>
+                        <tr><td>Streak Power</td><td>+0.5%/day (max +15%)</td><td>Skill unlocked + active streak</td></tr>
+                        <tr><td>Night Shift</td><td>+50%</td><td>Active between 11 PM - 5 AM</td></tr>
+                        <tr><td>Early Bird Bimbo</td><td>+50%</td><td>Active between 5 AM - 8 AM</td></tr>
+                        <tr><td>Pink Rush</td><td>Entire multiplier x3</td><td>Active during Pink Rush</td></tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box success">
+                    <h5>🚀 Maximum Multiplier</h5>
+                    <p><strong>Without Pink Rush:</strong> up to 2.1x (all boosts + time bonus + max streak)<br>
+                    <strong>With Pink Rush:</strong> up to 6.3x (everything above, tripled)</p>
+                </div>
+
+                <h3>XP Formula (Leveling)</h3>
+                <p>Each level requires <code>50 + (level x 20)</code> XP to advance.</p>
                 <div class="code-block">
-                    <pre>Level 1 → 2:   70 XP  (50 + 1×20)
-Level 2 → 3:   90 XP  (50 + 2×20)
-Level 5 → 6:   150 XP (50 + 5×20)
-Level 10 → 11: 250 XP (50 + 10×20)
-Level 50 → 51: 1,050 XP (50 + 50×20)</pre>
+                    <pre>Level 1 → 2:   70 XP  (50 + 1x20)
+Level 2 → 3:   90 XP  (50 + 2x20)
+Level 5 → 6:   150 XP (50 + 5x20)
+Level 10 → 11: 250 XP (50 + 10x20)
+Level 50 → 51: 1,050 XP (50 + 50x20)</pre>
                 </div>
             </section>
 
