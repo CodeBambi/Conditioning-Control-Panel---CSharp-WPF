@@ -25,7 +25,7 @@ This application implements several security measures:
 ### Application Security
 - **Single Instance**: Prevents multiple instances from running simultaneously
 - **Memory Protection**: Sensitive data is cleared from memory after use
-- **No Network**: Application operates entirely offline with no external connections
+- **Authenticated Network**: All server communication requires authentication tokens; no anonymous data submission
 - **No Telemetry**: Zero data collection or phone-home functionality
 
 ### Build Security
@@ -38,7 +38,7 @@ This application implements several security measures:
 If you discover a security vulnerability, please:
 
 1. **DO NOT** open a public issue
-2. Use GitHub's [Private Security Advisory](../../security/advisories/new) feature
+2. Use GitHub's [Private Security Advisory](https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/security/advisories/new) feature
 
 ### What to Include
 - Description of the vulnerability
