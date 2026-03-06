@@ -267,7 +267,7 @@ public class BubbleService : IDisposable
         // Don't remove here - let the pop animation play, removal happens in OnDestroy
         OnBubblePopped?.Invoke();
 
-        App.Progression?.AddXP(2 * multiplier, XPSource.Bubble);
+        App.Progression?.AddXP(5 * multiplier, XPSource.Bubble);
 
         // Track for achievement
         App.Achievements?.TrackBubblePopped();
@@ -320,7 +320,7 @@ public class BubbleService : IDisposable
                     var bubblesVolume = App.Settings.Current.BubblesVolume / 100f;
                     var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5) * 0.5f;
                     PlaySoundAsync(burstPath, volume);
-                    App.Logger?.Information("🎉 Lucky Bubble! 10x XP!");
+                    App.Logger?.Information("🎉 Lucky Bubble! 20x XP!");
                     return;
                 }
             }

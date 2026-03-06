@@ -83,6 +83,7 @@ namespace ConditioningControlPanel
         private bool _isCapturingPanicKey = false;
         private bool _exitRequested = false;
         private int _panicPressCount = 0;
+        private string _leaderboardMode = "monthly";
 
         // Lockdown mode
         private int _lockdownTimerClickCount = 0;
@@ -531,7 +532,7 @@ namespace ConditioningControlPanel
                         var outputDevice = new WaveOutEvent();
 
                         var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                        var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.5f;
+                        var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.375f;
                         audioFile.Volume = Math.Max(0.01f, curvedVolume);
 
                         outputDevice.Init(audioFile);
@@ -3425,6 +3426,20 @@ namespace ConditioningControlPanel
             App.Lockdown.Activate(duration);
         }
 
+        private void BtnStartQuiz_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Ai == null || !App.Ai.IsAvailable)
+            {
+                MessageBox.Show("You need to be logged in to use the AI quiz.", "Login Required",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var fullscreen = ChkQuizFullscreen?.IsChecked == true;
+            var quizWindow = new QuizWindow(fullscreen);
+            quizWindow.Show();
+        }
+
         private void OnLockdownActivated()
         {
             Dispatcher.BeginInvoke(() =>
@@ -3791,6 +3806,62 @@ namespace ConditioningControlPanel
             await RefreshLeaderboardAsync();
         }
 
+        private async void BtnLeaderboardMode_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn && btn.Tag is string mode && mode != _leaderboardMode)
+            {
+                _leaderboardMode = mode;
+                UpdateLeaderboardModeButtons();
+                await RefreshLeaderboardAsync();
+            }
+        }
+
+        private void UpdateLeaderboardModeButtons()
+        {
+            try
+            {
+                if (BtnLeaderboardMonthly == null || BtnLeaderboardAllTime == null) return;
+
+                if (_leaderboardMode == "all-time")
+                {
+                    BtnLeaderboardMonthly.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#352545"));
+                    BtnLeaderboardMonthly.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
+                    BtnLeaderboardAllTime.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
+                    BtnLeaderboardAllTime.Foreground = new SolidColorBrush(Colors.White);
+                }
+                else
+                {
+                    BtnLeaderboardMonthly.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
+                    BtnLeaderboardMonthly.Foreground = new SolidColorBrush(Colors.White);
+                    BtnLeaderboardAllTime.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#352545"));
+                    BtnLeaderboardAllTime.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Error updating leaderboard mode buttons");
+            }
+        }
+
+        private void UpdateSeasonsColumn()
+        {
+            try
+            {
+                var gridView = LstLeaderboard?.View as GridView;
+                if (gridView == null || gridView.Columns.Count == 0) return;
+
+                var seasonsCol = gridView.Columns.FirstOrDefault(c => c.Header?.ToString() == "Seasons");
+                if (seasonsCol != null)
+                {
+                    seasonsCol.Width = _leaderboardMode == "all-time" ? 80 : 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Error updating Seasons column");
+            }
+        }
+
         private void BtnLeaderboardDiscord_Click(object sender, RoutedEventArgs e)
         {
             if (sender is System.Windows.Controls.Button btn && btn.Tag is string discordId && !string.IsNullOrEmpty(discordId))
@@ -3858,7 +3929,7 @@ namespace ConditioningControlPanel
                 }
 
                 TxtLeaderboardStatus.Text = "Loading...";
-                var success = await App.Leaderboard.RefreshAsync(sortBy);
+                var success = await App.Leaderboard.RefreshAsync(sortBy, _leaderboardMode);
 
                 if (success)
                 {
@@ -3866,13 +3937,26 @@ namespace ConditioningControlPanel
                     ApplyLeaderboardSort(sortBy ?? App.Leaderboard.CurrentSortBy);
                     TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users";
 
-                    // Update season flavour text
-                    var seasonTitle = App.QuestDefinitions?.SeasonTitle;
-                    if (!string.IsNullOrEmpty(seasonTitle))
-                        TxtLeaderboardSeason.Text = $"{seasonTitle} ~ prove your devotion~";
+                    // Update season flavour text based on mode
+                    if (_leaderboardMode == "all-time")
+                    {
+                        TxtLeaderboardSeason.Text = "all-time ~ legends never die~";
+                        if (TxtLeaderboardSubtitle != null)
+                            TxtLeaderboardSubtitle.Text = "cumulative XP across all seasons~";
+                    }
+                    else
+                    {
+                        var seasonTitle = App.QuestDefinitions?.SeasonTitle;
+                        if (!string.IsNullOrEmpty(seasonTitle))
+                            TxtLeaderboardSeason.Text = $"{seasonTitle} ~ prove your devotion~";
+                        if (TxtLeaderboardSubtitle != null)
+                            TxtLeaderboardSubtitle.Text = "resets monthly — your rank is everything~";
+                    }
 
                     // Show/hide Trophy Case columns based on skill unlock
                     UpdateTrophyCaseColumns();
+                    // Show/hide Seasons column based on mode
+                    UpdateSeasonsColumn();
                 }
                 else
                 {
@@ -3894,13 +3978,29 @@ namespace ConditioningControlPanel
         {
             if (App.Leaderboard?.Entries == null || LstLeaderboard == null) return;
 
-            var sorted = sortBy switch
+            List<Services.LeaderboardEntry> sorted;
+
+            if (_leaderboardMode == "all-time")
             {
-                "level" => App.Leaderboard.Entries.OrderByDescending(x => x.Level).ThenByDescending(x => x.Xp).ToList(),
-                "xp" => App.Leaderboard.Entries.OrderByDescending(x => x.Xp).ToList(),
-                "is_patreon" => App.Leaderboard.Entries.OrderByDescending(x => x.PatreonTier).ThenByDescending(x => x.Level).ToList(),
-                _ => App.Leaderboard.Entries.OrderByDescending(x => x.Xp).ToList()
-            };
+                // In all-time mode, default sort by total XP earned; "level" sorts by highest_level_ever
+                sorted = sortBy switch
+                {
+                    "level" => App.Leaderboard.Entries.OrderByDescending(x => x.HighestLevelEver).ThenByDescending(x => x.TotalXpEarned).ToList(),
+                    "xp" => App.Leaderboard.Entries.OrderByDescending(x => x.TotalXpEarned).ToList(),
+                    "is_patreon" => App.Leaderboard.Entries.OrderByDescending(x => x.PatreonTier).ThenByDescending(x => x.TotalXpEarned).ToList(),
+                    _ => App.Leaderboard.Entries.OrderByDescending(x => x.TotalXpEarned).ToList()
+                };
+            }
+            else
+            {
+                sorted = sortBy switch
+                {
+                    "level" => App.Leaderboard.Entries.OrderByDescending(x => x.Level).ThenByDescending(x => x.Xp).ToList(),
+                    "xp" => App.Leaderboard.Entries.OrderByDescending(x => x.Xp).ToList(),
+                    "is_patreon" => App.Leaderboard.Entries.OrderByDescending(x => x.PatreonTier).ThenByDescending(x => x.Level).ToList(),
+                    _ => App.Leaderboard.Entries.OrderByDescending(x => x.Xp).ToList()
+                };
+            }
 
             // Re-number ranks
             for (int i = 0; i < sorted.Count; i++)
@@ -9892,7 +9992,7 @@ namespace ConditioningControlPanel
                     var session = _sessionEngine.CurrentSession;
 
                     // Update session button with remaining time
-                    BtnStartSession.Content = $"STOP SESSION ({remaining.Minutes:D2}:{remaining.Seconds:D2})";
+                    BtnStartSession.Content = $"STOP SESSION ({((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2})";
 
                     // Update Start button label with session name + timer
                     var mName = session.GetModeAwareName();
@@ -9900,7 +10000,7 @@ namespace ConditioningControlPanel
                         ? mName.Substring(0, 11) + "..."
                         : mName;
                     var pauseIndicator = _sessionEngine.IsPaused ? " [PAUSED]" : "";
-                    TxtStartLabel.Text = $"{name} {remaining.Minutes:D2}:{remaining.Seconds:D2}{pauseIndicator}";
+                    TxtStartLabel.Text = $"{name} {((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2}{pauseIndicator}";
                 }
             });
         }
@@ -9998,8 +10098,8 @@ namespace ConditioningControlPanel
                 "⚠ Stop Session?",
                 $"You're currently in a session:\n" +
                 $"{session?.Icon} {session?.Name}\n\n" +
-                $"Time elapsed: {elapsed.Minutes:D2}:{elapsed.Seconds:D2}\n" +
-                $"Time remaining: {remaining.Minutes:D2}:{remaining.Seconds:D2}\n\n" +
+                $"Time elapsed: {((int)elapsed.TotalMinutes):D2}:{elapsed.Seconds:D2}\n" +
+                $"Time remaining: {((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2}\n\n" +
                 $"If you stop now, you will lose ALL {potentialXP} XP.{penaltyText}\n\n" +
                 "Are you sure you want to quit?",
                 "Yes, stop session", "Keep going");
@@ -13225,8 +13325,8 @@ namespace ConditioningControlPanel
                         "⚠ Stop Session?",
                         $"You're currently in a session:\n" +
                         $"{session?.Icon} {session?.Name}\n\n" +
-                        $"Time elapsed: {elapsed.Minutes:D2}:{elapsed.Seconds:D2}\n" +
-                        $"Time remaining: {remaining.Minutes:D2}:{remaining.Seconds:D2}\n\n" +
+                        $"Time elapsed: {((int)elapsed.TotalMinutes):D2}:{elapsed.Seconds:D2}\n" +
+                        $"Time remaining: {((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2}\n\n" +
                         $"If you stop now, you will lose ALL {potentialXP} XP.{penaltyText}\n\n" +
                         "Are you sure you want to quit?",
                         "Yes, stop session", "Keep going");

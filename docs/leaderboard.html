@@ -469,6 +469,46 @@
             }
         }
 
+        /* ── View Toggle ── */
+        .view-toggle {
+            display: flex;
+            justify-content: center;
+            gap: 0;
+            margin-bottom: 1.5rem;
+        }
+
+        .toggle-btn {
+            background: rgba(37, 37, 66, 0.8);
+            border: 1px solid rgba(255, 105, 180, 0.3);
+            color: #b0b0c0;
+            padding: 0.55rem 1.5rem;
+            cursor: pointer;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .toggle-btn:first-child {
+            border-radius: 20px 0 0 20px;
+            border-right: none;
+        }
+
+        .toggle-btn:last-child {
+            border-radius: 0 20px 20px 0;
+        }
+
+        .toggle-btn:hover:not(.active) {
+            border-color: #ff69b4;
+            color: #ff69b4;
+        }
+
+        .toggle-btn.active {
+            background: linear-gradient(135deg, #ff69b4 0%, #9b59b6 100%);
+            color: white;
+            border-color: transparent;
+        }
+
         @media (max-width: 480px) {
             .badge {
                 font-size: 0.6rem;
@@ -555,6 +595,12 @@
                 </div>
             </div>
 
+            <!-- View Toggle -->
+            <div class="view-toggle">
+                <button class="toggle-btn active" data-view="season">This Season</button>
+                <button class="toggle-btn" data-view="all-time">All Time</button>
+            </div>
+
             <!-- Sort Controls -->
             <div class="sort-controls">
                 <button class="sort-btn active" data-sort="level">Level</button>
@@ -597,6 +643,7 @@
         const LEADERBOARD_URL = `${API_BASE}/v3/leaderboard`;
         const QUESTS_URL = `${API_BASE}/quests/definitions`;
         let currentSort = 'level';
+        let currentView = 'season'; // 'season' or 'all-time'
 
         // Sort button handlers
         document.querySelectorAll('.sort-btn[data-sort]').forEach(btn => {
@@ -608,13 +655,44 @@
             });
         });
 
+        // View toggle handlers
+        document.querySelectorAll('.toggle-btn[data-view]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.dataset.view === currentView) return;
+                document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentView = btn.dataset.view;
+                updateViewUI();
+                fetchLeaderboard();
+            });
+        });
+
+        function updateViewUI() {
+            const seasonInfo = document.querySelector('.season-info');
+            const seasonLabel = document.getElementById('seasonLabel');
+            const seasonTitle = document.getElementById('seasonTitle');
+            const subtitle = document.querySelector('.season-subtitle');
+
+            if (currentView === 'all-time') {
+                seasonLabel.textContent = 'ALL-TIME RANKINGS';
+                seasonTitle.textContent = 'Hall of Fame';
+                subtitle.innerHTML = 'Cumulative XP across every season. Legends <strong>never reset</strong>.';
+                seasonInfo.style.display = 'none';
+            } else {
+                // Restore season view — title will be re-fetched
+                subtitle.innerHTML = 'Compete. Climb. Prove your <strong>dedication</strong>.';
+                seasonInfo.style.display = '';
+                fetchSeasonTitle();
+            }
+        }
+
         // Fetch season title from quest definitions
         async function fetchSeasonTitle() {
             try {
                 const res = await fetch(QUESTS_URL);
                 if (!res.ok) return;
                 const data = await res.json();
-                if (data.seasonTitle) {
+                if (data.seasonTitle && currentView === 'season') {
                     document.getElementById('seasonTitle').textContent = data.seasonTitle;
                 }
             } catch (e) {
@@ -632,7 +710,11 @@
             `;
 
             try {
-                const response = await fetch(`${LEADERBOARD_URL}?sort_by=${currentSort}&limit=10000`);
+                let url = `${LEADERBOARD_URL}?sort_by=${currentSort}&limit=10000`;
+                if (currentView === 'all-time') {
+                    url += '&season=all-time';
+                }
+                const response = await fetch(url);
                 if (!response.ok) throw new Error('Failed to fetch');
 
                 const data = await response.json();
@@ -642,7 +724,10 @@
                 document.getElementById('onlineUsers').textContent = data.online_users?.toLocaleString() || '-';
 
                 // Update season info
-                if (data.season) {
+                if (data.season === 'all-time') {
+                    document.getElementById('seasonId').textContent = 'All Time';
+                    document.getElementById('seasonLabel').textContent = 'ALL-TIME RANKINGS';
+                } else if (data.season) {
                     const [year, month] = data.season.split('-');
                     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                     const monthName = monthNames[parseInt(month, 10) - 1] || month;

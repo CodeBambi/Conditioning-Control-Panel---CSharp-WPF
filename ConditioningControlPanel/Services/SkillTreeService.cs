@@ -274,24 +274,24 @@ public class SkillTreeService : IDisposable
     #region Lucky Procs
 
     /// <summary>
-    /// Roll for lucky flash (1% chance for 5x XP)
-    /// Returns the multiplier (1 for normal, 5 for lucky)
+    /// Roll for lucky flash (5% chance for 10x XP)
+    /// Returns the multiplier (1 for normal, 10 for lucky)
     /// </summary>
     public int RollLuckyFlash()
     {
         if (!HasSkill("lucky_bimbo")) return 1;
 
-        if (_random.NextDouble() < 0.01)
+        if (_random.NextDouble() < 0.05)
         {
-            LuckyProc?.Invoke(this, new LuckyProcEventArgs("Lucky Flash", 5));
-            return 5;
+            LuckyProc?.Invoke(this, new LuckyProcEventArgs("Lucky Flash", 10));
+            return 10;
         }
         return 1;
     }
 
     /// <summary>
-    /// Roll for lucky bubble (5% chance for 10x points)
-    /// Returns the multiplier (1 for normal, 10 for lucky)
+    /// Roll for lucky bubble (5% chance for 20x points)
+    /// Returns the multiplier (1 for normal, 20 for lucky)
     /// </summary>
     public int RollLuckyBubble()
     {
@@ -299,8 +299,8 @@ public class SkillTreeService : IDisposable
 
         if (_random.NextDouble() < 0.05)
         {
-            LuckyProc?.Invoke(this, new LuckyProcEventArgs("Lucky Bubble", 10));
-            return 10;
+            LuckyProc?.Invoke(this, new LuckyProcEventArgs("Lucky Bubble", 20));
+            return 20;
         }
         return 1;
     }

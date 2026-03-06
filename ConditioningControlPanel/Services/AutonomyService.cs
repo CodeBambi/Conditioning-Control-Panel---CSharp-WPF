@@ -390,6 +390,9 @@ namespace ConditioningControlPanel.Services
             _forceTestMode = false; // Reset test mode
             StopAllTimers();
 
+            // Restore any active pulse settings (spiral, pink filter, etc.) before cleanup
+            CancelActivePulses();
+
             // Reset all pulse flags to prevent stale callbacks from running
             _spiralPulseActive = false;
             _pinkFilterPulseActive = false;

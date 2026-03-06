@@ -58,6 +58,7 @@ public class QuestService : IDisposable
     // Accumulators for fractional minutes (time-based quests are called with small increments)
     private double _spiralMinutesAccumulator;
     private double _pinkFilterMinutesAccumulator;
+    private double _brainDrainMinutesAccumulator;
     private double _videoMinutesAccumulator;
     private double _combinedMinutesAccumulator;
 
@@ -337,6 +338,13 @@ public class QuestService : IDisposable
     /// </summary>
     public void ForceRegenerateWeeklyQuest()
     {
+        // Don't regenerate if current quest is still within this week
+        if (Progress.WeeklyQuest != null && !Progress.IsWeeklyExpired())
+        {
+            App.Logger?.Information("Skipping weekly quest force-regeneration - quest still within current week");
+            return;
+        }
+
         var oldId = Progress.WeeklyQuest?.DefinitionId;
         GenerateNewWeeklyQuest(excludeId: oldId);
         _isDirty = true;
@@ -531,6 +539,28 @@ public class QuestService : IDisposable
             int wholeMinutes = (int)Math.Floor(_pinkFilterMinutesAccumulator);
             UpdateQuestProgress(QuestCategory.PinkFilter, wholeMinutes);
             _pinkFilterMinutesAccumulator -= wholeMinutes;
+        }
+
+        if (_combinedMinutesAccumulator >= 1.0)
+        {
+            int wholeMinutes = (int)Math.Floor(_combinedMinutesAccumulator);
+            UpdateQuestProgress(QuestCategory.Combined, wholeMinutes);
+            _combinedMinutesAccumulator -= wholeMinutes;
+        }
+    }
+
+    /// <summary>
+    /// Track BrainDrain overlay time (called periodically with elapsed minutes)
+    /// </summary>
+    public void TrackBrainDrainMinutes(double minutes)
+    {
+        // BrainDrain feeds into Combined category only (no dedicated BrainDrain quest category)
+        _brainDrainMinutesAccumulator += minutes;
+        _combinedMinutesAccumulator += minutes;
+
+        if (_brainDrainMinutesAccumulator >= 1.0)
+        {
+            _brainDrainMinutesAccumulator -= (int)Math.Floor(_brainDrainMinutesAccumulator);
         }
 
         if (_combinedMinutesAccumulator >= 1.0)

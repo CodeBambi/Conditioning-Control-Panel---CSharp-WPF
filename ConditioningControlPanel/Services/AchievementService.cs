@@ -19,6 +19,7 @@ public class AchievementService : IDisposable
     private bool _isDirty;
     private DateTime _lastPinkFilterCheck = DateTime.Now;
     private DateTime _lastSpiralCheck = DateTime.Now;
+    private DateTime _lastBrainDrainCheck = DateTime.Now;
     private DateTime _lastMindWipeCheck = DateTime.Now;
     
     public event EventHandler<Achievement>? AchievementUnlocked;
@@ -202,7 +203,26 @@ public class AchievementService : IDisposable
             // Reset timer when inactive to prevent time accumulation bugs
             _lastSpiralCheck = now;
         }
-        
+
+        // Track BrainDrain time - only when overlay is actually running
+        var isBrainDrainActive = settings.BrainDrainEnabled &&
+                                 App.Overlay?.IsRunning == true;
+        if (isBrainDrainActive)
+        {
+            var elapsed = (now - _lastBrainDrainCheck).TotalMinutes;
+            if (elapsed > 0 && elapsed < 0.1) // Sanity check - max 6 seconds between ticks
+            {
+                // Track for quests (feeds into Combined/Mindless Minutes)
+                App.Quests?.TrackBrainDrainMinutes(elapsed);
+            }
+            _lastBrainDrainCheck = now;
+        }
+        else
+        {
+            // Reset timer when inactive to prevent time accumulation bugs
+            _lastBrainDrainCheck = now;
+        }
+
         // Check System Overload (Bubbles + Bouncing Text + Spiral all active)
         if (settings.BubblesEnabled && settings.BouncingTextEnabled && settings.SpiralEnabled)
         {

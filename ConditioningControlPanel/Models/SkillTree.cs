@@ -142,8 +142,8 @@ public class SkillDefinition
             Tier = 3,
             Cost = 15,
             PrerequisiteId = "sparkle_boost_2",
-            FlavorText = "Being an airhead pays off sometimes! 5% chance any flash gives 5x XP~ Tee-hee!",
-            Description = "5% chance for 5x XP on flash images",
+            FlavorText = "Being an airhead pays off sometimes! 5% chance any flash gives 10x XP~ Tee-hee!",
+            Description = "5% chance for 10x XP on flash images",
             EffectType = SkillEffectType.LuckyFlash,
             EffectValue = 0.05
         },
@@ -237,8 +237,8 @@ public class SkillDefinition
             Tier = 4,
             Cost = 20,
             PrerequisiteId = "sparkle_boost_3",
-            FlavorText = "Pop pop POP! 5% chance bubbles give 10x points! Empty heads LOVE bubbles~",
-            Description = "5% chance for 10x bubble points",
+            FlavorText = "Pop pop POP! 5% chance bubbles give 20x points! Empty heads LOVE bubbles~",
+            Description = "5% chance for 20x bubble points",
             EffectType = SkillEffectType.LuckyBubble,
             EffectValue = 0.05
         },

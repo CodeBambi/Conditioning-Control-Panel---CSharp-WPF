@@ -540,79 +540,132 @@ public class OverlayService : IDisposable
         {
             var settings = App.Settings.Current;
 
-            var screens = settings.DualMonitorEnabled
-                ? App.GetAllScreensCached()
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
-
             _isGifSpiral = _spiralPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
 
-            // For GIFs, load frames once and share across all screens (more efficient)
+            // For GIFs, load frames on background thread to avoid UI freeze
             if (_isGifSpiral)
             {
-                if (!LoadSpiralGifFrames())
+                var spiralPath = _spiralPath;
+                Task.Run(() =>
                 {
-                    App.Logger?.Warning("Spiral: Failed to load GIF frames from {Path}", _spiralPath);
-                    return;
-                }
-
-                foreach (var screen in screens)
-                {
-                    var (window, image) = CreateSpiralGifWindow(screen, settings.SpiralOpacity);
-                    if (window != null)
+                    try
                     {
-                        _spiralWindows.Add(window);
-                        if (image != null)
+                        if (!LoadSpiralGifFrames())
                         {
-                            _spiralGifImages.Add(image);
+                            App.Logger?.Warning("Spiral: Failed to load GIF frames from {Path}", spiralPath);
+                            return;
                         }
-                    }
-                }
 
-                // Start frame animation timer
-                if (_spiralGifFrames.Count > 1 && _spiralGifImages.Count > 0)
-                {
-                    _gifFrameTimer = new DispatcherTimer(DispatcherPriority.Render)
+                        // Frames are frozen BitmapSources — safe to use cross-thread
+                        // Create windows on UI thread
+                        Application.Current?.Dispatcher?.BeginInvoke(() =>
+                        {
+                            try
+                            {
+                                if (!_isRunning) return; // Service was stopped while loading
+                                CreateSpiralGifWindows();
+                            }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Error("Failed to create spiral GIF windows: {Error}", ex.Message);
+                            }
+                        });
+                    }
+                    catch (Exception ex)
                     {
-                        Interval = _gifFrameDelay
-                    };
-                    _gifFrameTimer.Tick += GifFrameTimer_Tick;
-                    _gifFrameTimer.Start();
-                    App.Logger?.Debug("Spiral GIF animation started with {FrameCount} frames at {Delay}ms interval",
-                        _spiralGifFrames.Count, _gifFrameDelay.TotalMilliseconds);
-                }
+                        App.Logger?.Error("Failed to load spiral GIF frames: {Error}", ex.Message);
+                    }
+                });
             }
             else
             {
-                // For video files, use MediaElement
-                foreach (var screen in screens)
-                {
-                    var (window, media) = CreateSpiralVideoWindow(screen, settings.SpiralOpacity);
-                    if (window != null)
-                    {
-                        _spiralWindows.Add(window);
-                        if (media != null)
-                        {
-                            _spiralMediaElements.Add(media);
-                        }
-                    }
-                }
-
-                // Start loop timer for video files
-                if (_spiralMediaElements.Count > 0)
-                {
-                    _gifLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
-                    _gifLoopTimer.Tick += VideoLoopTimer_Tick;
-                    _gifLoopTimer.Start();
-                }
+                // For video files, use MediaElement (no heavy loading needed)
+                CreateSpiralVideoWindows();
             }
-
-            App.Logger?.Debug("Spiral started on {Count} screens at opacity {Opacity}% (GIF: {IsGif})",
-                _spiralWindows.Count, settings.SpiralOpacity, _isGifSpiral);
         }
         catch (Exception ex)
         {
             App.Logger?.Error("Failed to start spiral: {Error}", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Create spiral GIF windows on all screens after frames are loaded.
+    /// Must be called on the UI thread.
+    /// </summary>
+    private void CreateSpiralGifWindows()
+    {
+        if (_spiralWindows.Count > 0) return;
+
+        var settings = App.Settings.Current;
+        var screens = settings.DualMonitorEnabled
+            ? App.GetAllScreensCached()
+            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+        foreach (var screen in screens)
+        {
+            var (window, image) = CreateSpiralGifWindow(screen, settings.SpiralOpacity);
+            if (window != null)
+            {
+                _spiralWindows.Add(window);
+                if (image != null)
+                {
+                    _spiralGifImages.Add(image);
+                }
+            }
+        }
+
+        // Start frame animation timer
+        if (_spiralGifFrames.Count > 1 && _spiralGifImages.Count > 0)
+        {
+            _gifFrameTimer = new DispatcherTimer(DispatcherPriority.Render)
+            {
+                Interval = _gifFrameDelay
+            };
+            _gifFrameTimer.Tick += GifFrameTimer_Tick;
+            _gifFrameTimer.Start();
+            App.Logger?.Debug("Spiral GIF animation started with {FrameCount} frames at {Delay}ms interval",
+                _spiralGifFrames.Count, _gifFrameDelay.TotalMilliseconds);
+        }
+
+        App.Logger?.Debug("Spiral GIF started on {Count} screens at opacity {Opacity}%",
+            _spiralWindows.Count, settings.SpiralOpacity);
+    }
+
+    /// <summary>
+    /// Create spiral video windows on all screens.
+    /// Must be called on the UI thread.
+    /// </summary>
+    private void CreateSpiralVideoWindows()
+    {
+        var settings = App.Settings.Current;
+        var screens = settings.DualMonitorEnabled
+            ? App.GetAllScreensCached()
+            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+        foreach (var screen in screens)
+        {
+            var (window, media) = CreateSpiralVideoWindow(screen, settings.SpiralOpacity);
+            if (window != null)
+            {
+                _spiralWindows.Add(window);
+                if (media != null)
+                {
+                    _spiralMediaElements.Add(media);
+                }
+            }
+        }
+
+        // Start loop timer for video files
+        if (_spiralMediaElements.Count > 0)
+        {
+            _gifLoopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            _gifLoopTimer.Tick += VideoLoopTimer_Tick;
+            _gifLoopTimer.Start();
+        }
+
+        App.Logger?.Debug("Spiral video started on {Count} screens at opacity {Opacity}%",
+            _spiralWindows.Count, settings.SpiralOpacity);
     }
 
     /// <summary>

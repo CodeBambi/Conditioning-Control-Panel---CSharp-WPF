@@ -1520,7 +1520,7 @@ namespace ConditioningControlPanel.Services
 
                         _ = App.Haptics?.VideoTargetHitAsync();
                         _hits++;
-                        App.Progression?.AddXP(10, XPSource.Video);
+                        App.Progression?.AddXP(15, XPSource.Video);
 
                         // Destroy ALL targets from this spawn (user caught one, clear all on all monitors)
                         lock (_targets)

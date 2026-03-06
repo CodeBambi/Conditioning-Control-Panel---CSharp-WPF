@@ -748,7 +748,7 @@ namespace ConditioningControlPanel.Services
             }
             
             // Award XP for viewing
-            var xpAmount = _soundPlayingForCurrentFlash ? 5 : 2;
+            var xpAmount = _soundPlayingForCurrentFlash ? 8 : 4;
 
             // Roll for lucky flash (5% chance for 5x XP if skill unlocked)
             var multiplier = App.SkillTree?.RollLuckyFlash() ?? 1;
@@ -1281,7 +1281,7 @@ namespace ConditioningControlPanel.Services
                                 Thread.Sleep(50);
                             }
 
-                            App.Logger?.Information("🎉 Lucky Flash! 5x XP!");
+                            App.Logger?.Information("🎉 Lucky Flash! 10x XP!");
                         }
                         catch (Exception ex)
                         {
