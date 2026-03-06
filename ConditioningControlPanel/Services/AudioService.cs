@@ -322,6 +322,8 @@ namespace ConditioningControlPanel.Services
                 catch (Exception ex)
                 {
                     App.Logger?.Debug("Audio ducking failed: {Error}", ex.Message);
+                    // Duck failed — compensate for the increment so ref count stays balanced
+                    _duckCount = Math.Max(0, _duckCount - 1);
                 }
             }
         }
@@ -387,11 +389,13 @@ namespace ConditioningControlPanel.Services
                 }
                 catch (Exception ex)
                 {
-                    App.Logger?.Debug("Audio unducking failed: {Error}", ex.Message);
-                    _originalVolumes.Clear();
-                    _isDucked = false;
+                    App.Logger?.Warning("Audio unducking failed, preserving state for retry: {Error}", ex.Message);
+                    // CRITICAL: Do NOT clear _originalVolumes or set _isDucked=false here.
+                    // If we do, the next Duck() will re-read the currently-ducked volumes as
+                    // "originals", causing volumes to ratchet toward 0% over repeated cycles.
+                    // Keep state intact so the next Unduck/ForceUnduck can retry restoration.
                     _duckCount = 0;
-                    ClearDuckingState();
+                    // Keep recovery file so crash recovery can restore if app exits
                 }
             }
         }
