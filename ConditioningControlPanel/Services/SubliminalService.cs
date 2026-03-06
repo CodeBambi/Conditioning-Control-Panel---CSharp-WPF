@@ -470,6 +470,9 @@ namespace ConditioningControlPanel.Services
 
         private void ShowSubliminalVisuals(string text)
         {
+            // Prevent memory explosion from too many concurrent subliminal windows
+            if (_activeWindows.Count >= 15) return;
+
             // Increment counter and fire event
             _subliminalCount++;
             SubliminalDisplayed?.Invoke(this, EventArgs.Empty);

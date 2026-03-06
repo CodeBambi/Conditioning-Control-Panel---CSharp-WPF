@@ -669,6 +669,12 @@ namespace ConditioningControlPanel.Services
         {
             if (!_isRunning && !_oneShotActive) return;
 
+            // Prevent memory explosion from too many concurrent flash windows
+            lock (_lockObj)
+            {
+                if (_activeWindows.Count >= 30) return;
+            }
+
             var geom = imageData.Geometry;
             
             // Avoid overlap with existing windows

@@ -125,10 +125,12 @@ namespace ConditioningControlPanel.Models
             // Base XP: 10 per minute
             int baseXP = DurationMinutes * 10;
 
-            // Feature bonus based on each start event
+            // Feature bonus based on distinct features (each feature counts once regardless of segment count)
             int featureBonus = 0;
+            var countedFeatures = new HashSet<string>();
             foreach (var evt in Events.Where(e => e.EventType == TimelineEventType.Start))
             {
+                if (!countedFeatures.Add(evt.FeatureId)) continue;
                 var definition = FeatureDefinition.GetById(evt.FeatureId);
                 if (definition != null)
                 {
@@ -160,9 +162,11 @@ namespace ConditioningControlPanel.Models
                 .Count();
             score += activeFeatures;
 
-            // Heavy features add more weight
+            // Heavy features add more weight (each feature counted once)
+            var countedFeatures = new HashSet<string>();
             foreach (var evt in Events.Where(e => e.EventType == TimelineEventType.Start))
             {
+                if (!countedFeatures.Add(evt.FeatureId)) continue;
                 var definition = FeatureDefinition.GetById(evt.FeatureId);
                 if (definition != null)
                 {

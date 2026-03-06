@@ -269,7 +269,7 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("Session XP calculation: Session={Name}, Source={Source}, BonusXP={BonusXP}, Penalty={Penalty}, Duration={Duration:F1}min",
                     _currentSession.Name, _currentSession.Source, _currentSession.BonusXP, XPPenalty, finalElapsedTime.TotalMinutes);
 
-                int baseXP = Math.Max(0, _currentSession.BonusXP - XPPenalty);
+                int baseXP = Math.Max(0, Math.Min(2500, _currentSession.BonusXP) - XPPenalty);
 
                 // Apply level-based XP multiplier
                 int level = App.Settings?.Current?.PlayerLevel ?? 1;

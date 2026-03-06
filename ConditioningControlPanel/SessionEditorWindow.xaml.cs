@@ -1017,6 +1017,22 @@ namespace ConditioningControlPanel
                 evt.Minute = _session.DurationMinutes;
             }
 
+            // Remove zero-length segments (start and stop clamped to same minute)
+            var collapsedStarts = _session.Events
+                .Where(e => e.EventType == TimelineEventType.Start && e.PairedEventId != null)
+                .Where(start =>
+                {
+                    var stop = _session.Events.FirstOrDefault(e => e.Id == start.PairedEventId);
+                    return stop != null && start.Minute >= stop.Minute;
+                })
+                .ToList();
+            foreach (var start in collapsedStarts)
+            {
+                var stop = _session.Events.FirstOrDefault(e => e.Id == start.PairedEventId);
+                _session.Events.Remove(start);
+                if (stop != null) _session.Events.Remove(stop);
+            }
+
             RefreshTimeline();
             RefreshStats();
         }
