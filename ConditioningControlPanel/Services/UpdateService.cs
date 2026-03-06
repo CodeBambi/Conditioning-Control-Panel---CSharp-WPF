@@ -22,30 +22,40 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.13";
+        public const string AppVersion = "5.6.14";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.13 - Mindless March Update
+        public const string CurrentPatchNotes = @"v5.6.14 - Quiz Training Update
+
+🧠 QUIZ TRAINING [BETA]
+• New AI-powered personality quiz — 10 questions that adapt to your answers in real time
+• Each quiz is unique: the AI reads your responses and tailors follow-up questions to dig deeper
+• Fullscreen mode with ambient drone audio option for deeper immersion
+• Personality breakdown with category scores, personality type, and written summary
+• Past quiz results saved and viewable from the main UI
+• Detailed report window with per-question score breakdowns
+• Added (?) help tooltip explaining how the quiz works
+
+🏆 ALL-TIME LEADERBOARD
+• New monthly/all-time toggle on the leaderboard — both in-app and on the web page
+• All-time leaderboard tracks your total XP earned across every season
+• Your lifetime dedication is now permanently recorded — seasonal resets no longer erase history
+• Hall of Fame view on the GitHub Pages leaderboard
 
 🛠️ BUG FIXES
-• Fixed progression data (level, achievements, unlocks) resetting after sign-out/sign-in
-• Fixed profile rank showing '-' for players outside the top 200
-• Fixed Discord linking showing errors despite succeeding
-• Fixed lockdown mode not actually preventing session stop/pause
-• Fixed content packs only downloadable via Patreon — all auth methods now work
-• Removed outdated Season 0 migration prompts from login flow
+• Fixed audio ducking getting permanently stuck at 0% for other programs after repeated duck/unduck cycles
+• Fixed XP exploit via custom session editor — duplicate feature counting and unbounded multipliers
+• Fixed memory leak from unbounded flash and subliminal windows accumulating over long sessions
 
-✨ IMPROVEMENTS
-• Achievements now sync to cloud — won't be lost on re-login or device change
-• Leaderboard rank is now server-calculated — accurate for all players
-• Quest XP scales harder with level (+4% per level, doubled from before)
-• Sessions reward duration — longer sessions give significantly more XP
-• Session level multiplier kicks in at level 30 (was 100)
-• Weekly quests now reset on Monday instead of Sunday
-• Welcome to Mindless March!";
+🔒 SECURITY
+• Validated Discord webhook achievement names against server-side allowlist
+• Validated level-up webhook requests against actual stored user level
+• Capped session XP multiplier at 5.0x and bonus XP at 2500 before multiplier
+• Capped concurrent flash windows at 30 and subliminal windows at 15
+• Installer now excludes unnecessary locale folders — smaller, cleaner install";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
