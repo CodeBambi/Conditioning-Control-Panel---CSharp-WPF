@@ -7443,11 +7443,58 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Placeholder Card 2 (Mantra Lab - hidden until ready) -->
-                        <Border Background="#12FFFFFF" CornerRadius="12" Margin="6" BorderBrush="#404060" BorderThickness="1">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                <TextBlock Text="Coming Soon" Foreground="#505070" FontSize="14" HorizontalAlignment="Center"/>
+                        <!-- Quiz Training Card -->
+                        <Border CornerRadius="12" Margin="6" Padding="15">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A1A32" Offset="0"/>
+                                    <GradientStop Color="#201A38" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#9B59B6" Offset="0"/>
+                                    <GradientStop Color="#FF69B4" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.BorderThickness>
+                                <Thickness>2</Thickness>
+                            </Border.BorderThickness>
+                            <StackPanel>
+                                <Grid Margin="0,0,0,6">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Quiz Training" Foreground="White" FontWeight="Bold" FontSize="16"/>
+                                        <TextBlock Text="[BETA]" Foreground="#9B59B6" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                    <Button x:Name="HelpBtnQuiz" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Quiz"/>
+                                </Grid>
+                                <TextBlock Text="AI-generated personality quiz. 10 questions that get spicier based on your answers. Find out who you really are."
+                                           Foreground="#808090" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                <CheckBox x:Name="ChkQuizFullscreen" Content="Fullscreen" IsChecked="True"
+                                          Foreground="#808090" FontSize="12" Margin="0,0,0,4"/>
+                                <CheckBox x:Name="ChkQuizDrone" Content="Play drone in background" IsChecked="False"
+                                          Foreground="#808090" FontSize="12" Margin="0,0,0,10"/>
+
+                                <Button x:Name="BtnStartQuiz" Content="Start Quiz" Cursor="Hand"
+                                        Background="#9B59B6" Foreground="White" FontWeight="Bold" FontSize="12"
+                                        BorderThickness="0" Padding="12,8" HorizontalAlignment="Left"
+                                        Click="BtnStartQuiz_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="8"/>
+                                        </Style>
+                                    </Button.Resources>
+                                </Button>
+
+                                <TextBlock Text="Past Quizzes" Foreground="#808090" FontSize="11" Margin="0,10,0,4"
+                                           x:Name="TxtPastQuizzesHeader" Visibility="Collapsed"/>
+                                <Border MaxHeight="130" CornerRadius="6" x:Name="PastQuizzesPanel" Visibility="Collapsed"
+                                        Background="#10FFFFFF" BorderBrush="#20FFFFFF" BorderThickness="1">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <StackPanel x:Name="PastQuizzesList"/>
+                                    </ScrollViewer>
+                                </Border>
                             </StackPanel>
                         </Border>
 
@@ -7520,15 +7567,50 @@
                                 </Border>
                             </StackPanel>
 
-                            <!-- Big LEADERBOARD title with stroke effect -->
-                            <Grid Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <!-- Shadow/outline layer -->
-                                <TextBlock Text="LEADERBOARD" FontSize="38" FontWeight="ExtraBold" FontFamily="Segoe Print"
-                                           Foreground="#80000000" Margin="2,2,0,0"/>
-                                <!-- Main text -->
-                                <TextBlock Text="LEADERBOARD" FontSize="38" FontWeight="ExtraBold" FontFamily="Segoe Print"
-                                           Foreground="#FF69B4"/>
-                            </Grid>
+                            <!-- Big LEADERBOARD title with stroke effect + mode toggle -->
+                            <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Grid HorizontalAlignment="Center">
+                                    <!-- Shadow/outline layer -->
+                                    <TextBlock Text="LEADERBOARD" FontSize="38" FontWeight="ExtraBold" FontFamily="Segoe Print"
+                                               Foreground="#80000000" Margin="2,2,0,0"/>
+                                    <!-- Main text -->
+                                    <TextBlock Text="LEADERBOARD" FontSize="38" FontWeight="ExtraBold" FontFamily="Segoe Print"
+                                               Foreground="#FF69B4"/>
+                                </Grid>
+                                <!-- Monthly / All-Time toggle buttons -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
+                                    <Button x:Name="BtnLeaderboardMonthly" Content="Monthly" Padding="16,5" FontSize="12" FontWeight="SemiBold"
+                                            Background="#FF69B4" Foreground="White" Cursor="Hand" Click="BtnLeaderboardMode_Click" Tag="monthly">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="MonthlyBorder" Background="{TemplateBinding Background}" CornerRadius="10,0,0,10" Padding="{TemplateBinding Padding}" BorderBrush="#FF69B4" BorderThickness="1">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Opacity" Value="0.85"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                    <Button x:Name="BtnLeaderboardAllTime" Content="All-Time" Padding="16,5" FontSize="12" FontWeight="SemiBold"
+                                            Background="#352545" Foreground="#FF69B4" Cursor="Hand" Click="BtnLeaderboardMode_Click" Tag="all-time">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="AllTimeBorder" Background="{TemplateBinding Background}" CornerRadius="0,10,10,0" Padding="{TemplateBinding Padding}" BorderBrush="#FF69B4" BorderThickness="1">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Opacity" Value="0.85"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
 
                             <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -7536,7 +7618,7 @@
                                         <StackPanel>
                                             <TextBlock x:Name="TxtLeaderboardSeason" Text="season 1 ~ prove your devotion~"
                                                        FontStyle="Italic" FontSize="15" FontWeight="Bold" Foreground="#9988AACC"/>
-                                            <TextBlock Text="resets monthly — your rank is everything~" FontStyle="Italic" FontSize="13" FontWeight="Bold"
+                                            <TextBlock x:Name="TxtLeaderboardSubtitle" Text="resets monthly — your rank is everything~" FontStyle="Italic" FontSize="13" FontWeight="Bold"
                                                        Foreground="#6688AACC" Margin="0,2,0,0"/>
                                         </StackPanel>
                                     </Border>
@@ -7704,6 +7786,8 @@
                                 <GridViewColumn Header="Level" Width="100" DisplayMemberBinding="{Binding Level}"/>
                                 <GridViewColumn Header="XP" Width="100" DisplayMemberBinding="{Binding XpDisplay}"/>
                                 <GridViewColumn Header="Achievements" Width="130" DisplayMemberBinding="{Binding AchievementsDisplay}"/>
+                                <!-- Seasons column (shown only in All-Time mode) -->
+                                <GridViewColumn Header="Seasons" Width="0" DisplayMemberBinding="{Binding SeasonsCompleted}"/>
                                 <!-- Trophy Case Columns (shown only when skill unlocked) -->
                                 <GridViewColumn x:Name="ColLongestSession" Header="Best Session" Width="110">
                                     <GridViewColumn.CellTemplate>

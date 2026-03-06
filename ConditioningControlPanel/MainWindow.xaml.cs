@@ -1154,6 +1154,9 @@ namespace ConditioningControlPanel
             // Initialize quick login UI
             UpdateQuickLoginUI();
 
+            // Load past quizzes list
+            RefreshPastQuizzes();
+
             // Handle start minimized (to tray) - delay briefly to let window render properly first
             if (App.Settings.Current.StartMinimized)
             {
@@ -3436,8 +3439,70 @@ namespace ConditioningControlPanel
             }
 
             var fullscreen = ChkQuizFullscreen?.IsChecked == true;
-            var quizWindow = new QuizWindow(fullscreen);
+            var playDrone = ChkQuizDrone?.IsChecked == true;
+            var quizWindow = new QuizWindow(fullscreen, playDrone);
+            quizWindow.Closed += (s, args) => RefreshPastQuizzes();
             quizWindow.Show();
+        }
+
+        private void RefreshPastQuizzes()
+        {
+            try
+            {
+                var history = QuizService.LoadHistory();
+                PastQuizzesList.Children.Clear();
+
+                if (history.Count == 0)
+                {
+                    TxtPastQuizzesHeader.Visibility = Visibility.Collapsed;
+                    PastQuizzesPanel.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                TxtPastQuizzesHeader.Visibility = Visibility.Visible;
+                PastQuizzesPanel.Visibility = Visibility.Visible;
+
+                foreach (var entry in history)
+                {
+                    var pct = entry.MaxScore > 0 ? (int)Math.Round((double)entry.TotalScore / entry.MaxScore * 100) : 0;
+                    var label = $"{entry.TakenAt:MMM d}  ·  {entry.Category}  ·  {entry.TotalScore}/{entry.MaxScore} ({pct}%)";
+
+                    var row = new Border
+                    {
+                        Cursor = System.Windows.Input.Cursors.Hand,
+                        Padding = new Thickness(8, 5, 8, 5),
+                        Background = System.Windows.Media.Brushes.Transparent
+                    };
+
+                    var txt = new TextBlock
+                    {
+                        Text = label,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xA0, 0xA0, 0xB8)),
+                        FontSize = 11.5
+                    };
+                    row.Child = txt;
+
+                    var captured = entry;
+                    row.MouseLeftButtonDown += (s, args) =>
+                    {
+                        new QuizReportWindow(captured) { Owner = this }.Show();
+                    };
+                    row.MouseEnter += (s, args) =>
+                    {
+                        if (s is Border b) b.Background = new SolidColorBrush(Color.FromArgb(0x15, 0xFF, 0xFF, 0xFF));
+                    };
+                    row.MouseLeave += (s, args) =>
+                    {
+                        if (s is Border b) b.Background = System.Windows.Media.Brushes.Transparent;
+                    };
+
+                    PastQuizzesList.Children.Add(row);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "MainWindow: Failed to refresh past quizzes");
+            }
         }
 
         private void OnLockdownActivated()
@@ -9229,6 +9294,7 @@ namespace ConditioningControlPanel
             SetHelpContent(HelpBtnAssetBrowser, "AssetBrowser");
 
             // Lab tab
+            SetHelpContent(HelpBtnQuiz, "Quiz");
             SetHelpContent(HelpBtnKeywordTriggers, "KeywordTriggers");
             SetHelpContent(HelpBtnScreenOcr, "ScreenOcr");
             SetHelpContent(HelpBtnRemoteControl, "RemoteControl");

@@ -1,0 +1,191 @@
+<Window x:Class="ConditioningControlPanel.MantraWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Mantra Lab"
+        WindowStyle="None" WindowState="Maximized"
+        AllowsTransparency="True"
+        Background="Black"
+        Topmost="True"
+        KeyDown="Window_KeyDown"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <Storyboard x:Key="PulseStoryboard">
+            <DoubleAnimation Storyboard.TargetName="MantraScale"
+                             Storyboard.TargetProperty="ScaleX"
+                             From="1.0" To="1.06" Duration="0:0:0.15" AutoReverse="True"/>
+            <DoubleAnimation Storyboard.TargetName="MantraScale"
+                             Storyboard.TargetProperty="ScaleY"
+                             From="1.0" To="1.06" Duration="0:0:0.15" AutoReverse="True"/>
+        </Storyboard>
+
+        <Storyboard x:Key="ShakeStoryboard">
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="MantraTranslate"
+                                           Storyboard.TargetProperty="X">
+                <LinearDoubleKeyFrame KeyTime="0:0:0.05" Value="8"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.1" Value="-8"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.15" Value="6"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.2" Value="-6"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.25" Value="3"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.3" Value="0"/>
+            </DoubleAnimationUsingKeyFrames>
+        </Storyboard>
+
+        <Storyboard x:Key="LetterPulseStoryboard">
+            <DoubleAnimation Storyboard.TargetName="MantraScale"
+                             Storyboard.TargetProperty="ScaleX"
+                             From="1.0" To="1.02" Duration="0:0:0.08" AutoReverse="True"/>
+            <DoubleAnimation Storyboard.TargetName="MantraScale"
+                             Storyboard.TargetProperty="ScaleY"
+                             From="1.0" To="1.02" Duration="0:0:0.08" AutoReverse="True"/>
+        </Storyboard>
+
+        <Storyboard x:Key="WrongShakeStoryboard">
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="MantraTranslate"
+                                           Storyboard.TargetProperty="X">
+                <LinearDoubleKeyFrame KeyTime="0:0:0.03" Value="4"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.06" Value="-4"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.09" Value="3"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.12" Value="-3"/>
+                <LinearDoubleKeyFrame KeyTime="0:0:0.15" Value="0"/>
+            </DoubleAnimationUsingKeyFrames>
+        </Storyboard>
+
+        <Storyboard x:Key="GlowPulseStoryboard" RepeatBehavior="Forever" AutoReverse="True">
+            <DoubleAnimation Storyboard.TargetName="GlowOverlay"
+                             Storyboard.TargetProperty="Opacity"
+                             From="0.0" To="0.3" Duration="0:0:2"/>
+        </Storyboard>
+    </Window.Resources>
+
+    <Grid>
+        <!-- Layer 0: Radial gradient base -->
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush x:Name="BaseBrush" Center="0.5,0.5" RadiusX="0.7" RadiusY="0.7">
+                    <GradientStop x:Name="BaseCenter" Color="#1A0A2E" Offset="0"/>
+                    <GradientStop x:Name="BaseEdge" Color="#0A0514" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- Layer 1: Color wash overlay (intensity tied to streak) -->
+        <Border x:Name="ColorWashOverlay" Opacity="0">
+            <Border.Background>
+                <RadialGradientBrush Center="0.5,0.5" RadiusX="0.6" RadiusY="0.6">
+                    <GradientStop x:Name="WashCenter" Color="#6633AA" Offset="0"/>
+                    <GradientStop Color="Transparent" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- Layer 2: Glow overlay (pulsing) -->
+        <Border x:Name="GlowOverlay" Opacity="0">
+            <Border.Background>
+                <RadialGradientBrush Center="0.5,0.6" RadiusX="0.4" RadiusY="0.4">
+                    <GradientStop Color="#FF69B4" Offset="0"/>
+                    <GradientStop Color="Transparent" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- Layer 3: Vignette -->
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush Center="0.5,0.5" RadiusX="0.8" RadiusY="0.8">
+                    <GradientStop Color="Transparent" Offset="0.4"/>
+                    <GradientStop Color="#80000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!-- Content Grid -->
+        <Grid Margin="40">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Top: Counters -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,20,0,0">
+                <StackPanel Margin="30,0">
+                    <TextBlock Text="REPS" Foreground="#606080" FontSize="11" HorizontalAlignment="Center" FontWeight="Bold"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock x:Name="TxtCompletions" Text="0" Foreground="White" FontSize="36" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtTarget" Text="/10" Foreground="#606080" FontSize="24" VerticalAlignment="Bottom" Margin="2,0,0,4"/>
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel Margin="30,0">
+                    <TextBlock Text="STREAK" Foreground="#606080" FontSize="11" HorizontalAlignment="Center" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtStreak" Text="0" Foreground="#FF69B4" FontSize="36" FontWeight="Bold" HorizontalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Margin="30,0">
+                    <TextBlock Text="BEST" Foreground="#606080" FontSize="11" HorizontalAlignment="Center" FontWeight="Bold"/>
+                    <TextBlock x:Name="TxtBestStreak" Text="0" Foreground="#9B59B6" FontSize="36" FontWeight="Bold" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Center: Mantra text (Inlines populated in code-behind) -->
+            <Viewbox Grid.Row="1" MaxWidth="1400" MaxHeight="300" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="TxtMantra"
+                           FontSize="72" FontWeight="Bold" TextAlignment="Center" TextWrapping="Wrap"
+                           MaxWidth="1400" Padding="20">
+                    <TextBlock.Effect>
+                        <DropShadowEffect x:Name="MantraGlow" Color="#9966CC" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                    </TextBlock.Effect>
+                    <TextBlock.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform x:Name="MantraScale" CenterX="0.5" CenterY="0.5"/>
+                            <TranslateTransform x:Name="MantraTranslate"/>
+                        </TransformGroup>
+                    </TextBlock.RenderTransform>
+                    <TextBlock.RenderTransformOrigin>
+                        <Point X="0.5" Y="0.5"/>
+                    </TextBlock.RenderTransformOrigin>
+                </TextBlock>
+            </Viewbox>
+
+            <!-- Bottom: Input area -->
+            <Border Grid.Row="2" Background="#20FFFFFF" CornerRadius="12" Padding="20,14"
+                    HorizontalAlignment="Center" MaxWidth="800" MinWidth="500" Margin="0,0,0,40">
+                <Border.BorderBrush>
+                    <SolidColorBrush x:Name="InputBorderBrush" Color="#40FF69B4"/>
+                </Border.BorderBrush>
+                <Border.BorderThickness>
+                    <Thickness>1.5</Thickness>
+                </Border.BorderThickness>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="TxtInput" Grid.Column="0"
+                             Background="Transparent" Foreground="White" FontSize="22"
+                             BorderThickness="0" CaretBrush="#FF69B4"
+                             VerticalAlignment="Center"
+                             TextChanged="TxtInput_TextChanged"
+                             PreviewKeyDown="TxtInput_PreviewKeyDown"/>
+                    <TextBlock Grid.Column="1" Text="ESC to exit" Foreground="#404060" FontSize="11"
+                               VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Session complete overlay -->
+        <Border x:Name="CompletionOverlay" Background="#E0000000" Visibility="Collapsed">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="SESSION COMPLETE" Foreground="#FF69B4" FontSize="48" FontWeight="Bold"
+                           HorizontalAlignment="Center">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="30" ShadowDepth="0" Opacity="0.8"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+                <TextBlock x:Name="TxtCompletionStats" Text="" Foreground="#9B59B6" FontSize="22"
+                           HorizontalAlignment="Center" Margin="0,16,0,0"/>
+                <TextBlock Text="Press any key to close" Foreground="#606080" FontSize="14"
+                           HorizontalAlignment="Center" Margin="0,24,0,0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

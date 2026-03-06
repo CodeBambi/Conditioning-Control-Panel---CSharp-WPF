@@ -775,6 +775,28 @@ namespace ConditioningControlPanel.Services
 
             // ==================== LAB TAB ====================
 
+            ["Quiz"] = new HelpContent
+            {
+                SectionId = "Quiz",
+                Icon = "\uD83E\uDDE0",
+                Title = "Quiz Training",
+                WhatItDoes = "AI-generated personality quizzes with 10 questions that adapt based on your answers. " +
+                             "Each quiz is unique — the AI reads your responses and tailors follow-up questions to dig deeper. " +
+                             "At the end you get a personality breakdown with scores and a summary of who you really are.",
+                Tips = new List<string>
+                {
+                    "Enable 'Fullscreen' for a more immersive, distraction-free experience",
+                    "Turn on 'Play drone in background' for ambient audio during the quiz",
+                    "Answer honestly — the AI adapts questions based on your previous answers",
+                    "Your past quiz results are saved and viewable under 'Past Quizzes'",
+                    "Each quiz awards XP on completion"
+                },
+                HowItWorks = "The quiz uses an AI language model to generate questions one at a time. After each answer, " +
+                             "the AI considers your full answer history to craft the next question. Questions have 4 options " +
+                             "with hidden scores (1-4) that feed into your final personality breakdown. The 10th question is " +
+                             "always a dramatic finale. Results include category scores, a personality type, and a written summary."
+            },
+
             ["KeywordTriggers"] = new HelpContent
             {
                 SectionId = "KeywordTriggers",

@@ -35,6 +35,9 @@ public class LeaderboardService : IDisposable
     /// <summary>Current sort field</summary>
     public string CurrentSortBy { get; private set; } = "level";
 
+    /// <summary>Current leaderboard mode (monthly or all-time)</summary>
+    public string CurrentMode { get; private set; } = "monthly";
+
     /// <summary>Last successful refresh time</summary>
     public DateTime? LastRefreshTime { get; private set; }
 
@@ -65,8 +68,9 @@ public class LeaderboardService : IDisposable
     /// Refresh leaderboard data from the server
     /// </summary>
     /// <param name="sortBy">Field to sort by (xp, level, total_bubbles_popped, total_flashes, total_video_minutes, total_lock_cards_completed)</param>
+    /// <param name="mode">Leaderboard mode: "monthly" (default) or "all-time"</param>
     /// <returns>True if successful</returns>
-    public async Task<bool> RefreshAsync(string? sortBy = null)
+    public async Task<bool> RefreshAsync(string? sortBy = null, string? mode = null)
     {
         // Skip if offline mode is enabled
         if (App.Settings?.Current?.OfflineMode == true)
@@ -78,14 +82,15 @@ public class LeaderboardService : IDisposable
         if (IsRefreshing) return false;
 
         sortBy ??= CurrentSortBy;
+        mode ??= CurrentMode;
         IsRefreshing = true;
 
         try
         {
-            App.Logger?.Debug("Fetching leaderboard with sort_by={SortBy}", sortBy);
+            App.Logger?.Debug("Fetching leaderboard with sort_by={SortBy}, mode={Mode}", sortBy, mode);
 
-            // Use V3 leaderboard (monthly seasons system)
-            var season = DateTime.UtcNow.ToString("yyyy-MM");
+            // Use V3 leaderboard — "all-time" mode uses a permanent sorted set
+            var season = mode == "all-time" ? "all-time" : DateTime.UtcNow.ToString("yyyy-MM");
             var unifiedId = App.UnifiedUserId;
             var url = $"{ProxyBaseUrl}/v3/leaderboard?season={season}&limit=10000";
             if (!string.IsNullOrEmpty(unifiedId))
@@ -111,6 +116,7 @@ public class LeaderboardService : IDisposable
                 YourRank = result.YourRank;
                 YourTotal = result.YourTotal;
                 CurrentSortBy = sortBy;
+                CurrentMode = mode;
                 LastRefreshTime = DateTime.Now;
                 LastRefreshError = null;
 
@@ -372,6 +378,20 @@ public class LeaderboardEntry
     /// Formatted highest streak display — blank if user doesn't have trophy_case skill
     /// </summary>
     public string HighestStreakDisplay => HasTrophyCase ? HighestStreak.ToString() : "";
+
+    [JsonProperty("seasons_completed")]
+    public int SeasonsCompleted { get; set; }
+
+    [JsonProperty("total_xp_earned")]
+    public long TotalXpEarned { get; set; }
+
+    /// <summary>
+    /// Formatted total XP earned display (e.g., "100.3k" or "1.2M")
+    /// </summary>
+    public string TotalXpEarnedDisplay => FormatLargeNumber((int)Math.Min(TotalXpEarned, int.MaxValue));
+
+    [JsonProperty("highest_level_ever")]
+    public int HighestLevelEver { get; set; }
 
     [JsonProperty("is_online", NullValueHandling = NullValueHandling.Ignore)]
     public bool IsOnline { get; set; }

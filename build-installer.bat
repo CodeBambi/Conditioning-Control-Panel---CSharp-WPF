@@ -43,6 +43,12 @@ if errorlevel 1 (
 cd ..
 
 echo.
+echo [2.5/4] Cleaning empty locale folders from publish output...
+for %%D in (cs de es fr it ja ko pl pt-BR ru tr zh-Hans zh-Hant runtimes) do (
+    if exist "%PUBLISH_DIR%\%%D" rmdir /s /q "%PUBLISH_DIR%\%%D"
+)
+
+echo.
 echo [3/4] Compiling installer with Inno Setup...
 "%ISCC_PATH%" installer.iss
 if errorlevel 1 (
