@@ -726,6 +726,8 @@ namespace ConditioningControlPanel
             if (RemoteControl != null) RemoteControl.MainWindowRef = mainWindow;
 
             // Close splash screen with fade animation
+            // Drop Topmost FIRST so deferred dialogs (What's New, Age Verification) aren't hidden behind it
+            splash.Topmost = false;
             splash.SetProgress(1.0, "Ready!");
             splash.FadeOutAndClose();
             _splash = null;
