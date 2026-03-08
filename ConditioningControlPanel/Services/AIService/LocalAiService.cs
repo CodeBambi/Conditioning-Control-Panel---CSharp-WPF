@@ -13,7 +13,7 @@ public class LocalAiService : IAiService, IDisposable
     private readonly BambiSprite _bambiSprite;
     private readonly Uri _localUri = new Uri("http://localhost:5259/");
     private Chat _chat;
-    
+    private List<AICommand> CurrentCommands { get; set; }
     public MainWindow? MainWindowRef { get; set; }
     
     public LocalAiService()
@@ -32,8 +32,8 @@ public class LocalAiService : IAiService, IDisposable
     /// <returns></returns>
     private static string GetFallbackResponse()
     {
-        var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-        return mode == Models.ContentMode.BambiSleep
+        var mode = App.Settings.Current?.ContentMode ?? ContentMode.BambiSleep;
+        return mode == ContentMode.BambiSleep
             ? "Bambi's head is so empty right now~ *giggles*"
             : "My head is so empty right now~ *giggles*";
     }
@@ -82,7 +82,7 @@ public class LocalAiService : IAiService, IDisposable
         return await GetAiResponseAsync(userInput, prompt);
     }
 
-    private bool _isWorkingOnResponse = false;
+    private bool _isWorkingOnResponse;
     private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt)
     {
         var currentTime = DateTime.Now.ToString("yy-MMM-dd dddd h:mm:ss tt");
@@ -124,19 +124,17 @@ public class LocalAiService : IAiService, IDisposable
         // If sanitization removed everything meaningful, return a fallback
         if (string.IsNullOrWhiteSpace(sanitized))
         {
-            App.Logger?.Warning("AiService: Response was entirely metadata, returning fallback");
+            App.Logger.Warning("AiService: Response was entirely metadata, returning fallback");
             return GetFallbackResponse();
         }
 
         return sanitized;
     }
-    private List<AICommand> CurrentCommands { get; set; }
 
     private string ParseJson(string response)
     {
         var pattern = new Regex(@"```json\s*([\s\S]*?)\s*```", RegexOptions.Compiled);
         CurrentCommands = new List<AICommand>();
-        var jsons = new List<string>();
         string clean = pattern.Replace(response, m =>
         {
             var body = m.Groups[1].Value;
@@ -178,7 +176,8 @@ public class LocalAiService : IAiService, IDisposable
         {
             case AICommandType.flash_image:
                 var commandData = command.Data as FlashImage;
-                App.Flash.TriggerFlashOnce(commandData.Amount, commandData.Duration, commandData.Opacity, commandData.Size);
+                if(commandData != null)
+                    App.Flash.TriggerFlashOnce(commandData.Amount, commandData.Duration, commandData.Opacity, commandData.Size);
                 break;
             case AICommandType.audio:
             case AICommandType.video:
@@ -186,7 +185,7 @@ public class LocalAiService : IAiService, IDisposable
                 break;
             case AICommandType.getbacktome:
                 var getbacktome = command.Data as GetBackToMe;
-                Task.Delay(getbacktome!.Delay * 1000).ContinueWith(t => SendTokenMessage(getbacktome!.Token, getbacktome.JsonOnly));
+                Task.Delay(getbacktome!.Delay * 1000).ContinueWith(_ => SendTokenMessage(getbacktome.Token, getbacktome.JsonOnly));
                 break;
             case AICommandType.pink:
                 if ((command.Data as SpiralPinkFiler)?.On ?? false)
@@ -194,9 +193,9 @@ public class LocalAiService : IAiService, IDisposable
                     MainWindowRef?.EnablePinkFilter(true);
                     App.Settings.Current.PinkFilterOpacity = (command.Data as SpiralPinkFiler)?.Intensity ?? 5;
                     // Start overlay service if needed
-                    if (App.Overlay?.IsRunning != true)
+                    if (App.Overlay.IsRunning != true)
                     {
-                        App.Overlay?.Start();
+                        App.Overlay.Start();
                         App.Logger?.Information("AIService: Pink - started overlay service");
                     }
                 }
@@ -209,9 +208,9 @@ public class LocalAiService : IAiService, IDisposable
                     MainWindowRef?.EnableSpiral(true);
                     App.Settings.Current.SpiralOpacity = (command.Data as SpiralPinkFiler)?.Intensity ?? 5;
                     // Start overlay service if needed
-                    if (App.Overlay?.IsRunning != true)
+                    if (App.Overlay.IsRunning != true)
                     {
-                        App.Overlay?.Start();
+                        App.Overlay.Start();
                         App.Logger?.Information("AutonomyService: Spiral - started overlay service");
                     }
                 }
@@ -235,6 +234,9 @@ public class LocalAiService : IAiService, IDisposable
                     App.BouncingText.Start(true, (command.Data as Bounce)?.Words);
                 else
                     App.BouncingText.Stop();
+                break;
+            case AICommandType.haptic:
+                _ = App.Haptics.ApplyVibrationModeAsync((command.Data as HapticCommand)?.Intensity ?? 0, ((command.Data as HapticCommand)?.Duration ?? 100) * 2, VibrationMode.Pulse);
                 break;
             case AICommandType.none:
             default:

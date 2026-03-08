@@ -90,5 +90,5 @@ public class AICommandConverter : JsonConverter<AICommand>
 
 public enum AICommandType
 {
-    none, spiral, mantra_lockscreen, bubbles, video, audio, pink, flash_image, subliminal, getbacktome, bounce
+    none, spiral, mantra_lockscreen, bubbles, video, audio, pink, flash_image, subliminal, getbacktome, bounce, haptic
 }
