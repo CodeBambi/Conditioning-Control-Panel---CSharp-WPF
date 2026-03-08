@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
@@ -7,7 +6,6 @@ using System.Net.Http.Json;
 using System.Security;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services

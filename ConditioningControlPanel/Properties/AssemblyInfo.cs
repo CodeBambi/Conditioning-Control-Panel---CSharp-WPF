@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Windows;
 
 [assembly: AssemblyTitle("Conditioning Control Panel")]
 [assembly: AssemblyDescription("A professional visual conditioning application with gamification features.")]

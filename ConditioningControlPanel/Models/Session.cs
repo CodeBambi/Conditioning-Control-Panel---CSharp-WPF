@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Text.RegularExpressions;
-
 namespace ConditioningControlPanel.Models
 {
     public enum SessionDifficulty

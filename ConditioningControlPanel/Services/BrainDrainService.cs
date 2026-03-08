@@ -1,10 +1,7 @@
-using System;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Windows.Threading;
 using NAudio.Wave;
-using Serilog;
 
 namespace ConditioningControlPanel.Services
 {

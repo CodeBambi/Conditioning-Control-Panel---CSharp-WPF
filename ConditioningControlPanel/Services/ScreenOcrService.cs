@@ -1,11 +1,7 @@
-using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Threading;
-using System.Threading.Tasks;
-using System.Windows;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
 using WinForms = System.Windows.Forms;

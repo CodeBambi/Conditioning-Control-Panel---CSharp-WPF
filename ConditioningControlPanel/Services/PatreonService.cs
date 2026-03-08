@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
@@ -7,7 +6,6 @@ using System.Net.Http.Json;
 using System.Security;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services
@@ -89,7 +87,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool IsFirstLogin => IsAuthenticated
             && string.IsNullOrEmpty(DisplayName)
-            && string.IsNullOrEmpty(App.Discord?.CustomDisplayName);
+            && string.IsNullOrEmpty(App.Discord.CustomDisplayName);
 
         /// <summary>
         /// Whether the user is whitelisted (gets Tier 1 access regardless of subscription)
@@ -144,16 +142,16 @@ namespace ConditioningControlPanel.Services
             try
             {
                 // Skip online validation if offline mode is enabled
-                if (App.Settings?.Current?.OfflineMode == true)
+                if (App.Settings.Current.OfflineMode)
                 {
-                    App.Logger?.Information("Offline mode enabled, using cached Patreon state only");
+                    App.Logger.Information("Offline mode enabled, using cached Patreon state only");
                     LoadCachedState();
                     return;
                 }
 
                 // Force clear cache for v4.1 to pick up whitelist changes
                 _tokenStorage.ClearCachedState();
-                App.Logger?.Debug("Cleared Patreon cache for fresh validation");
+                App.Logger.Debug("Cleared Patreon cache for fresh validation");
 
                 if (_tokenStorage.HasValidTokens())
                 {
@@ -162,17 +160,14 @@ namespace ConditioningControlPanel.Services
                 else
                 {
                     // No valid tokens - ensure cached premium access is cleared
-                    if (App.Settings?.Current != null)
-                    {
-                        App.Settings.Current.PatreonTier = 0;
-                        App.Settings.Current.PatreonPremiumValidUntil = null;
-                        App.Logger?.Debug("No Patreon tokens found, cleared cached premium access");
-                    }
+                    App.Settings.Current.PatreonTier = 0;
+                    App.Settings.Current.PatreonPremiumValidUntil = null;
+                    App.Logger.Debug("No Patreon tokens found, cleared cached premium access");
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to validate Patreon subscription on startup");
+                App.Logger.Warning(ex, "Failed to validate Patreon subscription on startup");
             }
         }
 
@@ -202,7 +197,7 @@ namespace ConditioningControlPanel.Services
                 _callbackListener.Prefixes.Add(callbackUrl);
                 _callbackListener.Start();
 
-                App.Logger?.Information("Started OAuth callback listener on {Url}", callbackUrl);
+                App.Logger.Information("Started OAuth callback listener on {Url}", callbackUrl);
 
                 // Open browser to authorization URL
                 var authUrl = $"{ProxyBaseUrl}/patreon/authorize?redirect_uri={Uri.EscapeDataString(callbackUrl)}&state={state}";
@@ -256,16 +251,16 @@ namespace ConditioningControlPanel.Services
                 // Validate subscription immediately
                 await ValidateSubscriptionAsync(forceRefresh: true);
 
-                App.Logger?.Information("Patreon OAuth flow completed successfully");
+                App.Logger.Information("Patreon OAuth flow completed successfully");
             }
             catch (OperationCanceledException)
             {
-                App.Logger?.Information("Patreon OAuth flow cancelled");
+                App.Logger.Information("Patreon OAuth flow cancelled");
                 throw;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Patreon OAuth flow failed");
+                App.Logger.Error(ex, "Patreon OAuth flow failed");
                 AuthenticationFailed?.Invoke(this, ex.Message);
                 throw;
             }
@@ -293,7 +288,10 @@ namespace ConditioningControlPanel.Services
                 _callbackListener?.Close();
                 _callbackListener = null;
             }
-            catch { }
+            catch
+            {
+                // ignored
+            }
         }
 
         private async Task SendBrowserResponse(HttpListenerContext context, bool success)
@@ -375,7 +373,7 @@ namespace ConditioningControlPanel.Services
                 tokenResponse.RefreshToken,
                 DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn));
 
-            App.Logger?.Information("Patreon tokens stored successfully");
+            App.Logger.Information("Patreon tokens stored successfully");
         }
 
         /// <summary>
@@ -386,9 +384,9 @@ namespace ConditioningControlPanel.Services
             if (IsVerifying && !forceRefresh) return CurrentTier;
 
             // Skip online validation if offline mode is enabled
-            if (App.Settings?.Current?.OfflineMode == true)
+            if (App.Settings.Current.OfflineMode)
             {
-                App.Logger?.Debug("Offline mode enabled, skipping Patreon validation");
+                App.Logger.Debug("Offline mode enabled, skipping Patreon validation");
                 return CurrentTier;
             }
 
@@ -465,7 +463,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    App.Logger?.Warning("Patreon validation failed with status {Status}", response.StatusCode);
+                    App.Logger.Warning("Patreon validation failed with status {Status}", response.StatusCode);
                     // Use cached tier if available, otherwise fail closed
                     return CurrentTier;
                 }
@@ -474,7 +472,7 @@ namespace ConditioningControlPanel.Services
 
                 if (subscription == null || !string.IsNullOrEmpty(subscription.Error))
                 {
-                    App.Logger?.Warning("Patreon validation error: {Error}", subscription?.Error);
+                    App.Logger.Warning("Patreon validation error: {Error}", subscription?.Error);
                     return CurrentTier;
                 }
 
@@ -485,7 +483,7 @@ namespace ConditioningControlPanel.Services
                 // Check if user needs to complete registration (choose display name)
                 NeedsRegistration = subscription.NeedsRegistration;
 
-                App.Logger?.Debug("Server whitelist check: Whitelisted={Whitelisted}, NeedsRegistration={NeedsReg}",
+                App.Logger.Debug("Server whitelist check: Whitelisted={Whitelisted}, NeedsRegistration={NeedsReg}",
                     userIsWhitelisted, subscription.NeedsRegistration);
 
                 // Set unified user ID for cross-provider account linking
@@ -498,11 +496,11 @@ namespace ConditioningControlPanel.Services
                     if (string.IsNullOrEmpty(App.UnifiedUserId))
                     {
                         App.UnifiedUserId = subscription.UnifiedId;
-                        App.Logger?.Information("Set UnifiedUserId from Patreon validate: {UnifiedId}", subscription.UnifiedId);
+                        App.Logger.Information("Set UnifiedUserId from Patreon validate: {UnifiedId}", subscription.UnifiedId);
                     }
                     else
                     {
-                        App.Logger?.Information("Patreon has UnifiedUserId {PatreonId} but App already has {AppId} - deferring to AccountService for conflict check",
+                        App.Logger.Information("Patreon has UnifiedUserId {PatreonId} but App already has {AppId} - deferring to AccountService for conflict check",
                             subscription.UnifiedId, App.UnifiedUserId);
                     }
                 }
@@ -521,7 +519,7 @@ namespace ConditioningControlPanel.Services
                 var existingCache = _tokenStorage.RetrieveCachedState();
                 var serverDisplayName = subscription.DisplayName;
                 var localDisplayName = existingCache?.DisplayName ?? DisplayName;
-                var discordDisplayName = App.Discord?.CustomDisplayName;
+                var discordDisplayName = App.Discord.CustomDisplayName;
 
                 // Priority: server > local > Discord
                 var effectiveDisplayName = !string.IsNullOrEmpty(serverDisplayName)
@@ -545,7 +543,7 @@ namespace ConditioningControlPanel.Services
                 {
                     // Adopt Discord's display name if Patreon doesn't have one
                     DisplayName = discordDisplayName;
-                    App.Logger?.Information("Adopted display name from Discord: {Name}", DisplayName);
+                    App.Logger.Information("Adopted display name from Discord: {Name}", DisplayName);
                 }
 
                 // Cache result for 24 hours (use effective values for whitelisted users)
@@ -564,21 +562,18 @@ namespace ConditioningControlPanel.Services
                 // This allows users to log in with Discord and still keep premium features
                 if (newTier >= PatreonTier.Level1 || userIsWhitelisted)
                 {
-                    if (App.Settings?.Current != null)
-                    {
-                        App.Settings.Current.PatreonPremiumValidUntil = DateTime.UtcNow.AddDays(14);
-                        App.Logger?.Information("Extended premium access grace period to {Date}", App.Settings.Current.PatreonPremiumValidUntil);
-                    }
+                    App.Settings.Current.PatreonPremiumValidUntil = DateTime.UtcNow.AddDays(14);
+                    App.Logger.Information("Extended premium access grace period to {Date}", App.Settings.Current.PatreonPremiumValidUntil);
                 }
 
-                App.Logger?.Information("Patreon subscription validated: Tier={Tier}, ProxyActive={ProxyActive}, EffectiveActive={EffectiveActive}, Whitelisted={Whitelisted}",
+                App.Logger.Information("Patreon subscription validated: Tier={Tier}, ProxyActive={ProxyActive}, EffectiveActive={EffectiveActive}, Whitelisted={Whitelisted}",
                     newTier, subscription.IsActive, effectivelyActive, userIsWhitelisted);
 
                 return newTier;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to validate Patreon subscription");
+                App.Logger.Error(ex, "Failed to validate Patreon subscription");
                 // Fail closed - return current tier (which may be cached or None)
                 return CurrentTier;
             }
@@ -599,7 +594,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    App.Logger?.Warning("Token refresh failed with status {Status}", response.StatusCode);
+                    App.Logger.Warning("Token refresh failed with status {Status}", response.StatusCode);
                     return false;
                 }
 
@@ -607,7 +602,7 @@ namespace ConditioningControlPanel.Services
 
                 if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
                 {
-                    App.Logger?.Warning("Token refresh error: {Error}", tokenResponse?.ErrorDescription);
+                    App.Logger.Warning("Token refresh error: {Error}", tokenResponse?.ErrorDescription);
                     return false;
                 }
 
@@ -616,12 +611,12 @@ namespace ConditioningControlPanel.Services
                     tokenResponse.RefreshToken,
                     DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn));
 
-                App.Logger?.Information("Patreon tokens refreshed successfully");
+                App.Logger.Information("Patreon tokens refreshed successfully");
                 return true;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to refresh Patreon tokens");
+                App.Logger.Error(ex, "Failed to refresh Patreon tokens");
                 return false;
             }
         }
@@ -645,7 +640,7 @@ namespace ConditioningControlPanel.Services
             // Log whitelist status
             if (IsWhitelisted)
             {
-                App.Logger?.Information("User is whitelisted - granting premium access");
+                App.Logger.Information("User is whitelisted - granting premium access");
             }
         }
 
@@ -657,7 +652,7 @@ namespace ConditioningControlPanel.Services
         {
             if (!string.IsNullOrEmpty(DisplayName))
             {
-                App.Logger?.Warning("Attempted to change display name, but it's already set");
+                App.Logger.Warning("Attempted to change display name, but it's already set");
                 return (false, "Display name is already set");
             }
 
@@ -667,7 +662,7 @@ namespace ConditioningControlPanel.Services
             var checkResult = await CheckDisplayNameAvailableAsync(trimmedName);
             if (!checkResult.Available)
             {
-                App.Logger?.Warning("Display name '{Name}' is already taken", trimmedName);
+                App.Logger.Warning("Display name '{Name}' is already taken", trimmedName);
                 return (false, checkResult.Error ?? "This name is already taken. Please choose another.");
             }
 
@@ -684,7 +679,7 @@ namespace ConditioningControlPanel.Services
             // Save to server so it syncs across devices
             await SaveDisplayNameToServerAsync(DisplayName);
 
-            App.Logger?.Information("Display name set to: {DisplayName}", DisplayName);
+            App.Logger.Information("Display name set to: {DisplayName}", DisplayName);
             NeedsDisplayNameMigration = false;
             return (true, null);
         }
@@ -700,13 +695,13 @@ namespace ConditioningControlPanel.Services
                 return (true, null); // Nothing to migrate
             }
 
-            App.Logger?.Information("Attempting to migrate local display name to server: {Name}", DisplayName);
+            App.Logger.Information("Attempting to migrate local display name to server: {Name}", DisplayName);
 
             // Check if the name is available
             var checkResult = await CheckDisplayNameAvailableAsync(DisplayName);
             if (!checkResult.Available)
             {
-                App.Logger?.Warning("Migration failed - name '{Name}' is already taken", DisplayName);
+                App.Logger.Warning("Migration failed - name '{Name}' is already taken", DisplayName);
                 // Clear the local name so user can pick a new one
                 DisplayName = null;
                 var cachedState = _tokenStorage.RetrieveCachedState();
@@ -722,7 +717,7 @@ namespace ConditioningControlPanel.Services
             // Name is available - sync to server
             await SaveDisplayNameToServerAsync(DisplayName);
             NeedsDisplayNameMigration = false;
-            App.Logger?.Information("Successfully migrated display name to server: {Name}", DisplayName);
+            App.Logger.Information("Successfully migrated display name to server: {Name}", DisplayName);
             return (true, null);
         }
 
@@ -750,12 +745,12 @@ namespace ConditioningControlPanel.Services
                     return (result?.Available ?? true, result?.Error);
                 }
 
-                // If endpoint doesn't exist or errors, allow optimistically
+                // If an endpoint doesn't exist or errors, allow optimistically
                 return (true, null);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to check display name availability");
+                App.Logger.Warning(ex, "Failed to check display name availability");
                 return (true, null); // Allow optimistically on error
             }
         }
@@ -776,7 +771,7 @@ namespace ConditioningControlPanel.Services
                 var tokens = _tokenStorage.RetrieveTokens();
                 if (tokens == null)
                 {
-                    App.Logger?.Warning("Cannot save display name: no tokens available");
+                    App.Logger.Warning("Cannot save display name: no tokens available");
                     return;
                 }
 
@@ -790,16 +785,16 @@ namespace ConditioningControlPanel.Services
 
                 if (response.IsSuccessStatusCode)
                 {
-                    App.Logger?.Information("Display name saved to server successfully");
+                    App.Logger.Information("Display name saved to server successfully");
                 }
                 else
                 {
-                    App.Logger?.Warning("Failed to save display name to server: {Status}", response.StatusCode);
+                    App.Logger.Warning("Failed to save display name to server: {Status}", response.StatusCode);
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to save display name to server");
+                App.Logger.Warning(ex, "Failed to save display name to server");
                 // Don't throw - local save was successful, server sync is best-effort
             }
         }
@@ -829,14 +824,14 @@ namespace ConditioningControlPanel.Services
                         if (string.IsNullOrEmpty(App.UnifiedUserId))
                         {
                             App.UnifiedUserId = cachedState.UnifiedId;
-                            App.Logger?.Information("Restored UnifiedUserId from cache: {UnifiedId}", cachedState.UnifiedId);
+                            App.Logger.Information("Restored UnifiedUserId from cache: {UnifiedId}", cachedState.UnifiedId);
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to load cached Patreon state");
+                App.Logger.Warning(ex, "Failed to load cached Patreon state");
             }
         }
 
@@ -861,15 +856,12 @@ namespace ConditioningControlPanel.Services
             _isWhitelisted = false; // Clear whitelist status
 
             // Clear all cached premium access - user explicitly logged out
-            if (App.Settings?.Current != null)
-            {
-                App.Settings.Current.PatreonPremiumValidUntil = null;
-                App.Settings.Current.PatreonTier = 0; // Clear cached tier
-                App.Settings.Save(); // Force save immediately
-            }
+            App.Settings.Current.PatreonPremiumValidUntil = null;
+            App.Settings.Current.PatreonTier = 0; // Clear cached tier
+            App.Settings.Save(); // Force save immediately
 
             UpdateTier(PatreonTier.None, false);
-            App.Logger?.Information("Patreon logout completed, all premium access cleared");
+            App.Logger.Information("Patreon logout completed, all premium access cleared");
         }
 
         public void Dispose()

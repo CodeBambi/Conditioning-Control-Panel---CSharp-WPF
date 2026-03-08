@@ -1,5 +1,3 @@
-using System.Windows;
-
 namespace ConditioningControlPanel
 {
     public partial class EasterEggWindow : Window

@@ -1,5 +1,3 @@
-using System;
-
 namespace ConditioningControlPanel.Models
 {
     public enum TutorialStepPosition

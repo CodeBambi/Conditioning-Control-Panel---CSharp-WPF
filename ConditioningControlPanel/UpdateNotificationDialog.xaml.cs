@@ -1,4 +1,3 @@
-using System.Windows;
 using System.Text.RegularExpressions;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;

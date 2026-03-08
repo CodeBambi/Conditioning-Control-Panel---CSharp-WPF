@@ -1,10 +1,6 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using System.Timers;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
-using Newtonsoft.Json;
 using OllamaSharp;
 
 namespace ConditioningControlPanel.Services.AIService;

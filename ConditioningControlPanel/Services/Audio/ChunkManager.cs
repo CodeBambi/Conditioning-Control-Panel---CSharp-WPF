@@ -1,11 +1,7 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Threading;
-using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using NAudio.Wave;
-using Serilog;
 
 namespace ConditioningControlPanel.Services.Audio
 {

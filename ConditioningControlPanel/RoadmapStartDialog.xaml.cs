@@ -1,4 +1,3 @@
-using System.Windows;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel;

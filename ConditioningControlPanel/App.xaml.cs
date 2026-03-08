@@ -1,17 +1,9 @@
-using System;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Media;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Net.Http;
 using System.Text;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
 using Microsoft.Win32;
-using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.AIService;
 using Serilog;

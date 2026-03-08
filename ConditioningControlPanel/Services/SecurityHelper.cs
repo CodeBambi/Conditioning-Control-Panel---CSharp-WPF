@@ -1,10 +1,7 @@
-using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Security;
 using System.Security.Cryptography;
 using System.Text;
-using Serilog;
 
 namespace ConditioningControlPanel.Services
 {

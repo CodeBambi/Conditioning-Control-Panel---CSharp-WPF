@@ -1,4 +1,3 @@
-using System;
 using System.Windows.Threading;
 using DiscordRPC;
 using DiscordRPC.Logging;

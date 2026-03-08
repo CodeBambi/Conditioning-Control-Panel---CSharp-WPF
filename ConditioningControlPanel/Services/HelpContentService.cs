@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services
