@@ -1194,8 +1194,7 @@ namespace ConditioningControlPanel
             // Start periodic stat pill update timer
             StartStatPillUpdateTimer();
 
-            // Auto-initialize browser on startup
-            await InitializeBrowserAsync();
+            // Browser is lazy-loaded on first interaction (click radio toggle, pop-out, or external navigation)
 
             // Check if this is first run and prompt for assets folder
             await CheckFirstRunAssetsPromptAsync();
@@ -3877,7 +3876,9 @@ namespace ConditioningControlPanel
             {
                 _leaderboardMode = mode;
                 UpdateLeaderboardModeButtons();
-                await RefreshLeaderboardAsync();
+                // All-time defaults to XP ranking, monthly defaults to level
+                var defaultSort = mode == "all-time" ? "xp" : "level";
+                await RefreshLeaderboardAsync(defaultSort);
             }
         }
 
@@ -11533,9 +11534,29 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void BrowserSiteToggle_Changed(object sender, RoutedEventArgs e)
+        private async void BrowserLoadingText_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            if (_browser == null || !_browserInitialized) return;
+            await InitializeBrowserAsync();
+        }
+
+        private async System.Threading.Tasks.Task InitAndNavigateAsync(string url, bool autoPlayFullscreen)
+        {
+            await InitializeBrowserAsync();
+            if (_browserInitialized && _browser != null)
+            {
+                NavigateToUrlInBrowser(url, autoPlayFullscreen);
+            }
+        }
+
+        private async void BrowserSiteToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            // Lazy-load browser on first toggle interaction
+            if (!_browserInitialized)
+            {
+                await InitializeBrowserAsync();
+                return; // InitializeBrowserAsync navigates to the correct site already
+            }
+            if (_browser == null) return;
 
             // Block navigation in offline mode
             if (App.Settings?.Current?.OfflineMode == true) return;
@@ -11576,7 +11597,14 @@ namespace ConditioningControlPanel
                 return false;
             }
 
-            if (_browser == null || !_browserInitialized)
+            // Lazy-load browser if not yet initialized
+            if (!_browserInitialized)
+            {
+                _ = InitAndNavigateAsync(url, autoPlayFullscreen);
+                return true; // Navigation will happen after init completes
+            }
+
+            if (_browser == null)
             {
                 App.Logger?.Warning("Browser not available for navigation: {Url}", url);
                 return false;
@@ -13028,10 +13056,16 @@ namespace ConditioningControlPanel
 
         #endregion
 
-        private void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
+        private async void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
         {
             // Block in offline mode
             if (App.Settings?.Current?.OfflineMode == true) return;
+
+            // Lazy-load browser on first pop-out
+            if (!_browserInitialized)
+            {
+                await InitializeBrowserAsync();
+            }
 
             if (_browser?.WebView == null) return;
 
@@ -15237,7 +15271,7 @@ namespace ConditioningControlPanel
                 if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level70Unlocked);
 
                 // Lab Tab: Requires Patreon T2 / whitelist
-                var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2;
+                var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2 || (App.Settings?.Current?.PatreonTier ?? 0) >= 2;
                 if (LabSmokescreen != null) LabSmokescreen.Visibility = labUnlocked ? Visibility.Collapsed : Visibility.Visible;
 
                 // Bambi Takeover: Requires Patreon (any tier)
@@ -17645,8 +17679,14 @@ namespace ConditioningControlPanel
             ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
         }
 
-        // Thumbnail cache for pack files (keyed by packId + obfuscatedName)
+        // Thumbnail cache for pack files (keyed by packId + obfuscatedName) with LRU eviction
+        private const int MaxThumbnailCacheEntries = 50;
+        private const long MaxThumbnailCacheBytes = 50 * 1024 * 1024; // 50 MB
         private static readonly Dictionary<string, ImageSource> _packThumbnailCache = new();
+        private static readonly Dictionary<string, long> _packThumbnailLastAccess = new();
+        private static readonly Dictionary<string, long> _packThumbnailSizes = new();
+        private static long _packThumbnailCacheBytes;
+        private static long _packThumbnailAccessCounter;
         private static readonly SemaphoreSlim _thumbnailSemaphore = new(4); // Limit concurrent loads
 
         private async Task LoadPackThumbnailAsync(AssetFileItem item, string packId, Services.PackFileEntry file)
@@ -17658,6 +17698,7 @@ namespace ConditioningControlPanel
                 var cacheKey = $"{packId}:{file.ObfuscatedName}";
                 if (_packThumbnailCache.TryGetValue(cacheKey, out var cached))
                 {
+                    _packThumbnailLastAccess[cacheKey] = Interlocked.Increment(ref _packThumbnailAccessCounter);
                     Dispatcher.Invoke(() => item.Thumbnail = cached);
                     return;
                 }
@@ -17669,6 +17710,7 @@ namespace ConditioningControlPanel
                     // Double-check cache after acquiring semaphore
                     if (_packThumbnailCache.TryGetValue(cacheKey, out cached))
                     {
+                        _packThumbnailLastAccess[cacheKey] = Interlocked.Increment(ref _packThumbnailAccessCounter);
                         Dispatcher.Invoke(() => item.Thumbnail = cached);
                         return;
                     }
@@ -17698,7 +17740,31 @@ namespace ConditioningControlPanel
 
                             if (thumbnail != null)
                             {
+                                // Estimate size: width * height * 4 bytes (BGRA)
+                                long estimatedBytes = 0;
+                                if (thumbnail is System.Windows.Media.Imaging.BitmapSource bmp)
+                                    estimatedBytes = (long)bmp.PixelWidth * bmp.PixelHeight * 4;
+
+                                // Evict LRU entries if cache is full
+                                while ((_packThumbnailCache.Count >= MaxThumbnailCacheEntries ||
+                                        _packThumbnailCacheBytes + estimatedBytes > MaxThumbnailCacheBytes) &&
+                                       _packThumbnailCache.Count > 0)
+                                {
+                                    var lruKey = _packThumbnailLastAccess.OrderBy(kv => kv.Value).First().Key;
+                                    _packThumbnailCache.Remove(lruKey);
+                                    _packThumbnailLastAccess.Remove(lruKey);
+                                    if (_packThumbnailSizes.TryGetValue(lruKey, out var evictedSize))
+                                    {
+                                        _packThumbnailCacheBytes -= evictedSize;
+                                        _packThumbnailSizes.Remove(lruKey);
+                                    }
+                                }
+
                                 _packThumbnailCache[cacheKey] = thumbnail;
+                                _packThumbnailLastAccess[cacheKey] = Interlocked.Increment(ref _packThumbnailAccessCounter);
+                                _packThumbnailSizes[cacheKey] = estimatedBytes;
+                                _packThumbnailCacheBytes += estimatedBytes;
+
                                 Dispatcher.Invoke(() => item.Thumbnail = thumbnail);
                             }
                         }
