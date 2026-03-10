@@ -1391,6 +1391,20 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Clear the decoded image cache to free memory (e.g. between sessions).
+        /// Cached BitmapSources on the LOH are released so GC can reclaim them.
+        /// </summary>
+        public void ClearImageCache()
+        {
+            lock (_imageDecodeCache)
+            {
+                _imageDecodeCache.Clear();
+                _imageCacheBytes = 0;
+            }
+            App.Logger?.Debug("FlashService: Image decode cache cleared");
+        }
+
         #endregion
 
         #region Audio

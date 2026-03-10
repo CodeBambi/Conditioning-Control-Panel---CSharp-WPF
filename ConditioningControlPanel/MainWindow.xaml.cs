@@ -13606,6 +13606,13 @@ namespace ConditioningControlPanel
             // Fire event for avatar reaction
             EngineStopped?.Invoke(this, EventArgs.Empty);
 
+            // Release cached images and compact the Large Object Heap.
+            // Flash/overlay BitmapSources are large allocations (>85 KB) that fragment
+            // the LOH during sessions. Compacting here returns memory to the OS.
+            App.Flash.ClearImageCache();
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Aggressive, blocking: false);
+
             App.Logger?.Information("Engine stopped");
         }
 
