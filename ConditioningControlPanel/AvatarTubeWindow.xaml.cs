@@ -1620,7 +1620,12 @@ namespace ConditioningControlPanel
             // Double-click detection — open chat input if AI available, otherwise activity comment
             if ((now - _lastClickTime).TotalMilliseconds < 300)
             {
-                if (App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true)
+                if (_isMuted)
+                {
+                    // Show brief muted indicator so user knows she's not broken
+                    ShowMutedIndicator();
+                }
+                else if (App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true)
                 {
                     // Open the chat input panel (same as "Talk to" menu item)
                     ShowInputPanel();
@@ -2132,6 +2137,38 @@ namespace ConditioningControlPanel
 
             App.Logger?.Debug("Companion says ({Source}, {Chars} chars, {Duration:F1}s): {Text}",
                 source, text.Length, displayDuration, text);
+        }
+
+        private DispatcherTimer? _mutedIndicatorTimer;
+
+        /// <summary>
+        /// Shows a brief "MUTED" indicator in the speech bubble when the user
+        /// double-clicks the avatar while muted, so they know she's not broken.
+        /// </summary>
+        private void ShowMutedIndicator()
+        {
+            // Don't spam the indicator
+            if (SpeechBubble.Visibility == Visibility.Visible)
+                return;
+
+            TxtSpeech.Inlines.Clear();
+            TxtSpeech.Inlines.Add(new System.Windows.Documents.Run("MUTED \U0001F509")
+            {
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(180, 180, 200))
+            });
+            TxtSpeech.FontSize = 20;
+
+            SpeechBubble.Visibility = Visibility.Visible;
+
+            _mutedIndicatorTimer?.Stop();
+            _mutedIndicatorTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _mutedIndicatorTimer.Tick += (s, e) =>
+            {
+                _mutedIndicatorTimer.Stop();
+                SpeechBubble.Visibility = Visibility.Collapsed;
+            };
+            _mutedIndicatorTimer.Start();
         }
 
         /// <summary>
