@@ -2062,9 +2062,10 @@
                                 <Button x:Name="HelpBtnFlash" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="FlashImages"/>
                             </Grid>
                             
-                            <!-- Enable / Clickable / Hydra in one row -->
+                            <!-- Enable / Clickable / Hydra / Linked in one row -->
                             <Grid Margin="0,2">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -2081,14 +2082,27 @@
                                               Checked="ChkClickable_Changed" Unchecked="ChkClickable_Changed"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="Click" Margin="5,0,0,0" FontSize="11"/>
                                 </StackPanel>
-                                <StackPanel Grid.Column="2" Orientation="Horizontal"
+                            </Grid>
+                            <Grid Margin="0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,6,0"
                                             ToolTip="Hydra Mode: Clicking an image spawns&#x0a;two more images instead of dismissing it.&#x0a;Creates an escalating challenge!">
                                     <CheckBox x:Name="ChkCorruption" Style="{StaticResource ToggleStyle}"
                                               Checked="ChkCorruption_Changed" Unchecked="ChkCorruption_Changed"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="🐙Hydra" Margin="5,0,0,0" FontSize="11"/>
                                 </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                            ToolTip="Linked: Hydra spawns share the parent flash timer&#x0a;and disappear when it ends.&#x0a;Unlinked: Each hydra spawn gets its own&#x0a;fresh full-duration timer for more chaos!">
+                                    <CheckBox x:Name="ChkHydraLinked" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                              Checked="ChkHydraLinked_Changed" Unchecked="ChkHydraLinked_Changed"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="🔗Linked" Margin="5,0,0,0" FontSize="11"/>
+                                </StackPanel>
                             </Grid>
-                            
                             <!-- Per Hour / Images in two columns -->
                             <Grid Margin="0,2,0,0">
                                 <Grid.ColumnDefinitions>
@@ -2115,7 +2129,7 @@
                                 <TextBlock Style="{StaticResource SettingLabel}" Text="Max On Screen" FontSize="11"/>
                                 <TextBlock x:Name="TxtMaxOnScreen" Grid.Column="1" Style="{StaticResource ValueLabel}" Text="20"/>
                             </Grid>
-                            <Slider x:Name="SliderMaxOnScreen" Minimum="5" Maximum="20" Value="20" Margin="0,1" ValueChanged="SliderMaxOnScreen_Changed"/>
+                            <Slider x:Name="SliderMaxOnScreen" Minimum="2" Maximum="20" Value="20" Margin="0,1" ValueChanged="SliderMaxOnScreen_Changed"/>
                         </StackPanel>
                     </Border>
 

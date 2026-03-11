@@ -92,7 +92,7 @@ public class LeaderboardService : IDisposable
             // Use V3 leaderboard — "all-time" mode uses a permanent sorted set
             var season = mode == "all-time" ? "all-time" : DateTime.UtcNow.ToString("yyyy-MM");
             var unifiedId = App.UnifiedUserId;
-            var url = $"{ProxyBaseUrl}/v3/leaderboard?season={season}&limit=10000";
+            var url = $"{ProxyBaseUrl}/v3/leaderboard?season={season}&limit=200";
             if (!string.IsNullOrEmpty(unifiedId))
                 url += $"&unified_id={Uri.EscapeDataString(unifiedId)}";
             var response = await _httpClient.GetAsync(url);

@@ -362,6 +362,19 @@ namespace ConditioningControlPanel.Models
             set { _corruptionMode = value; OnPropertyChanged(); }
         }
 
+        private bool _hydraLinkedTiming = true;
+        /// <summary>
+        /// Controls hydra spawn timing~ 🐙✨
+        /// true  = "Linked" — hydra children expire when the original flash event expires.
+        /// false = "Independent" — each hydra spawn gets its own full-duration lifetime.
+        /// CopilotNotes: Default true preserves legacy behavior where all windows died together.
+        /// </summary>
+        public bool HydraLinkedTiming
+        {
+            get => _hydraLinkedTiming;
+            set { _hydraLinkedTiming = value; OnPropertyChanged(); }
+        }
+
         private int _hydraLimit = 20; // Max images on screen (hard cap: 20)
         public int HydraLimit
         {

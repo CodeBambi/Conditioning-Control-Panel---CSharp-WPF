@@ -48,8 +48,6 @@ namespace ConditioningControlPanel.Services
         private bool _isRunning;
         private bool _isBusy;
         private bool _oneShotActive; // For TriggerFlashOnce when service not running
-        private DateTime _virtualEndTime = DateTime.MinValue;
-        private bool _cleanupInProgress;
         private bool _noImagesWarningShown;
         
         // Audio - only ONE sound per flash event
@@ -566,7 +564,12 @@ namespace ConditioningControlPanel.Services
 
         #region Display
 
-        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication)
+        /// <summary>
+        /// Shows flash images on screen with per-window lifetimes~ 🌸
+        /// </summary>
+        /// <param name="overrideLifetimeMs">If provided, overrides the calculated lifetime (used for hydra linked timing)~ 🔗</param>
+        /// <param name="hydraGeneration">How many hydra hops deep these spawns are (0 = original flash)~ 🐙</param>
+        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication, int? overrideLifetimeMs = null, int hydraGeneration = 0)
         {
             if (!_isRunning && !_oneShotActive)
             {
@@ -609,27 +612,43 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Set virtual end time for fade control (only on initial flash, not hydra)
-            if (!isMultiplication)
+            // Set per-window lifetime: each window gets its own CancellationTokenSource~ 🌸
+            // This lets newer images live longer and users can keep clicking for hydra spawns!
+            var lifetimeMs = (int)(duration * 1000) + 1000;
+            
+            // Allow hydra spawns to override the lifetime (linked vs independent timing)~ 🔗
+            if (overrideLifetimeMs.HasValue)
             {
-                _virtualEndTime = DateTime.Now.AddSeconds(duration);
-                
-                // Schedule cleanup after sound ends
-                var cleanupDelay = (int)(duration * 1000) + 1000;
-                Task.Delay(cleanupDelay).ContinueWith(_ =>
+                lifetimeMs = overrideLifetimeMs.Value;
+            }
+            
+            // For one-shot mode, schedule cleanup of one-shot state after all windows should be done fading
+            if (_oneShotActive && !isMultiplication)
+            {
+                var oneShotCleanupDelay = lifetimeMs + 2000; // extra 2s for fade-out
+                Task.Delay(oneShotCleanupDelay).ContinueWith(_ =>
                 {
                     try
                     {
+                        if (!_oneShotActive || _isRunning) return;
                         System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
                         {
-                            ForceFlashCleanup();
+                            // Only stop if no active windows remain
+                            bool hasWindows;
+                            lock (_lockObj) { hasWindows = _activeWindows.Count > 0; }
+                            if (!hasWindows && _oneShotActive && !_isRunning)
+                            {
+                                _oneShotActive = false;
+                                _heartbeatTimer?.Stop();
+                                App.Logger?.Debug("FlashService: One-shot flash completed (all windows faded) uwu~ 🌙");
+                            }
                         });
                     }
                     catch { }
                 });
             }
 
-            // Spawn windows
+            // Spawn windows — each gets its own lifetime CTS~ ✨
             for (int i = 0; i < images.Count; i++)
             {
                 var imageData = images[i];
@@ -637,11 +656,13 @@ namespace ConditioningControlPanel.Services
                 
                 if (delayMs == 0)
                 {
-                    SpawnFlashWindow(imageData, settings);
+                    SpawnFlashWindow(imageData, settings, lifetimeMs, hydraGeneration);
                 }
                 else
                 {
                     var capturedData = imageData;
+                    var capturedLifetime = lifetimeMs;
+                    var capturedGeneration = hydraGeneration;
                     Task.Delay(delayMs).ContinueWith(_ =>
                     {
                         try
@@ -649,7 +670,7 @@ namespace ConditioningControlPanel.Services
                             System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
                             {
                                 if (_isRunning || _oneShotActive)
-                                    SpawnFlashWindow(capturedData, settings);
+                                    SpawnFlashWindow(capturedData, settings, capturedLifetime, capturedGeneration);
                             });
                         }
                         catch { }
@@ -665,7 +686,12 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void SpawnFlashWindow(LoadedImageData imageData, AppSettings settings)
+        /// <summary>
+        /// Spawns a single flash window with its own independent lifetime~ 🌟
+        /// CopilotNotes: Each window gets a CTS that fires after lifetimeMs, triggering independent fade-out.
+        /// When hydraGeneration > 0 and independent timing is active, XP is reduced by 25% per generation (floor 10%).
+        /// </summary>
+        private void SpawnFlashWindow(LoadedImageData imageData, AppSettings settings, int lifetimeMs, int hydraGeneration = 0)
         {
             if (!_isRunning && !_oneShotActive) return;
 
@@ -675,83 +701,151 @@ namespace ConditioningControlPanel.Services
                 if (_activeWindows.Count >= 30) return;
             }
 
-            var geom = imageData.Geometry;
-            
-            // Avoid overlap with existing windows
-            var finalX = geom.X;
-            var finalY = geom.Y;
-            var monitor = imageData.Monitor;
-            
-            for (int attempt = 0; attempt < 10; attempt++)
+            // Create per-window CTS with automatic cancellation after the lifetime expires~ ✨
+            var windowCts = new CancellationTokenSource();
+            windowCts.CancelAfter(lifetimeMs);
+
+            FlashWindow? window = null;
+            try
             {
-                if (!IsOverlapping(finalX, finalY, geom.Width, geom.Height))
-                    break;
+                var geom = imageData.Geometry;
                 
-                finalX = monitor.X + _random.Next(0, Math.Max(1, monitor.Width - geom.Width));
-                finalY = monitor.Y + _random.Next(0, Math.Max(1, monitor.Height - geom.Height));
+                // Avoid overlap with existing windows
+                var finalX = geom.X;
+                var finalY = geom.Y;
+                var monitor = imageData.Monitor;
+                
+                for (int attempt = 0; attempt < 10; attempt++)
+                {
+                    if (!IsOverlapping(finalX, finalY, geom.Width, geom.Height))
+                        break;
+                    
+                    finalX = monitor.X + _random.Next(0, Math.Max(1, monitor.Width - geom.Width));
+                    finalY = monitor.Y + _random.Next(0, Math.Max(1, monitor.Height - geom.Height));
+                }
+
+                window = new FlashWindow
+                {
+                    Left = finalX,
+                    Top = finalY,
+                    Width = geom.Width,
+                    Height = geom.Height,
+                    Frames = imageData.Frames,
+                    FrameDelay = imageData.FrameDelay,
+                    StartTime = DateTime.Now,
+                    IsClickable = settings.FlashClickable,
+                    AllowsTransparency = true,
+                    WindowStyle = WindowStyle.None,
+                    Topmost = true,
+                    ShowInTaskbar = false,
+                    ShowActivated = false,
+                    Background = System.Windows.Media.Brushes.Black,
+                    ResizeMode = ResizeMode.NoResize,
+                    LifetimeCts = windowCts,
+                    ExpiresAt = DateTime.Now.AddMilliseconds(lifetimeMs),
+                    OriginalLifetimeMs = lifetimeMs,
+                    HydraGeneration = hydraGeneration
+                };
+
+                // Register cancellation callback — when the token fires, mark this window for fade-out~ 🌙
+                windowCts.Token.Register(() =>
+                {
+                    try
+                    {
+                        System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
+                        {
+                            window.IsFadingOut = true;
+                        });
+                    }
+                    catch { }
+                });
+
+                // Safety net: if the window is closed externally (e.g., OS shutdown, Alt+F4)
+                // without going through SafeCloseFlashWindow, dispose the CTS to prevent leaks~ 🧹
+                window.Closed += (s, e) =>
+                {
+                    try { window.LifetimeCts?.Cancel(); } catch { }
+                    try { window.LifetimeCts?.Dispose(); } catch { }
+                    window.LifetimeCts = null;
+                };
+
+                // Create image control
+                var image = new Image
+                {
+                    Stretch = Stretch.Uniform,
+                    Source = imageData.Frames[0]
+                };
+
+                window.ImageControl = image;
+                window.Content = image;
+                window.Opacity = 0;
+
+                // Click handler
+                if (settings.FlashClickable)
+                {
+                    window.Cursor = System.Windows.Input.Cursors.Hand;
+                    window.MouseLeftButtonDown += (s, e) => OnFlashClicked(window, settings);
+                }
+                else
+                {
+                    window.Cursor = System.Windows.Input.Cursors.No;
+                    MakeClickThrough(window);
+                }
+
+                // Hide from Alt+Tab for ALL flash windows
+                HideFromAltTab(window);
+
+                window.Show();
+                _ = App.Haptics?.FlashDecayVibeAsync();
+                
+                // Force topmost even over fullscreen apps
+                ForceTopmost(window);
+                
+                lock (_lockObj)
+                {
+                    _activeWindows.Add(window);
+                }
             }
-
-            var window = new FlashWindow
+            catch (Exception ex)
             {
-                Left = finalX,
-                Top = finalY,
-                Width = geom.Width,
-                Height = geom.Height,
-                Frames = imageData.Frames,
-                FrameDelay = imageData.FrameDelay,
-                StartTime = DateTime.Now,
-                IsClickable = settings.FlashClickable,
-                AllowsTransparency = true,
-                WindowStyle = WindowStyle.None,
-                Topmost = true,
-                ShowInTaskbar = false,
-                ShowActivated = false,
-                Background = System.Windows.Media.Brushes.Black,
-                ResizeMode = ResizeMode.NoResize
-            };
-
-            // Create image control
-            var image = new Image
-            {
-                Stretch = Stretch.Uniform,
-                Source = imageData.Frames[0]
-            };
-
-            window.ImageControl = image;
-            window.Content = image;
-            window.Opacity = 0;
-
-            // Click handler
-            if (settings.FlashClickable)
-            {
-                window.Cursor = System.Windows.Input.Cursors.Hand;
-                window.MouseLeftButtonDown += (s, e) => OnFlashClicked(window, settings);
-            }
-            else
-            {
-                window.Cursor = System.Windows.Input.Cursors.No;
-                MakeClickThrough(window);
-            }
-
-            // Hide from Alt+Tab for ALL flash windows
-            HideFromAltTab(window);
-
-            window.Show();
-            _ = App.Haptics?.FlashDecayVibeAsync();
-            
-            // Force topmost even over fullscreen apps
-            ForceTopmost(window);
-            
-            lock (_lockObj)
-            {
-                _activeWindows.Add(window);
+                // If anything fails before the window is tracked, dispose the CTS so it doesn't leak~ 🧹
+                App.Logger?.Debug("SpawnFlashWindow failed: {Error}", ex.Message);
+                try { windowCts.Cancel(); } catch { }
+                try { windowCts.Dispose(); } catch { }
+                if (window != null)
+                {
+                    try { window.LifetimeCts = null; window.Close(); } catch { }
+                }
+                return;
             }
             
             // Award XP for viewing
             var xpAmount = _soundPlayingForCurrentFlash ? 8 : 4;
 
+            // Hydra XP diminishing returns — independent timing only~ 🐙💫
+            // Each generation deeper reduces XP by 25%, hard floor at 10%.
+            // Gen 0 = 100%, Gen 1 = 75%, Gen 2 = 50%, Gen 3 = 25%, Gen 4+ = 10%
+            // CopilotNotes: Only applies when HydraLinkedTiming is false (independent mode).
+            // Linked mode windows die together so there's no farming concern.
+            if (!settings.HydraLinkedTiming && hydraGeneration > 0)
+            {
+                const double decayPerGeneration = 0.25;
+                const double floor = 0.10;
+                var hydraXpMultiplier = Math.Max(floor, 1.0 - hydraGeneration * decayPerGeneration);
+                xpAmount = (int)Math.Max(1, Math.Round(xpAmount * hydraXpMultiplier));
+                App.Logger?.Debug("Hydra XP decay: gen {Gen}, multiplier {Mult:P0}, xp {XP}",
+                    hydraGeneration, hydraXpMultiplier, xpAmount);
+            }
+
             // Roll for lucky flash (5% chance for 5x XP if skill unlocked)
             var multiplier = App.SkillTree?.RollLuckyFlash() ?? 1;
+            if (hydraGeneration > 0)
+            { 
+               double reduction = Math.Log(hydraGeneration+1);
+               multiplier = 1 / (int) (1+reduction);
+            }
+            
+
             var isLucky = multiplier > 1;
 
             // Play lucky flash sound if triggered
@@ -763,11 +857,17 @@ namespace ConditioningControlPanel.Services
             App.Progression?.AddXP(xpAmount * multiplier, XPSource.Flash);
 
             // Track for achievement
-            App.Achievements?.TrackFlashImage();
+            if (settings.HydraLinkedTiming || hydraGeneration == 0)
+            {
+                App.Achievements?.TrackFlashImage();
+            }
         }
 
         private void OnFlashClicked(FlashWindow window, AppSettings settings)
         {
+            // Cancel only THIS window's lifetime — other windows keep living~ ✨
+            try { window.LifetimeCts?.Cancel(); } catch { }
+
             lock (_lockObj)
             {
                 _activeWindows.Remove(window);
@@ -778,7 +878,8 @@ namespace ConditioningControlPanel.Services
             _ = App.Haptics?.FlashClickVibeAsync();
 
             // Hydra mode: spawn 2 more when clicking (NO NEW AUDIO)
-            if (settings.CorruptionMode && !_cleanupInProgress)
+            // No global _cleanupInProgress check needed — each window has its own lifetime~ 🐍
+            if (settings.CorruptionMode)
             {
                 var maxHydra = Math.Min(settings.HydraLimit, 20);
                 int currentCount;
@@ -789,12 +890,20 @@ namespace ConditioningControlPanel.Services
 
                 if (currentCount + 1 < maxHydra)
                 {
-                    TriggerMultiplication(maxHydra, currentCount);
+                    // Calculate remaining lifetime from the clicked window for linked timing~ 🔗
+                    var remainingMs = Math.Max(1000, (int)(window.ExpiresAt - DateTime.Now).TotalMilliseconds);
+                    TriggerMultiplication(maxHydra, currentCount, window.OriginalLifetimeMs, remainingMs, window.HydraGeneration);
                 }
             }
         }
 
-        private async void TriggerMultiplication(int maxHydra, int currentCount)
+        /// <summary>
+        /// Spawns hydra children when a flash window is clicked~ 🐙
+        /// CopilotNotes: parentLifetimeMs is the full original duration; parentRemainingMs is what's left on the clicked window's timer.
+        /// When HydraLinkedTiming is true, children get parentRemainingMs; when false, they get a fresh full lifetime.
+        /// parentGeneration is the clicked window's generation — children will be parentGeneration + 1.
+        /// </summary>
+        private async void TriggerMultiplication(int maxHydra, int currentCount, int parentLifetimeMs, int parentRemainingMs, int parentGeneration)
         {
             if (!_isRunning && !_oneShotActive) return;
 
@@ -809,6 +918,13 @@ namespace ConditioningControlPanel.Services
 
             var monitors = GetMonitors(settings.DualMonitorEnabled);
             var scale = settings.ImageScale / 100.0;
+
+            // Decide hydra spawn lifetime based on the Linked timing setting~ 🔗✨
+            var hydraLifetimeMs = settings.HydraLinkedTiming
+                ? parentRemainingMs   // Linked: inherits whatever time the parent had left
+                : parentLifetimeMs;   // Independent: gets a fresh full-duration lifetime
+
+            var childGeneration = parentGeneration + 1;
 
             var loadTasks = images.Select(imagePath => LoadImageAsync(imagePath)).ToArray();
             var results = await Task.WhenAll(loadTasks);
@@ -828,10 +944,12 @@ namespace ConditioningControlPanel.Services
 
             if (loadedImages.Count > 0)
             {
+                var capturedLifetime = hydraLifetimeMs;
+                var capturedGeneration = childGeneration;
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     // Pass null for sound - NO AUDIO FOR HYDRA
-                    ShowImages(loadedImages, null, true);
+                    ShowImages(loadedImages, null, true, capturedLifetime, capturedGeneration);
                 });
             }
         }
@@ -846,8 +964,6 @@ namespace ConditioningControlPanel.Services
 
             var settings = App.Settings.Current;
             var maxAlpha = Math.Min(1.0, Math.Max(0.0, settings.FlashOpacity / 100.0));
-            var showImages = DateTime.Now < _virtualEndTime;
-            var targetAlpha = showImages ? maxAlpha : 0.0;
 
             FlashWindow[] windowsCopy;
             lock (_lockObj)
@@ -871,7 +987,11 @@ namespace ConditioningControlPanel.Services
                         continue;
                     }
 
-                    // Fade in/out
+                    // Per-window fade control — each window manages its own lifetime~ 🌸
+                    var showThisWindow = DateTime.Now < window.ExpiresAt && !window.IsFadingOut;
+                    var targetAlpha = showThisWindow ? maxAlpha : 0.0;
+
+                    // Fade in/out per-window~ uwu
                     var currentAlpha = window.Opacity;
                     if (targetAlpha > currentAlpha)
                     {
@@ -922,33 +1042,6 @@ namespace ConditioningControlPanel.Services
 
             if (toRemove.Count > 0)
                 App.Overlay?.NotifyTopWindowClosed();
-        }
-
-        private void ForceFlashCleanup()
-        {
-            if (!_isRunning && !_oneShotActive) return;
-
-            _virtualEndTime = DateTime.Now;
-            _cleanupInProgress = true;
-            _soundPlayingForCurrentFlash = false; // Reset for next flash
-
-            // Re-enable after windows fade out
-            Task.Delay(2000).ContinueWith(_ =>
-            {
-                _cleanupInProgress = false;
-
-                // If this was a one-shot flash, stop heartbeat and reset flag
-                if (_oneShotActive && !_isRunning)
-                {
-                    if (System.Windows.Application.Current?.Dispatcher == null) return;
-                    System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
-                    {
-                        _oneShotActive = false;
-                        _heartbeatTimer?.Stop();
-                        App.Logger?.Debug("FlashService: One-shot flash completed");
-                    });
-                }
-            });
         }
 
         #endregion
@@ -1460,6 +1553,11 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // Cancel and dispose per-window lifetime token~ 🧹
+                try { window.LifetimeCts?.Cancel(); } catch { }
+                try { window.LifetimeCts?.Dispose(); } catch { }
+                window.LifetimeCts = null;
+
                 // Release bitmap references before closing to prevent memory accumulation
                 // Without this, closed windows hold BitmapSource frames until GC collects them,
                 // causing multi-GB memory growth over long sessions
@@ -1570,6 +1668,10 @@ namespace ConditioningControlPanel.Services
 
     #region Supporting Classes
 
+    /// <summary>
+    /// A flash image window with its own independent lifetime managed by a CancellationToken~ ✨
+    /// CopilotNotes: Each window owns its CTS so it can fade out independently without nuking siblings.
+    /// </summary>
     internal class FlashWindow : Window
     {
         public List<BitmapSource> Frames { get; set; } = new();
@@ -1578,6 +1680,35 @@ namespace ConditioningControlPanel.Services
         public int CurrentFrameIndex { get; set; }
         public Image? ImageControl { get; set; }
         public bool IsClickable { get; set; }
+
+        /// <summary>
+        /// Per-window cancellation source — cancel this to begin fade-out for THIS window only~ 🌙
+        /// </summary>
+        public CancellationTokenSource? LifetimeCts { get; set; }
+
+        /// <summary>
+        /// When this window should start fading out. Set by the cancellation callback or on creation.
+        /// </summary>
+        public DateTime ExpiresAt { get; set; } = DateTime.MaxValue;
+
+        /// <summary>
+        /// Whether this window is actively fading out (set when token is cancelled)~ uwu
+        /// </summary>
+        public bool IsFadingOut { get; set; }
+
+        /// <summary>
+        /// The full original lifetime this window was spawned with (ms), for hydra spawn calculations~ 🐙
+        /// CopilotNotes: Used when HydraLinkedTiming is false (independent mode) to give children a fresh full lifetime.
+        /// </summary>
+        public int OriginalLifetimeMs { get; set; }
+
+        /// <summary>
+        /// How many hydra hops deep this window is~ 🐙✨
+        /// 0 = original flash, 1 = first hydra child, 2 = grandchild, etc.
+        /// CopilotNotes: Used for XP diminishing returns in independent timing mode.
+        /// Gen 0 = 100% XP, Gen 1 = 75%, Gen 2 = 50%, Gen 3 = 25%, Gen 4+ = 10% floor.
+        /// </summary>
+        public int HydraGeneration { get; set; }
     }
 
     internal class LoadedImageData

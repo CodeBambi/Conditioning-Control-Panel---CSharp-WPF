@@ -283,14 +283,7 @@ namespace ConditioningControlPanel.Services
                     }
                 };
 
-                // Inject CSS to hide common ad elements after page loads
-                _webView.CoreWebView2.NavigationCompleted += async (s, e) =>
-                {
-                    if (e.IsSuccess)
-                    {
-                        await InjectAdBlockingCssAsync();
-                    }
-                };
+                // Ad-blocking CSS injection is handled by OnNavigationCompleted
 
                 App.Logger?.Information("Ad blocking enabled - blocking {Count} known ad domains", _blockedDomains.Count);
             }
@@ -1028,8 +1021,13 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+        private async void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
         {
+            if (e.IsSuccess)
+            {
+                await InjectAdBlockingCssAsync();
+            }
+
             var url = _webView?.CoreWebView2?.Source ?? "";
             NavigationCompleted?.Invoke(this, url);
         }

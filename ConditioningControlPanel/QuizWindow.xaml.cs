@@ -1014,6 +1014,16 @@ namespace ConditioningControlPanel
             StopDrone();
             _quizService?.Dispose();
             _quizService = null;
+
+            // Drain and dispose pooled audio devices to free memory
+            lock (_audioPoolLock)
+            {
+                while (_audioPool.Count > 0)
+                {
+                    try { _audioPool.Dequeue().Dispose(); } catch { }
+                }
+            }
+
             base.OnClosed(e);
         }
     }

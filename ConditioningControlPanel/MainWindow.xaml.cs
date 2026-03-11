@@ -11526,7 +11526,8 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex)
             {
-                var errorMsg = $"Browser Error:\n\nType: {ex.GetType().Name}\n\nMessage: {ex.Message}\n\nStack: {ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0))}";
+                var stack = ex.StackTrace;
+                var errorMsg = $"Browser Error:\n\nType: {ex.GetType().Name}\n\nMessage: {ex.Message}\n\nStack: {(stack != null ? stack.Substring(0, Math.Min(500, stack.Length)) : "(none)")}";
                 BrowserLoadingText.Text = $"❌ {ex.GetType().Name}\n{ex.Message}";
                 TxtBrowserStatus.Text = "● Error";
                 TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
@@ -11550,6 +11551,8 @@ namespace ConditioningControlPanel
 
         private async void BrowserSiteToggle_Changed(object sender, RoutedEventArgs e)
         {
+            if (_isLoading) return; // Don't auto-load browser during XAML init
+
             // Lazy-load browser on first toggle interaction
             if (!_browserInitialized)
             {
@@ -13611,7 +13614,7 @@ namespace ConditioningControlPanel
             // the LOH during sessions. Compacting here returns memory to the OS.
             App.Flash.ClearImageCache();
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: false);
+            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true);
 
             App.Logger?.Information("Engine stopped");
         }
