@@ -411,8 +411,12 @@ namespace ConditioningControlPanel.Services
             _loopMode = false;
             _loopFilePath = null;
             
-            _crossfadeTimer?.Stop();
-            _crossfadeTimer = null;
+            if (_crossfadeTimer != null)
+            {
+                _crossfadeTimer.Tick -= CrossfadeTimer_Tick;
+                _crossfadeTimer.Stop();
+                _crossfadeTimer = null;
+            }
             
             DisposePlayerA();
             DisposePlayerB();
@@ -579,6 +583,7 @@ namespace ConditioningControlPanel.Services
             Stop();
             StopCurrentAudio();
             StopLoop();
+            _timer.Tick -= Timer_Tick;
         }
     }
 }

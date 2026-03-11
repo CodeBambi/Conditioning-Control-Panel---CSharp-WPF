@@ -462,6 +462,15 @@ public class BubbleService : IDisposable
     public void Dispose()
     {
         Stop();
+
+        // Drain and dispose pooled audio devices (static pool persists across service restarts)
+        lock (_audioPoolLock)
+        {
+            while (_audioDevicePool.Count > 0)
+            {
+                try { _audioDevicePool.Dequeue().Dispose(); } catch { }
+            }
+        }
     }
 }
 

@@ -13925,6 +13925,7 @@ namespace ConditioningControlPanel
             s.FlashEnabled = ChkFlashEnabled.IsChecked ?? true;
             s.FlashClickable = ChkClickable.IsChecked ?? true;
             s.CorruptionMode = ChkCorruption.IsChecked ?? false;
+            s.HydraLinkedTiming = ChkHydraLinked.IsChecked ?? true;
             s.FlashFrequency = (int)SliderPerMin.Value;
             s.SimultaneousImages = (int)SliderImages.Value;
             s.HydraLimit = (int)SliderMaxOnScreen.Value;
@@ -14140,6 +14141,7 @@ namespace ConditioningControlPanel
             ChkFlashEnabled.IsChecked = s.FlashEnabled;
             ChkClickable.IsChecked = s.FlashClickable;
             ChkCorruption.IsChecked = s.CorruptionMode;
+            ChkHydraLinked.IsChecked = s.HydraLinkedTiming;
             SliderPerMin.Value = s.FlashFrequency;
             SliderImages.Value = s.SimultaneousImages;
             SliderMaxOnScreen.Value = s.HydraLimit;
@@ -14481,6 +14483,7 @@ namespace ConditioningControlPanel
             s.FlashEnabled = ChkFlashEnabled.IsChecked ?? true;
             s.FlashClickable = ChkClickable.IsChecked ?? true;
             s.CorruptionMode = ChkCorruption.IsChecked ?? false;
+            s.HydraLinkedTiming = ChkHydraLinked.IsChecked ?? true;
             s.FlashFrequency = (int)SliderPerMin.Value;
             s.SimultaneousImages = (int)SliderImages.Value;
             s.HydraLimit = (int)SliderMaxOnScreen.Value;
@@ -15692,6 +15695,21 @@ namespace ConditioningControlPanel
             var isEnabled = ChkCorruption.IsChecked ?? false;
             App.Settings.Current.CorruptionMode = isEnabled;
             App.Logger?.Information("Hydra mode toggled: {Enabled}", isEnabled);
+            App.Settings.Save();
+        }
+
+        /// <summary>
+        /// Toggles linked vs independent timing for hydra spawns~ 🔗✨
+        /// Linked = hydra children share the parent's remaining timer.
+        /// Independent = each hydra spawn gets a fresh full-duration lifetime.
+        /// </summary>
+        private void ChkHydraLinked_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isLinked = ChkHydraLinked.IsChecked ?? true;
+            App.Settings.Current.HydraLinkedTiming = isLinked;
+            App.Logger?.Information("Hydra linked timing toggled: {Linked}", isLinked);
             App.Settings.Save();
         }
 
@@ -19665,9 +19683,56 @@ namespace ConditioningControlPanel
 
                 // Actually closing - clean up
                 SaveSettings();
+
+                // Stop ALL timers to prevent post-close dispatcher crashes
                 _schedulerTimer?.Stop();
                 _rampTimer?.Stop();
                 _packPreviewTimer?.Stop();
+                _remoteNotificationTimer?.Stop();
+                _remoteSessionInfoTimer?.Stop();
+                _bannerRotationTimer?.Stop();
+                _marqueeRefreshTimer?.Stop();
+                _statPillUpdateTimer?.Stop();
+                _conditioningTimeTimer?.Stop();
+                _conditioningTimeSyncTimer?.Stop();
+
+                // Unsubscribe service events to allow GC of this window
+                if (App.Progression != null)
+                {
+                    App.Progression.XPChanged -= OnXPChanged;
+                    App.Progression.LevelUp -= OnLevelUp;
+                }
+                if (App.Companion != null)
+                {
+                    App.Companion.XPAwarded -= OnCompanionXPAwarded;
+                    App.Companion.CompanionLevelUp -= OnCompanionLevelUp;
+                    App.Companion.XPDrained -= OnCompanionXPDrained;
+                    App.Companion.CompanionSwitched -= OnCompanionSwitched;
+                }
+                if (App.ProfileSync != null)
+                {
+                    App.ProfileSync.ProfileLoaded -= OnProfileLoaded;
+                }
+                if (App.Achievements != null)
+                {
+                    App.Achievements.AchievementUnlocked -= OnAchievementUnlockedInMainWindow;
+                }
+                if (App.Quests != null)
+                {
+                    App.Quests.QuestCompleted -= OnQuestCompleted;
+                    App.Quests.QuestProgressChanged -= OnQuestProgressChanged;
+                }
+                if (App.SkillTree != null)
+                {
+                    App.SkillTree.PinkRushStarted -= OnPinkRushStarted;
+                    App.SkillTree.PinkRushEnded -= OnPinkRushEnded;
+                }
+                if (App.Roadmap != null)
+                {
+                    App.Roadmap.StepCompleted -= OnRoadmapStepCompleted;
+                    App.Roadmap.TrackUnlocked -= OnRoadmapTrackUnlocked;
+                }
+
                 _keyboardHook?.Dispose();
                 _trayIcon?.Dispose();
                 _browser?.Dispose();
