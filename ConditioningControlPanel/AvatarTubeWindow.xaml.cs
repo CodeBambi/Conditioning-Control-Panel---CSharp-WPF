@@ -1486,6 +1486,9 @@ namespace ConditioningControlPanel
                 // Stop voice line audio
                 StopVoiceLineAudio();
 
+                // Release GIF animation frames to prevent memory leak
+                AnimationBehavior.SetSourceUri(ImgAvatarAnimated, null);
+
                 // Remove window message hook
                 _hwndSource?.RemoveHook(WndProc);
                 _hwndSource = null;

@@ -1021,9 +1021,13 @@ public class OverlayService : IDisposable
         _gifLoopTimer?.Stop();
         _gifLoopTimer = null;
 
-        // Clear GIF frames and images
-        _spiralGifFrames.Clear();
+        // Release Image.Source references so BitmapSource frames can be GC'd
+        foreach (var img in _spiralGifImages)
+        {
+            img.Source = null;
+        }
         _spiralGifImages.Clear();
+        _spiralGifFrames.Clear();
         _currentGifFrameIndex = 0;
 
         // Stop and clear MediaElements
@@ -1891,7 +1895,7 @@ public class OverlayService : IDisposable
             }
             _pinkFilterWindows.Clear();
 
-            // Close all spiral windows
+            // Close all spiral windows and release frame data
             foreach (var window in _spiralWindows.ToList())
             {
                 try { window.Close(); }
@@ -1901,6 +1905,12 @@ public class OverlayService : IDisposable
                 }
             }
             _spiralWindows.Clear();
+            foreach (var img in _spiralGifImages)
+            {
+                img.Source = null;
+            }
+            _spiralGifImages.Clear();
+            _spiralGifFrames.Clear();
 
             App.Logger?.Debug("OverlayService disposed - all windows closed");
         }
