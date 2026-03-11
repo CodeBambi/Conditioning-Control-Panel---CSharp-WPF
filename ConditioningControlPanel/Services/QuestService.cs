@@ -89,6 +89,7 @@ public class QuestService : IDisposable
                 _isDirty = false;
                 var json = JsonSerializer.Serialize(Progress, new JsonSerializerOptions { WriteIndented = true });
                 var path = _progressPath;
+                var tmpPath = path + ".tmp";
                 _ = Task.Run(() =>
                 {
                     try
@@ -96,7 +97,9 @@ public class QuestService : IDisposable
                         var dir = Path.GetDirectoryName(path);
                         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                             Directory.CreateDirectory(dir);
-                        File.WriteAllText(path, json);
+                        // Atomic write: write to .tmp first, then rename
+                        File.WriteAllText(tmpPath, json);
+                        File.Move(tmpPath, path, overwrite: true);
                     }
                     catch (Exception ex)
                     {
@@ -129,17 +132,41 @@ public class QuestService : IDisposable
 
     private QuestProgress LoadProgress()
     {
-        try
+        var tmpPath = _progressPath + ".tmp";
+
+        // Try loading from main file first
+        if (File.Exists(_progressPath))
         {
-            if (File.Exists(_progressPath))
+            try
             {
                 var json = File.ReadAllText(_progressPath);
                 return JsonSerializer.Deserialize<QuestProgress>(json) ?? new QuestProgress();
             }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Quest progress file corrupted, attempting recovery from .tmp");
+            }
         }
-        catch (Exception ex)
+
+        // Main file missing or corrupt — try recovering from .tmp
+        if (File.Exists(tmpPath))
         {
-            App.Logger?.Error(ex, "Failed to load quest progress");
+            try
+            {
+                var json = File.ReadAllText(tmpPath);
+                var progress = JsonSerializer.Deserialize<QuestProgress>(json);
+                if (progress != null)
+                {
+                    App.Logger?.Warning("Recovered quest progress from .tmp file");
+                    // Promote .tmp to main file so future loads succeed normally
+                    try { File.Move(tmpPath, _progressPath, overwrite: true); } catch { }
+                    return progress;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to recover quest progress from .tmp file");
+            }
         }
 
         return new QuestProgress();
@@ -156,7 +183,11 @@ public class QuestService : IDisposable
             }
 
             var json = JsonSerializer.Serialize(Progress, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_progressPath, json);
+
+            // Atomic write: write to .tmp first, then rename to prevent corruption on crash
+            var tmpPath = _progressPath + ".tmp";
+            File.WriteAllText(tmpPath, json);
+            File.Move(tmpPath, _progressPath, overwrite: true);
         }
         catch (Exception ex)
         {

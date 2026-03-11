@@ -1076,7 +1076,10 @@ namespace ConditioningControlPanel.Services
                         var resourceInfo = Application.GetResourceStream(gifUri);
                         if (resourceInfo?.Stream != null)
                         {
-                            img = System.Drawing.Image.FromStream(resourceInfo.Stream);
+                            using (resourceInfo.Stream)
+                            {
+                                img = System.Drawing.Image.FromStream(resourceInfo.Stream);
+                            }
                             App.Logger?.Information("Corner GIF not set or found, defaulting to spiral.gif resource");
                         }
                     }
@@ -1172,12 +1175,22 @@ namespace ConditioningControlPanel.Services
                 AnimationBehavior.SetSourceUri(imageElement, gifUri);
                 AnimationBehavior.SetRepeatBehavior(imageElement, System.Windows.Media.Animation.RepeatBehavior.Forever);
 
+                // Catch GIF rendering errors gracefully instead of letting them crash the app
+                AnimationBehavior.AddErrorHandler(imageElement, (s, e) =>
+                {
+                    App.Logger?.Warning("Corner GIF animation error ({Kind}): {Error}",
+                        e.Kind, e.Exception?.Message);
+                });
+
                 _cornerGifImage = imageElement;
                 _cornerGifWindow.Content = imageElement;
-                _cornerGifWindow.Show();
 
-                // Make click-through
-                MakeWindowClickThrough(_cornerGifWindow);
+                // Hook SourceInitialized BEFORE Show() to safely get the hwnd for click-through
+                _cornerGifWindow.SourceInitialized += (s, e) =>
+                {
+                    MakeWindowClickThrough(_cornerGifWindow);
+                };
+                _cornerGifWindow.Show();
 
                 App.Logger?.Information("Corner GIF shown at {Position}: {Path} (pos: {Left},{Top}, size: {Width}x{Height}px, opacity: {Opacity}%)",
                     settings.CornerGifPosition, gifUri.ToString(), left, top, (int)windowWidth, (int)windowHeight, settings.CornerGifOpacity);
@@ -1291,6 +1304,11 @@ namespace ConditioningControlPanel.Services
         private void MakeWindowClickThrough(Window window)
         {
             var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            if (hwnd == IntPtr.Zero)
+            {
+                App.Logger?.Warning("MakeWindowClickThrough: hwnd is zero, window not yet initialized");
+                return;
+            }
             var extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
             // Add TOOLWINDOW to hide from alt-tab, TRANSPARENT and LAYERED for click-through
             SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW);
