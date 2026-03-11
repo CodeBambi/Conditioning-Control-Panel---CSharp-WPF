@@ -2113,6 +2113,12 @@ Application State:
             Roadmap?.Dispose();
             SkillTree?.Dispose();
             QuestDefinitions?.Dispose();
+            Quests?.Dispose();
+            Companion?.Dispose();
+            CommunityPrompts?.Dispose();
+            ActivityTracker?.Dispose();
+            Haptics?.Dispose();
+            AudioSync?.Dispose();
             Audio?.Dispose();
 
             // Clear in-memory secrets before exit to reduce memory exposure

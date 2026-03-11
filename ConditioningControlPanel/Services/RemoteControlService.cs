@@ -73,7 +73,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private async Task<HttpResponseMessage> AuthPostAsync(string url, string jsonBody)
         {
-            var request = new HttpRequestMessage(HttpMethod.Post, url)
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
             {
                 Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
             };
@@ -101,7 +101,7 @@ namespace ConditioningControlPanel.Services
                 var pin = _pinRng.Next(0, 10000).ToString("D4");
 
                 var body = JsonConvert.SerializeObject(new { unified_id = unifiedId, tier, connect_pin = pin });
-                var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/start", body);
+                using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/start", body);
 
                 var json = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
@@ -149,7 +149,7 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     var body = JsonConvert.SerializeObject(new { unified_id = unifiedId });
-                    await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/stop", body);
+                    using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/stop", body);
                 }
                 catch (Exception ex)
                 {
@@ -200,7 +200,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 var body = JsonConvert.SerializeObject(new { unified_id = unifiedId });
-                var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/poll", body);
+                using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/poll", body);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -320,7 +320,7 @@ namespace ConditioningControlPanel.Services
                     session_info = sessionInfo
                 });
 
-                await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/status", body);
+                using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/status", body);
             }
             catch (Exception ex)
             {
