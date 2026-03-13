@@ -1,0 +1,128 @@
+<Window x:Class="ConditioningControlPanel.PopQuizWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Pop Quiz"
+        Width="500" Height="420"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        KeyDown="Window_KeyDown">
+
+    <Border CornerRadius="16" Margin="10">
+        <Border.Background>
+            <SolidColorBrush Color="#F0151530"/>
+        </Border.Background>
+        <Border.BorderBrush>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#60FF69B4" Offset="0"/>
+                <GradientStop Color="#609B59B6" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.BorderBrush>
+        <Border.BorderThickness>
+            <Thickness>1.5</Thickness>
+        </Border.BorderThickness>
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+        </Border.Effect>
+
+        <Grid Margin="24,20">
+            <!-- Question Panel -->
+            <StackPanel x:Name="QuestionPanel" VerticalAlignment="Center">
+                <!-- Question text -->
+                <TextBlock x:Name="TxtQuestion" FontSize="24" FontWeight="Bold"
+                           Foreground="White" TextWrapping="Wrap" TextAlignment="Center"
+                           Margin="0,0,0,24">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+
+                <!-- Answer buttons -->
+                <StackPanel x:Name="AnswersPanel">
+                    <Border x:Name="AnswerA" Cursor="Hand" CornerRadius="8" Margin="0,0,0,8" Padding="14,10"
+                            MouseLeftButtonDown="Answer_Click" Tag="0"
+                            MouseEnter="Answer_MouseEnter" MouseLeave="Answer_MouseLeave">
+                        <Border.Background>
+                            <SolidColorBrush Color="#15FFFFFF"/>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <SolidColorBrush Color="#20FFFFFF"/>
+                        </Border.BorderBrush>
+                        <Border.BorderThickness>
+                            <Thickness>1</Thickness>
+                        </Border.BorderThickness>
+                        <TextBlock x:Name="TxtAnswerA" FontSize="15" Foreground="#D0D0E0"
+                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                    </Border>
+
+                    <Border x:Name="AnswerB" Cursor="Hand" CornerRadius="8" Margin="0,0,0,8" Padding="14,10"
+                            MouseLeftButtonDown="Answer_Click" Tag="1"
+                            MouseEnter="Answer_MouseEnter" MouseLeave="Answer_MouseLeave">
+                        <Border.Background>
+                            <SolidColorBrush Color="#15FFFFFF"/>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <SolidColorBrush Color="#20FFFFFF"/>
+                        </Border.BorderBrush>
+                        <Border.BorderThickness>
+                            <Thickness>1</Thickness>
+                        </Border.BorderThickness>
+                        <TextBlock x:Name="TxtAnswerB" FontSize="15" Foreground="#D0D0E0"
+                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                    </Border>
+
+                    <Border x:Name="AnswerC" Cursor="Hand" CornerRadius="8" Margin="0,0,0,8" Padding="14,10"
+                            MouseLeftButtonDown="Answer_Click" Tag="2"
+                            MouseEnter="Answer_MouseEnter" MouseLeave="Answer_MouseLeave">
+                        <Border.Background>
+                            <SolidColorBrush Color="#15FFFFFF"/>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <SolidColorBrush Color="#20FFFFFF"/>
+                        </Border.BorderBrush>
+                        <Border.BorderThickness>
+                            <Thickness>1</Thickness>
+                        </Border.BorderThickness>
+                        <TextBlock x:Name="TxtAnswerC" FontSize="15" Foreground="#D0D0E0"
+                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                    </Border>
+
+                    <Border x:Name="AnswerD" Cursor="Hand" CornerRadius="8" Margin="0,0,0,8" Padding="14,10"
+                            MouseLeftButtonDown="Answer_Click" Tag="3"
+                            MouseEnter="Answer_MouseEnter" MouseLeave="Answer_MouseLeave">
+                        <Border.Background>
+                            <SolidColorBrush Color="#15FFFFFF"/>
+                        </Border.Background>
+                        <Border.BorderBrush>
+                            <SolidColorBrush Color="#20FFFFFF"/>
+                        </Border.BorderBrush>
+                        <Border.BorderThickness>
+                            <Thickness>1</Thickness>
+                        </Border.BorderThickness>
+                        <TextBlock x:Name="TxtAnswerD" FontSize="15" Foreground="#D0D0E0"
+                                   TextWrapping="Wrap" TextAlignment="Center"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- ESC hint -->
+                <TextBlock Text="ESC to skip" Foreground="#303050" FontSize="11"
+                           HorizontalAlignment="Center" Margin="0,8,0,0"/>
+            </StackPanel>
+
+            <!-- Affirmation Panel (shown after answering) -->
+            <StackPanel x:Name="AffirmationPanel" Visibility="Collapsed"
+                        VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock x:Name="TxtAffirmation" FontSize="22" FontWeight="SemiBold"
+                           Foreground="#FF69B4" TextWrapping="Wrap" TextAlignment="Center">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+                <TextBlock Text="+25 XP" Foreground="#9B59B6" FontSize="14" FontWeight="Bold"
+                           HorizontalAlignment="Center" Margin="0,10,0,0"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

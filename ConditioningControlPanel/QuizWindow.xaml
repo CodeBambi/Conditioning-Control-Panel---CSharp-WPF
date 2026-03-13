@@ -143,43 +143,10 @@
                 <TextBlock Text="Choose your category" Foreground="#B0B0C8" FontSize="22"
                            HorizontalAlignment="Center" Margin="0,0,0,20"/>
 
-                <!-- Sissy button -->
-                <Border x:Name="BtnCategorySissy" Cursor="Hand" CornerRadius="12" Margin="0,0,0,12"
-                        Padding="20,16" MouseLeftButtonDown="CategoryButton_Click" Tag="Sissy"
-                        MouseEnter="CategoryButton_MouseEnter" MouseLeave="CategoryButton_MouseLeave">
-                    <Border.Background>
-                        <SolidColorBrush Color="#15FFFFFF"/>
-                    </Border.Background>
-                    <Border.BorderBrush>
-                        <SolidColorBrush Color="#30FF69B4"/>
-                    </Border.BorderBrush>
-                    <Border.BorderThickness>
-                        <Thickness>1.5</Thickness>
-                    </Border.BorderThickness>
-                    <StackPanel>
-                        <TextBlock Text="Sissy" Foreground="#FF69B4" FontWeight="Bold" FontSize="26"/>
-                        <TextBlock Text="How deep into feminization are you really?" Foreground="#808090" FontSize="17" Margin="0,4,0,0"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Bambi button -->
-                <Border x:Name="BtnCategoryBambi" Cursor="Hand" CornerRadius="12" Margin="0,0,0,12"
-                        Padding="20,16" MouseLeftButtonDown="CategoryButton_Click" Tag="Bambi"
-                        MouseEnter="CategoryButton_MouseEnter" MouseLeave="CategoryButton_MouseLeave">
-                    <Border.Background>
-                        <SolidColorBrush Color="#15FFFFFF"/>
-                    </Border.Background>
-                    <Border.BorderBrush>
-                        <SolidColorBrush Color="#309B59B6"/>
-                    </Border.BorderBrush>
-                    <Border.BorderThickness>
-                        <Thickness>1.5</Thickness>
-                    </Border.BorderThickness>
-                    <StackPanel>
-                        <TextBlock Text="Bambi" Foreground="#9B59B6" FontWeight="Bold" FontSize="26"/>
-                        <TextBlock Text="How susceptible to conditioning are you?" Foreground="#808090" FontSize="17" Margin="0,4,0,0"/>
-                    </StackPanel>
-                </Border>
+                <!-- Dynamic category buttons (populated from code-behind) -->
+                <ScrollViewer MaxHeight="400" VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="CategoryButtonsPanel"/>
+                </ScrollViewer>
 
                 <!-- ESC hint -->
                 <TextBlock Text="Press ESC to close" Foreground="#404060" FontSize="13"
@@ -387,6 +354,18 @@
                         <TextBlock x:Name="TxtProfileText" FontSize="22" Foreground="#C0C0D8"
                                    TextWrapping="Wrap" LineHeight="34" TextAlignment="Center"/>
                     </Border>
+
+                    <!-- Recommendations -->
+                    <TextBlock x:Name="TxtRecommendationsHeader" Text="RECOMMENDATIONS" FontSize="14" FontWeight="Bold"
+                               Foreground="#606080" HorizontalAlignment="Center" Margin="0,0,0,10"
+                               Visibility="Collapsed"/>
+                    <StackPanel x:Name="RecommendationsPanel" Margin="0,0,0,20"/>
+
+                    <!-- Score Trend -->
+                    <TextBlock x:Name="TxtTrendHeader" Text="YOUR JOURNEY" FontSize="14" FontWeight="Bold"
+                               Foreground="#606080" HorizontalAlignment="Center" Margin="0,0,0,10"
+                               Visibility="Collapsed"/>
+                    <StackPanel x:Name="TrendPanel" Margin="0,0,0,20"/>
 
                     <!-- Buttons -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">

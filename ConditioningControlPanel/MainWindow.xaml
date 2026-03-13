@@ -2696,9 +2696,11 @@
                                 <Grid x:Name="BrowserContainer" Grid.Row="1">
                                     <!-- WebView2 will be added here programmatically -->
                                     <TextBlock x:Name="BrowserLoadingText"
-                                               Text="🌐 Connecting to Bambi Cloud..."
+                                               Text="🌐 Click to load browser"
                                                Foreground="#808080" FontSize="12"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Cursor="Hand"
+                                               MouseLeftButtonDown="BrowserLoadingText_Click"/>
                                 </Grid>
                             </Grid>
                         </Border>
@@ -7512,11 +7514,48 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Placeholder Card 3 -->
-                        <Border Background="#12FFFFFF" CornerRadius="12" Margin="6" BorderBrush="#404060" BorderThickness="1">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                <TextBlock Text="Coming Soon" Foreground="#505070" FontSize="14" HorizontalAlignment="Center"/>
+                        <!-- Pop Quiz Card -->
+                        <Border CornerRadius="12" Margin="6" Padding="15">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#20FF69B4" Offset="0"/>
+                                    <GradientStop Color="#209B59B6" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <SolidColorBrush Color="#40FF69B4"/>
+                            </Border.BorderBrush>
+                            <Border.BorderThickness>
+                                <Thickness>1</Thickness>
+                            </Border.BorderThickness>
+                            <StackPanel>
+                                <TextBlock Text="Pop Quiz" Foreground="White" FontWeight="Bold" FontSize="16" Margin="0,0,0,6"/>
+                                <TextBlock Text="Reinforcement questions pop up during sessions. All answers are correct — pure positive vibes. Frequency is per session hour."
+                                           Foreground="#808090" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                <CheckBox x:Name="ChkPopQuizEnabled" Content="Enable pop-up questions"
+                                          Foreground="#808090" FontSize="12" Margin="0,0,0,8"
+                                          Checked="ChkPopQuizEnabled_Changed" Unchecked="ChkPopQuizEnabled_Changed"/>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="Frequency:" Foreground="#808090" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <Slider x:Name="SliderPopQuizFrequency" Minimum="1" Maximum="100" Width="120"
+                                            VerticalAlignment="Center"
+                                            ValueChanged="SliderPopQuizFrequency_ValueChanged"/>
+                                    <TextBlock x:Name="TxtPopQuizFrequency" Foreground="#B0B0C8" FontSize="12"
+                                               VerticalAlignment="Center" Margin="8,0,0,0" Text="2/session hr"/>
+                                </StackPanel>
+
+                                <Button x:Name="BtnTestPopQuiz" Content="Test" Cursor="Hand"
+                                        Background="#9B59B6" Foreground="White" FontWeight="Bold" FontSize="12"
+                                        BorderThickness="0" Padding="12,8" HorizontalAlignment="Left"
+                                        Click="BtnTestPopQuiz_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="8"/>
+                                        </Style>
+                                    </Button.Resources>
+                                </Button>
                             </StackPanel>
                         </Border>
 

@@ -523,6 +523,22 @@ Example responses with REAL video names:
                 sb.AppendLine(settings.OutputRules);
             }
 
+            // Inject quiz context if the user has taken a quiz
+            var quizPct = App.Settings?.Current?.LatestQuizScorePercentage ?? -1;
+            if (quizPct >= 0)
+            {
+                var archetype = App.Settings?.Current?.LatestQuizArchetype ?? "";
+                var profileSnippet = App.Settings?.Current?.LatestQuizProfileText ?? "";
+                sb.AppendLine();
+                sb.AppendLine("--- QUIZ CONTEXT ---");
+                if (!string.IsNullOrEmpty(archetype))
+                    sb.AppendLine($"The user was classified as: \"{archetype}\" (scored {quizPct}%).");
+                if (!string.IsNullOrEmpty(profileSnippet))
+                    sb.AppendLine($"Their profile: {profileSnippet}");
+                sb.AppendLine("Use this to personalize responses ~20% of the time. Reference their archetype naturally — don't announce it every message.");
+                sb.AppendLine();
+            }
+
             // Make the prompt mode-aware by replacing "Bambi" references with appropriate term
             return MakePromptModeAware(sb.ToString());
         }

@@ -235,6 +235,9 @@ namespace ConditioningControlPanel.Services
             // Stop Mind Wipe
             App.MindWipe?.Stop();
 
+            // Stop Pop Quiz
+            App.PopQuiz?.Stop();
+
             // Stop Bubbles
             App.Bubbles?.Stop();
 
@@ -346,6 +349,7 @@ namespace ConditioningControlPanel.Services
             App.Subliminal?.Stop();
             App.Bubbles?.Stop();
             App.LockCard?.Stop();
+            App.PopQuiz?.Stop();
             App.BubbleCount?.Stop();
             App.BouncingText?.Stop();
             App.MindWipe?.Stop();
@@ -378,6 +382,7 @@ namespace ConditioningControlPanel.Services
             if (settings.SubliminalEnabled) App.Subliminal?.Start();
             if (settings.BubblesEnabled) App.Bubbles?.Start();
             if (settings.LockCardEnabled && App.Settings.Current.IsLevelUnlocked(35)) App.LockCard?.Start();
+            if (settings.PopQuizEnabled) App.PopQuiz?.Start();
             if (settings.BubbleCountEnabled && App.Settings.Current.IsLevelUnlocked(50)) App.BubbleCount?.Start();
             if (settings.BouncingTextEnabled && App.Settings.Current.IsLevelUnlocked(60)) App.BouncingText?.Start();
             if (settings.MindWipeEnabled && App.Settings.Current.IsLevelUnlocked(75))
@@ -757,6 +762,8 @@ namespace ConditioningControlPanel.Services
             _savedSettings.VideosPerHour = current.VideosPerHour;
             _savedSettings.LockCardEnabled = current.LockCardEnabled;
             _savedSettings.LockCardFrequency = current.LockCardFrequency;
+            _savedSettings.PopQuizEnabled = current.PopQuizEnabled;
+            _savedSettings.PopQuizFrequency = current.PopQuizFrequency;
             _savedSettings.BubbleCountEnabled = current.BubbleCountEnabled;
             _savedSettings.BubbleCountFrequency = current.BubbleCountFrequency;
         }
@@ -949,6 +956,20 @@ namespace ConditioningControlPanel.Services
                 App.LockCard?.Stop();
             }
 
+            current.PopQuizEnabled = settings.PopQuizEnabled;
+            if (settings.PopQuizEnabled)
+            {
+                if (settings.PopQuizFrequency.HasValue)
+                {
+                    current.PopQuizFrequency = settings.PopQuizFrequency.Value;
+                }
+                App.PopQuiz?.Start();
+            }
+            else
+            {
+                App.PopQuiz?.Stop();
+            }
+
             current.BubbleCountEnabled = settings.BubbleCountEnabled;
             if (settings.BubbleCountEnabled)
             {
@@ -1035,6 +1056,8 @@ namespace ConditioningControlPanel.Services
             current.VideosPerHour = _savedSettings.VideosPerHour;
             current.LockCardEnabled = _savedSettings.LockCardEnabled;
             current.LockCardFrequency = _savedSettings.LockCardFrequency;
+            current.PopQuizEnabled = _savedSettings.PopQuizEnabled;
+            current.PopQuizFrequency = _savedSettings.PopQuizFrequency;
             current.BubbleCountEnabled = _savedSettings.BubbleCountEnabled;
             current.BubbleCountFrequency = _savedSettings.BubbleCountFrequency;
 

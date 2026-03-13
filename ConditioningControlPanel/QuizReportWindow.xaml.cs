@@ -13,7 +13,8 @@ namespace ConditioningControlPanel
         {
             InitializeComponent();
 
-            TxtSubtitle.Text = $"{entry.Category}  ·  {entry.TakenAt:MMM d, yyyy  h:mm tt}";
+            var categoryDisplay = !string.IsNullOrEmpty(entry.CategoryName) ? entry.CategoryName : entry.Category.ToString();
+            TxtSubtitle.Text = $"{categoryDisplay}  ·  {entry.TakenAt:MMM d, yyyy  h:mm tt}";
             var pct = entry.MaxScore > 0 ? (int)Math.Round((double)entry.TotalScore / entry.MaxScore * 100) : 0;
             TxtScore.Text = $"{entry.TotalScore} / {entry.MaxScore}  ({pct}%)";
 

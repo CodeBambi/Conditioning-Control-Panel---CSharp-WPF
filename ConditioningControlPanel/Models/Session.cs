@@ -898,6 +898,12 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         public int? BubbleCountFrequency { get; set; }
         public bool MiniGameEnabled { get; set; }
 
+        // Pop Quiz (reinforcement questions during sessions)
+        public bool PopQuizEnabled { get; set; }
+        public int PopQuizStartMinute { get; set; } = 0;
+        public int PopQuizEndMinute { get; set; } = -1; // -1 = session duration
+        public int? PopQuizFrequency { get; set; }
+
         // Mind Wipe (escalating audio during sessions)
         public bool MindWipeEnabled { get; set; }
         public int MindWipeStartMinute { get; set; } = 0;

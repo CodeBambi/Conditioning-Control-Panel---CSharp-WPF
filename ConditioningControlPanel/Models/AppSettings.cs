@@ -1441,6 +1441,63 @@ namespace ConditioningControlPanel.Models
         }
         #endregion
 
+        #region Latest Quiz Result (for companion integration)
+
+        private string _latestQuizArchetype = "";
+        public string LatestQuizArchetype
+        {
+            get => _latestQuizArchetype;
+            set { _latestQuizArchetype = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private int _latestQuizScorePercentage = -1; // -1 = no quiz taken
+        public int LatestQuizScorePercentage
+        {
+            get => _latestQuizScorePercentage;
+            set { _latestQuizScorePercentage = value; OnPropertyChanged(); }
+        }
+
+        private string _latestQuizCategoryId = "";
+        public string LatestQuizCategoryId
+        {
+            get => _latestQuizCategoryId;
+            set { _latestQuizCategoryId = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _latestQuizProfileText = "";
+        public string LatestQuizProfileText
+        {
+            get => _latestQuizProfileText;
+            set
+            {
+                // Truncate to 200 chars
+                var truncated = value ?? "";
+                if (truncated.Length > 200) truncated = truncated.Substring(0, 200);
+                _latestQuizProfileText = truncated;
+                OnPropertyChanged();
+            }
+        }
+
+        #endregion
+
+        #region Pop Quiz (Session reinforcement questions)
+
+        private bool _popQuizEnabled = false;
+        public bool PopQuizEnabled
+        {
+            get => _popQuizEnabled;
+            set { _popQuizEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _popQuizFrequency = 2; // Per hour (1-10)
+        public int PopQuizFrequency
+        {
+            get => _popQuizFrequency;
+            set { _popQuizFrequency = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Bubble Count Game (Unlocks Lv.50)
 
         private bool _bubbleCountEnabled = false;

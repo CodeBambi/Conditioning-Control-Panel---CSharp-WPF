@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using IOPath = System.IO.Path;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -161,6 +163,7 @@ namespace ConditioningControlPanel
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             BuildProgressDots();
+            BuildCategoryButtons();
 
             // Start glow pulse animation
             if (TryFindResource("GlowPulseStoryboard") is Storyboard glowSb)
@@ -204,6 +207,145 @@ namespace ConditioningControlPanel
                 };
                 _progressDots[i] = dot;
                 ProgressDotsPanel.Children.Add(dot);
+            }
+        }
+
+        private void BuildCategoryButtons()
+        {
+            CategoryButtonsPanel.Children.Clear();
+            var categories = QuizService.GetAllCategories();
+            foreach (var cat in categories)
+            {
+                var color = Colors.White;
+                try
+                {
+                    color = (Color)System.Windows.Media.ColorConverter.ConvertFromString(cat.Color);
+                }
+                catch { }
+
+                var border = new Border
+                {
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    CornerRadius = new CornerRadius(12),
+                    Margin = new Thickness(0, 0, 0, 12),
+                    Padding = new Thickness(20, 16, 20, 16),
+                    Background = new SolidColorBrush(Color.FromArgb(0x15, 0xFF, 0xFF, 0xFF)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x30, color.R, color.G, color.B)),
+                    BorderThickness = new Thickness(1.5),
+                    Tag = cat
+                };
+
+                var grid = new Grid();
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var stack = new StackPanel();
+                stack.Children.Add(new TextBlock
+                {
+                    Text = cat.Name,
+                    Foreground = new SolidColorBrush(color),
+                    FontWeight = FontWeights.Bold,
+                    FontSize = 26
+                });
+                stack.Children.Add(new TextBlock
+                {
+                    Text = cat.Description,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x90)),
+                    FontSize = 17,
+                    Margin = new Thickness(0, 4, 0, 0)
+                });
+                Grid.SetColumn(stack, 0);
+                grid.Children.Add(stack);
+
+                // Edit button for custom categories
+                if (!cat.IsBuiltIn)
+                {
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    var editBtn = new TextBlock
+                    {
+                        Text = "Edit",
+                        Foreground = new SolidColorBrush(Color.FromRgb(0x60, 0x60, 0x80)),
+                        FontSize = 13,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Cursor = System.Windows.Input.Cursors.Hand,
+                        Margin = new Thickness(10, 0, 0, 0),
+                        Tag = cat
+                    };
+                    editBtn.MouseLeftButtonDown += EditCategoryButton_Click;
+                    editBtn.MouseEnter += (s, _) => { if (s is TextBlock t) t.Foreground = new SolidColorBrush(Colors.White); };
+                    editBtn.MouseLeave += (s, _) => { if (s is TextBlock t) t.Foreground = new SolidColorBrush(Color.FromRgb(0x60, 0x60, 0x80)); };
+                    Grid.SetColumn(editBtn, 1);
+                    grid.Children.Add(editBtn);
+                }
+
+                border.Child = grid;
+
+                border.MouseLeftButtonDown += DynamicCategoryButton_Click;
+                border.MouseEnter += CategoryButton_MouseEnter;
+                border.MouseLeave += CategoryButton_MouseLeave;
+
+                CategoryButtonsPanel.Children.Add(border);
+            }
+
+            // "+ Create Custom" button
+            var createBorder = new Border
+            {
+                Cursor = System.Windows.Input.Cursors.Hand,
+                CornerRadius = new CornerRadius(12),
+                Margin = new Thickness(0, 4, 0, 12),
+                Padding = new Thickness(20, 14, 20, 14),
+                Background = new SolidColorBrush(Colors.Transparent),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(1.5),
+            };
+            // Dashed border via VisualBrush not easily done in code, use dotted look
+            createBorder.BorderBrush = new SolidColorBrush(Color.FromArgb(0x25, 0xFF, 0xFF, 0xFF));
+
+            var createStack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            createStack.Children.Add(new TextBlock
+            {
+                Text = "+ Create Custom Category",
+                Foreground = new SolidColorBrush(Color.FromRgb(0x70, 0x70, 0x88)),
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 20,
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+            createBorder.Child = createStack;
+            createBorder.MouseLeftButtonDown += CreateCategoryButton_Click;
+            createBorder.MouseEnter += (s, _) =>
+            {
+                if (s is Border b) b.Background = new SolidColorBrush(Color.FromArgb(0x10, 0xFF, 0xFF, 0xFF));
+            };
+            createBorder.MouseLeave += (s, _) =>
+            {
+                if (s is Border b) b.Background = new SolidColorBrush(Colors.Transparent);
+            };
+
+            CategoryButtonsPanel.Children.Add(createBorder);
+        }
+
+        private void CreateCategoryButton_Click(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            var editor = new QuizCategoryEditorWindow { Owner = this };
+            if (editor.ShowDialog() == true && editor.Result != null)
+            {
+                QuizService.SaveCustomCategory(editor.Result);
+                BuildCategoryButtons();
+            }
+        }
+
+        private void EditCategoryButton_Click(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            if (sender is not FrameworkElement el || el.Tag is not QuizCategoryDefinition catDef) return;
+
+            var editor = new QuizCategoryEditorWindow(catDef) { Owner = this };
+            if (editor.ShowDialog() == true)
+            {
+                if (editor.Result != null)
+                    QuizService.SaveCustomCategory(editor.Result);
+                // If Result is null, it was deleted (handled inside editor)
+                BuildCategoryButtons();
             }
         }
 
@@ -299,23 +441,51 @@ namespace ConditioningControlPanel
         {
             _loadingDotsTimer.Stop();
 
+            var catDef = _quizService?.CurrentCategoryDefinition;
+
             // Save to quiz history
+            QuizHistoryEntry? savedEntry = null;
             try
             {
-                var entry = new QuizHistoryEntry
+                savedEntry = new QuizHistoryEntry
                 {
                     TakenAt = DateTime.Now,
                     Category = result.Category,
+                    CategoryId = catDef?.Id ?? result.Category.ToString(),
+                    CategoryName = catDef?.Name ?? result.Category.ToString(),
                     TotalScore = result.TotalScore,
                     MaxScore = result.MaxScore,
                     ProfileText = result.ProfileText,
                     Answers = new List<QuizAnswerRecord>(_answerHistory)
                 };
-                QuizService.SaveEntry(entry);
+                QuizService.SaveEntry(savedEntry);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "QuizWindow: Failed to save quiz history");
+            }
+
+            // Save latest quiz result for companion integration
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings != null)
+                {
+                    settings.LatestQuizCategoryId = catDef?.Id ?? result.Category.ToString();
+                    settings.LatestQuizScorePercentage = result.MaxScore > 0
+                        ? (int)Math.Round((double)result.TotalScore / result.MaxScore * 100) : 0;
+                    settings.LatestQuizProfileText = result.ProfileText;
+
+                    // Extract archetype from profile text
+                    var archetypeMatch = System.Text.RegularExpressions.Regex.Match(
+                        result.ProfileText, @"You are a (.+?)\.");
+                    settings.LatestQuizArchetype = archetypeMatch.Success
+                        ? archetypeMatch.Groups[1].Value : "";
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "QuizWindow: Failed to save quiz result to settings");
             }
 
             TxtFinalScore.Text = $"{result.TotalScore} / {result.MaxScore}";
@@ -333,8 +503,188 @@ namespace ConditioningControlPanel
 
             TxtProfileText.Text = result.ProfileText;
 
+            // Build recommendations and trend display
+            if (savedEntry != null)
+            {
+                BuildRecommendations(savedEntry);
+                BuildTrendDisplay(savedEntry.Category);
+            }
+
             ShowPanel(ResultPanel);
             PlayResultSound();
+        }
+
+        private void BuildRecommendations(QuizHistoryEntry entry)
+        {
+            try
+            {
+                RecommendationsPanel.Children.Clear();
+                var recs = QuizService.GenerateRecommendations(entry);
+                if (recs.Count == 0) return;
+
+                TxtRecommendationsHeader.Visibility = Visibility.Visible;
+
+                foreach (var rec in recs)
+                {
+                    var card = new Border
+                    {
+                        CornerRadius = new CornerRadius(10),
+                        Padding = new Thickness(14, 10, 14, 10),
+                        Margin = new Thickness(0, 0, 0, 8),
+                        Background = new SolidColorBrush(Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF)),
+                        BorderBrush = new SolidColorBrush(Color.FromArgb(0x25, 0xFF, 0x69, 0xB4)),
+                        BorderThickness = new Thickness(1),
+                        Cursor = System.Windows.Input.Cursors.Hand
+                    };
+                    card.MouseEnter += (s, _) => { if (s is Border b) b.Background = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)); };
+                    card.MouseLeave += (s, _) => { if (s is Border b) b.Background = new SolidColorBrush(Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF)); };
+
+                    var grid = new Grid();
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                    var textStack = new StackPanel();
+                    textStack.Children.Add(new TextBlock
+                    {
+                        Text = rec.Title,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)),
+                        FontWeight = FontWeights.SemiBold,
+                        FontSize = 14
+                    });
+                    textStack.Children.Add(new TextBlock
+                    {
+                        Text = rec.Description,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x90)),
+                        FontSize = 12,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 2, 0, 0)
+                    });
+                    Grid.SetColumn(textStack, 0);
+                    grid.Children.Add(textStack);
+
+                    var actionBtn = new TextBlock
+                    {
+                        Text = rec.ActionLabel,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0x9B, 0x59, 0xB6)),
+                        FontSize = 12,
+                        FontWeight = FontWeights.SemiBold,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(10, 0, 0, 0)
+                    };
+                    Grid.SetColumn(actionBtn, 1);
+                    grid.Children.Add(actionBtn);
+
+                    card.Child = grid;
+
+                    var capturedKey = rec.ActionKey;
+                    card.MouseLeftButtonDown += (s, _) => HandleRecommendationAction(capturedKey);
+
+                    RecommendationsPanel.Children.Add(card);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "QuizWindow: Failed to build recommendations");
+            }
+        }
+
+        private void HandleRecommendationAction(string actionKey)
+        {
+            try
+            {
+                if (actionKey.StartsWith("difficulty:"))
+                {
+                    // Navigate to sessions tab — the main window handles it
+                    if (Application.Current.MainWindow is MainWindow mw)
+                    {
+                        mw.Activate();
+                    }
+                }
+                else if (actionKey.StartsWith("setting:"))
+                {
+                    var settingName = actionKey.Substring("setting:".Length);
+                    var settings = App.Settings?.Current;
+                    if (settings == null) return;
+
+                    switch (settingName)
+                    {
+                        case "LockCardEnabled":
+                            settings.LockCardEnabled = true;
+                            break;
+                        case "SubliminalEnabled":
+                            settings.SubliminalEnabled = true;
+                            break;
+                        case "MandatoryVideosEnabled":
+                            settings.MandatoryVideosEnabled = true;
+                            break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "QuizWindow: Failed to handle recommendation action: {Key}", actionKey);
+            }
+        }
+
+        private void BuildTrendDisplay(QuizCategory category)
+        {
+            try
+            {
+                TrendPanel.Children.Clear();
+                var history = QuizService.LoadHistory();
+                var trend = QuizService.GetScoreTrend(history, category);
+                if (trend == null) return;
+
+                TxtTrendHeader.Visibility = Visibility.Visible;
+
+                var arrow = trend.Direction switch
+                {
+                    TrendDirection.Up => "\u2191",
+                    TrendDirection.Down => "\u2193",
+                    TrendDirection.Flat => "\u2192",
+                    _ => ""
+                };
+                var arrowColor = trend.Direction switch
+                {
+                    TrendDirection.Up => Color.FromRgb(0x2E, 0xCC, 0x71),
+                    TrendDirection.Down => Color.FromRgb(0xE7, 0x4C, 0x3C),
+                    _ => Color.FromRgb(0x80, 0x80, 0x90)
+                };
+
+                var trendText = trend.Direction == TrendDirection.FirstQuiz
+                    ? $"Score: {trend.LatestPercent}% — Your first {category} quiz!"
+                    : $"Score: {trend.LatestPercent}% ({arrow}{Math.Abs(trend.DeltaPercent)}% from last time) \u00B7 Average: {trend.AveragePercent}% across {trend.QuizCount} quizzes";
+
+                var trendBlock = new TextBlock
+                {
+                    FontSize = 14,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xC8)),
+                    TextWrapping = TextWrapping.Wrap,
+                    TextAlignment = TextAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Center
+                };
+
+                if (trend.Direction != TrendDirection.FirstQuiz)
+                {
+                    // Build with inline colored arrow
+                    trendBlock.Inlines.Add(new System.Windows.Documents.Run($"Score: {trend.LatestPercent}% (")
+                    { Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xC8)) });
+                    trendBlock.Inlines.Add(new System.Windows.Documents.Run($"{arrow}{Math.Abs(trend.DeltaPercent)}%")
+                    { Foreground = new SolidColorBrush(arrowColor), FontWeight = FontWeights.SemiBold });
+                    trendBlock.Inlines.Add(new System.Windows.Documents.Run($" from last time) \u00B7 Average: {trend.AveragePercent}% across {trend.QuizCount} quizzes")
+                    { Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xC8)) });
+                }
+                else
+                {
+                    trendBlock.Text = trendText;
+                }
+
+                TrendPanel.Children.Add(trendBlock);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "QuizWindow: Failed to build trend display");
+            }
         }
 
         private void ShowError(string message)
@@ -403,6 +753,44 @@ namespace ConditioningControlPanel
 
         // ============ EVENT HANDLERS ============
 
+        private async void DynamicCategoryButton_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (_isProcessing) return;
+
+            var border = sender as FrameworkElement;
+            if (border?.Tag is not QuizCategoryDefinition catDef) return;
+
+            _isProcessing = true;
+            _answerHistory.Clear();
+            ShowLoading("Preparing your quiz...");
+
+            _quizService?.Dispose();
+            _quizService = new QuizService();
+
+            try
+            {
+                var question = await _quizService.StartQuizAsync(catDef);
+                if (question != null)
+                {
+                    ShowQuestion(question);
+                }
+                else
+                {
+                    ShowError("Couldn't generate the quiz. The AI might be busy or you've hit your daily limit. Try again in a moment.");
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "QuizWindow: Failed to start quiz");
+                ShowError("Something went wrong starting the quiz. Please try again.");
+            }
+            finally
+            {
+                _isProcessing = false;
+            }
+        }
+
+        // Keep for backward compat — unused but safe to leave
         private async void CategoryButton_Click(object sender, MouseButtonEventArgs e)
         {
             if (_isProcessing) return;
