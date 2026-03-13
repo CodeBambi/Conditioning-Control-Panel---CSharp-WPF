@@ -55,10 +55,7 @@ namespace ConditioningControlPanel.Services
 • Validated level-up webhook requests against actual stored user level
 • Capped session XP multiplier at 5.0x and bonus XP at 2500 before multiplier
 • Capped concurrent flash windows at 30 and subliminal windows at 15
-• Installer now excludes unnecessary locale folders — smaller, cleaner install
-
-🤝 COMMUNITY
-• Special thanks to Pherik for deep FlashService memory profiling with dotMemory and identifying 12 memory leak vectors — 11 fixed!";
+• Installer now excludes unnecessary locale folders — smaller, cleaner install";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
