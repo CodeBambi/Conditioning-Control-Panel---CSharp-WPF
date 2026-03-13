@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.Windows.Forms; // For Screen class
@@ -716,6 +718,8 @@ namespace ConditioningControlPanel.Services
             windowCts.CancelAfter(lifetimeMs);
 
             FlashWindow? window = null;
+            int xpAmount = 0;
+            int multiplier = 1;
             try
             {
                 var geom = imageData.Geometry;
@@ -793,7 +797,101 @@ namespace ConditioningControlPanel.Services
                 };
 
                 window.ImageControl = image;
-                window.Content = image;
+
+                // Roll for lucky flash BEFORE show so we can apply visual effects
+                xpAmount = _soundPlayingForCurrentFlash ? 8 : 4;
+
+                if (!settings.HydraLinkedTiming && hydraGeneration > 0)
+                {
+                    if (hydraGeneration >= 2)
+                    {
+                        xpAmount = 1;
+                    }
+                    else
+                    {
+                        // Gen 1: 75% of base XP
+                        xpAmount = (int)Math.Max(1, Math.Round(xpAmount * 0.75));
+                    }
+                    App.Logger?.Debug("Hydra XP: gen {Gen}, xp {XP}", hydraGeneration, xpAmount);
+                }
+
+                multiplier = (hydraGeneration > 0) ? 1 : (App.SkillTree?.RollLuckyFlash() ?? 1);
+                var isLucky = multiplier > 1;
+                window.IsLucky = isLucky;
+
+                if (isLucky)
+                {
+                    PlayLuckyFlashSound();
+                }
+
+                // Apply glow effect based on sparkle boost tier or lucky proc
+                var sparkleBoostTier = App.SkillTree?.GetSparkleBoostTier() ?? 0;
+                if (isLucky || sparkleBoostTier > 0)
+                {
+                    var glowColor = isLucky
+                        ? System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00) // Gold
+                        : System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4); // Hot pink
+
+                    double blurRadius, glowOpacity;
+                    if (isLucky)
+                    {
+                        blurRadius = 60;
+                        glowOpacity = 0.9;
+                    }
+                    else
+                    {
+                        blurRadius = sparkleBoostTier switch { 1 => 25, 2 => 35, _ => 45 };
+                        glowOpacity = sparkleBoostTier switch { 1 => 0.5, 2 => 0.6, _ => 0.7 };
+                    }
+
+                    var glowEffect = new DropShadowEffect
+                    {
+                        Color = glowColor,
+                        BlurRadius = blurRadius,
+                        ShadowDepth = 0,
+                        Opacity = glowOpacity
+                    };
+
+                    var border = new Border
+                    {
+                        Background = System.Windows.Media.Brushes.Black,
+                        Effect = glowEffect,
+                        Padding = new Thickness(blurRadius / 2),
+                        Child = image
+                    };
+
+                    window.Background = System.Windows.Media.Brushes.Transparent;
+                    window.Content = border;
+
+                    // Expand window to accommodate glow padding
+                    var padding = blurRadius / 2;
+                    window.Width += padding * 2;
+                    window.Height += padding * 2;
+                    window.Left -= padding;
+                    window.Top -= padding;
+
+                    // Pulsing golden animation for lucky procs
+                    if (isLucky)
+                    {
+                        var blurAnim = new DoubleAnimation(60, 100, TimeSpan.FromMilliseconds(400))
+                        {
+                            AutoReverse = true,
+                            RepeatBehavior = RepeatBehavior.Forever
+                        };
+                        var opacityAnim = new DoubleAnimation(0.7, 1.0, TimeSpan.FromMilliseconds(400))
+                        {
+                            AutoReverse = true,
+                            RepeatBehavior = RepeatBehavior.Forever
+                        };
+                        glowEffect.BeginAnimation(DropShadowEffect.BlurRadiusProperty, blurAnim);
+                        glowEffect.BeginAnimation(DropShadowEffect.OpacityProperty, opacityAnim);
+                    }
+                }
+                else
+                {
+                    window.Content = image;
+                }
+
                 window.Opacity = 0;
 
                 // Click handler
@@ -817,10 +915,10 @@ namespace ConditioningControlPanel.Services
 
                 window.Show();
                 _ = App.Haptics?.FlashDecayVibeAsync();
-                
+
                 // Force topmost even over fullscreen apps
                 ForceTopmost(window);
-                
+
                 lock (_lockObj)
                 {
                     _activeWindows.Add(window);
@@ -837,37 +935,6 @@ namespace ConditioningControlPanel.Services
                     try { window.LifetimeCts = null; window.Close(); } catch { }
                 }
                 return;
-            }
-            
-            // Award XP for viewing
-            var xpAmount = _soundPlayingForCurrentFlash ? 8 : 4;
-
-            // Hydra XP diminishing returns — independent timing only~ 🐙💫
-            // Each generation deeper reduces XP by 25%, hard floor at 10%.
-            // Gen 0 = 100%, Gen 1 = 75%, Gen 2 = 50%, Gen 3 = 25%, Gen 4+ = 10%
-            // CopilotNotes: Only applies when HydraLinkedTiming is false (independent mode).
-            // Linked mode windows die together so there's no farming concern.
-            if (!settings.HydraLinkedTiming && hydraGeneration > 0)
-            {
-                const double decayPerGeneration = 0.25;
-                const double floor = 0.10;
-                var hydraXpMultiplier = Math.Max(floor, 1.0 - hydraGeneration * decayPerGeneration);
-                xpAmount = (int)Math.Max(1, Math.Round(xpAmount * hydraXpMultiplier));
-                App.Logger?.Debug("Hydra XP decay: gen {Gen}, multiplier {Mult:P0}, xp {XP}",
-                    hydraGeneration, hydraXpMultiplier, xpAmount);
-            }
-
-            // Roll for lucky flash (5% chance for 10x XP if skill unlocked)
-            // Disable lucky flash for hydra children — base XP already has diminishing returns
-            var multiplier = (hydraGeneration > 0) ? 1 : (App.SkillTree?.RollLuckyFlash() ?? 1);
-            
-
-            var isLucky = multiplier > 1;
-
-            // Play lucky flash sound if triggered
-            if (isLucky)
-            {
-                PlayLuckyFlashSound();
             }
 
             App.Progression?.AddXP(xpAmount * multiplier, XPSource.Flash);
@@ -1755,6 +1822,11 @@ namespace ConditioningControlPanel.Services
         /// Gen 0 = 100% XP, Gen 1 = 75%, Gen 2 = 50%, Gen 3 = 25%, Gen 4+ = 10% floor.
         /// </summary>
         public int HydraGeneration { get; set; }
+
+        /// <summary>
+        /// Whether this flash triggered a lucky proc (golden glow effect)
+        /// </summary>
+        public bool IsLucky { get; set; }
     }
 
     internal class LoadedImageData
