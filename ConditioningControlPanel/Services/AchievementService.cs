@@ -302,8 +302,55 @@ public class AchievementService : IDisposable
             TryUnlock("pop_the_thought");
         }
 
+        // Award 1 sparkle point every 100 bubbles
+        if (_progress.TotalBubblesPopped % 100 == 0)
+        {
+            var settings = App.Settings?.Current;
+            if (settings != null)
+            {
+                settings.SkillPoints += 1;
+                App.Settings?.Save();
+                App.Logger?.Information("Bubble milestone! {Total} bubbles popped — awarded 1 sparkle point (total: {Points})",
+                    _progress.TotalBubblesPopped, settings.SkillPoints);
+                ShowBubbleMilestoneNotification(_progress.TotalBubblesPopped);
+            }
+        }
+
         // Track for quests
         App.Quests?.TrackBubblePopped();
+    }
+
+    private void ShowBubbleMilestoneNotification(int totalBubbles)
+    {
+        try
+        {
+            var fakeAchievement = new Achievement
+            {
+                Id = "bubble_milestone",
+                Name = $"{totalBubbles} Bubbles Popped!",
+                FlavorText = "+1 Sparkle Point earned!",
+                ImageName = "bubble_pop.png",
+                Category = AchievementCategory.Minigames
+            };
+
+            Application.Current?.Dispatcher.BeginInvoke(
+                DispatcherPriority.ApplicationIdle, () =>
+            {
+                try
+                {
+                    var popup = new AchievementPopup(fakeAchievement, "✨", "Bubble Milestone!");
+                    popup.Show();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to show bubble milestone popup");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Warning(ex, "Failed to show bubble milestone notification");
+        }
     }
     
     /// <summary>

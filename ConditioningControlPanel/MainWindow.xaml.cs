@@ -1157,6 +1157,16 @@ namespace ConditioningControlPanel
             // Load past quizzes list
             RefreshPastQuizzes();
 
+            // Initialize pop quiz UI from settings
+            if (ChkPopQuizEnabled != null)
+                ChkPopQuizEnabled.IsChecked = App.Settings.Current.PopQuizEnabled;
+            if (SliderPopQuizFrequency != null)
+            {
+                SliderPopQuizFrequency.Value = App.Settings.Current.PopQuizFrequency;
+                if (TxtPopQuizFrequency != null)
+                    TxtPopQuizFrequency.Text = $"{App.Settings.Current.PopQuizFrequency}/hr";
+            }
+
             // Handle start minimized (to tray) - delay briefly to let window render properly first
             if (App.Settings.Current.StartMinimized)
             {
@@ -2697,6 +2707,8 @@ namespace ConditioningControlPanel
         /// </summary>
         private void OpenUnifiedLoginDialog()
         {
+            var previousUnifiedId = App.UnifiedUserId;
+
             var loginDialog = new LoginDialog
             {
                 Owner = this,
@@ -2706,6 +2718,10 @@ namespace ConditioningControlPanel
             if (loginDialog.ShowDialog() == true && loginDialog.Result != null)
             {
                 var result = loginDialog.Result;
+
+                // Detect same-account re-login (e.g. re-linking Patreon on same account)
+                var isSameAccount = !string.IsNullOrEmpty(previousUnifiedId)
+                    && previousUnifiedId == App.UnifiedUserId;
 
                 // Update all UI
                 UpdateQuickLoginUI();
@@ -2717,24 +2733,28 @@ namespace ConditioningControlPanel
                 UpdateBannerWelcomeMessage();
                 UpdateAccountLinkingUI();
 
-                // Save new account's identity/lifetime data set by ApplyUserDataToSettings inside LoginDialog.
-                // ClearProgressionData will zero these, so we restore them after clearing.
-                var savedHighestLevelEver = App.Settings?.Current?.HighestLevelEver ?? 0;
-                var savedIsSeason0Og = App.Settings?.Current?.IsSeason0Og ?? false;
-                var savedCurrentSeason = App.Settings?.Current?.CurrentSeason;
-                var savedPatreonTier = App.Settings?.Current?.PatreonTier ?? 0;
-
-                // Clear stale progression data from previous account before syncing
-                ClearProgressionData();
-
-                // Restore the new account's lifetime data that ClearProgressionData just zeroed
-                if (App.Settings?.Current != null)
+                if (!isSameAccount)
                 {
-                    App.Settings.Current.HighestLevelEver = savedHighestLevelEver;
-                    App.Settings.Current.IsSeason0Og = savedIsSeason0Og;
-                    App.Settings.Current.CurrentSeason = savedCurrentSeason;
-                    App.Settings.Current.PatreonTier = savedPatreonTier;
-                    App.Settings.Save();
+                    // Save new account's identity/lifetime data set by ApplyUserDataToSettings inside LoginDialog.
+                    // ClearProgressionData will zero these, so we restore them after clearing.
+                    var savedHighestLevelEver = App.Settings?.Current?.HighestLevelEver ?? 0;
+                    var savedIsSeason0Og = App.Settings?.Current?.IsSeason0Og ?? false;
+                    var savedCurrentSeason = App.Settings?.Current?.CurrentSeason;
+                    var savedPatreonTier = App.Settings?.Current?.PatreonTier ?? 0;
+
+                    // Clear stale progression data from previous account before syncing.
+                    // Defer quest generation — cloud data will be restored first.
+                    ClearProgressionData(generateQuests: false);
+
+                    // Restore the new account's lifetime data that ClearProgressionData just zeroed
+                    if (App.Settings?.Current != null)
+                    {
+                        App.Settings.Current.HighestLevelEver = savedHighestLevelEver;
+                        App.Settings.Current.IsSeason0Og = savedIsSeason0Og;
+                        App.Settings.Current.CurrentSeason = savedCurrentSeason;
+                        App.Settings.Current.PatreonTier = savedPatreonTier;
+                        App.Settings.Save();
+                    }
                 }
 
                 // Start profile sync
@@ -2775,6 +2795,12 @@ namespace ConditioningControlPanel
                         // Refresh UI on the dispatcher thread after sync completes
                         Application.Current?.Dispatcher?.Invoke(() =>
                         {
+                            // Generate quests AFTER cloud data has been restored
+                            if (!isSameAccount)
+                            {
+                                App.Quests?.CheckAndGenerateQuests();
+                            }
+
                             UpdateLevelDisplay();
                             RefreshQuestUI();
                             DrawSkillTree();
@@ -2792,7 +2818,8 @@ namespace ConditioningControlPanel
         /// Does NOT clear identity fields (UnifiedId, UserDisplayName, link flags).
         /// Called on login (before sync), logout, and account deletion.
         /// </summary>
-        private void ClearProgressionData()
+        /// <param name="generateQuests">If false, skip quest generation (caller will generate after cloud sync)</param>
+        private void ClearProgressionData(bool generateQuests = true)
         {
             if (App.Settings?.Current != null)
             {
@@ -2837,7 +2864,7 @@ namespace ConditioningControlPanel
             }
 
             // Reset quest progress (active quests + stats in quests.json)
-            App.Quests?.ResetProgress();
+            App.Quests?.ResetProgress(generateQuests);
 
             // Reset achievement progress (unlocked achievements + stats in achievements.json)
             App.Achievements?.ResetProgress();
@@ -3461,6 +3488,46 @@ namespace ConditioningControlPanel
                 TxtPastQuizzesHeader.Visibility = Visibility.Visible;
                 PastQuizzesPanel.Visibility = Visibility.Visible;
 
+                // Trend summary at top — show latest archetype + trend per category that has history
+                var categories = history.Select(h => h.Category).Distinct();
+                foreach (var cat in categories)
+                {
+                    var trend = QuizService.GetScoreTrend(history, cat);
+                    if (trend == null) continue;
+
+                    // Extract archetype from latest profile text
+                    var latestEntry = history.FirstOrDefault(h => h.Category == cat);
+                    var archetype = "";
+                    if (latestEntry != null)
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(latestEntry.ProfileText, @"You are a (.+?)\.");
+                        if (match.Success) archetype = match.Groups[1].Value;
+                    }
+
+                    var arrow = trend.Direction switch
+                    {
+                        TrendDirection.Up => "\u2191",
+                        TrendDirection.Down => "\u2193",
+                        TrendDirection.Flat => "\u2192",
+                        _ => ""
+                    };
+                    var trendLabel = trend.Direction == TrendDirection.FirstQuiz
+                        ? $"{cat}: {trend.LatestPercent}%"
+                        : $"{cat}: {trend.LatestPercent}% {arrow}{Math.Abs(trend.DeltaPercent)}%";
+                    if (!string.IsNullOrEmpty(archetype))
+                        trendLabel += $" · {archetype}";
+
+                    var trendRow = new TextBlock
+                    {
+                        Text = trendLabel,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)),
+                        FontSize = 11,
+                        FontWeight = FontWeights.SemiBold,
+                        Margin = new Thickness(8, 3, 8, 3)
+                    };
+                    PastQuizzesList.Children.Add(trendRow);
+                }
+
                 foreach (var entry in history)
                 {
                     var pct = entry.MaxScore > 0 ? (int)Math.Round((double)entry.TotalScore / entry.MaxScore * 100) : 0;
@@ -3502,6 +3569,27 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "MainWindow: Failed to refresh past quizzes");
             }
+        }
+
+        // ============ POP QUIZ HANDLERS ============
+
+        private void ChkPopQuizEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current == null) return;
+            App.Settings.Current.PopQuizEnabled = ChkPopQuizEnabled.IsChecked == true;
+        }
+
+        private void SliderPopQuizFrequency_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (App.Settings?.Current == null || TxtPopQuizFrequency == null) return;
+            var val = (int)Math.Round(e.NewValue);
+            App.Settings.Current.PopQuizFrequency = val;
+            TxtPopQuizFrequency.Text = $"{val}/hr";
+        }
+
+        private void BtnTestPopQuiz_Click(object sender, RoutedEventArgs e)
+        {
+            App.PopQuiz?.TestPopQuiz();
         }
 
         private void OnLockdownActivated()
@@ -8023,7 +8111,7 @@ namespace ConditioningControlPanel
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = "you earn 1 sparkle point every time you level up — spend them wisely~",
+                Text = "you earn sparkle points from leveling up + every 100 bubbles popped~",
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 11,
                 FontStyle = FontStyles.Italic,
