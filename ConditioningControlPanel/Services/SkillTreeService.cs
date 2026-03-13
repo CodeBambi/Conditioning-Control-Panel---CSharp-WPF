@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 
@@ -106,31 +107,37 @@ public class SkillTreeService : IDisposable
     }
 
     /// <summary>
-    /// Purchase a skill if possible
+    /// Purchase a skill via server when online, or locally when offline.
+    /// Returns (Success, Error) tuple.
     /// </summary>
-    public bool PurchaseSkill(string skillId)
+    public async Task<(bool Success, string? Error)> PurchaseSkillAsync(string skillId)
     {
-        if (!CanPurchaseSkill(skillId)) return false;
+        if (!CanPurchaseSkill(skillId)) return (false, "Cannot purchase this skill");
 
         var settings = App.Settings?.Current;
-        if (settings == null) return false;
+        if (settings == null) return (false, "Settings unavailable");
 
         var skill = SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
-        if (skill == null) return false;
+        if (skill == null) return (false, "Unknown skill");
 
-        settings.SkillPoints -= skill.Cost;
-        settings.UnlockedSkills.Add(skillId);
+        // Require login — purchases are server-authoritative
+        var unifiedId = settings.UnifiedId;
+        if (string.IsNullOrEmpty(unifiedId) || App.ProfileSync == null)
+            return (false, "Please log in to purchase enhancements.");
 
-        // Apply immediate effects for certain skills
+        var (success, error) = await App.ProfileSync.PurchaseSkillAsync(skillId);
+        if (!success)
+            return (false, error);
+
+        // Server updated SkillPoints and UnlockedSkills via ProfileSyncService
+        // Apply local-only effects (streak shields, pink rush timer)
         ApplySkillEffects(skillId);
 
-        App.Logger?.Information("Skill purchased: {SkillId} for {Cost} points, {Remaining} remaining",
+        App.Logger?.Information("Skill purchased via server: {SkillId} for {Cost} points, {Remaining} remaining",
             skillId, skill.Cost, settings.SkillPoints);
 
         SkillUnlocked?.Invoke(this, skillId);
-        App.Settings?.Save();
-
-        return true;
+        return (true, null);
     }
 
     /// <summary>
@@ -164,6 +171,17 @@ public class SkillTreeService : IDisposable
         var settings = App.Settings?.Current;
         if (settings == null) return false;
         return settings.UnlockedSkills.Contains(skillId);
+    }
+
+    /// <summary>
+    /// Returns the highest sparkle boost tier unlocked (0 = none, 1-3 = tier).
+    /// </summary>
+    public int GetSparkleBoostTier()
+    {
+        if (HasSkill("sparkle_boost_3")) return 3;
+        if (HasSkill("sparkle_boost_2")) return 2;
+        if (HasSkill("sparkle_boost_1")) return 1;
+        return 0;
     }
 
     /// <summary>

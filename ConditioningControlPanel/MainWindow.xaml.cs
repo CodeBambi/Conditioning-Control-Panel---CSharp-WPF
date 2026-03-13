@@ -14,6 +14,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -157,6 +158,9 @@ namespace ConditioningControlPanel
 
         // Pink Rush popup
         private PinkRushPopup? _pinkRushPopup;
+
+        // Lucky proc toast popup
+        private Window? _luckyProcPopup;
         
         // Ramp tracking
         private DispatcherTimer? _rampTimer;
@@ -312,6 +316,7 @@ namespace ConditioningControlPanel
             {
                 App.SkillTree.PinkRushStarted += OnPinkRushStarted;
                 App.SkillTree.PinkRushEnded += OnPinkRushEnded;
+                App.SkillTree.LuckyProc += OnLuckyProc;
             }
 
             // Subscribe to roadmap events
@@ -323,6 +328,9 @@ namespace ConditioningControlPanel
 
             // Initialize Avatar tab settings
             InitializePatreonTab();
+
+            // Initialize Exclusives section visibility for already-logged-in users
+            UpdateAccountLinkingUI();
 
             // Initialize banner rotation
             InitializeBannerRotation();
@@ -864,6 +872,10 @@ namespace ConditioningControlPanel
                 RbHypnoTube.IsChecked = true;
             }
 
+            // Update browser loading text for current mode
+            var browserSiteName = isSissyMode ? "HypnoTube" : "BambiCloud";
+            BrowserLoadingText.Text = $"🌐 Click to connect to {browserSiteName}";
+
             // Load mode-aware images
             LoadTakeoverImage();
             RefreshThemeAwareElements();
@@ -1164,7 +1176,7 @@ namespace ConditioningControlPanel
             {
                 SliderPopQuizFrequency.Value = App.Settings.Current.PopQuizFrequency;
                 if (TxtPopQuizFrequency != null)
-                    TxtPopQuizFrequency.Text = $"{App.Settings.Current.PopQuizFrequency}/hr";
+                    TxtPopQuizFrequency.Text = $"{App.Settings.Current.PopQuizFrequency}/session hr";
             }
 
             // Handle start minimized (to tray) - delay briefly to let window render properly first
@@ -3511,9 +3523,11 @@ namespace ConditioningControlPanel
                         TrendDirection.Flat => "\u2192",
                         _ => ""
                     };
+                    var catDisplay = latestEntry != null && !string.IsNullOrEmpty(latestEntry.CategoryName)
+                        ? latestEntry.CategoryName : cat.ToString();
                     var trendLabel = trend.Direction == TrendDirection.FirstQuiz
-                        ? $"{cat}: {trend.LatestPercent}%"
-                        : $"{cat}: {trend.LatestPercent}% {arrow}{Math.Abs(trend.DeltaPercent)}%";
+                        ? $"{catDisplay}: {trend.LatestPercent}%"
+                        : $"{catDisplay}: {trend.LatestPercent}% {arrow}{Math.Abs(trend.DeltaPercent)}%";
                     if (!string.IsNullOrEmpty(archetype))
                         trendLabel += $" · {archetype}";
 
@@ -3531,7 +3545,8 @@ namespace ConditioningControlPanel
                 foreach (var entry in history)
                 {
                     var pct = entry.MaxScore > 0 ? (int)Math.Round((double)entry.TotalScore / entry.MaxScore * 100) : 0;
-                    var label = $"{entry.TakenAt:MMM d}  ·  {entry.Category}  ·  {entry.TotalScore}/{entry.MaxScore} ({pct}%)";
+                    var catName = !string.IsNullOrEmpty(entry.CategoryName) ? entry.CategoryName : entry.Category.ToString();
+                    var label = $"{entry.TakenAt:MMM d}  ·  {catName}  ·  {entry.TotalScore}/{entry.MaxScore} ({pct}%)";
 
                     var row = new Border
                     {
@@ -3584,7 +3599,7 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current == null || TxtPopQuizFrequency == null) return;
             var val = (int)Math.Round(e.NewValue);
             App.Settings.Current.PopQuizFrequency = val;
-            TxtPopQuizFrequency.Text = $"{val}/hr";
+            TxtPopQuizFrequency.Text = $"{val}/session hr";
         }
 
         private void BtnTestPopQuiz_Click(object sender, RoutedEventArgs e)
@@ -9228,7 +9243,7 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Handles clicking on a purchasable skill card
         /// </summary>
-        private void SkillCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private async void SkillCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             if (sender is Border border && border.Tag is string skillId)
             {
@@ -9244,21 +9259,35 @@ namespace ConditioningControlPanel
 
                 if (result == MessageBoxResult.Yes)
                 {
-                    if (App.SkillTree?.PurchaseSkill(skillId) == true)
+                    // Disable the card during purchase to prevent double-clicks
+                    border.IsEnabled = false;
+                    try
                     {
-                        // Show celebration
-                        App.Flash?.PlayRandomSound();
+                        var (success, error) = await (App.SkillTree?.PurchaseSkillAsync(skillId)
+                            ?? Task.FromResult((false, (string?)"Skill tree unavailable")));
 
-                        // Refresh UI
-                        RefreshEnhancementsUI();
-
-                        // Update Trophy Case columns if trophy_case was purchased
-                        if (skillId == "trophy_case")
+                        if (success)
                         {
-                            UpdateTrophyCaseColumns();
-                        }
+                            // Show celebration
+                            App.Flash?.PlayRandomSound();
 
-                        App.Logger?.Information("Skill purchased via UI: {SkillId}", skillId);
+                            // Update Trophy Case columns if trophy_case was purchased
+                            if (skillId == "trophy_case")
+                            {
+                                UpdateTrophyCaseColumns();
+                            }
+
+                            App.Logger?.Information("Skill purchased via UI: {SkillId}", skillId);
+                        }
+                        else if (!string.IsNullOrEmpty(error))
+                        {
+                            MessageBox.Show(error, "Purchase Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                    }
+                    finally
+                    {
+                        border.IsEnabled = true;
+                        RefreshEnhancementsUI();
                     }
                 }
             }
@@ -9312,6 +9341,39 @@ namespace ConditioningControlPanel
             {
                 TxtPinkRushIndicator.Visibility = Visibility.Visible;
 
+                // Full-screen pink flash effect
+                try
+                {
+                    var flashWindow = new Window
+                    {
+                        WindowStyle = WindowStyle.None,
+                        AllowsTransparency = true,
+                        Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(100, 0xFF, 0x14, 0x93)),
+                        Topmost = true,
+                        ShowInTaskbar = false,
+                        ShowActivated = false,
+                        Left = SystemParameters.VirtualScreenLeft,
+                        Top = SystemParameters.VirtualScreenTop,
+                        Width = SystemParameters.VirtualScreenWidth,
+                        Height = SystemParameters.VirtualScreenHeight,
+                        IsHitTestVisible = false,
+                        Focusable = false,
+                        Opacity = 0.6
+                    };
+                    flashWindow.Show();
+
+                    var fadeOut = new DoubleAnimation(0.6, 0, TimeSpan.FromMilliseconds(500));
+                    fadeOut.Completed += (s, args) =>
+                    {
+                        try { flashWindow.Close(); } catch { }
+                    };
+                    flashWindow.BeginAnimation(Window.OpacityProperty, fadeOut);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Pink Rush flash effect failed: {Error}", ex.Message);
+                }
+
                 // Show toast notification popup
                 try
                 {
@@ -9337,6 +9399,118 @@ namespace ConditioningControlPanel
                 }
                 catch { }
                 _pinkRushPopup = null;
+            });
+        }
+
+        private void OnLuckyProc(object? sender, LuckyProcEventArgs e)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    // Close previous lucky popup if still showing
+                    try { _luckyProcPopup?.Close(); } catch { }
+
+                    var isGold = e.ProcType.Contains("Flash");
+                    var glowColor = isGold
+                        ? System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00)
+                        : System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4);
+
+                    var border = new Border
+                    {
+                        Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE0, 0x15, 0x15, 0x30)),
+                        CornerRadius = new CornerRadius(12),
+                        BorderBrush = new SolidColorBrush(glowColor),
+                        BorderThickness = new Thickness(2),
+                        Padding = new Thickness(20, 12, 20, 12),
+                        Effect = new DropShadowEffect
+                        {
+                            Color = glowColor,
+                            BlurRadius = 30,
+                            ShadowDepth = 0,
+                            Opacity = 0.8
+                        }
+                    };
+
+                    var stack = new StackPanel { Orientation = Orientation.Vertical, HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = "LUCKY!",
+                        Foreground = new SolidColorBrush(glowColor),
+                        FontWeight = FontWeights.Bold,
+                        FontSize = 22,
+                        HorizontalAlignment = System.Windows.HorizontalAlignment.Center
+                    });
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = $"{e.Multiplier}x XP!",
+                        Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xB6, 0xC1)),
+                        FontSize = 14,
+                        HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                        Margin = new Thickness(0, 4, 0, 0)
+                    });
+
+                    border.Child = stack;
+
+                    var popup = new Window
+                    {
+                        WindowStyle = WindowStyle.None,
+                        AllowsTransparency = true,
+                        Background = System.Windows.Media.Brushes.Transparent,
+                        Topmost = true,
+                        ShowInTaskbar = false,
+                        ShowActivated = false,
+                        SizeToContent = SizeToContent.WidthAndHeight,
+                        Content = border
+                    };
+
+                    // Position at top-center of primary screen
+                    popup.Loaded += (s, args) =>
+                    {
+                        try
+                        {
+                            var workArea = SystemParameters.WorkArea;
+                            popup.Left = workArea.Left + (workArea.Width - popup.ActualWidth) / 2;
+                            popup.Top = workArea.Top + 40;
+                        }
+                        catch { }
+                    };
+
+                    _luckyProcPopup = popup;
+
+                    // Fade in
+                    popup.Opacity = 0;
+                    popup.Show();
+
+                    var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200));
+                    popup.BeginAnimation(Window.OpacityProperty, fadeIn);
+
+                    // Auto-close after 3 seconds with fade-out
+                    var closeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+                    closeTimer.Tick += (s, args) =>
+                    {
+                        closeTimer.Stop();
+                        try
+                        {
+                            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300));
+                            fadeOut.Completed += (s2, args2) =>
+                            {
+                                try { popup.Close(); } catch { }
+                                if (_luckyProcPopup == popup) _luckyProcPopup = null;
+                            };
+                            popup.BeginAnimation(Window.OpacityProperty, fadeOut);
+                        }
+                        catch
+                        {
+                            try { popup.Close(); } catch { }
+                        }
+                    };
+                    closeTimer.Start();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Lucky proc popup failed: {Error}", ex.Message);
+                }
             });
         }
 

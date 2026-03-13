@@ -374,7 +374,9 @@ namespace ConditioningControlPanel.Services
                                 .Select(d => d.ToString("yyyy-MM-dd")).ToList() ?? new List<string>(),
                             ["total_daily_quests_completed"] = questProgress?.TotalDailyQuestsCompleted ?? 0,
                             ["total_weekly_quests_completed"] = questProgress?.TotalWeeklyQuestsCompleted ?? 0,
-                            ["total_xp_from_quests"] = questProgress?.TotalXPFromQuests ?? 0
+                            ["total_xp_from_quests"] = questProgress?.TotalXPFromQuests ?? 0,
+                            ["daily_quests_completed_today"] = questProgress?.GetDailyQuestsCompletedToday() ?? 0,
+                            ["daily_completion_reset_date"] = questProgress?.DailyCompletionResetDate?.ToString("yyyy-MM-dd") ?? ""
                         },
                         unlocked_skills = settings.UnlockedSkills?.ToList() ?? new List<string>(),
                         skill_points = settings.SkillPoints,
@@ -457,13 +459,16 @@ namespace ConditioningControlPanel.Services
                             settings.PendingSkillsResetAck = false;
                             App.Settings?.Save();
                         }
-                        else if (v2Result?.SkillPoints.HasValue == true && v2Result.SkillPoints.Value > settings.SkillPoints)
+                        else if (v2Result?.SkillPoints.HasValue == true)
                         {
-                            // Take higher value to prevent progress loss
-                            App.Logger?.Information("V2 Sync: Skill points server={Server} > local={Local} — syncing DOWN",
-                                v2Result.SkillPoints.Value, settings.SkillPoints);
-                            settings.SkillPoints = v2Result.SkillPoints.Value;
-                            App.Settings?.Save();
+                            // Server-authoritative: always accept server's skill_points value
+                            if (v2Result.SkillPoints.Value != settings.SkillPoints)
+                            {
+                                App.Logger?.Information("V2 Sync: Skill points server={Server}, local={Local} — accepting server value",
+                                    v2Result.SkillPoints.Value, settings.SkillPoints);
+                                settings.SkillPoints = v2Result.SkillPoints.Value;
+                                App.Settings?.Save();
+                            }
                         }
 
                         // Merge unlocked skills from server (union — never lose skills)
@@ -1118,23 +1123,45 @@ namespace ConditioningControlPanel.Services
                             needsSave = true;
                         }
                     }
+
+                    // Restore daily_quests_completed_today from cloud (prevents quest reset exploit)
+                    if (cloudProfile.Stats.TryGetValue("daily_quests_completed_today", out var cloudDailyCompToday))
+                    {
+                        var cloudCount = Convert.ToInt32(cloudDailyCompToday);
+                        bool cloudDateIsToday = false;
+                        if (cloudProfile.Stats.TryGetValue("daily_completion_reset_date", out var cloudResetDate))
+                        {
+                            if (DateTime.TryParse(cloudResetDate?.ToString(), out var resetDate))
+                                cloudDateIsToday = resetDate.Date == DateTime.Today;
+                        }
+                        if (cloudDateIsToday && cloudCount > questProgress.GetDailyQuestsCompletedToday())
+                        {
+                            questProgress.DailyQuestsCompletedToday = cloudCount;
+                            questProgress.DailyCompletionResetDate = DateTime.Today;
+                            needsSave = true;
+                        }
+                    }
+
+                    // Defensive fallback: if today is in completion dates but counter is 0
+                    if (questProgress.DailyQuestCompletionDates.Any(d => d.Date == DateTime.Today)
+                        && questProgress.GetDailyQuestsCompletedToday() == 0)
+                    {
+                        questProgress.DailyQuestsCompletedToday = 1;
+                        questProgress.DailyCompletionResetDate = DateTime.Today;
+                        needsSave = true;
+                    }
                 }
             }
 
-            // Merge skill tree data - take HIGHER value to prevent progress loss
+            // Merge skill tree data - server-authoritative: always accept server value
             if (cloudProfile.SkillPoints.HasValue)
             {
-                if (cloudProfile.SkillPoints.Value > settings.SkillPoints)
+                if (cloudProfile.SkillPoints.Value != settings.SkillPoints)
                 {
-                    App.Logger?.Information("Skill tree sync: Cloud has more skill points ({Cloud}) > local ({Local}), syncing DOWN",
+                    App.Logger?.Information("Skill tree sync: Accepting server skill points ({Server}), local was ({Local})",
                         cloudProfile.SkillPoints.Value, settings.SkillPoints);
                     settings.SkillPoints = cloudProfile.SkillPoints.Value;
                     needsSave = true;
-                }
-                else if (settings.SkillPoints > cloudProfile.SkillPoints.Value)
-                {
-                    App.Logger?.Information("Skill tree sync: Local has more skill points ({Local}) > cloud ({Cloud}), will sync UP",
-                        settings.SkillPoints, cloudProfile.SkillPoints.Value);
                 }
             }
 
@@ -1375,6 +1402,95 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Error(ex, "Oopsie insurance request failed");
                 return (false, $"Connection failed: {ex.Message}", null);
+            }
+        }
+
+        /// <summary>
+        /// Purchase a skill via server-authoritative endpoint.
+        /// Server validates cost, prerequisites, and deducts points.
+        /// Returns (success, error) — on success, updates local SkillPoints and UnlockedSkills from server response.
+        /// </summary>
+        public async Task<(bool success, string? error)> PurchaseSkillAsync(string skillId)
+        {
+            var settings = App.Settings?.Current;
+            var unifiedId = settings?.UnifiedId;
+            if (string.IsNullOrEmpty(unifiedId))
+            {
+                return (false, "Purchasing enhancements requires a cloud account. Please log in first.");
+            }
+
+            try
+            {
+                var requestData = new
+                {
+                    unified_id = unifiedId,
+                    skill_id = skillId
+                };
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/purchase-skill");
+                AddAuthHeader(request);
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(requestData),
+                    Encoding.UTF8,
+                    "application/json"
+                );
+
+                var response = await _httpClient.SendAsync(request);
+                var json = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    HandleUnauthorized(response);
+                    string errorMsg;
+                    try
+                    {
+                        var errorResult = JsonConvert.DeserializeObject<PurchaseSkillResponse>(json);
+                        errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
+                        // Still update local points from server if provided
+                        if (errorResult?.SkillPoints.HasValue == true)
+                            settings.SkillPoints = errorResult.SkillPoints.Value;
+                    }
+                    catch
+                    {
+                        errorMsg = $"Server error: {response.StatusCode}";
+                    }
+                    App.Logger?.Warning("Skill purchase failed: {Error}", errorMsg);
+                    return (false, errorMsg);
+                }
+
+                var result = JsonConvert.DeserializeObject<PurchaseSkillResponse>(json);
+                if (result == null)
+                    return (false, "Invalid server response");
+
+                if (!result.Success)
+                {
+                    // Update local points to match server's authoritative value
+                    if (result.SkillPoints.HasValue)
+                        settings.SkillPoints = result.SkillPoints.Value;
+                    App.Settings?.Save();
+                    return (false, result.Error ?? "Purchase failed");
+                }
+
+                // Apply server's authoritative values
+                if (result.SkillPoints.HasValue)
+                    settings.SkillPoints = result.SkillPoints.Value;
+                if (result.UnlockedSkills != null)
+                {
+                    // Merge: take union to never lose skills
+                    var merged = new HashSet<string>(settings.UnlockedSkills ?? new List<string>());
+                    foreach (var skill in result.UnlockedSkills)
+                        merged.Add(skill);
+                    settings.UnlockedSkills = merged.ToList();
+                }
+                App.Settings?.Save();
+
+                App.Logger?.Information("Skill purchased via server: {SkillId}, {Points} points remaining",
+                    skillId, settings.SkillPoints);
+                return (true, null);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Skill purchase request failed");
+                return (false, "Connection failed. Please check your internet connection.");
             }
         }
 
@@ -2097,6 +2213,21 @@ namespace ConditioningControlPanel.Services
         {
             [JsonProperty("error")]
             public string? Error { get; set; }
+        }
+
+        private class PurchaseSkillResponse
+        {
+            [JsonProperty("success")]
+            public bool Success { get; set; }
+
+            [JsonProperty("error")]
+            public string? Error { get; set; }
+
+            [JsonProperty("skill_points")]
+            public int? SkillPoints { get; set; }
+
+            [JsonProperty("unlocked_skills")]
+            public List<string>? UnlockedSkills { get; set; }
         }
 
         private class ChangeDisplayNameResponse
