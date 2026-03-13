@@ -421,6 +421,13 @@ namespace ConditioningControlPanel.Models
             set { _flashAudioEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _flashGlowEnabled = true;
+        public bool FlashGlowEnabled
+        {
+            get => _flashGlowEnabled;
+            set { _flashGlowEnabled = value; OnPropertyChanged(); }
+        }
+
         private int _flashDuration = 5; // Duration in seconds when audio is disabled (1-30)
         public int FlashDuration
         {

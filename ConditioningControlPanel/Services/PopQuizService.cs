@@ -134,7 +134,23 @@ namespace ConditioningControlPanel.Services
             _timer?.Stop();
             _timer = null;
 
+            // Close any open quiz windows
+            CloseAllQuizWindows();
+
             App.Logger?.Information("PopQuizService stopped");
+        }
+
+        private static void CloseAllQuizWindows()
+        {
+            try
+            {
+                Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    foreach (var win in Application.Current.Windows.OfType<PopQuizWindow>().ToList())
+                        win.Close();
+                });
+            }
+            catch { }
         }
 
         private void Timer_Tick(object? sender, EventArgs e)

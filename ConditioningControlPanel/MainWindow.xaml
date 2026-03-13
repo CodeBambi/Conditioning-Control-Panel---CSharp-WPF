@@ -2102,6 +2102,12 @@
                                               Checked="ChkHydraLinked_Changed" Unchecked="ChkHydraLinked_Changed"/>
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="🔗Linked" Margin="5,0,0,0" FontSize="11"/>
                                 </StackPanel>
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="6,0,0,0"
+                                            ToolTip="Toggle the pink sparkle glow effect on flash images.&#x0a;Golden lucky glow is always shown.">
+                                    <CheckBox x:Name="ChkFlashGlow" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                              Checked="ChkFlashGlow_Changed" Unchecked="ChkFlashGlow_Changed"/>
+                                    <TextBlock Style="{StaticResource SettingLabel}" Text="✨Glow" Margin="5,0,0,0" FontSize="11"/>
+                                </StackPanel>
                             </Grid>
                             <!-- Per Hour / Images in two columns -->
                             <Grid Margin="0,2,0,0">

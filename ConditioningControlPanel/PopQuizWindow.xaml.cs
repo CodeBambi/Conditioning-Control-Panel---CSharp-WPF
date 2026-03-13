@@ -1,8 +1,11 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using IOPath = System.IO.Path;
 using ConditioningControlPanel.Services;
 using NAudio.Wave;
@@ -15,6 +18,16 @@ namespace ConditioningControlPanel
         private readonly bool _isTest;
         private bool _answered;
         private static readonly Random _random = new();
+        private readonly DispatcherTimer _keepOnTopTimer;
+        private IntPtr _hwnd;
+
+        private static readonly IntPtr HWND_TOPMOST = new(-1);
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOACTIVATE = 0x0010;
+
+        [DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
         public PopQuizWindow(PopQuizQuestion question, bool isTest = false)
         {
@@ -30,8 +43,24 @@ namespace ConditioningControlPanel
                 (indices[i], indices[j]) = (indices[j], indices[i]);
             }
 
-            // Re-assert focus if a flash or overlay temporarily covers us
-            Deactivated += OnDeactivated;
+            // Use Win32 SetWindowPos to re-assert topmost without toggling
+            // (toggling Topmost=false/true creates a gap that the avatar z-order timer exploits)
+            _keepOnTopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            _keepOnTopTimer.Tick += (s, e) =>
+            {
+                if (_answered || !IsVisible)
+                {
+                    _keepOnTopTimer.Stop();
+                    return;
+                }
+                if (_hwnd != IntPtr.Zero)
+                    SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            };
+            Loaded += (s, e) =>
+            {
+                _hwnd = new WindowInteropHelper(this).Handle;
+                _keepOnTopTimer.Start();
+            };
 
             TxtQuestion.Text = question.QuestionText;
             TxtAnswerA.Text = question.Answers[indices[0]];
@@ -44,18 +73,6 @@ namespace ConditioningControlPanel
             AnswerB.Tag = indices[1];
             AnswerC.Tag = indices[2];
             AnswerD.Tag = indices[3];
-        }
-
-        private void OnDeactivated(object? sender, EventArgs e)
-        {
-            if (_answered || !IsVisible) return;
-
-            // Bring quiz back to front after a flash or overlay steals focus
-            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, () =>
-            {
-                if (!_answered && IsVisible)
-                    Activate();
-            });
         }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
@@ -112,6 +129,7 @@ namespace ConditioningControlPanel
 
         private void CleanupAndClose()
         {
+            _keepOnTopTimer.Stop();
             App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.PopQuiz);
             Close();
         }
@@ -178,6 +196,7 @@ namespace ConditioningControlPanel
 
         protected override void OnClosed(EventArgs e)
         {
+            _keepOnTopTimer.Stop();
             // Ensure queue is cleared even if close happens unexpectedly
             if (!_answered)
             {

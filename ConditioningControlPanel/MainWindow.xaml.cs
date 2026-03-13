@@ -3469,6 +3469,10 @@ namespace ConditioningControlPanel
 
         private void BtnStartQuiz_Click(object sender, RoutedEventArgs e)
         {
+            // Prevent opening multiple quiz windows
+            if (Application.Current.Windows.OfType<QuizWindow>().Any())
+                return;
+
             if (App.Ai == null || !App.Ai.IsAvailable)
             {
                 MessageBox.Show("You need to be logged in to use the AI quiz.", "Login Required",
@@ -13802,12 +13806,24 @@ namespace ConditioningControlPanel
                 App.Autonomy?.Start();
             }
 
+            // Start pop quiz if enabled
+            if (settings.PopQuizEnabled)
+            {
+                App.PopQuiz?.Start();
+            }
+
+            // Start pop quiz service
+            if (settings.PopQuizEnabled)
+            {
+                App.PopQuiz?.Start();
+            }
+
             // Start ramp timer if enabled
             if (settings.IntensityRampEnabled)
             {
                 StartRampTimer();
             }
-            
+
             // Browser audio serves as background - no need to play separate music
 
             _isRunning = true;
@@ -13840,6 +13856,7 @@ namespace ConditioningControlPanel
             App.BubbleCount.Stop();
             App.MindWipe.Stop();
             App.BrainDrain.Stop();
+            App.PopQuiz?.Stop();
             // Only stop autonomy if it was started by the session engine (i.e., user didn't enable it independently).
             // If the user has autonomy enabled in settings, let it keep running after session ends.
             var s = App.Settings?.Current;
@@ -14188,6 +14205,7 @@ namespace ConditioningControlPanel
             s.FlashClickable = ChkClickable.IsChecked ?? true;
             s.CorruptionMode = ChkCorruption.IsChecked ?? false;
             s.HydraLinkedTiming = ChkHydraLinked.IsChecked ?? true;
+            s.FlashGlowEnabled = ChkFlashGlow.IsChecked ?? true;
             s.FlashFrequency = (int)SliderPerMin.Value;
             s.SimultaneousImages = (int)SliderImages.Value;
             s.HydraLimit = (int)SliderMaxOnScreen.Value;
@@ -14404,6 +14422,7 @@ namespace ConditioningControlPanel
             ChkClickable.IsChecked = s.FlashClickable;
             ChkCorruption.IsChecked = s.CorruptionMode;
             ChkHydraLinked.IsChecked = s.HydraLinkedTiming;
+            ChkFlashGlow.IsChecked = s.FlashGlowEnabled;
             SliderPerMin.Value = s.FlashFrequency;
             SliderImages.Value = s.SimultaneousImages;
             SliderMaxOnScreen.Value = s.HydraLimit;
@@ -14746,6 +14765,7 @@ namespace ConditioningControlPanel
             s.FlashClickable = ChkClickable.IsChecked ?? true;
             s.CorruptionMode = ChkCorruption.IsChecked ?? false;
             s.HydraLinkedTiming = ChkHydraLinked.IsChecked ?? true;
+            s.FlashGlowEnabled = ChkFlashGlow.IsChecked ?? true;
             s.FlashFrequency = (int)SliderPerMin.Value;
             s.SimultaneousImages = (int)SliderImages.Value;
             s.HydraLimit = (int)SliderMaxOnScreen.Value;
@@ -15957,6 +15977,16 @@ namespace ConditioningControlPanel
             var isEnabled = ChkCorruption.IsChecked ?? false;
             App.Settings.Current.CorruptionMode = isEnabled;
             App.Logger?.Information("Hydra mode toggled: {Enabled}", isEnabled);
+            App.Settings.Save();
+        }
+
+        private void ChkFlashGlow_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkFlashGlow.IsChecked ?? true;
+            App.Settings.Current.FlashGlowEnabled = isEnabled;
+            App.Logger?.Information("Flash glow toggled: {Enabled}", isEnabled);
             App.Settings.Save();
         }
 

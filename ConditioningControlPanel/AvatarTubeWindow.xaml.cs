@@ -2487,6 +2487,11 @@ namespace ConditioningControlPanel
             if (!_isAttached) return;
             if (_parentWindow == null || !_parentWindow.IsVisible || _parentWindow.WindowState == WindowState.Minimized)
                 return;
+
+            // Don't fight with pop quiz — it uses HWND_TOPMOST and must stay on top
+            if (Application.Current.Windows.OfType<PopQuizWindow>().Any())
+                return;
+
             if (_parentHandle == IntPtr.Zero)
                 _parentHandle = new WindowInteropHelper(_parentWindow).Handle;
             if (_parentHandle == IntPtr.Zero) return;
@@ -2519,6 +2524,9 @@ namespace ConditioningControlPanel
 
             // Don't redirect activation when user is typing in the chat input
             if (_isInputVisible) return;
+
+            // Don't activate parent when pop quiz is open — it would cover the quiz
+            if (Application.Current.Windows.OfType<PopQuizWindow>().Any()) return;
 
             try
             {

@@ -696,6 +696,10 @@ Do NOT include any other text before or after the question format. Just the ques
                     question.Points[i] = i + 1; // fallback: 1,2,3,4
             }
 
+            // Reject if AI echoed the format template placeholders instead of real answers
+            if (question.Answers.Any(a => a.StartsWith("[") && a.EndsWith("]")))
+                return null;
+
             return question;
         }
 

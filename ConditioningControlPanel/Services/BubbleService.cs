@@ -263,7 +263,7 @@ public class BubbleService : IDisposable
         var isLucky = multiplier > 1;
 
         // Tell bubble whether it's lucky so it can show the right visual effects
-        var hasSparkleBoost = (App.SkillTree?.GetSparkleBoostTier() ?? 0) > 0;
+        var hasSparkleBoost = (App.SkillTree?.GetSparkleBoostTier() ?? 0) > 0 && (App.Settings?.Current?.FlashGlowEnabled ?? true);
         bubble.SetLucky(isLucky, hasSparkleBoost);
 
         // Play appropriate sound

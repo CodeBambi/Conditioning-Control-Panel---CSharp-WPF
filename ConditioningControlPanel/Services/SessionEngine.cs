@@ -382,7 +382,7 @@ namespace ConditioningControlPanel.Services
             if (settings.SubliminalEnabled) App.Subliminal?.Start();
             if (settings.BubblesEnabled) App.Bubbles?.Start();
             if (settings.LockCardEnabled && App.Settings.Current.IsLevelUnlocked(35)) App.LockCard?.Start();
-            if (settings.PopQuizEnabled) App.PopQuiz?.Start();
+            if (App.Settings.Current.PopQuizEnabled) App.PopQuiz?.Start();
             if (settings.BubbleCountEnabled && App.Settings.Current.IsLevelUnlocked(50)) App.BubbleCount?.Start();
             if (settings.BouncingTextEnabled && App.Settings.Current.IsLevelUnlocked(60)) App.BouncingText?.Start();
             if (settings.MindWipeEnabled && App.Settings.Current.IsLevelUnlocked(75))
@@ -956,13 +956,9 @@ namespace ConditioningControlPanel.Services
                 App.LockCard?.Stop();
             }
 
-            current.PopQuizEnabled = settings.PopQuizEnabled;
-            if (settings.PopQuizEnabled)
+            // Pop quiz is a user-level toggle (AppSettings), not per-session
+            if (App.Settings.Current.PopQuizEnabled)
             {
-                if (settings.PopQuizFrequency.HasValue)
-                {
-                    current.PopQuizFrequency = settings.PopQuizFrequency.Value;
-                }
                 App.PopQuiz?.Start();
             }
             else

@@ -985,7 +985,31 @@ namespace ConditioningControlPanel
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            if (e.ClickCount == 2)
+            {
+                ToggleMaximize();
+                return;
+            }
             try { DragMove(); } catch { }
+        }
+
+        private void BtnMaximizeTitleBar_Click(object sender, RoutedEventArgs e)
+        {
+            ToggleMaximize();
+        }
+
+        private void ToggleMaximize()
+        {
+            if (WindowState == WindowState.Maximized)
+            {
+                WindowState = WindowState.Normal;
+                BtnMaximizeTitleBar.Content = "☐";
+            }
+            else
+            {
+                WindowState = WindowState.Maximized;
+                BtnMaximizeTitleBar.Content = "❐";
+            }
         }
 
         private void BtnCloseTitleBar_Click(object sender, RoutedEventArgs e)

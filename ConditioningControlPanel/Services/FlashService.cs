@@ -826,7 +826,7 @@ namespace ConditioningControlPanel.Services
 
                 // Apply glow effect based on sparkle boost tier or lucky proc
                 var sparkleBoostTier = App.SkillTree?.GetSparkleBoostTier() ?? 0;
-                if (isLucky || sparkleBoostTier > 0)
+                if (isLucky || (sparkleBoostTier > 0 && (App.Settings?.Current?.FlashGlowEnabled ?? true)))
                 {
                     var glowColor = isLucky
                         ? System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00) // Gold
@@ -852,12 +852,21 @@ namespace ConditioningControlPanel.Services
                         Opacity = glowOpacity
                     };
 
+                    // Clip the image with rounded corners so the glow wraps softly
+                    var clipBorder = new Border
+                    {
+                        CornerRadius = new CornerRadius(12),
+                        ClipToBounds = true,
+                        Child = image
+                    };
+
                     var border = new Border
                     {
                         Background = System.Windows.Media.Brushes.Transparent,
                         Effect = glowEffect,
+                        CornerRadius = new CornerRadius(12),
                         Padding = new Thickness(blurRadius / 2),
-                        Child = image
+                        Child = clipBorder
                     };
 
                     window.Background = System.Windows.Media.Brushes.Transparent;
