@@ -97,6 +97,7 @@ lb_*.json
 
 # Temp scripts and data dumps (often contain tokens/PII)
 tmp_*
+temp*
 find_*.js
 merge_*.js
 fix_*.js

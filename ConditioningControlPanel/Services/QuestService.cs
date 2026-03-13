@@ -885,16 +885,20 @@ public class QuestService : IDisposable
     /// <summary>
     /// Reset all quest progress (used on logout to clear account-specific data)
     /// </summary>
-    public void ResetProgress()
+    /// <param name="generateQuests">If false, skip quest generation (caller will generate after cloud sync)</param>
+    public void ResetProgress(bool generateQuests = true)
     {
         Progress = new QuestProgress();
         _isDirty = false;
         Save();
 
-        // Generate fresh quests so the UI doesn't show "Loading..."
-        CheckAndGenerateQuests();
+        if (generateQuests)
+        {
+            // Generate fresh quests so the UI doesn't show "Loading..."
+            CheckAndGenerateQuests();
+        }
 
-        App.Logger?.Information("QuestService progress reset");
+        App.Logger?.Information("QuestService progress reset (generateQuests={Generate})", generateQuests);
     }
 
     #region IDisposable
