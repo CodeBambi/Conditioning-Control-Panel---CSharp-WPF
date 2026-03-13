@@ -131,6 +131,7 @@ namespace ConditioningControlPanel.Services
             if (_isRunning) return;
 
             _isRunning = true;
+            _cancellationSource?.Dispose();
             _cancellationSource = new CancellationTokenSource();
             _heartbeatTimer?.Start();
 
@@ -151,6 +152,9 @@ namespace ConditioningControlPanel.Services
 
             StopCurrentSound();
             CloseAllWindows();
+
+            // Release cached BitmapSource objects from the LOH on stop
+            ClearImageCache();
 
             // Update Discord presence back to idle
             App.DiscordRpc?.SetIdleActivity();
@@ -244,21 +248,24 @@ namespace ConditioningControlPanel.Services
             var interval = baseInterval + (_random.NextDouble() * variance * 2 - variance);
             interval = Math.Max(3, interval); // Minimum 3 seconds
             
-            _schedulerTimer?.Stop();
-            _schedulerTimer = new DispatcherTimer
+            if (_schedulerTimer == null)
             {
-                Interval = TimeSpan.FromSeconds(interval)
-            };
-            _schedulerTimer.Tick += (s, e) =>
-            {
-                _schedulerTimer?.Stop();
-                if (_isRunning && !_isBusy)
-                {
-                    TriggerFlash();
-                }
-                ScheduleNextFlash();
-            };
+                _schedulerTimer = new DispatcherTimer();
+                _schedulerTimer.Tick += SchedulerTimer_Tick;
+            }
+            _schedulerTimer.Stop();
+            _schedulerTimer.Interval = TimeSpan.FromSeconds(interval);
             _schedulerTimer.Start();
+        }
+
+        private void SchedulerTimer_Tick(object? sender, EventArgs e)
+        {
+            _schedulerTimer?.Stop();
+            if (_isRunning && !_isBusy)
+            {
+                TriggerFlash();
+            }
+            ScheduleNextFlash();
         }
 
         #endregion
@@ -599,11 +606,12 @@ namespace ConditioningControlPanel.Services
 
                         // Schedule unduck
                         var unduckDelay = (int)(duration * 1000) + 1500;
-                        Task.Delay(unduckDelay).ContinueWith(_ =>
+                        var token = _cancellationSource?.Token ?? CancellationToken.None;
+                        Task.Delay(unduckDelay, token).ContinueWith(_ =>
                         {
                             try { App.Audio?.Unduck(duckGen); }
                             catch (Exception ex) { App.Logger?.Debug("FlashService unduck failed: {Error}", ex.Message); }
-                        });
+                        }, TaskContinuationOptions.NotOnCanceled);
                     }
                 }
                 catch (Exception ex)
@@ -626,7 +634,8 @@ namespace ConditioningControlPanel.Services
             if (_oneShotActive && !isMultiplication)
             {
                 var oneShotCleanupDelay = lifetimeMs + 2000; // extra 2s for fade-out
-                Task.Delay(oneShotCleanupDelay).ContinueWith(_ =>
+                var cleanupToken = _cancellationSource?.Token ?? CancellationToken.None;
+                Task.Delay(oneShotCleanupDelay, cleanupToken).ContinueWith(_ =>
                 {
                     try
                     {
@@ -645,7 +654,7 @@ namespace ConditioningControlPanel.Services
                         });
                     }
                     catch { }
-                });
+                }, TaskContinuationOptions.NotOnCanceled);
             }
 
             // Spawn windows — each gets its own lifetime CTS~ ✨
@@ -663,7 +672,8 @@ namespace ConditioningControlPanel.Services
                     var capturedData = imageData;
                     var capturedLifetime = lifetimeMs;
                     var capturedGeneration = hydraGeneration;
-                    Task.Delay(delayMs).ContinueWith(_ =>
+                    var spawnToken = _cancellationSource?.Token ?? CancellationToken.None;
+                    Task.Delay(delayMs, spawnToken).ContinueWith(_ =>
                     {
                         try
                         {
@@ -674,7 +684,7 @@ namespace ConditioningControlPanel.Services
                             });
                         }
                         catch { }
-                    });
+                    }, TaskContinuationOptions.NotOnCanceled);
                 }
             }
 
@@ -748,7 +758,8 @@ namespace ConditioningControlPanel.Services
                 };
 
                 // Register cancellation callback — when the token fires, mark this window for fade-out~ 🌙
-                windowCts.Token.Register(() =>
+                // Store the registration so we can dispose it in SafeCloseFlashWindow
+                window.LifetimeRegistration = windowCts.Token.Register(() =>
                 {
                     try
                     {
@@ -764,9 +775,14 @@ namespace ConditioningControlPanel.Services
                 // without going through SafeCloseFlashWindow, dispose the CTS to prevent leaks~ 🧹
                 window.Closed += (s, e) =>
                 {
-                    try { window.LifetimeCts?.Cancel(); } catch { }
-                    try { window.LifetimeCts?.Dispose(); } catch { }
-                    window.LifetimeCts = null;
+                    if (s is FlashWindow fw)
+                    {
+                        try { fw.LifetimeRegistration?.Dispose(); } catch { }
+                        fw.LifetimeRegistration = null;
+                        try { fw.LifetimeCts?.Cancel(); } catch { }
+                        try { fw.LifetimeCts?.Dispose(); } catch { }
+                        fw.LifetimeCts = null;
+                    }
                 };
 
                 // Create image control
@@ -784,7 +800,11 @@ namespace ConditioningControlPanel.Services
                 if (settings.FlashClickable)
                 {
                     window.Cursor = System.Windows.Input.Cursors.Hand;
-                    window.MouseLeftButtonDown += (s, e) => OnFlashClicked(window, settings);
+                    window.MouseLeftButtonDown += (s, e) =>
+                    {
+                        if (s is FlashWindow fw)
+                            OnFlashClicked(fw, App.Settings.Current);
+                    };
                 }
                 else
                 {
@@ -1042,6 +1062,9 @@ namespace ConditioningControlPanel.Services
 
             if (toRemove.Count > 0)
                 App.Overlay?.NotifyTopWindowClosed();
+
+            // Clear stale references in snapshot so removed windows can be GC'd
+            Array.Clear(_windowsSnapshot, 0, _windowsSnapshot.Length);
         }
 
         #endregion
@@ -1206,6 +1229,12 @@ namespace ConditioningControlPanel.Services
         {
             lock (_lockObj)
             {
+                // Periodically clean temp pack files instead of letting the list grow unbounded
+                if (_tempPackFiles.Count > 50)
+                {
+                    CleanupTempPackFiles();
+                }
+
                 // Refresh image lists if empty (first call or after cache clear)
                 if (_imageList.Count == 0 && _packImageList.Count == 0)
                 {
@@ -1505,24 +1534,33 @@ namespace ConditioningControlPanel.Services
         private double PlaySound(string path, int volumePercent)
         {
             StopCurrentSound();
-            
+
+            AudioFileReader? audioFile = null;
+            WaveOutEvent? sound = null;
             try
             {
-                _currentAudioFile = new AudioFileReader(path);
-                _currentSound = new WaveOutEvent();
-                
+                audioFile = new AudioFileReader(path);
+                sound = new WaveOutEvent();
+
                 // Apply volume curve (gentler, minimum 5%)
                 var volume = volumePercent / 100.0f;
                 var curvedVolume = Math.Max(0.05f, (float)Math.Pow(volume, 1.5));
-                _currentAudioFile.Volume = curvedVolume;
-                
-                _currentSound.Init(_currentAudioFile);
-                _currentSound.Play();
-                
-                return _currentAudioFile.TotalTime.TotalSeconds;
+                audioFile.Volume = curvedVolume;
+
+                sound.Init(audioFile);
+                sound.Play();
+
+                // Only assign to fields after everything succeeded
+                _currentAudioFile = audioFile;
+                _currentSound = sound;
+
+                return audioFile.TotalTime.TotalSeconds;
             }
             catch (Exception ex)
             {
+                // Dispose locally — these never made it to the fields
+                sound?.Dispose();
+                audioFile?.Dispose();
                 App.Logger.Debug("Could not play sound {Path}: {Error}", path, ex.Message);
                 return 5.0;
             }
@@ -1553,6 +1591,10 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // Dispose CTS registration first to release the closure capturing this window
+                try { window.LifetimeRegistration?.Dispose(); } catch { }
+                window.LifetimeRegistration = null;
+
                 // Cancel and dispose per-window lifetime token~ 🧹
                 try { window.LifetimeCts?.Cancel(); } catch { }
                 try { window.LifetimeCts?.Dispose(); } catch { }
@@ -1583,7 +1625,8 @@ namespace ConditioningControlPanel.Services
                 // Need to do this after window is shown
                 window.SourceInitialized += (s, e) =>
                 {
-                    var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                    if (s is not Window w) return;
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
                     var extendedStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
                     // WS_EX_TRANSPARENT: clicks pass through
                     // WS_EX_LAYERED: allows transparency
@@ -1604,7 +1647,8 @@ namespace ConditioningControlPanel.Services
             {
                 window.SourceInitialized += (s, e) =>
                 {
-                    var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+                    if (s is not Window w) return;
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
                     var extendedStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
                     NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE,
                         extendedStyle | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE);
@@ -1685,6 +1729,12 @@ namespace ConditioningControlPanel.Services
         /// Per-window cancellation source — cancel this to begin fade-out for THIS window only~ 🌙
         /// </summary>
         public CancellationTokenSource? LifetimeCts { get; set; }
+
+        /// <summary>
+        /// Registration handle for the CTS callback — must be disposed to release the closure
+        /// that captures this window, preventing memory leaks per flash.
+        /// </summary>
+        public CancellationTokenRegistration? LifetimeRegistration { get; set; }
 
         /// <summary>
         /// When this window should start fading out. Set by the cancellation callback or on creation.
