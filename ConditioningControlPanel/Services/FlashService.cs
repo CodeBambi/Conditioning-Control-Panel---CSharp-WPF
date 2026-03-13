@@ -857,13 +857,9 @@ namespace ConditioningControlPanel.Services
                     hydraGeneration, hydraXpMultiplier, xpAmount);
             }
 
-            // Roll for lucky flash (5% chance for 5x XP if skill unlocked)
-            var multiplier = App.SkillTree?.RollLuckyFlash() ?? 1;
-            if (hydraGeneration > 0)
-            { 
-               double reduction = Math.Log(hydraGeneration+1);
-               multiplier = 1 / (int) (1+reduction);
-            }
+            // Roll for lucky flash (5% chance for 10x XP if skill unlocked)
+            // Disable lucky flash for hydra children — base XP already has diminishing returns
+            var multiplier = (hydraGeneration > 0) ? 1 : (App.SkillTree?.RollLuckyFlash() ?? 1);
             
 
             var isLucky = multiplier > 1;
