@@ -16777,9 +16777,23 @@ namespace ConditioningControlPanel
 
         #endregion
 
-        private void ShowEasterEgg()
+        private async void ShowEasterEgg()
         {
-            var easterEggWindow = new EasterEggWindow();
+            int readerCount = -1;
+            try
+            {
+                if (App.ProfileSync != null)
+                    readerCount = await App.ProfileSync.RecordEasterEggReadAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to fetch easter egg reader count");
+            }
+
+            if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted)
+                return;
+
+            var easterEggWindow = new EasterEggWindow(readerCount);
             easterEggWindow.Owner = this;
             easterEggWindow.ShowDialog();
         }

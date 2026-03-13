@@ -1824,6 +1824,53 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Records that the current user found the easter egg and returns the total reader count.
+        /// If logged in: adds user to the unique readers set and returns count.
+        /// If not logged in: returns count only (read-only).
+        /// Returns -1 on failure.
+        /// </summary>
+        public async Task<int> RecordEasterEggReadAsync()
+        {
+            try
+            {
+                var unifiedId = App.Settings?.Current?.UnifiedId;
+
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/easter-egg");
+
+                if (!string.IsNullOrEmpty(unifiedId))
+                {
+                    AddAuthHeader(request);
+                    request.Content = new StringContent(
+                        JsonConvert.SerializeObject(new { unified_id = unifiedId }),
+                        Encoding.UTF8,
+                        "application/json"
+                    );
+                }
+                else
+                {
+                    request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+                }
+
+                var response = await _httpClient.SendAsync(request);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    App.Logger?.Warning("Easter egg endpoint returned {Status}", response.StatusCode);
+                    return -1;
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonConvert.DeserializeObject<EasterEggResponse>(json);
+                return result?.Count ?? -1;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Easter egg request failed");
+                return -1;
+            }
+        }
+
         #endregion
 
         public void Dispose()
@@ -1835,6 +1882,12 @@ namespace ConditioningControlPanel.Services
         }
 
         #region DTOs
+
+        private class EasterEggResponse
+        {
+            [JsonProperty("count")]
+            public int Count { get; set; }
+        }
 
         private class ProfileResponse
         {
