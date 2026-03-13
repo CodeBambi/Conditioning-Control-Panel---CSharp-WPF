@@ -315,16 +315,18 @@ public class BubbleService : IDisposable
         {
             var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
 
-            // If lucky bubble, play special Burst easter egg sound
+            // If lucky bubble, play a random chime sound
             if (isLucky)
             {
-                var burstPath = Path.Combine(soundsPath, "Burst.mp3");
-                if (File.Exists(burstPath))
+                var chimeSoundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds");
+                var chimeFiles = new[] { "chime1.mp3", "chime2.mp3", "chime3.mp3" };
+                var chimePath = Path.Combine(chimeSoundsPath, chimeFiles[_random.Next(chimeFiles.Length)]);
+                if (File.Exists(chimePath))
                 {
                     var masterVolume = App.Settings.Current.MasterVolume / 100f;
                     var bubblesVolume = App.Settings.Current.BubblesVolume / 100f;
-                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5) * 0.5f;
-                    PlaySoundAsync(burstPath, volume);
+                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5) * 0.35f;
+                    PlaySoundAsync(chimePath, volume);
                     App.Logger?.Information("🎉 Lucky Bubble! 20x XP!");
                     return;
                 }

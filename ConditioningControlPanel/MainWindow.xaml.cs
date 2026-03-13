@@ -540,7 +540,7 @@ namespace ConditioningControlPanel
                         var outputDevice = new WaveOutEvent();
 
                         var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                        var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.375f;
+                        var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.2625f;
                         audioFile.Volume = Math.Max(0.01f, curvedVolume);
 
                         outputDevice.Init(audioFile);
@@ -7999,9 +7999,6 @@ namespace ConditioningControlPanel
         {
             var settings = App.Settings?.Current;
             if (settings == null) return;
-
-            // Scroll to the beginning to show the header
-            SkillTreeScroller?.ScrollToHorizontalOffset(0);
 
             // Update skill points display
             TxtSkillPoints.Text = settings.SkillPoints.ToString();

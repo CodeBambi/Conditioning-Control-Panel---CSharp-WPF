@@ -194,7 +194,11 @@ namespace ConditioningControlPanel.Services
                     // Pick a random question
                     var question = QuestionPool[_random.Next(QuestionPool.Length)];
                     var window = new PopQuizWindow(question, isTest);
+                    var mainWin = Application.Current.MainWindow;
+                    if (mainWin != null && mainWin.IsVisible)
+                        window.Owner = mainWin;
                     window.Show();
+                    window.Activate();
 
                     App.Logger?.Information("Pop Quiz shown: {Question}", question.QuestionText);
                 }

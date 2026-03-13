@@ -93,7 +93,7 @@ namespace ConditioningControlPanel
                             using var outputDevice = new WaveOutEvent();
 
                             var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                            var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.5f;
+                            var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
                             audioFile.Volume = Math.Max(0.01f, curvedVolume);
 
                             outputDevice.Init(audioFile);

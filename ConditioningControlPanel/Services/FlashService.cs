@@ -854,7 +854,7 @@ namespace ConditioningControlPanel.Services
 
                     var border = new Border
                     {
-                        Background = System.Windows.Media.Brushes.Black,
+                        Background = System.Windows.Media.Brushes.Transparent,
                         Effect = glowEffect,
                         Padding = new Thickness(blurRadius / 2),
                         Child = image
@@ -1436,26 +1436,27 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Plays the Burst.mp3 sound for lucky flash (5x XP)
+        /// Plays a random chime sound for lucky flash (10x XP)
         /// </summary>
         private void PlayLuckyFlashSound()
         {
             try
             {
-                var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
-                var burstPath = Path.Combine(soundsPath, "Burst.mp3");
+                var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds");
+                var chimeFiles = new[] { "chime1.mp3", "chime2.mp3", "chime3.mp3" };
+                var chimePath = Path.Combine(soundsPath, chimeFiles[_random.Next(chimeFiles.Length)]);
 
-                if (File.Exists(burstPath))
+                if (File.Exists(chimePath))
                 {
                     Task.Run(() =>
                     {
                         try
                         {
-                            using var audioFile = new AudioFileReader(burstPath);
+                            using var audioFile = new AudioFileReader(chimePath);
                             using var outputDevice = new WaveOutEvent();
 
                             var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                            var volume = (float)Math.Pow(masterVolume, 1.5) * 0.5f;
+                            var volume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
                             audioFile.Volume = volume;
 
                             outputDevice.Init(audioFile);

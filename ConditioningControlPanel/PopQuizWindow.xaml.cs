@@ -30,6 +30,9 @@ namespace ConditioningControlPanel
                 (indices[i], indices[j]) = (indices[j], indices[i]);
             }
 
+            // Re-assert focus if a flash or overlay temporarily covers us
+            Deactivated += OnDeactivated;
+
             TxtQuestion.Text = question.QuestionText;
             TxtAnswerA.Text = question.Answers[indices[0]];
             TxtAnswerB.Text = question.Answers[indices[1]];
@@ -41,6 +44,18 @@ namespace ConditioningControlPanel
             AnswerB.Tag = indices[1];
             AnswerC.Tag = indices[2];
             AnswerD.Tag = indices[3];
+        }
+
+        private void OnDeactivated(object? sender, EventArgs e)
+        {
+            if (_answered || !IsVisible) return;
+
+            // Bring quiz back to front after a flash or overlay steals focus
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, () =>
+            {
+                if (!_answered && IsVisible)
+                    Activate();
+            });
         }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)

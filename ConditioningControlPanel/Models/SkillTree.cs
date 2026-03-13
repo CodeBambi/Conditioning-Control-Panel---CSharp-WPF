@@ -74,7 +74,7 @@ public class SkillDefinition
             Cost = 8,
             PrerequisiteId = "pink_hours",
             FlavorText = "Good girls deserve extra sparkles! You're just THAT special, sweetie~",
-            Description = "+10% XP from all sources",
+            Description = "+10% XP from all sources. Adds pink glow to flashes and sparkle particles on bubble pops",
             EffectType = SkillEffectType.XpMultiplier,
             EffectValue = 0.10
         },
@@ -130,7 +130,7 @@ public class SkillDefinition
             Cost = 15,
             PrerequisiteId = "sparkle_boost_1",
             FlavorText = "Even MORE sparkles?! +15% extra (25% total!) You're practically GLOWING~",
-            Description = "+15% more XP (stacks to 25%)",
+            Description = "+15% more XP (stacks to 25%). Stronger pink glow on flashes",
             EffectType = SkillEffectType.XpMultiplier,
             EffectValue = 0.15
         },
@@ -143,7 +143,7 @@ public class SkillDefinition
             Cost = 15,
             PrerequisiteId = "sparkle_boost_2",
             FlavorText = "Being an airhead pays off sometimes! 5% chance any flash gives 10x XP~ Tee-hee!",
-            Description = "5% chance for 10x XP on flash images",
+            Description = "5% chance for 10x XP on flash images with golden pulsing glow",
             EffectType = SkillEffectType.LuckyFlash,
             EffectValue = 0.05
         },
@@ -225,7 +225,7 @@ public class SkillDefinition
             Cost = 25,
             PrerequisiteId = "lucky_bimbo",
             FlavorText = "THE MOST SPARKLES POSSIBLE! +20% more (45% total!) You're basically made of glitter now~",
-            Description = "+20% more XP (stacks to 45%)",
+            Description = "+20% more XP (stacks to 45%). Maximum pink glow on flashes",
             EffectType = SkillEffectType.XpMultiplier,
             EffectValue = 0.20
         },
@@ -238,7 +238,7 @@ public class SkillDefinition
             Cost = 20,
             PrerequisiteId = "sparkle_boost_3",
             FlavorText = "Pop pop POP! 5% chance bubbles give 20x points! Empty heads LOVE bubbles~",
-            Description = "5% chance for 20x bubble points",
+            Description = "5% chance for 20x bubble points with golden sparkle burst",
             EffectType = SkillEffectType.LuckyBubble,
             EffectValue = 0.05
         },
