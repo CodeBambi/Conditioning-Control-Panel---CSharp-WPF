@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -151,6 +152,9 @@ namespace ConditioningControlPanel
 
         // Pink Rush popup
         private PinkRushPopup? _pinkRushPopup;
+
+        // Lucky proc toast popup
+        private Window? _luckyProcPopup;
         
         // Ramp tracking
         private DispatcherTimer? _rampTimer;
@@ -306,6 +310,7 @@ namespace ConditioningControlPanel
             {
                 App.SkillTree.PinkRushStarted += OnPinkRushStarted;
                 App.SkillTree.PinkRushEnded += OnPinkRushEnded;
+                App.SkillTree.LuckyProc += OnLuckyProc;
             }
 
             // Subscribe to roadmap events
@@ -317,6 +322,9 @@ namespace ConditioningControlPanel
 
             // Initialize Avatar tab settings
             InitializePatreonTab();
+
+            // Initialize Exclusives section visibility for already-logged-in users
+            UpdateAccountLinkingUI();
 
             // Initialize banner rotation
             InitializeBannerRotation();
@@ -526,7 +534,7 @@ namespace ConditioningControlPanel
                         var outputDevice = new WaveOutEvent();
 
                         var masterVolume = App.Settings.Current.MasterVolume / 100f;
-                        var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.375f;
+                        var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.2625f;
                         audioFile.Volume = Math.Max(0.01f, curvedVolume);
 
                         outputDevice.Init(audioFile);
@@ -858,6 +866,10 @@ namespace ConditioningControlPanel
                 RbHypnoTube.IsChecked = true;
             }
 
+            // Update browser loading text for current mode
+            var browserSiteName = isSissyMode ? "HypnoTube" : "BambiCloud";
+            BrowserLoadingText.Text = $"🌐 Click to connect to {browserSiteName}";
+
             // Load mode-aware images
             LoadTakeoverImage();
             RefreshThemeAwareElements();
@@ -1151,6 +1163,16 @@ namespace ConditioningControlPanel
             // Load past quizzes list
             RefreshPastQuizzes();
 
+            // Initialize pop quiz UI from settings
+            if (ChkPopQuizEnabled != null)
+                ChkPopQuizEnabled.IsChecked = App.Settings.Current.PopQuizEnabled;
+            if (SliderPopQuizFrequency != null)
+            {
+                SliderPopQuizFrequency.Value = App.Settings.Current.PopQuizFrequency;
+                if (TxtPopQuizFrequency != null)
+                    TxtPopQuizFrequency.Text = $"{App.Settings.Current.PopQuizFrequency}/session hr";
+            }
+
             // Handle start minimized (to tray) - delay briefly to let window render properly first
             if (App.Settings.Current.StartMinimized)
             {
@@ -1188,8 +1210,7 @@ namespace ConditioningControlPanel
             // Start periodic stat pill update timer
             StartStatPillUpdateTimer();
 
-            // Auto-initialize browser on startup
-            await InitializeBrowserAsync();
+            // Browser is lazy-loaded on first interaction (click radio toggle, pop-out, or external navigation)
 
             // Check if this is first run and prompt for assets folder
             await CheckFirstRunAssetsPromptAsync();
@@ -2692,6 +2713,8 @@ namespace ConditioningControlPanel
         /// </summary>
         private void OpenUnifiedLoginDialog()
         {
+            var previousUnifiedId = App.UnifiedUserId;
+
             var loginDialog = new LoginDialog
             {
                 Owner = this,
@@ -2701,6 +2724,10 @@ namespace ConditioningControlPanel
             if (loginDialog.ShowDialog() == true && loginDialog.Result != null)
             {
                 var result = loginDialog.Result;
+
+                // Detect same-account re-login (e.g. re-linking Patreon on same account)
+                var isSameAccount = !string.IsNullOrEmpty(previousUnifiedId)
+                    && previousUnifiedId == App.UnifiedUserId;
 
                 // Update all UI
                 UpdateQuickLoginUI();
@@ -2712,24 +2739,28 @@ namespace ConditioningControlPanel
                 UpdateBannerWelcomeMessage();
                 UpdateAccountLinkingUI();
 
-                // Save new account's identity/lifetime data set by ApplyUserDataToSettings inside LoginDialog.
-                // ClearProgressionData will zero these, so we restore them after clearing.
-                var savedHighestLevelEver = App.Settings?.Current?.HighestLevelEver ?? 0;
-                var savedIsSeason0Og = App.Settings?.Current?.IsSeason0Og ?? false;
-                var savedCurrentSeason = App.Settings?.Current?.CurrentSeason;
-                var savedPatreonTier = App.Settings?.Current?.PatreonTier ?? 0;
-
-                // Clear stale progression data from previous account before syncing
-                ClearProgressionData();
-
-                // Restore the new account's lifetime data that ClearProgressionData just zeroed
-                if (App.Settings?.Current != null)
+                if (!isSameAccount)
                 {
-                    App.Settings.Current.HighestLevelEver = savedHighestLevelEver;
-                    App.Settings.Current.IsSeason0Og = savedIsSeason0Og;
-                    App.Settings.Current.CurrentSeason = savedCurrentSeason;
-                    App.Settings.Current.PatreonTier = savedPatreonTier;
-                    App.Settings.Save();
+                    // Save new account's identity/lifetime data set by ApplyUserDataToSettings inside LoginDialog.
+                    // ClearProgressionData will zero these, so we restore them after clearing.
+                    var savedHighestLevelEver = App.Settings?.Current?.HighestLevelEver ?? 0;
+                    var savedIsSeason0Og = App.Settings?.Current?.IsSeason0Og ?? false;
+                    var savedCurrentSeason = App.Settings?.Current?.CurrentSeason;
+                    var savedPatreonTier = App.Settings?.Current?.PatreonTier ?? 0;
+
+                    // Clear stale progression data from previous account before syncing.
+                    // Defer quest generation — cloud data will be restored first.
+                    ClearProgressionData(generateQuests: false);
+
+                    // Restore the new account's lifetime data that ClearProgressionData just zeroed
+                    if (App.Settings?.Current != null)
+                    {
+                        App.Settings.Current.HighestLevelEver = savedHighestLevelEver;
+                        App.Settings.Current.IsSeason0Og = savedIsSeason0Og;
+                        App.Settings.Current.CurrentSeason = savedCurrentSeason;
+                        App.Settings.Current.PatreonTier = savedPatreonTier;
+                        App.Settings.Save();
+                    }
                 }
 
                 // Start profile sync
@@ -2770,6 +2801,12 @@ namespace ConditioningControlPanel
                         // Refresh UI on the dispatcher thread after sync completes
                         Application.Current?.Dispatcher?.Invoke(() =>
                         {
+                            // Generate quests AFTER cloud data has been restored
+                            if (!isSameAccount)
+                            {
+                                App.Quests?.CheckAndGenerateQuests();
+                            }
+
                             UpdateLevelDisplay();
                             RefreshQuestUI();
                             DrawSkillTree();
@@ -2787,7 +2824,8 @@ namespace ConditioningControlPanel
         /// Does NOT clear identity fields (UnifiedId, UserDisplayName, link flags).
         /// Called on login (before sync), logout, and account deletion.
         /// </summary>
-        private void ClearProgressionData()
+        /// <param name="generateQuests">If false, skip quest generation (caller will generate after cloud sync)</param>
+        private void ClearProgressionData(bool generateQuests = true)
         {
             if (App.Settings?.Current != null)
             {
@@ -2832,7 +2870,7 @@ namespace ConditioningControlPanel
             }
 
             // Reset quest progress (active quests + stats in quests.json)
-            App.Quests?.ResetProgress();
+            App.Quests?.ResetProgress(generateQuests);
 
             // Reset achievement progress (unlocked achievements + stats in achievements.json)
             App.Achievements?.ResetProgress();
@@ -3425,6 +3463,15 @@ namespace ConditioningControlPanel
 
         private void BtnStartQuiz_Click(object sender, RoutedEventArgs e)
         {
+            // Prevent opening multiple quiz windows — focus existing one instead
+            var existingQuiz = Application.Current.Windows.OfType<QuizWindow>().FirstOrDefault();
+            if (existingQuiz != null)
+            {
+                existingQuiz.Activate();
+                existingQuiz.Focus();
+                return;
+            }
+
             if (App.Ai == null || !App.Ai.IsAvailable)
             {
                 MessageBox.Show("You need to be logged in to use the AI quiz.", "Login Required",
@@ -3456,10 +3503,53 @@ namespace ConditioningControlPanel
                 TxtPastQuizzesHeader.Visibility = Visibility.Visible;
                 PastQuizzesPanel.Visibility = Visibility.Visible;
 
+                // Trend summary at top — show latest archetype + trend per category that has history
+                var categories = history.Select(h => h.Category).Distinct();
+                foreach (var cat in categories)
+                {
+                    var trend = QuizService.GetScoreTrend(history, cat);
+                    if (trend == null) continue;
+
+                    // Extract archetype from latest profile text
+                    var latestEntry = history.FirstOrDefault(h => h.Category == cat);
+                    var archetype = "";
+                    if (latestEntry != null)
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(latestEntry.ProfileText, @"You are a (.+?)\.");
+                        if (match.Success) archetype = match.Groups[1].Value;
+                    }
+
+                    var arrow = trend.Direction switch
+                    {
+                        TrendDirection.Up => "\u2191",
+                        TrendDirection.Down => "\u2193",
+                        TrendDirection.Flat => "\u2192",
+                        _ => ""
+                    };
+                    var catDisplay = latestEntry != null && !string.IsNullOrEmpty(latestEntry.CategoryName)
+                        ? latestEntry.CategoryName : cat.ToString();
+                    var trendLabel = trend.Direction == TrendDirection.FirstQuiz
+                        ? $"{catDisplay}: {trend.LatestPercent}%"
+                        : $"{catDisplay}: {trend.LatestPercent}% {arrow}{Math.Abs(trend.DeltaPercent)}%";
+                    if (!string.IsNullOrEmpty(archetype))
+                        trendLabel += $" · {archetype}";
+
+                    var trendRow = new TextBlock
+                    {
+                        Text = trendLabel,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)),
+                        FontSize = 11,
+                        FontWeight = FontWeights.SemiBold,
+                        Margin = new Thickness(8, 3, 8, 3)
+                    };
+                    PastQuizzesList.Children.Add(trendRow);
+                }
+
                 foreach (var entry in history)
                 {
                     var pct = entry.MaxScore > 0 ? (int)Math.Round((double)entry.TotalScore / entry.MaxScore * 100) : 0;
-                    var label = $"{entry.TakenAt:MMM d}  ·  {entry.Category}  ·  {entry.TotalScore}/{entry.MaxScore} ({pct}%)";
+                    var catName = !string.IsNullOrEmpty(entry.CategoryName) ? entry.CategoryName : entry.Category.ToString();
+                    var label = $"{entry.TakenAt:MMM d}  ·  {catName}  ·  {entry.TotalScore}/{entry.MaxScore} ({pct}%)";
 
                     var row = new Border
                     {
@@ -3479,6 +3569,9 @@ namespace ConditioningControlPanel
                     var captured = entry;
                     row.MouseLeftButtonDown += (s, args) =>
                     {
+                        // Close any existing report window before opening a new one
+                        foreach (var w in Application.Current.Windows.OfType<QuizReportWindow>().ToList())
+                            w.Close();
                         new QuizReportWindow(captured) { Owner = this }.Show();
                     };
                     row.MouseEnter += (s, args) =>
@@ -3497,6 +3590,27 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "MainWindow: Failed to refresh past quizzes");
             }
+        }
+
+        // ============ POP QUIZ HANDLERS ============
+
+        private void ChkPopQuizEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current == null) return;
+            App.Settings.Current.PopQuizEnabled = ChkPopQuizEnabled.IsChecked == true;
+        }
+
+        private void SliderPopQuizFrequency_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (App.Settings?.Current == null || TxtPopQuizFrequency == null) return;
+            var val = (int)Math.Round(e.NewValue);
+            App.Settings.Current.PopQuizFrequency = val;
+            TxtPopQuizFrequency.Text = $"{val}/session hr";
+        }
+
+        private void BtnTestPopQuiz_Click(object sender, RoutedEventArgs e)
+        {
+            App.PopQuiz?.TestPopQuiz();
         }
 
         private void OnLockdownActivated()
@@ -3871,7 +3985,9 @@ namespace ConditioningControlPanel
             {
                 _leaderboardMode = mode;
                 UpdateLeaderboardModeButtons();
-                await RefreshLeaderboardAsync();
+                // All-time defaults to XP ranking, monthly defaults to level
+                var defaultSort = mode == "all-time" ? "xp" : "level";
+                await RefreshLeaderboardAsync(defaultSort);
             }
         }
 
@@ -3881,25 +3997,96 @@ namespace ConditioningControlPanel
             {
                 if (BtnLeaderboardMonthly == null || BtnLeaderboardAllTime == null) return;
 
-                if (_leaderboardMode == "all-time")
+                var isAllTime = _leaderboardMode == "all-time";
+                var gold = (Color)ColorConverter.ConvertFromString("#FFD700");
+                var pink = (Color)ColorConverter.ConvertFromString("#FF69B4");
+                var dark = (Color)ColorConverter.ConvertFromString("#1A1A2E");
+                var inactive = (Color)ColorConverter.ConvertFromString("#352545");
+
+                if (isAllTime)
                 {
-                    BtnLeaderboardMonthly.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#352545"));
-                    BtnLeaderboardMonthly.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
-                    BtnLeaderboardAllTime.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
-                    BtnLeaderboardAllTime.Foreground = new SolidColorBrush(Colors.White);
+                    BtnLeaderboardMonthly.Background = new SolidColorBrush(inactive);
+                    BtnLeaderboardMonthly.Foreground = new SolidColorBrush(pink);
+                    BtnLeaderboardAllTime.Background = new SolidColorBrush(gold);
+                    BtnLeaderboardAllTime.Foreground = new SolidColorBrush(dark);
                 }
                 else
                 {
-                    BtnLeaderboardMonthly.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
+                    BtnLeaderboardMonthly.Background = new SolidColorBrush(pink);
                     BtnLeaderboardMonthly.Foreground = new SolidColorBrush(Colors.White);
-                    BtnLeaderboardAllTime.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#352545"));
-                    BtnLeaderboardAllTime.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
+                    BtnLeaderboardAllTime.Background = new SolidColorBrush(inactive);
+                    BtnLeaderboardAllTime.Foreground = new SolidColorBrush(pink);
                 }
+
+                // Update All-Time button border color
+                var allTimeBorder = BtnLeaderboardAllTime.Template?.FindName("AllTimeBorder", BtnLeaderboardAllTime) as Border;
+                if (allTimeBorder != null)
+                    allTimeBorder.BorderBrush = new SolidColorBrush(isAllTime ? gold : pink);
+
+                // Apply accent theme to rows, headers, and hover colors
+                ApplyLeaderboardTheme(isAllTime ? gold : pink);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Error updating leaderboard mode buttons");
             }
+        }
+
+        private void ApplyLeaderboardTheme(Color accent)
+        {
+            if (LstLeaderboard == null) return;
+
+            var accentBrush = new SolidColorBrush(accent);
+            var hoverBrush = new SolidColorBrush(Color.FromArgb(0x40, accent.R, accent.G, accent.B));
+            var selectedBrush = new SolidColorBrush(Color.FromArgb(0x50, accent.R, accent.G, accent.B));
+            var headerHoverBg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#452555"));
+            var headerBg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#352545"));
+
+            // Rebuild ItemContainerStyle with the new accent color
+            var itemStyle = new Style(typeof(ListViewItem));
+            itemStyle.Setters.Add(new Setter(ForegroundProperty, accentBrush));
+            itemStyle.Setters.Add(new Setter(BackgroundProperty, Brushes.Transparent));
+            itemStyle.Setters.Add(new Setter(PaddingProperty, new Thickness(8)));
+            itemStyle.Setters.Add(new Setter(MarginProperty, new Thickness(0, 2, 0, 0)));
+            itemStyle.Setters.Add(new Setter(FontSizeProperty, 18.0));
+            itemStyle.Setters.Add(new Setter(FontWeightProperty, FontWeights.ExtraBold));
+            itemStyle.Setters.Add(new Setter(FontFamilyProperty, new FontFamily("Segoe Print")));
+            itemStyle.Setters.Add(new Setter(HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
+
+            // OG gold-tinted row (always gold regardless of mode)
+            var ogTrigger = new DataTrigger { Binding = new System.Windows.Data.Binding("IsSeason0Og"), Value = true };
+            ogTrigger.Setters.Add(new Setter(BackgroundProperty, new SolidColorBrush(Color.FromArgb(0x25, 0xFF, 0xD7, 0x00))));
+            ogTrigger.Setters.Add(new Setter(BorderBrushProperty, new SolidColorBrush(Color.FromArgb(0x50, 0xFF, 0xD7, 0x00))));
+            ogTrigger.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(0, 0, 0, 2)));
+            itemStyle.Triggers.Add(ogTrigger);
+
+            var hoverTrigger = new Trigger { Property = IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new Setter(BackgroundProperty, hoverBrush));
+            itemStyle.Triggers.Add(hoverTrigger);
+
+            var selectedTrigger = new Trigger { Property = ListViewItem.IsSelectedProperty, Value = true };
+            selectedTrigger.Setters.Add(new Setter(BackgroundProperty, selectedBrush));
+            itemStyle.Triggers.Add(selectedTrigger);
+
+            LstLeaderboard.ItemContainerStyle = itemStyle;
+
+            // Rebuild header style in ListView.Resources
+            var headerStyle = new Style(typeof(GridViewColumnHeader));
+            headerStyle.Setters.Add(new Setter(BackgroundProperty, headerBg));
+            headerStyle.Setters.Add(new Setter(ForegroundProperty, accentBrush));
+            headerStyle.Setters.Add(new Setter(FontWeightProperty, FontWeights.ExtraBold));
+            headerStyle.Setters.Add(new Setter(FontSizeProperty, 18.0));
+            headerStyle.Setters.Add(new Setter(FontFamilyProperty, new FontFamily("Segoe Print")));
+            headerStyle.Setters.Add(new Setter(PaddingProperty, new Thickness(12, 10, 12, 10)));
+            headerStyle.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(0, 0, 1, 2)));
+            headerStyle.Setters.Add(new Setter(BorderBrushProperty, accentBrush));
+            headerStyle.Setters.Add(new Setter(CursorProperty, Cursors.Hand));
+
+            var headerHoverTrigger = new Trigger { Property = IsMouseOverProperty, Value = true };
+            headerHoverTrigger.Setters.Add(new Setter(BackgroundProperty, headerHoverBg));
+            headerStyle.Triggers.Add(headerHoverTrigger);
+
+            LstLeaderboard.Resources[typeof(GridViewColumnHeader)] = headerStyle;
         }
 
         private void UpdateSeasonsColumn()
@@ -7890,9 +8077,6 @@ namespace ConditioningControlPanel
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
-            // Scroll to the beginning to show the header
-            SkillTreeScroller?.ScrollToHorizontalOffset(0);
-
             // Update skill points display
             TxtSkillPoints.Text = settings.SkillPoints.ToString();
 
@@ -8016,7 +8200,7 @@ namespace ConditioningControlPanel
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = "you earn 1 sparkle point every time you level up — spend them wisely~",
+                Text = "you earn sparkle points from leveling up + every 100 bubbles popped~",
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 11,
                 FontStyle = FontStyles.Italic,
@@ -9133,7 +9317,7 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Handles clicking on a purchasable skill card
         /// </summary>
-        private void SkillCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private async void SkillCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             if (sender is Border border && border.Tag is string skillId)
             {
@@ -9149,21 +9333,35 @@ namespace ConditioningControlPanel
 
                 if (result == MessageBoxResult.Yes)
                 {
-                    if (App.SkillTree?.PurchaseSkill(skillId) == true)
+                    // Disable the card during purchase to prevent double-clicks
+                    border.IsEnabled = false;
+                    try
                     {
-                        // Show celebration
-                        App.Flash?.PlayRandomSound();
+                        var (success, error) = await (App.SkillTree?.PurchaseSkillAsync(skillId)
+                            ?? Task.FromResult((false, (string?)"Skill tree unavailable")));
 
-                        // Refresh UI
-                        RefreshEnhancementsUI();
-
-                        // Update Trophy Case columns if trophy_case was purchased
-                        if (skillId == "trophy_case")
+                        if (success)
                         {
-                            UpdateTrophyCaseColumns();
-                        }
+                            // Show celebration
+                            App.Flash?.PlayRandomSound();
 
-                        App.Logger?.Information("Skill purchased via UI: {SkillId}", skillId);
+                            // Update Trophy Case columns if trophy_case was purchased
+                            if (skillId == "trophy_case")
+                            {
+                                UpdateTrophyCaseColumns();
+                            }
+
+                            App.Logger?.Information("Skill purchased via UI: {SkillId}", skillId);
+                        }
+                        else if (!string.IsNullOrEmpty(error))
+                        {
+                            MessageBox.Show(error, "Purchase Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                    }
+                    finally
+                    {
+                        border.IsEnabled = true;
+                        RefreshEnhancementsUI();
                     }
                 }
             }
@@ -9217,6 +9415,39 @@ namespace ConditioningControlPanel
             {
                 TxtPinkRushIndicator.Visibility = Visibility.Visible;
 
+                // Full-screen pink flash effect
+                try
+                {
+                    var flashWindow = new Window
+                    {
+                        WindowStyle = WindowStyle.None,
+                        AllowsTransparency = true,
+                        Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(100, 0xFF, 0x14, 0x93)),
+                        Topmost = true,
+                        ShowInTaskbar = false,
+                        ShowActivated = false,
+                        Left = SystemParameters.VirtualScreenLeft,
+                        Top = SystemParameters.VirtualScreenTop,
+                        Width = SystemParameters.VirtualScreenWidth,
+                        Height = SystemParameters.VirtualScreenHeight,
+                        IsHitTestVisible = false,
+                        Focusable = false,
+                        Opacity = 0.6
+                    };
+                    flashWindow.Show();
+
+                    var fadeOut = new DoubleAnimation(0.6, 0, TimeSpan.FromMilliseconds(500));
+                    fadeOut.Completed += (s, args) =>
+                    {
+                        try { flashWindow.Close(); } catch { }
+                    };
+                    flashWindow.BeginAnimation(Window.OpacityProperty, fadeOut);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Pink Rush flash effect failed: {Error}", ex.Message);
+                }
+
                 // Show toast notification popup
                 try
                 {
@@ -9242,6 +9473,118 @@ namespace ConditioningControlPanel
                 }
                 catch { }
                 _pinkRushPopup = null;
+            });
+        }
+
+        private void OnLuckyProc(object? sender, LuckyProcEventArgs e)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    // Close previous lucky popup if still showing
+                    try { _luckyProcPopup?.Close(); } catch { }
+
+                    var isGold = e.ProcType.Contains("Flash");
+                    var glowColor = isGold
+                        ? System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00)
+                        : System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4);
+
+                    var border = new Border
+                    {
+                        Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE0, 0x15, 0x15, 0x30)),
+                        CornerRadius = new CornerRadius(12),
+                        BorderBrush = new SolidColorBrush(glowColor),
+                        BorderThickness = new Thickness(2),
+                        Padding = new Thickness(20, 12, 20, 12),
+                        Effect = new DropShadowEffect
+                        {
+                            Color = glowColor,
+                            BlurRadius = 30,
+                            ShadowDepth = 0,
+                            Opacity = 0.8
+                        }
+                    };
+
+                    var stack = new StackPanel { Orientation = Orientation.Vertical, HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = "LUCKY!",
+                        Foreground = new SolidColorBrush(glowColor),
+                        FontWeight = FontWeights.Bold,
+                        FontSize = 22,
+                        HorizontalAlignment = System.Windows.HorizontalAlignment.Center
+                    });
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = $"{e.Multiplier}x XP!",
+                        Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xB6, 0xC1)),
+                        FontSize = 14,
+                        HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                        Margin = new Thickness(0, 4, 0, 0)
+                    });
+
+                    border.Child = stack;
+
+                    var popup = new Window
+                    {
+                        WindowStyle = WindowStyle.None,
+                        AllowsTransparency = true,
+                        Background = System.Windows.Media.Brushes.Transparent,
+                        Topmost = true,
+                        ShowInTaskbar = false,
+                        ShowActivated = false,
+                        SizeToContent = SizeToContent.WidthAndHeight,
+                        Content = border
+                    };
+
+                    // Position at top-center of primary screen
+                    popup.Loaded += (s, args) =>
+                    {
+                        try
+                        {
+                            var workArea = SystemParameters.WorkArea;
+                            popup.Left = workArea.Left + (workArea.Width - popup.ActualWidth) / 2;
+                            popup.Top = workArea.Top + 40;
+                        }
+                        catch { }
+                    };
+
+                    _luckyProcPopup = popup;
+
+                    // Fade in
+                    popup.Opacity = 0;
+                    popup.Show();
+
+                    var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200));
+                    popup.BeginAnimation(Window.OpacityProperty, fadeIn);
+
+                    // Auto-close after 3 seconds with fade-out
+                    var closeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+                    closeTimer.Tick += (s, args) =>
+                    {
+                        closeTimer.Stop();
+                        try
+                        {
+                            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(300));
+                            fadeOut.Completed += (s2, args2) =>
+                            {
+                                try { popup.Close(); } catch { }
+                                if (_luckyProcPopup == popup) _luckyProcPopup = null;
+                            };
+                            popup.BeginAnimation(Window.OpacityProperty, fadeOut);
+                        }
+                        catch
+                        {
+                            try { popup.Close(); } catch { }
+                        }
+                    };
+                    closeTimer.Start();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Lucky proc popup failed: {Error}", ex.Message);
+                }
             });
         }
 
@@ -11519,7 +11862,8 @@ namespace ConditioningControlPanel
             }
             catch (Exception ex)
             {
-                var errorMsg = $"Browser Error:\n\nType: {ex.GetType().Name}\n\nMessage: {ex.Message}\n\nStack: {ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0))}";
+                var stack = ex.StackTrace;
+                var errorMsg = $"Browser Error:\n\nType: {ex.GetType().Name}\n\nMessage: {ex.Message}\n\nStack: {(stack != null ? stack.Substring(0, Math.Min(500, stack.Length)) : "(none)")}";
                 BrowserLoadingText.Text = $"❌ {ex.GetType().Name}\n{ex.Message}";
                 TxtBrowserStatus.Text = "● Error";
                 TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
@@ -11527,9 +11871,31 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void BrowserSiteToggle_Changed(object sender, RoutedEventArgs e)
+        private async void BrowserLoadingText_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            if (_browser == null || !_browserInitialized) return;
+            await InitializeBrowserAsync();
+        }
+
+        private async System.Threading.Tasks.Task InitAndNavigateAsync(string url, bool autoPlayFullscreen)
+        {
+            await InitializeBrowserAsync();
+            if (_browserInitialized && _browser != null)
+            {
+                NavigateToUrlInBrowser(url, autoPlayFullscreen);
+            }
+        }
+
+        private async void BrowserSiteToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return; // Don't auto-load browser during XAML init
+
+            // Lazy-load browser on first toggle interaction
+            if (!_browserInitialized)
+            {
+                await InitializeBrowserAsync();
+                return; // InitializeBrowserAsync navigates to the correct site already
+            }
+            if (_browser == null) return;
 
             // Block navigation in offline mode
             if (App.Settings?.Current?.OfflineMode == true) return;
@@ -11570,7 +11936,14 @@ namespace ConditioningControlPanel
                 return false;
             }
 
-            if (_browser == null || !_browserInitialized)
+            // Lazy-load browser if not yet initialized
+            if (!_browserInitialized)
+            {
+                _ = InitAndNavigateAsync(url, autoPlayFullscreen);
+                return true; // Navigation will happen after init completes
+            }
+
+            if (_browser == null)
             {
                 App.Logger?.Warning("Browser not available for navigation: {Url}", url);
                 return false;
@@ -13022,10 +13395,16 @@ namespace ConditioningControlPanel
 
         #endregion
 
-        private void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
+        private async void BtnPopOutBrowser_Click(object sender, RoutedEventArgs e)
         {
             // Block in offline mode
             if (App.Settings?.Current?.OfflineMode == true) return;
+
+            // Lazy-load browser on first pop-out
+            if (!_browserInitialized)
+            {
+                await InitializeBrowserAsync();
+            }
 
             if (_browser?.WebView == null) return;
 
@@ -13500,12 +13879,24 @@ namespace ConditioningControlPanel
                 App.Autonomy?.Start();
             }
 
+            // Start pop quiz if enabled
+            if (settings.PopQuizEnabled)
+            {
+                App.PopQuiz?.Start();
+            }
+
+            // Start pop quiz service
+            if (settings.PopQuizEnabled)
+            {
+                App.PopQuiz?.Start();
+            }
+
             // Start ramp timer if enabled
             if (settings.IntensityRampEnabled)
             {
                 StartRampTimer();
             }
-            
+
             // Browser audio serves as background - no need to play separate music
 
             _isRunning = true;
@@ -13538,6 +13929,7 @@ namespace ConditioningControlPanel
             App.BubbleCount.Stop();
             App.MindWipe.Stop();
             App.BrainDrain.Stop();
+            App.PopQuiz?.Stop();
             // Only stop autonomy if it was started by the session engine (i.e., user didn't enable it independently).
             // If the user has autonomy enabled in settings, let it keep running after session ends.
             var s = App.Settings?.Current;
@@ -13549,10 +13941,12 @@ namespace ConditioningControlPanel
             App.SkillTree?.Stop();
             App.Audio.ForceUnduck();
 
-            // Force close any open lock card windows (panic button should close them immediately)
+            // Force close any open lock card / quiz windows (panic button should close them immediately)
             LockCardWindow.ForceCloseAll();
             BubbleCountWindow.ForceCloseAll();
             BubbleCountResultWindow.ForceCloseAll();
+            QuizWindow.ForceCloseAll();
+            PopQuizWindow.ForceCloseAll();
 
             // Stop ramp timer and reset sliders
             StopRampTimer();
@@ -13565,6 +13959,13 @@ namespace ConditioningControlPanel
 
             // Fire event for avatar reaction
             EngineStopped?.Invoke(this, EventArgs.Empty);
+
+            // Release cached images and compact the Large Object Heap.
+            // Flash/overlay BitmapSources are large allocations (>85 KB) that fragment
+            // the LOH during sessions. Compacting here returns memory to the OS.
+            App.Flash.ClearImageCache();
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true);
 
             App.Logger?.Information("Engine stopped");
         }
@@ -13878,6 +14279,8 @@ namespace ConditioningControlPanel
             s.FlashEnabled = ChkFlashEnabled.IsChecked ?? true;
             s.FlashClickable = ChkClickable.IsChecked ?? true;
             s.CorruptionMode = ChkCorruption.IsChecked ?? false;
+            s.HydraLinkedTiming = ChkHydraLinked.IsChecked ?? true;
+            s.FlashGlowEnabled = ChkFlashGlow.IsChecked ?? true;
             s.FlashFrequency = (int)SliderPerMin.Value;
             s.SimultaneousImages = (int)SliderImages.Value;
             s.HydraLimit = (int)SliderMaxOnScreen.Value;
@@ -14093,6 +14496,8 @@ namespace ConditioningControlPanel
             ChkFlashEnabled.IsChecked = s.FlashEnabled;
             ChkClickable.IsChecked = s.FlashClickable;
             ChkCorruption.IsChecked = s.CorruptionMode;
+            ChkHydraLinked.IsChecked = s.HydraLinkedTiming;
+            ChkFlashGlow.IsChecked = s.FlashGlowEnabled;
             SliderPerMin.Value = s.FlashFrequency;
             SliderImages.Value = s.SimultaneousImages;
             SliderMaxOnScreen.Value = s.HydraLimit;
@@ -14434,6 +14839,8 @@ namespace ConditioningControlPanel
             s.FlashEnabled = ChkFlashEnabled.IsChecked ?? true;
             s.FlashClickable = ChkClickable.IsChecked ?? true;
             s.CorruptionMode = ChkCorruption.IsChecked ?? false;
+            s.HydraLinkedTiming = ChkHydraLinked.IsChecked ?? true;
+            s.FlashGlowEnabled = ChkFlashGlow.IsChecked ?? true;
             s.FlashFrequency = (int)SliderPerMin.Value;
             s.SimultaneousImages = (int)SliderImages.Value;
             s.HydraLimit = (int)SliderMaxOnScreen.Value;
@@ -15231,7 +15638,7 @@ namespace ConditioningControlPanel
                 if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level70Unlocked);
 
                 // Lab Tab: Requires Patreon T2 / whitelist
-                var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2;
+                var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2 || (App.Settings?.Current?.PatreonTier ?? 0) >= 2;
                 if (LabSmokescreen != null) LabSmokescreen.Visibility = labUnlocked ? Visibility.Collapsed : Visibility.Visible;
 
                 // Bambi Takeover: Requires Patreon (any tier)
@@ -15645,6 +16052,31 @@ namespace ConditioningControlPanel
             var isEnabled = ChkCorruption.IsChecked ?? false;
             App.Settings.Current.CorruptionMode = isEnabled;
             App.Logger?.Information("Hydra mode toggled: {Enabled}", isEnabled);
+            App.Settings.Save();
+        }
+
+        private void ChkFlashGlow_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isEnabled = ChkFlashGlow.IsChecked ?? true;
+            App.Settings.Current.FlashGlowEnabled = isEnabled;
+            App.Logger?.Information("Flash glow toggled: {Enabled}", isEnabled);
+            App.Settings.Save();
+        }
+
+        /// <summary>
+        /// Toggles linked vs independent timing for hydra spawns~ 🔗✨
+        /// Linked = hydra children share the parent's remaining timer.
+        /// Independent = each hydra spawn gets a fresh full-duration lifetime.
+        /// </summary>
+        private void ChkHydraLinked_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+
+            var isLinked = ChkHydraLinked.IsChecked ?? true;
+            App.Settings.Current.HydraLinkedTiming = isLinked;
+            App.Logger?.Information("Hydra linked timing toggled: {Linked}", isLinked);
             App.Settings.Save();
         }
 
@@ -16709,9 +17141,23 @@ namespace ConditioningControlPanel
 
         #endregion
 
-        private void ShowEasterEgg()
+        private async void ShowEasterEgg()
         {
-            var easterEggWindow = new EasterEggWindow();
+            int readerCount = -1;
+            try
+            {
+                if (App.ProfileSync != null)
+                    readerCount = await App.ProfileSync.RecordEasterEggReadAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to fetch easter egg reader count");
+            }
+
+            if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted)
+                return;
+
+            var easterEggWindow = new EasterEggWindow(readerCount);
             easterEggWindow.Owner = this;
             easterEggWindow.ShowDialog();
         }
@@ -17639,8 +18085,14 @@ namespace ConditioningControlPanel
             ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
         }
 
-        // Thumbnail cache for pack files (keyed by packId + obfuscatedName)
+        // Thumbnail cache for pack files (keyed by packId + obfuscatedName) with LRU eviction
+        private const int MaxThumbnailCacheEntries = 50;
+        private const long MaxThumbnailCacheBytes = 50 * 1024 * 1024; // 50 MB
         private static readonly Dictionary<string, ImageSource> _packThumbnailCache = new();
+        private static readonly Dictionary<string, long> _packThumbnailLastAccess = new();
+        private static readonly Dictionary<string, long> _packThumbnailSizes = new();
+        private static long _packThumbnailCacheBytes;
+        private static long _packThumbnailAccessCounter;
         private static readonly SemaphoreSlim _thumbnailSemaphore = new(4); // Limit concurrent loads
 
         private async Task LoadPackThumbnailAsync(AssetFileItem item, string packId, Services.PackFileEntry file)
@@ -17652,6 +18104,7 @@ namespace ConditioningControlPanel
                 var cacheKey = $"{packId}:{file.ObfuscatedName}";
                 if (_packThumbnailCache.TryGetValue(cacheKey, out var cached))
                 {
+                    _packThumbnailLastAccess[cacheKey] = Interlocked.Increment(ref _packThumbnailAccessCounter);
                     Dispatcher.Invoke(() => item.Thumbnail = cached);
                     return;
                 }
@@ -17663,6 +18116,7 @@ namespace ConditioningControlPanel
                     // Double-check cache after acquiring semaphore
                     if (_packThumbnailCache.TryGetValue(cacheKey, out cached))
                     {
+                        _packThumbnailLastAccess[cacheKey] = Interlocked.Increment(ref _packThumbnailAccessCounter);
                         Dispatcher.Invoke(() => item.Thumbnail = cached);
                         return;
                     }
@@ -17692,7 +18146,31 @@ namespace ConditioningControlPanel
 
                             if (thumbnail != null)
                             {
+                                // Estimate size: width * height * 4 bytes (BGRA)
+                                long estimatedBytes = 0;
+                                if (thumbnail is System.Windows.Media.Imaging.BitmapSource bmp)
+                                    estimatedBytes = (long)bmp.PixelWidth * bmp.PixelHeight * 4;
+
+                                // Evict LRU entries if cache is full
+                                while ((_packThumbnailCache.Count >= MaxThumbnailCacheEntries ||
+                                        _packThumbnailCacheBytes + estimatedBytes > MaxThumbnailCacheBytes) &&
+                                       _packThumbnailCache.Count > 0)
+                                {
+                                    var lruKey = _packThumbnailLastAccess.OrderBy(kv => kv.Value).First().Key;
+                                    _packThumbnailCache.Remove(lruKey);
+                                    _packThumbnailLastAccess.Remove(lruKey);
+                                    if (_packThumbnailSizes.TryGetValue(lruKey, out var evictedSize))
+                                    {
+                                        _packThumbnailCacheBytes -= evictedSize;
+                                        _packThumbnailSizes.Remove(lruKey);
+                                    }
+                                }
+
                                 _packThumbnailCache[cacheKey] = thumbnail;
+                                _packThumbnailLastAccess[cacheKey] = Interlocked.Increment(ref _packThumbnailAccessCounter);
+                                _packThumbnailSizes[cacheKey] = estimatedBytes;
+                                _packThumbnailCacheBytes += estimatedBytes;
+
                                 Dispatcher.Invoke(() => item.Thumbnail = thumbnail);
                             }
                         }
@@ -19586,13 +20064,70 @@ namespace ConditioningControlPanel
 
                 // Actually closing - clean up
                 SaveSettings();
+
+                // Stop ALL timers to prevent post-close dispatcher crashes
                 _schedulerTimer?.Stop();
                 _rampTimer?.Stop();
                 _packPreviewTimer?.Stop();
+                _remoteNotificationTimer?.Stop();
+                _remoteSessionInfoTimer?.Stop();
+                _bannerRotationTimer?.Stop();
+                _marqueeRefreshTimer?.Stop();
+                _statPillUpdateTimer?.Stop();
+                _conditioningTimeTimer?.Stop();
+                _conditioningTimeSyncTimer?.Stop();
+
+                // Unsubscribe service events to allow GC of this window
+                if (App.Progression != null)
+                {
+                    App.Progression.XPChanged -= OnXPChanged;
+                    App.Progression.LevelUp -= OnLevelUp;
+                }
+                if (App.Companion != null)
+                {
+                    App.Companion.XPAwarded -= OnCompanionXPAwarded;
+                    App.Companion.CompanionLevelUp -= OnCompanionLevelUp;
+                    App.Companion.XPDrained -= OnCompanionXPDrained;
+                    App.Companion.CompanionSwitched -= OnCompanionSwitched;
+                }
+                if (App.ProfileSync != null)
+                {
+                    App.ProfileSync.ProfileLoaded -= OnProfileLoaded;
+                }
+                if (App.Achievements != null)
+                {
+                    App.Achievements.AchievementUnlocked -= OnAchievementUnlockedInMainWindow;
+                }
+                if (App.Quests != null)
+                {
+                    App.Quests.QuestCompleted -= OnQuestCompleted;
+                    App.Quests.QuestProgressChanged -= OnQuestProgressChanged;
+                }
+                if (App.SkillTree != null)
+                {
+                    App.SkillTree.PinkRushStarted -= OnPinkRushStarted;
+                    App.SkillTree.PinkRushEnded -= OnPinkRushEnded;
+                }
+                if (App.Roadmap != null)
+                {
+                    App.Roadmap.StepCompleted -= OnRoadmapStepCompleted;
+                    App.Roadmap.TrackUnlocked -= OnRoadmapTrackUnlocked;
+                }
+
                 _keyboardHook?.Dispose();
                 _trayIcon?.Dispose();
                 _browser?.Dispose();
                 _avatarTubeWindow?.Close();
+
+                // Close any quiz windows (topmost/fullscreen, would keep app alive)
+                try
+                {
+                    foreach (var quiz in Application.Current.Windows.OfType<PopQuizWindow>().ToList())
+                        quiz.Close();
+                    foreach (var quiz in Application.Current.Windows.OfType<QuizWindow>().ToList())
+                        quiz.Close();
+                }
+                catch { }
 
                 // Stop and dispose session engine (closes corner GIF window)
                 try
@@ -19615,6 +20150,17 @@ namespace ConditioningControlPanel
             {
                 // Always minimize to tray instead of closing
                 e.Cancel = true;
+
+                // Close any quiz windows (topmost/fullscreen, would stay visible while app is in tray)
+                try
+                {
+                    foreach (var quiz in Application.Current.Windows.OfType<PopQuizWindow>().ToList())
+                        quiz.Close();
+                    foreach (var quiz in Application.Current.Windows.OfType<QuizWindow>().ToList())
+                        quiz.Close();
+                }
+                catch { }
+
                 _trayIcon?.MinimizeToTray();
                 HideAvatarTube();
 

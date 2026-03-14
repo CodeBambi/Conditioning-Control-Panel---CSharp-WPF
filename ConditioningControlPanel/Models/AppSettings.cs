@@ -360,6 +360,19 @@ namespace ConditioningControlPanel.Models
             set { _corruptionMode = value; OnPropertyChanged(); }
         }
 
+        private bool _hydraLinkedTiming = true;
+        /// <summary>
+        /// Controls hydra spawn timing~ 🐙✨
+        /// true  = "Linked" — hydra children expire when the original flash event expires.
+        /// false = "Independent" — each hydra spawn gets its own full-duration lifetime.
+        /// CopilotNotes: Default true preserves legacy behavior where all windows died together.
+        /// </summary>
+        public bool HydraLinkedTiming
+        {
+            get => _hydraLinkedTiming;
+            set { _hydraLinkedTiming = value; OnPropertyChanged(); }
+        }
+
         private int _hydraLimit = 20; // Max images on screen (hard cap: 20)
         public int HydraLimit
         {
@@ -404,6 +417,13 @@ namespace ConditioningControlPanel.Models
         {
             get => _flashAudioEnabled;
             set { _flashAudioEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _flashGlowEnabled = true;
+        public bool FlashGlowEnabled
+        {
+            get => _flashGlowEnabled;
+            set { _flashGlowEnabled = value; OnPropertyChanged(); }
         }
 
         private int _flashDuration = 5; // Duration in seconds when audio is disabled (1-30)
@@ -1424,6 +1444,63 @@ namespace ConditioningControlPanel.Models
             get => _lockCardAccentColor;
             set { _lockCardAccentColor = value ?? "#FF69B4"; OnPropertyChanged(); }
         }
+        #endregion
+
+        #region Latest Quiz Result (for companion integration)
+
+        private string _latestQuizArchetype = "";
+        public string LatestQuizArchetype
+        {
+            get => _latestQuizArchetype;
+            set { _latestQuizArchetype = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private int _latestQuizScorePercentage = -1; // -1 = no quiz taken
+        public int LatestQuizScorePercentage
+        {
+            get => _latestQuizScorePercentage;
+            set { _latestQuizScorePercentage = value; OnPropertyChanged(); }
+        }
+
+        private string _latestQuizCategoryId = "";
+        public string LatestQuizCategoryId
+        {
+            get => _latestQuizCategoryId;
+            set { _latestQuizCategoryId = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _latestQuizProfileText = "";
+        public string LatestQuizProfileText
+        {
+            get => _latestQuizProfileText;
+            set
+            {
+                // Truncate to 200 chars
+                var truncated = value ?? "";
+                if (truncated.Length > 200) truncated = truncated.Substring(0, 200);
+                _latestQuizProfileText = truncated;
+                OnPropertyChanged();
+            }
+        }
+
+        #endregion
+
+        #region Pop Quiz (Session reinforcement questions)
+
+        private bool _popQuizEnabled = false;
+        public bool PopQuizEnabled
+        {
+            get => _popQuizEnabled;
+            set { _popQuizEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _popQuizFrequency = 2; // Per hour (1-10)
+        public int PopQuizFrequency
+        {
+            get => _popQuizFrequency;
+            set { _popQuizFrequency = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Bubble Count Game (Unlocks Lv.50)

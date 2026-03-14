@@ -230,6 +230,9 @@ namespace ConditioningControlPanel.Services
             // Stop Mind Wipe
             App.MindWipe?.Stop();
 
+            // Stop Pop Quiz
+            App.PopQuiz?.Stop();
+
             // Stop Bubbles
             App.Bubbles?.Stop();
 
@@ -341,6 +344,7 @@ namespace ConditioningControlPanel.Services
             App.Subliminal?.Stop();
             App.Bubbles?.Stop();
             App.LockCard?.Stop();
+            App.PopQuiz?.Stop();
             App.BubbleCount?.Stop();
             App.BouncingText?.Stop();
             App.MindWipe?.Stop();
@@ -373,6 +377,7 @@ namespace ConditioningControlPanel.Services
             if (settings.SubliminalEnabled) App.Subliminal?.Start();
             if (settings.BubblesEnabled) App.Bubbles?.Start();
             if (settings.LockCardEnabled && App.Settings.Current.IsLevelUnlocked(35)) App.LockCard?.Start();
+            if (App.Settings.Current.PopQuizEnabled) App.PopQuiz?.Start();
             if (settings.BubbleCountEnabled && App.Settings.Current.IsLevelUnlocked(50)) App.BubbleCount?.Start();
             if (settings.BouncingTextEnabled && App.Settings.Current.IsLevelUnlocked(60)) App.BouncingText?.Start();
             if (settings.MindWipeEnabled && App.Settings.Current.IsLevelUnlocked(75))
@@ -752,12 +757,19 @@ namespace ConditioningControlPanel.Services
             _savedSettings.VideosPerHour = current.VideosPerHour;
             _savedSettings.LockCardEnabled = current.LockCardEnabled;
             _savedSettings.LockCardFrequency = current.LockCardFrequency;
+
+            // Save lock card pool (deep copy)
+            _savedLockCardPool = new Dictionary<string, bool>(current.LockCardPhrases);
+
+            _savedSettings.PopQuizEnabled = current.PopQuizEnabled;
+            _savedSettings.PopQuizFrequency = current.PopQuizFrequency;
             _savedSettings.BubbleCountEnabled = current.BubbleCountEnabled;
             _savedSettings.BubbleCountFrequency = current.BubbleCountFrequency;
         }
         
         private Dictionary<string, bool>? _savedBouncingTextPool;
         private Dictionary<string, bool>? _savedSubliminalPool;
+        private Dictionary<string, bool>? _savedLockCardPool;
         
         private void ApplySessionSettings(SessionSettings settings)
         {
@@ -937,11 +949,42 @@ namespace ConditioningControlPanel.Services
                 {
                     current.LockCardFrequency = settings.LockCardFrequency.Value;
                 }
+
+                // Override lock card pool with session-specific phrases
+                if (settings.LockCardPhrases.Count > 0)
+                {
+                    var keys = current.LockCardPhrases.Keys.ToList();
+                    foreach (var key in keys)
+                    {
+                        current.LockCardPhrases[key] = false;
+                    }
+
+                    var contentMode = App.Settings?.Current?.ContentMode ?? ContentMode.BambiSleep;
+                    foreach (var phrase in settings.LockCardPhrases)
+                    {
+                        var modePhrase = Session.MakeModeAware(phrase, contentMode);
+                        current.LockCardPhrases[modePhrase] = true;
+                    }
+
+                    App.Logger?.Information("Session: Using lock card phrases: {Phrases}",
+                        string.Join(", ", settings.LockCardPhrases));
+                }
+
                 App.LockCard?.Start();
             }
             else
             {
                 App.LockCard?.Stop();
+            }
+
+            // Pop quiz is a user-level toggle (AppSettings), not per-session
+            if (App.Settings.Current.PopQuizEnabled)
+            {
+                App.PopQuiz?.Start();
+            }
+            else
+            {
+                App.PopQuiz?.Stop();
             }
 
             current.BubbleCountEnabled = settings.BubbleCountEnabled;
@@ -1030,6 +1073,20 @@ namespace ConditioningControlPanel.Services
             current.VideosPerHour = _savedSettings.VideosPerHour;
             current.LockCardEnabled = _savedSettings.LockCardEnabled;
             current.LockCardFrequency = _savedSettings.LockCardFrequency;
+
+            // Restore lock card pool
+            if (_savedLockCardPool != null)
+            {
+                current.LockCardPhrases.Clear();
+                foreach (var kvp in _savedLockCardPool)
+                {
+                    current.LockCardPhrases[kvp.Key] = kvp.Value;
+                }
+                _savedLockCardPool = null;
+            }
+
+            current.PopQuizEnabled = _savedSettings.PopQuizEnabled;
+            current.PopQuizFrequency = _savedSettings.PopQuizFrequency;
             current.BubbleCountEnabled = _savedSettings.BubbleCountEnabled;
             current.BubbleCountFrequency = _savedSettings.BubbleCountFrequency;
 
@@ -1071,7 +1128,10 @@ namespace ConditioningControlPanel.Services
                         var resourceInfo = Application.GetResourceStream(gifUri);
                         if (resourceInfo?.Stream != null)
                         {
-                            img = System.Drawing.Image.FromStream(resourceInfo.Stream);
+                            using (resourceInfo.Stream)
+                            {
+                                img = System.Drawing.Image.FromStream(resourceInfo.Stream);
+                            }
                             App.Logger?.Information("Corner GIF not set or found, defaulting to spiral.gif resource");
                         }
                     }
@@ -1167,12 +1227,22 @@ namespace ConditioningControlPanel.Services
                 AnimationBehavior.SetSourceUri(imageElement, gifUri);
                 AnimationBehavior.SetRepeatBehavior(imageElement, System.Windows.Media.Animation.RepeatBehavior.Forever);
 
+                // Catch GIF rendering errors gracefully instead of letting them crash the app
+                AnimationBehavior.AddErrorHandler(imageElement, (s, e) =>
+                {
+                    App.Logger?.Warning("Corner GIF animation error ({Kind}): {Error}",
+                        e.Kind, e.Exception?.Message);
+                });
+
                 _cornerGifImage = imageElement;
                 _cornerGifWindow.Content = imageElement;
-                _cornerGifWindow.Show();
 
-                // Make click-through
-                MakeWindowClickThrough(_cornerGifWindow);
+                // Hook SourceInitialized BEFORE Show() to safely get the hwnd for click-through
+                _cornerGifWindow.SourceInitialized += (s, e) =>
+                {
+                    MakeWindowClickThrough(_cornerGifWindow);
+                };
+                _cornerGifWindow.Show();
 
                 App.Logger?.Information("Corner GIF shown at {Position}: {Path} (pos: {Left},{Top}, size: {Width}x{Height}px, opacity: {Opacity}%)",
                     settings.CornerGifPosition, gifUri.ToString(), left, top, (int)windowWidth, (int)windowHeight, settings.CornerGifOpacity);
@@ -1286,6 +1356,11 @@ namespace ConditioningControlPanel.Services
         private void MakeWindowClickThrough(Window window)
         {
             var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            if (hwnd == IntPtr.Zero)
+            {
+                App.Logger?.Warning("MakeWindowClickThrough: hwnd is zero, window not yet initialized");
+                return;
+            }
             var extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
             // Add TOOLWINDOW to hide from alt-tab, TRANSPARENT and LAYERED for click-through
             SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW);

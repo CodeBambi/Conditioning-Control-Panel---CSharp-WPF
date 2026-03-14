@@ -103,8 +103,13 @@ namespace ConditioningControlPanel.Services
             _isWhitelisted = whitelisted;
             if (whitelisted && CurrentTier < minTier)
             {
+                var oldTier = CurrentTier;
                 CurrentTier = minTier;
                 IsActivePatron = true;
+                if (CurrentTier != oldTier)
+                {
+                    TierChanged?.Invoke(this, minTier);
+                }
             }
         }
 

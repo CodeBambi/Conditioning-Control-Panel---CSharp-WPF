@@ -515,8 +515,9 @@ namespace ConditioningControlPanel.Services
             if (!Settings.Enabled || !Settings.FlashDisplayEnabled || _activeProvider == null || !_activeProvider.IsConnected)
                 return;
 
-            // Cancel any existing decay
+            // Cancel and dispose any existing decay
             _flashDecayCts?.Cancel();
+            _flashDecayCts?.Dispose();
             _flashDecayCts = new System.Threading.CancellationTokenSource();
             var token = _flashDecayCts.Token;
 
@@ -561,6 +562,7 @@ namespace ConditioningControlPanel.Services
                 return;
 
             _flashDecayCts?.Cancel();
+            _flashDecayCts?.Dispose();
             _flashDecayCts = new System.Threading.CancellationTokenSource();
             var token = _flashDecayCts.Token;
 
@@ -655,6 +657,7 @@ namespace ConditioningControlPanel.Services
                 return;
 
             _videoVibeCts?.Cancel();
+            _videoVibeCts?.Dispose();
             _videoVibeCts = new System.Threading.CancellationTokenSource();
             var token = _videoVibeCts.Token;
             _videoTargetHits = 0;
@@ -686,6 +689,7 @@ namespace ConditioningControlPanel.Services
         public async Task StopVideoBackgroundVibeAsync()
         {
             _videoVibeCts?.Cancel();
+            _videoVibeCts?.Dispose();
             _videoVibeCts = null;
             _videoTargetHits = 0;
             _currentVideoIntensity = 0;
@@ -806,6 +810,10 @@ namespace ConditioningControlPanel.Services
             if (_disposed) return;
             _disposed = true;
             Settings.PropertyChanged -= OnSettingsChanged;
+            _flashDecayCts?.Cancel();
+            _flashDecayCts?.Dispose();
+            _videoVibeCts?.Cancel();
+            _videoVibeCts?.Dispose();
             DisconnectAsync().Wait(1000);
         }
     }

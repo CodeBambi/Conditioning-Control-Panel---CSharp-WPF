@@ -156,6 +156,35 @@ function isValidDisplayNameChars(name) {
     return !DISPLAY_NAME_INVALID_CHARS.test(name);
 }
 
+// =============================================================================
+// SKILL CATALOG — server-authoritative skill definitions for purchase validation
+// =============================================================================
+const SKILL_CATALOG = {
+    'pink_hours':         { cost: 2,  prereq: null },
+    'ditzy_data':         { cost: 5,  prereq: 'pink_hours' },
+    'sparkle_boost_1':    { cost: 8,  prereq: 'pink_hours' },
+    'good_girl_streak':   { cost: 5,  prereq: 'pink_hours' },
+    'hive_mind':          { cost: 10, prereq: 'ditzy_data' },
+    'trophy_case':        { cost: 10, prereq: 'hive_mind' },
+    'sparkle_boost_2':    { cost: 15, prereq: 'sparkle_boost_1' },
+    'lucky_bimbo':        { cost: 15, prereq: 'sparkle_boost_2' },
+    'milestone_rewards':  { cost: 15, prereq: 'good_girl_streak' },
+    'oopsie_insurance':   { cost: 12, prereq: 'milestone_rewards' },
+    'popular_girl':       { cost: 15, prereq: 'trophy_case' },
+    'quest_refresh':      { cost: 15, prereq: 'popular_girl' },
+    'better_quests':      { cost: 20, prereq: 'quest_refresh' },
+    'sparkle_boost_3':    { cost: 25, prereq: 'lucky_bimbo' },
+    'lucky_bubbles':      { cost: 20, prereq: 'sparkle_boost_3' },
+    'pink_rush':          { cost: 25, prereq: 'lucky_bubbles' },
+    'streak_power':       { cost: 20, prereq: 'oopsie_insurance' },
+    'reroll_addict':      { cost: 15, prereq: 'streak_power' },
+    'perfect_bimbo_week': { cost: 20, prereq: 'reroll_addict' },
+    'night_shift':        { cost: 10, prereq: null },
+    'early_bird_bimbo':   { cost: 10, prereq: null },
+    'eternal_doll':       { cost: 8,  prereq: null },
+};
+const POINTS_PER_LEVEL = 1;
+
 /**
  * Filter a user object for safe API response (strip auth_token_hash, email_hash, internal fields).
  * Used by V1 auth endpoints to prevent leaking sensitive server-side data.
@@ -3275,7 +3304,7 @@ app.post('/user/sync', async (req, res) => {
         }
 
         // Anti-cheat: XP delta capping (matches V2 limits)
-        const MAX_V1_XP_PER_SYNC = 25000;
+        const MAX_V1_XP_PER_SYNC = 50000;
         const MAX_V1_LEVEL = 999;
         const oldXp = existing?.xp || 0;
         const oldLevel = existing?.level || 0;
@@ -4066,7 +4095,7 @@ app.post('/user/sync-discord', async (req, res) => {
         }
 
         // Anti-cheat: XP delta capping (matches V2 limits)
-        const MAX_V1D_XP_PER_SYNC = 25000;
+        const MAX_V1D_XP_PER_SYNC = 50000;
         const MAX_V1D_LEVEL = 999;
         const newXp = typeof xp === 'number' ? xp : 0;
         const oldXpD = profile.xp || 0;
@@ -7919,6 +7948,11 @@ app.post('/v2/auth/login', async (req, res) => {
         const whitelisted = isWhitelisted(null, null, user.display_name);
         user.patreon_is_whitelisted = whitelisted;
 
+        // Ensure whitelisted users have at least tier 2
+        if (whitelisted && (!user.patreon_tier || user.patreon_tier < 2)) {
+            user.patreon_tier = 2;
+        }
+
         await redis.set(`user:${unifiedId}`, JSON.stringify(user));
 
         console.log(`[V2] Password login: ${unifiedId}`);
@@ -7941,7 +7975,8 @@ app.post('/v2/auth/login', async (req, res) => {
                 achievements: user.achievements,
                 is_season0_og: user.is_season0_og,
                 patreon_tier: user.patreon_tier,
-                patreon_is_active: user.patreon_is_active
+                patreon_is_active: user.patreon_is_active,
+                patreon_is_whitelisted: user.patreon_is_whitelisted
             }
         });
     } catch (error) {
@@ -10002,8 +10037,8 @@ app.post('/v2/user/sync', async (req, res) => {
         const now = Date.now();
         const lastSyncAt = user.last_sync_at ? new Date(user.last_sync_at).getTime() : (now - 24 * 60 * 60 * 1000);
         const hoursSinceLastSync = Math.min(168, Math.max(0.01, (now - lastSyncAt) / (1000 * 60 * 60)));
-        const MAX_XP_PER_HOUR = 50000;
-        const MAX_XP_PER_SYNC = 25000;
+        const MAX_XP_PER_HOUR = 100000;
+        const MAX_XP_PER_SYNC = 50000;
 
         // R8/M23: Pre-cap arrays in case Redis record was manipulated
         if (user.anti_cheat_flags && user.anti_cheat_flags.length > 100) {
@@ -10136,8 +10171,12 @@ app.post('/v2/user/sync', async (req, res) => {
             daily_quest_streak: 7,
             total_daily_quests_completed: 24,
             total_weekly_quests_completed: 4,
-            total_xp_from_quests: 50000
+            total_xp_from_quests: 50000,
+            daily_quests_completed_today: 3
         };
+
+        // Capture old bubbles BEFORE stats merge for server-side skill point awarding
+        const oldBubbles = (user.stats && user.stats.total_bubbles_popped) || 0;
 
         // Merge stats (take HIGHER values, but skip streak stats if force_streak_override is active)
         if (stats && typeof stats === 'object') {
@@ -10151,7 +10190,7 @@ app.post('/v2/user/sync', async (req, res) => {
                 }
 
                 // Handle non-numeric stat fields (date strings, arrays) — these can't go through Math.max
-                if (key === 'last_daily_quest_date') {
+                if (key === 'last_daily_quest_date' || key === 'daily_completion_reset_date') {
                     // Take the more recent date string (lexicographic compare works for YYYY-MM-DD)
                     const clientDate = typeof value === 'string' && value.length <= 20 ? value : '';
                     const serverDate = typeof user.stats[key] === 'string' ? user.stats[key] : '';
@@ -10216,13 +10255,10 @@ app.post('/v2/user/sync', async (req, res) => {
             user.share_profile_picture = share_profile_picture;
         }
 
-        // Merge unlocked skills and skill points — but NOT during a level reset or skills reset
+        // Merge unlocked skills — but NOT during a level reset or skills reset
         // (client may be pushing old cached values from before the reset)
         const pendingSkillsReset = user.force_skills_reset === true;
         if (!hadLevelReset && !pendingSkillsReset) {
-            // Capture server skill count BEFORE union merge so we can detect
-            // when the client has purchased new skills (client count > pre-merge server count)
-            const serverSkillCountBeforeMerge = (user.unlocked_skills || []).length;
             if (unlocked_skills && Array.isArray(unlocked_skills)) {
                 const existingSkills = new Set(user.unlocked_skills || []);
                 for (const skill of unlocked_skills) {
@@ -10232,34 +10268,25 @@ app.post('/v2/user/sync', async (req, res) => {
                 }
                 user.unlocked_skills = Array.from(existingSkills).slice(0, 200);
             }
-            // Sync skill points: accept client value if they have more unlocked skills
-            // (meaning they spent points on new skills), OR if they have more points (earned new ones)
-            if (typeof skill_points === 'number') {
-                const clientSkillCount = (unlocked_skills && Array.isArray(unlocked_skills)) ? unlocked_skills.length : 0;
-                const serverSkillCount = serverSkillCountBeforeMerge;
-                if (clientSkillCount > serverSkillCount) {
-                    // Client has MORE skills — they spent points, trust their (lower) total
-                    user.skill_points = skill_points;
-                } else if (clientSkillCount === serverSkillCount) {
-                    // Same skill count — take the higher value to preserve admin corrections
-                    // while still allowing level-up point gains from client
-                    user.skill_points = Math.max(skill_points, user.skill_points || 0);
-                } else if (skill_points > (user.skill_points || 0)) {
-                    // Client has fewer skills (stale data) but more points — take higher
-                    user.skill_points = skill_points;
-                }
+
+            // Server-authoritative skill points — award based on level-up and bubble milestones
+            // Client value is NOT trusted; server computes points from observed deltas
+            const newLevel = user.level || 1;
+            const levelDelta = Math.max(0, newLevel - oldLevel);
+            if (levelDelta > 0) {
+                user.skill_points = (user.skill_points || 0) + (levelDelta * POINTS_PER_LEVEL);
             }
-            // Floor: skill_points should never DROP below level when no skills are unlocked
-            // This prevents stale clients from wiping out corrected values
-            // R11/M5: Only restore to level floor if points decreased (prevents exploit via refund cycle)
-            if ((user.unlocked_skills || []).length === 0) {
-                const currentLevel = user.level || 1;
-                const previousPoints = serverSkillCountBeforeMerge === 0 ? (user.skill_points || 0) : skill_points;
-                if ((user.skill_points || 0) < currentLevel && previousPoints >= currentLevel) {
-                    // Points were already at or above level but got decreased — restore floor
-                    user.skill_points = currentLevel;
-                }
+
+            const newBubbles = (user.stats && user.stats.total_bubbles_popped) || 0;
+            const oldMilestones = Math.floor(oldBubbles / 100);
+            const newMilestones = Math.floor(newBubbles / 100);
+            const bubbleDelta = Math.max(0, newMilestones - oldMilestones);
+            if (bubbleDelta > 0) {
+                user.skill_points = (user.skill_points || 0) + bubbleDelta;
             }
+
+            // Cap skill_points at 9999
+            user.skill_points = Math.min(9999, user.skill_points || 0);
         }
 
         // Merge total conditioning minutes (lifetime value — always take higher)
@@ -10575,6 +10602,168 @@ app.post('/v2/user/settings-backup', async (req, res) => {
         });
     } catch (error) {
         console.error('Settings backup retrieve error:', error.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * POST /v2/user/purchase-skill
+ * Server-authoritative skill purchase. Validates cost, prereqs, deducts points, adds skill.
+ * Body: { unified_id, skill_id, current_level?, total_bubbles_popped? }
+ * Response: { success, skill_points, unlocked_skills } or { success: false, error, skill_points }
+ */
+app.post('/v2/user/purchase-skill', async (req, res) => {
+    try {
+        if (!redis) return res.status(503).json({ error: 'Redis not available' });
+
+        // Rate limit: 10/min/IP
+        const ip = req.ip || 'unknown';
+        const purchaseRateKey = `purchase_skill_rate:${ip}`;
+        try {
+            await redis.set(purchaseRateKey, 0, { nx: true, ex: 60 });
+            const rateCount = await redis.incr(purchaseRateKey);
+            if (rateCount > 10) {
+                return res.status(429).json({ error: 'Too many requests. Try again in a minute.' });
+            }
+        } catch (e) {
+            return res.status(429).json({ error: 'Rate limit check failed' });
+        }
+
+        const { unified_id, skill_id } = req.body || {};
+
+        if (!unified_id || !isValidUnifiedId(unified_id)) {
+            return res.status(400).json({ error: 'Invalid unified_id' });
+        }
+        if (typeof skill_id !== 'string' || skill_id.length > 50 || !SKILL_CATALOG[skill_id]) {
+            return res.status(400).json({ error: 'Invalid skill_id' });
+        }
+
+        // Per-user lock to prevent TOCTOU race condition (concurrent double-purchase)
+        const lockKey = `purchase_lock:${unified_id}`;
+        const lockAcquired = await redis.set(lockKey, '1', { nx: true, ex: 10 });
+        if (!lockAcquired) {
+            return res.status(429).json({ error: 'Purchase already in progress. Please wait.' });
+        }
+
+        try {
+            const userRaw = await redis.get(`user:${unified_id}`);
+            if (!userRaw) {
+                return res.status(401).json({ error: 'Invalid or missing auth token' });
+            }
+            const user = typeof userRaw === 'string' ? JSON.parse(userRaw) : userRaw;
+
+            const authCheck = validateAuthToken(req, user);
+            if (!authCheck.valid) {
+                return res.status(401).json({ error: 'Invalid or missing auth token' });
+            }
+
+            // Block purchases during pending skills reset (admin has wiped skills)
+            if (user.force_skills_reset === true) {
+                return res.json({ success: false, error: 'Skills are being reset. Please sync first.', skill_points: user.skill_points || 0 });
+            }
+
+            // Server uses its own stored values — no client-supplied level/bubbles reconciliation.
+            // Points are awarded by the sync endpoint when level-ups and bubble milestones occur.
+
+            // Check already owned
+            user.unlocked_skills = user.unlocked_skills || [];
+            if (user.unlocked_skills.includes(skill_id)) {
+                return res.json({ success: false, error: 'Skill already owned', skill_points: user.skill_points || 0 });
+            }
+
+            // Check prerequisite
+            const skillDef = SKILL_CATALOG[skill_id];
+            if (skillDef.prereq && !user.unlocked_skills.includes(skillDef.prereq)) {
+                return res.json({ success: false, error: 'Prerequisite not met', skill_points: user.skill_points || 0 });
+            }
+
+            // Check sufficient points
+            if ((user.skill_points || 0) < skillDef.cost) {
+                return res.json({ success: false, error: 'Not enough sparkle points. Try syncing first to receive pending points.', skill_points: user.skill_points || 0 });
+            }
+
+            // Purchase: deduct cost and add skill
+            user.skill_points = Math.max(0, (user.skill_points || 0) - skillDef.cost);
+            user.skill_points = Math.min(9999, user.skill_points);
+            user.unlocked_skills.push(skill_id);
+            user.updated_at = new Date().toISOString();
+
+            await redis.set(`user:${unified_id}`, JSON.stringify(user));
+
+            console.log(`[PurchaseSkill] User ${unified_id} purchased ${skill_id} for ${skillDef.cost} points, ${user.skill_points} remaining`);
+
+            res.json({
+                success: true,
+                skill_points: user.skill_points,
+                unlocked_skills: user.unlocked_skills
+            });
+        } finally {
+            // Always release the lock
+            await redis.del(lockKey).catch(() => {});
+        }
+    } catch (error) {
+        console.error('Purchase skill error:', error.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * POST /v2/easter-egg
+ * Record a unique easter egg reader and return the total count.
+ * If unified_id provided: validates auth, adds user to Set, returns count.
+ * If unified_id omitted: returns count only (read-only, no auth).
+ * Response: { count: <number> }
+ */
+app.post('/v2/easter-egg', async (req, res) => {
+    try {
+        if (!redis) return res.status(503).json({ error: 'Redis not available' });
+
+        const REDIS_KEY = 'easter_egg_readers';
+        const BASE_COUNT = 57;
+
+        // Per-IP rate limit: 10 per minute
+        const ip = req.ip || 'unknown';
+        const eeRateKey = `easter_egg_rate:${ip}`;
+        try {
+            await redis.set(eeRateKey, 0, { nx: true, ex: 60 });
+            const eeCount = await redis.incr(eeRateKey);
+            if (eeCount > 10) {
+                return res.status(429).json({ error: 'Too many requests. Try again in a minute.' });
+            }
+        } catch (e) {
+            return res.status(429).json({ error: 'Rate limit check failed' });
+        }
+
+        const { unified_id } = req.body || {};
+
+        if (unified_id) {
+            // Authenticated path: validate and record the reader
+            if (!isValidUnifiedId(unified_id)) {
+                return res.status(400).json({ error: 'Invalid unified_id' });
+            }
+
+            const userRaw = await redis.get(`user:${unified_id}`);
+            if (!userRaw) {
+                // Return 401 (not 404) to prevent user enumeration
+                return res.status(401).json({ error: 'Invalid or missing auth token' });
+            }
+
+            const user = typeof userRaw === 'string' ? JSON.parse(userRaw) : userRaw;
+            const authCheck = validateAuthToken(req, user);
+            if (!authCheck.valid) {
+                return res.status(401).json({ error: 'Invalid or missing auth token' });
+            }
+
+            // Add user to the set (idempotent)
+            await redis.sadd(REDIS_KEY, unified_id);
+        }
+
+        // Return total unique readers + base
+        const rawCount = await redis.scard(REDIS_KEY);
+        const actualReaders = (typeof rawCount === 'number' && isFinite(rawCount)) ? rawCount : 0;
+        res.json({ count: actualReaders + BASE_COUNT });
+    } catch (error) {
+        console.error('Easter egg endpoint error:', error.message);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

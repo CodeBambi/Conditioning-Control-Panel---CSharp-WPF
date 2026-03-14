@@ -169,6 +169,7 @@ namespace ConditioningControlPanel
         public static OverlayService Overlay { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
         public static LockCardService LockCard { get; private set; } = null!;
+        public static PopQuizService PopQuiz { get; private set; } = null!;
         public static BubbleCountService BubbleCount { get; private set; } = null!;
         public static BouncingTextService BouncingText { get; private set; } = null!;
         public static MindWipeService MindWipe { get; private set; } = null!;
@@ -357,8 +358,9 @@ namespace ConditioningControlPanel
                 // Stop all visual overlays (spiral, pink filter, etc.)
                 Overlay?.Stop();
 
-                // Stop lock card if active
+                // Stop lock card and pop quiz if active
                 LockCard?.Stop();
+                PopQuiz?.Stop();
 
                 // Stop mantra lab audio
                 Mantra?.Dispose();
@@ -595,6 +597,7 @@ namespace ConditioningControlPanel
             Bubbles = new BubbleService();
             InteractionQueue = new InteractionQueueService();
             LockCard = new LockCardService();
+            PopQuiz = new PopQuizService();
             BubbleCount = new BubbleCountService();
             BouncingText = new BouncingTextService();
             MindWipe = new MindWipeService();
@@ -2086,6 +2089,7 @@ Application State:
             Overlay?.Dispose();
             Bubbles?.Dispose();
             LockCard?.Dispose();
+            PopQuiz?.Dispose();
             BubbleCount?.Dispose();
             BouncingText?.Dispose();
             MindWipe?.Dispose();
@@ -2106,6 +2110,12 @@ Application State:
             Roadmap?.Dispose();
             SkillTree?.Dispose();
             QuestDefinitions?.Dispose();
+            Quests?.Dispose();
+            Companion?.Dispose();
+            CommunityPrompts?.Dispose();
+            ActivityTracker?.Dispose();
+            Haptics?.Dispose();
+            AudioSync?.Dispose();
             Audio?.Dispose();
 
             // Clear in-memory secrets before exit to reduce memory exposure

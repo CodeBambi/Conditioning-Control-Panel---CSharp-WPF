@@ -3,6 +3,7 @@ using System.Threading;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using NAudio.Wave;
@@ -259,6 +260,10 @@ public class BubbleService : IDisposable
         var multiplier = App.SkillTree?.RollLuckyBubble() ?? 1;
         var isLucky = multiplier > 1;
 
+        // Tell bubble whether it's lucky so it can show the right visual effects
+        var hasSparkleBoost = (App.SkillTree?.GetSparkleBoostTier() ?? 0) > 0 && (App.Settings?.Current?.FlashGlowEnabled ?? true);
+        bubble.SetLucky(isLucky, hasSparkleBoost);
+
         // Play appropriate sound
         PlayPopSound(isLucky);
 
@@ -308,16 +313,18 @@ public class BubbleService : IDisposable
         {
             var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
 
-            // If lucky bubble, play special Burst easter egg sound
+            // If lucky bubble, play a random chime sound
             if (isLucky)
             {
-                var burstPath = Path.Combine(soundsPath, "Burst.mp3");
-                if (File.Exists(burstPath))
+                var chimeSoundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds");
+                var chimeFiles = new[] { "chime1.mp3", "chime2.mp3", "chime3.mp3" };
+                var chimePath = Path.Combine(chimeSoundsPath, chimeFiles[_random.Next(chimeFiles.Length)]);
+                if (File.Exists(chimePath))
                 {
                     var masterVolume = App.Settings.Current.MasterVolume / 100f;
                     var bubblesVolume = App.Settings.Current.BubblesVolume / 100f;
-                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5) * 0.5f;
-                    PlaySoundAsync(burstPath, volume);
+                    var volume = (float)Math.Pow(masterVolume * bubblesVolume, 1.5) * 0.35f;
+                    PlaySoundAsync(chimePath, volume);
                     App.Logger?.Information("🎉 Lucky Bubble! 20x XP!");
                     return;
                 }
@@ -460,6 +467,15 @@ public class BubbleService : IDisposable
     public void Dispose()
     {
         Stop();
+
+        // Drain and dispose pooled audio devices (static pool persists across service restarts)
+        lock (_audioPoolLock)
+        {
+            while (_audioDevicePool.Count > 0)
+            {
+                try { _audioDevicePool.Dequeue().Dispose(); } catch { }
+            }
+        }
     }
 }
 
@@ -487,10 +503,20 @@ internal class Bubble
     private bool _isPopping;
     private bool _isAlive = true;
     private bool _isDestroyed = false;
+    private bool _isLucky;
 
     private readonly Image _bubbleImage;
     private readonly int _size;
     private readonly double _screenTop;
+    private readonly Canvas _sparkleCanvas;
+    private readonly Grid _grid;
+    private List<SparkleParticle>? _sparkles;
+
+    private struct SparkleParticle
+    {
+        public double X, Y, VelX, VelY, Alpha, Size;
+        public System.Windows.Shapes.Ellipse Shape;
+    }
 
     public bool IsAlive => _isAlive && !_isDestroyed;
 
@@ -576,21 +602,30 @@ internal class Bubble
             };
         }
 
+        // Sparkle particle canvas (overlays the bubble, non-interactive)
+        _sparkleCanvas = new Canvas
+        {
+            Width = _size,
+            Height = _size,
+            IsHitTestVisible = false
+        };
+
         // Create container grid with hit area behind the bubble image
-        var grid = new Grid
+        _grid = new Grid
         {
             Width = _size,
             Height = _size,
             Background = Brushes.Transparent,
             IsHitTestVisible = _isClickable
         };
-        grid.Children.Add(hitArea);      // Hit area first (behind)
-        grid.Children.Add(_bubbleImage); // Image on top
+        _grid.Children.Add(hitArea);         // Hit area first (behind)
+        _grid.Children.Add(_bubbleImage);    // Image on top
+        _grid.Children.Add(_sparkleCanvas);  // Sparkles on top of everything
 
         // Grid click as backup (only if clickable)
         if (_isClickable)
         {
-            grid.MouseLeftButtonDown += (s, e) =>
+            _grid.MouseLeftButtonDown += (s, e) =>
             {
                 Pop();
                 e.Handled = true;
@@ -611,7 +646,7 @@ internal class Bubble
             Height = _size + 40,
             Left = _posX - 20,
             Top = _posY - 20,
-            Content = grid,
+            Content = _grid,
             Cursor = _isClickable ? Cursors.Hand : Cursors.Arrow,
             IsHitTestVisible = _isClickable
         };
@@ -643,8 +678,34 @@ internal class Bubble
         {
             // Pop animation - expand and fade (scaled for 30fps)
             _scale += 0.04;
-            _fadeAlpha -= 0.066;
+            _fadeAlpha -= _isLucky ? 0.044 : 0.066; // Lucky pops linger ~50% longer
             _angle += 2;
+
+            // Animate sparkle particles outward
+            if (_sparkles != null)
+            {
+                for (int i = 0; i < _sparkles.Count; i++)
+                {
+                    var sp = _sparkles[i];
+                    sp.X += sp.VelX;
+                    sp.Y += sp.VelY;
+                    sp.VelY += 0.15; // Slight gravity
+                    sp.Alpha -= _isLucky ? 0.04 : 0.06;
+
+                    if (sp.Alpha > 0)
+                    {
+                        try
+                        {
+                            Canvas.SetLeft(sp.Shape, sp.X - sp.Size / 2);
+                            Canvas.SetTop(sp.Shape, sp.Y - sp.Size / 2);
+                            sp.Shape.Opacity = Math.Max(0, sp.Alpha);
+                        }
+                        catch { }
+                    }
+
+                    _sparkles[i] = sp;
+                }
+            }
 
             if (_fadeAlpha <= 0)
             {
@@ -721,6 +782,77 @@ internal class Bubble
         {
             App.Logger?.Debug("Bubble animate error: {Error}", ex.Message);
             Destroy();
+        }
+    }
+
+    public void SetLucky(bool isLucky, bool hasSparkleBoost)
+    {
+        _isLucky = isLucky;
+
+        // Apply golden glow for lucky pops
+        if (isLucky)
+        {
+            try
+            {
+                _window.Effect = new DropShadowEffect
+                {
+                    Color = System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00),
+                    BlurRadius = 50,
+                    ShadowDepth = 0,
+                    Opacity = 0.8
+                };
+            }
+            catch { }
+        }
+
+        // Spawn sparkle particles if sparkle boost is unlocked
+        if (hasSparkleBoost || isLucky)
+        {
+            SpawnSparkles(isLucky);
+        }
+    }
+
+    private void SpawnSparkles(bool isGold)
+    {
+        var count = isGold ? 16 : 8;
+        var color = isGold
+            ? System.Windows.Media.Color.FromRgb(0xFF, 0xD7, 0x00)
+            : System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4);
+        var minSize = isGold ? 4.0 : 3.0;
+        var maxSize = isGold ? 8.0 : 6.0;
+
+        _sparkles = new List<SparkleParticle>(count);
+        var centerX = _size / 2.0;
+        var centerY = _size / 2.0;
+
+        for (int i = 0; i < count; i++)
+        {
+            var angle = _random.NextDouble() * Math.PI * 2;
+            var speed = 2.0 + _random.NextDouble() * 4.0;
+            var size = minSize + _random.NextDouble() * (maxSize - minSize);
+
+            var ellipse = new System.Windows.Shapes.Ellipse
+            {
+                Width = size,
+                Height = size,
+                Fill = new SolidColorBrush(color),
+                IsHitTestVisible = false
+            };
+
+            Canvas.SetLeft(ellipse, centerX - size / 2);
+            Canvas.SetTop(ellipse, centerY - size / 2);
+            _sparkleCanvas.Children.Add(ellipse);
+
+            _sparkles.Add(new SparkleParticle
+            {
+                X = centerX,
+                Y = centerY,
+                VelX = Math.Cos(angle) * speed,
+                VelY = Math.Sin(angle) * speed,
+                Alpha = 1.0,
+                Size = size,
+                Shape = ellipse
+            });
         }
     }
 

@@ -12,7 +12,8 @@ public class InteractionQueueService
     {
         Video,
         BubbleCount,
-        LockCard
+        LockCard,
+        PopQuiz
     }
 
     private readonly Queue<(InteractionType Type, Action Trigger)> _queue = new();

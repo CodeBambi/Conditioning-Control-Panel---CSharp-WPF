@@ -26,41 +26,49 @@
 
             <!-- Content -->
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="25,10,25,10">
-                <TextBlock TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" LineHeight="20">
-                    <Run Foreground="#FF69B4" FontWeight="Bold">congrats.</Run>
-                    <LineBreak/>
-                    <Run Foreground="#B0B0B0">Either you were rlly bored, or u r a coder and looked trough the code, either way doesnt rlly matter, had to write a cupple of lines down.</Run>
-                    <Run Foreground="#666">Its new year's eve, soon is midnight. I rlly wanted to drop the relese for the new year, but life never goes how we want i guess...</Run>
-                    <LineBreak/><LineBreak/>
-                    <Run Foreground="#B0B0B0">so here i am. 3 am now actually. drinking this piss warm bubbling water someone gave me for christmas, recycled trash gift just like how i felt my whole life. my cat is asleep on the keyboard, only thing breathing in this cold ass apartment. funny how people got so mad about v1. </Run>
-                    <Run Foreground="#FF69B4">'oh she used ai'</Run>
-                    <Run Foreground="#B0B0B0"> </Run>
-                    <Run Foreground="#FF69B4">'oh its insecure'</Run>
-                    <Run Foreground="#B0B0B0"> </Run>
-                    <Run Foreground="#FF69B4">'learn to code properly'</Run>
-                    <Run Foreground="#B0B0B0">. shut up. just shut up. you think i dont know? you think i dont know what it feels like to be told im doing it wrong? acting wrong being wrong? existing wrong?</Run>
-                    <LineBreak/><LineBreak/>
-                    <Run Foreground="#666">i spent my whole life in a town where breathing the wrong way got you stared at or worse so sorry if my python script wasnt clean enough for your github standards or whatever. they tell you how to dress how to talk how to be a man how to not be a freak. and when you finally escape, when you finally find a way to make something... well i guess you know what, fuck it, doeesnt matter.</Run>
-                    <LineBreak/><LineBreak/>
-                    <Run Foreground="#B0B0B0">well guess what. i spent the whole winter holidays here alone. while everyone else is kissing someone or lighting fireworks i was here fixing spirals overlays getting stuck or clippin sprites on canvas. </Run>
-                    <Run Foreground="#FF69B4" FontWeight="SemiBold">i built this. me.</Run>
-                    <Run Foreground="#B0B0B0"> yeah i used tools who cares? do you build a house with your bare hands?</Run>
-                    <LineBreak/><LineBreak/>
-                    <Run Foreground="#B0B0B0">if ur reading this, maybe you get it. maybe ur lonely too. maybe its just pretentious crap. Either way, here we are.</Run>
-                    <LineBreak/><LineBreak/>
-                    <Run Foreground="#FF69B4">i made this beautiful thing out of spite and cheap champagne and sleepless nights, but i never felt so alive</Run>
-                    <LineBreak/><LineBreak/>
-                    <Run Foreground="#B0B0B0">so cheers. to 2026. to not letting anyone tell us who we are or how we should build our world.</Run>
-                    <LineBreak/><LineBreak/>
-                    <Run Foreground="#666">im gonna go pet my cat and pass out. Happy new year.</Run>
-                    <LineBreak/>
-                    <Run Foreground="#B0B0B0"> Love you , whoever u are.</Run>
-                    <LineBreak/><LineBreak/>
-                    <Run Foreground="#FF69B4" FontSize="18">&#x2764;</Run>
-                    <Run Foreground="#FF69B4" FontSize="14"> :3 </Run>
-                    <LineBreak/><LineBreak/>
-                    <Run Foreground="#FF69B4" FontWeight="Bold" FontStyle="Italic">CodeBambi</Run>
-                </TextBlock>
+                <StackPanel>
+                    <TextBlock TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" LineHeight="20">
+                        <Run Foreground="#FF69B4" FontWeight="Bold">congrats.</Run>
+                        <LineBreak/>
+                        <Run Foreground="#B0B0B0">Either you were rlly bored, or u r a coder and looked trough the code, either way doesnt rlly matter, had to write a cupple of lines down.</Run>
+                        <Run Foreground="#666">Its new year's eve, soon is midnight. I rlly wanted to drop the relese for the new year, but life never goes how we want i guess...</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="#B0B0B0">so here i am. 3 am now actually. drinking this piss warm bubbling water someone gave me for christmas, recycled trash gift just like how i felt my whole life. my cat is asleep on the keyboard, only thing breathing in this cold ass apartment. funny how people got so mad about v1. </Run>
+                        <Run Foreground="#FF69B4">'oh she used ai'</Run>
+                        <Run Foreground="#B0B0B0"> </Run>
+                        <Run Foreground="#FF69B4">'oh its insecure'</Run>
+                        <Run Foreground="#B0B0B0"> </Run>
+                        <Run Foreground="#FF69B4">'learn to code properly'</Run>
+                        <Run Foreground="#B0B0B0">. shut up. just shut up. you think i dont know? you think i dont know what it feels like to be told im doing it wrong? acting wrong being wrong? existing wrong?</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="#666">i spent my whole life in a town where breathing the wrong way got you stared at or worse so sorry if my python script wasnt clean enough for your github standards or whatever. they tell you how to dress how to talk how to be a man how to not be a freak. and when you finally escape, when you finally find a way to make something... well i guess you know what, fuck it, doeesnt matter.</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="#B0B0B0">well guess what. i spent the whole winter holidays here alone. while everyone else is kissing someone or lighting fireworks i was here fixing spirals overlays getting stuck or clippin sprites on canvas. </Run>
+                        <Run Foreground="#FF69B4" FontWeight="SemiBold">i built this. me.</Run>
+                        <Run Foreground="#B0B0B0"> yeah i used tools who cares? do you build a house with your bare hands?</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="#B0B0B0">if ur reading this, maybe you get it. maybe ur lonely too. maybe its just pretentious crap. Either way, here we are.</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="#FF69B4">i made this beautiful thing out of spite and cheap champagne and sleepless nights, but i never felt so alive</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="#B0B0B0">so cheers. to 2026. to not letting anyone tell us who we are or how we should build our world.</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="#666">im gonna go pet my cat and pass out. Happy new year.</Run>
+                        <LineBreak/>
+                        <Run Foreground="#B0B0B0"> Love you , whoever u are.</Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="#FF69B4" FontSize="18">&#x2764;</Run>
+                        <Run Foreground="#FF69B4" FontSize="14"> :3 </Run>
+                        <LineBreak/><LineBreak/>
+                        <Run Foreground="#FF69B4" FontWeight="Bold" FontStyle="Italic">CodeBambi</Run>
+                    </TextBlock>
+                    <TextBlock x:Name="TxtReaderCount"
+                               FontFamily="Consolas" FontSize="11"
+                               Foreground="#FF4444"
+                               Margin="0,15,0,5"
+                               HorizontalAlignment="Center"
+                               Visibility="Collapsed"/>
+                </StackPanel>
             </ScrollViewer>
 
             <!-- Footer -->
