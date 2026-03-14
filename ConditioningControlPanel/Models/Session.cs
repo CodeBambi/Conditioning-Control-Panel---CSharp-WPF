@@ -892,6 +892,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         public int LockCardStartMinute { get; set; } = 0;
         public int LockCardEndMinute { get; set; } = -1; // -1 = session duration
         public int? LockCardFrequency { get; set; }
+        public List<string> LockCardPhrases { get; set; } = new();
         public bool BubbleCountEnabled { get; set; }
         public int BubbleCountStartMinute { get; set; } = 0;
         public int BubbleCountEndMinute { get; set; } = -1; // -1 = session duration

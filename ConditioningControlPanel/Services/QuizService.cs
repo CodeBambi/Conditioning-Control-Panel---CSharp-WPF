@@ -105,23 +105,6 @@ namespace ConditioningControlPanel.Services
         public string CategoryName { get; set; } = string.Empty;
     }
 
-    public enum QuizRecommendationType
-    {
-        SessionDifficulty,
-        CompanionPreset,
-        SettingSuggestion
-    }
-
-    public class QuizRecommendation
-    {
-        public QuizRecommendationType Type { get; set; }
-        public string Title { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
-        public string ActionLabel { get; set; } = string.Empty;
-        /// <summary>Key used by QuizWindow to identify which action to perform.</summary>
-        public string ActionKey { get; set; } = string.Empty;
-    }
-
     public enum TrendDirection
     {
         Up,
@@ -903,88 +886,110 @@ Do NOT include any other text before or after the question format. Just the ques
             }
         }
 
-        // ============ RECOMMENDATIONS & TRENDS ============
+        // ============ SESSION CONTENT GENERATION ============
 
-        public static List<QuizRecommendation> GenerateRecommendations(QuizHistoryEntry entry)
+        public async Task<SessionTextContent?> GenerateSessionContentAsync()
         {
-            var recs = new List<QuizRecommendation>();
-            var pct = entry.MaxScore > 0 ? (int)Math.Round((double)entry.TotalScore / entry.MaxScore * 100) : 0;
+            try
+            {
+                var prompt = @"Based on this quiz, generate content for a personalized conditioning session. Use the exact format below with no extra text:
 
-            // 1. Session difficulty suggestion
-            var (difficulty, diffDesc) = pct switch
-            {
-                <= 25 => ("Easy", "Start gentle — ease into it at your own pace."),
-                <= 50 => ("Medium", "You're ready for a moderate challenge."),
-                <= 75 => ("Hard", "Push your limits with an intense session."),
-                _ => ("Extreme", "You can handle anything. Go all out.")
-            };
-            recs.Add(new QuizRecommendation
-            {
-                Type = QuizRecommendationType.SessionDifficulty,
-                Title = $"{difficulty} Sessions",
-                Description = diffDesc,
-                ActionLabel = $"Browse {difficulty} sessions",
-                ActionKey = $"difficulty:{difficulty}"
-            });
+SESSION_NAME: [A creative 2-5 word session name]
+SESSION_DESC: [A 1-sentence description of the session theme]
+SUBLIMINAL_1: [short subliminal phrase]
+SUBLIMINAL_2: [short subliminal phrase]
+SUBLIMINAL_3: [short subliminal phrase]
+SUBLIMINAL_4: [short subliminal phrase]
+SUBLIMINAL_5: [short subliminal phrase]
+SUBLIMINAL_6: [short subliminal phrase]
+SUBLIMINAL_7: [short subliminal phrase]
+SUBLIMINAL_8: [short subliminal phrase]
+SUBLIMINAL_9: [short subliminal phrase]
+SUBLIMINAL_10: [short subliminal phrase]
+BOUNCING_1: [ALL CAPS bouncing text phrase]
+BOUNCING_2: [ALL CAPS bouncing text phrase]
+BOUNCING_3: [ALL CAPS bouncing text phrase]
+BOUNCING_4: [ALL CAPS bouncing text phrase]
+BOUNCING_5: [ALL CAPS bouncing text phrase]
+BOUNCING_6: [ALL CAPS bouncing text phrase]
+LOCKCARD_1: [typing reinforcement phrase]
+LOCKCARD_2: [typing reinforcement phrase]
+LOCKCARD_3: [typing reinforcement phrase]
+LOCKCARD_4: [typing reinforcement phrase]
+LOCKCARD_5: [typing reinforcement phrase]
+LOCKCARD_6: [typing reinforcement phrase]
+LOCKCARD_7: [typing reinforcement phrase]
+LOCKCARD_8: [typing reinforcement phrase]
 
-            // 2. Companion personality preset
-            var (presetName, presetDesc) = pct switch
-            {
-                <= 25 => ("Encouraging Bestie", "A gentle, supportive companion to guide you."),
-                <= 50 => ("Playful Tease", "Flirty and fun — keeps you on your toes."),
-                <= 75 => ("Strict Trainer", "Firm and commanding — pushes you further."),
-                _ => ("Total Control", "Dominant and intense — you asked for it.")
-            };
-            recs.Add(new QuizRecommendation
-            {
-                Type = QuizRecommendationType.CompanionPreset,
-                Title = presetName,
-                Description = presetDesc,
-                ActionLabel = "Set companion style",
-                ActionKey = $"preset:{presetName}"
-            });
+Make all phrases thematically consistent with the quiz category and the user's score. Subliminals should be 2-5 words. Bouncing text should be 1-3 words in ALL CAPS. Lock card phrases should be short affirmations (4-8 words).";
 
-            // 3. Setting suggestions based on score & current state
-            var settings = App.Settings?.Current;
-            if (settings != null)
+                _conversationHistory.Add(new ProxyChatMessage { Role = "user", Content = prompt });
+
+                var response = await CallAiAsync(800);
+                if (response == null) return null;
+
+                _conversationHistory.Add(new ProxyChatMessage { Role = "assistant", Content = response });
+
+                return ParseSessionContent(response);
+            }
+            catch (Exception ex)
             {
-                if (pct > 60 && !settings.LockCardEnabled && settings.IsLevelUnlocked(35))
+                App.Logger?.Warning(ex, "QuizService: Failed to generate session content");
+                return null;
+            }
+        }
+
+        private static SessionTextContent? ParseSessionContent(string text)
+        {
+            var content = new SessionTextContent();
+
+            var nameMatch = Regex.Match(text, @"SESSION_NAME:\s*(.+?)(?:\r?\n|$)");
+            if (nameMatch.Success) content.Name = nameMatch.Groups[1].Value.Trim();
+
+            var descMatch = Regex.Match(text, @"SESSION_DESC:\s*(.+?)(?:\r?\n|$)");
+            if (descMatch.Success) content.Description = descMatch.Groups[1].Value.Trim();
+
+            for (int i = 1; i <= 10; i++)
+            {
+                var match = Regex.Match(text, $@"SUBLIMINAL_{i}:\s*(.+?)(?:\r?\n|$)");
+                if (match.Success)
                 {
-                    recs.Add(new QuizRecommendation
-                    {
-                        Type = QuizRecommendationType.SettingSuggestion,
-                        Title = "Enable Lock Cards",
-                        Description = "Your score says you're ready for reinforcement typing prompts.",
-                        ActionLabel = "Enable",
-                        ActionKey = "setting:LockCardEnabled"
-                    });
-                }
-                else if (pct > 50 && !settings.SubliminalEnabled)
-                {
-                    recs.Add(new QuizRecommendation
-                    {
-                        Type = QuizRecommendationType.SettingSuggestion,
-                        Title = "Enable Subliminals",
-                        Description = "Add subliminal messages to deepen the experience.",
-                        ActionLabel = "Enable",
-                        ActionKey = "setting:SubliminalEnabled"
-                    });
-                }
-                else if (pct > 75 && !settings.MandatoryVideosEnabled)
-                {
-                    recs.Add(new QuizRecommendation
-                    {
-                        Type = QuizRecommendationType.SettingSuggestion,
-                        Title = "Enable Mandatory Videos",
-                        Description = "You scored high enough — mandatory videos will keep you focused.",
-                        ActionLabel = "Enable",
-                        ActionKey = "setting:MandatoryVideosEnabled"
-                    });
+                    var phrase = match.Groups[1].Value.Trim();
+                    if (!string.IsNullOrWhiteSpace(phrase) && !phrase.StartsWith("["))
+                        content.SubliminalPhrases.Add(phrase);
                 }
             }
 
-            return recs;
+            for (int i = 1; i <= 6; i++)
+            {
+                var match = Regex.Match(text, $@"BOUNCING_{i}:\s*(.+?)(?:\r?\n|$)");
+                if (match.Success)
+                {
+                    var phrase = match.Groups[1].Value.Trim();
+                    if (!string.IsNullOrWhiteSpace(phrase) && !phrase.StartsWith("["))
+                        content.BouncingTextPhrases.Add(phrase);
+                }
+            }
+
+            for (int i = 1; i <= 8; i++)
+            {
+                var match = Regex.Match(text, $@"LOCKCARD_{i}:\s*(.+?)(?:\r?\n|$)");
+                if (match.Success)
+                {
+                    var phrase = match.Groups[1].Value.Trim();
+                    if (!string.IsNullOrWhiteSpace(phrase) && !phrase.StartsWith("["))
+                        content.LockCardPhrases.Add(phrase);
+                }
+            }
+
+            // Require minimum viable content
+            if (string.IsNullOrWhiteSpace(content.Name) || content.SubliminalPhrases.Count < 3)
+                return null;
+
+            return content;
         }
+
+        // ============ TRENDS ============
 
         public static QuizScoreTrend? GetScoreTrend(List<QuizHistoryEntry> history, QuizCategory category)
         {

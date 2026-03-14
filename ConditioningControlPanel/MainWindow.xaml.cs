@@ -3469,9 +3469,14 @@ namespace ConditioningControlPanel
 
         private void BtnStartQuiz_Click(object sender, RoutedEventArgs e)
         {
-            // Prevent opening multiple quiz windows
-            if (Application.Current.Windows.OfType<QuizWindow>().Any())
+            // Prevent opening multiple quiz windows — focus existing one instead
+            var existingQuiz = Application.Current.Windows.OfType<QuizWindow>().FirstOrDefault();
+            if (existingQuiz != null)
+            {
+                existingQuiz.Activate();
+                existingQuiz.Focus();
                 return;
+            }
 
             if (App.Ai == null || !App.Ai.IsAvailable)
             {
@@ -3570,6 +3575,9 @@ namespace ConditioningControlPanel
                     var captured = entry;
                     row.MouseLeftButtonDown += (s, args) =>
                     {
+                        // Close any existing report window before opening a new one
+                        foreach (var w in Application.Current.Windows.OfType<QuizReportWindow>().ToList())
+                            w.Close();
                         new QuizReportWindow(captured) { Owner = this }.Show();
                     };
                     row.MouseEnter += (s, args) =>
@@ -20044,6 +20052,16 @@ namespace ConditioningControlPanel
                 _browser?.Dispose();
                 _avatarTubeWindow?.Close();
 
+                // Close any quiz windows (topmost/fullscreen, would keep app alive)
+                try
+                {
+                    foreach (var quiz in Application.Current.Windows.OfType<PopQuizWindow>().ToList())
+                        quiz.Close();
+                    foreach (var quiz in Application.Current.Windows.OfType<QuizWindow>().ToList())
+                        quiz.Close();
+                }
+                catch { }
+
                 // Stop and dispose session engine (closes corner GIF window)
                 try
                 {
@@ -20065,6 +20083,17 @@ namespace ConditioningControlPanel
             {
                 // Always minimize to tray instead of closing
                 e.Cancel = true;
+
+                // Close any quiz windows (topmost/fullscreen, would stay visible while app is in tray)
+                try
+                {
+                    foreach (var quiz in Application.Current.Windows.OfType<PopQuizWindow>().ToList())
+                        quiz.Close();
+                    foreach (var quiz in Application.Current.Windows.OfType<QuizWindow>().ToList())
+                        quiz.Close();
+                }
+                catch { }
+
                 _trayIcon?.MinimizeToTray();
                 HideAvatarTube();
 

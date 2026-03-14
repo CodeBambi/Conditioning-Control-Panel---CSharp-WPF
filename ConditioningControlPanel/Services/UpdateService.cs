@@ -22,13 +22,13 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.14";
+        public const string AppVersion = "5.6.15";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.14 - Quiz Training Update
+        public const string CurrentPatchNotes = @"v5.6.15 - Quiz Training Update
 
 🧠 QUIZ TRAINING [BETA]
 • New AI-powered personality quiz — 10 questions that adapt to your answers in real time

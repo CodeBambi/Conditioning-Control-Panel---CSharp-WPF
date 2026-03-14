@@ -1332,6 +1332,10 @@ namespace ConditioningControlPanel
         private void ParentWindow_Activated(object? sender, EventArgs e)
         {
             if (_parentWindow == null) return;
+
+            // Don't do any z-order work when pop quiz is open
+            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
+
             try
             {
                 if (_parentWindow.WindowState != WindowState.Minimized && _parentWindow.IsVisible
@@ -1346,6 +1350,7 @@ namespace ConditioningControlPanel
                         // Use Background priority so all window activation processing finishes first
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
+                            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
                             if (_isAttached && _tubeHandle != IntPtr.Zero)
                             {
                                 BringAttachedPairToFront();
@@ -1359,6 +1364,9 @@ namespace ConditioningControlPanel
 
         private void ParentWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
+            // Don't fight z-order when pop quiz is open
+            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
+
             // When main window is clicked (even if already active), immediately bring tube to front
             // This handles the case where Activated event doesn't fire (window already active)
             if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
@@ -1366,6 +1374,7 @@ namespace ConditioningControlPanel
                 // Use Background priority to ensure this happens after the click processing
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
+                    if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
                     if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
                     {
                         BringAttachedPairToFront();
@@ -1426,7 +1435,7 @@ namespace ConditioningControlPanel
                 if (_parentWindow != null && _parentWindow.IsVisible && _parentWindow.WindowState != WindowState.Minimized)
                 {
                     UpdatePosition();
-                    if (_isAttached) BringAttachedPairToFront();
+                    if (_isAttached && !(PopQuizWindow.IsOpen || QuizWindow.IsOpen)) BringAttachedPairToFront();
                 }
 
                 StartFloatingAnimation();
@@ -2092,8 +2101,12 @@ namespace ConditioningControlPanel
             SpeechBubble.Visibility = Visibility.Visible;
 
             // Start z-order refresh to keep bubble on top of main window
-            StartZOrderRefreshTimer();
-            BringAttachedPairToFront();
+            // Skip all z-order work when pop quiz is open — must not cover the quiz
+            if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
+            {
+                StartZOrderRefreshTimer();
+                BringAttachedPairToFront();
+            }
 
             // Calculate display duration based on text length
             // Base: 5 seconds, plus ~0.05s per character, min 5s, max 14s
@@ -2489,7 +2502,7 @@ namespace ConditioningControlPanel
                 return;
 
             // Don't fight with pop quiz — it uses HWND_TOPMOST and must stay on top
-            if (Application.Current.Windows.OfType<PopQuizWindow>().Any())
+            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen))
                 return;
 
             if (_parentHandle == IntPtr.Zero)
@@ -2526,7 +2539,7 @@ namespace ConditioningControlPanel
             if (_isInputVisible) return;
 
             // Don't activate parent when pop quiz is open — it would cover the quiz
-            if (Application.Current.Windows.OfType<PopQuizWindow>().Any()) return;
+            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
 
             try
             {
@@ -2546,6 +2559,7 @@ namespace ConditioningControlPanel
                 {
                     try
                     {
+                        if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
                         if (_isAttached && _parentWindow != null && _parentWindow.IsVisible
                             && _parentWindow.WindowState != WindowState.Minimized)
                         {
@@ -2565,6 +2579,9 @@ namespace ConditioningControlPanel
         {
             if (_tubeHandle == IntPtr.Zero || _isAttached) return;
 
+            // Don't fight with pop quiz for topmost z-order
+            if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
+
             // Use Win32 SetWindowPos with HWND_TOPMOST to force topmost z-order
             // This is more reliable than WPF's Topmost property across monitor/focus changes
             SetWindowPos(_tubeHandle, HWND_TOPMOST, 0, 0, 0, 0,
@@ -2583,6 +2600,7 @@ namespace ConditioningControlPanel
             _zOrderRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             _zOrderRefreshTimer.Tick += (s, e) =>
             {
+                if ((PopQuizWindow.IsOpen || QuizWindow.IsOpen)) return;
                 if (_isAttached && _tubeHandle != IntPtr.Zero && SpeechBubble.Visibility == Visibility.Visible)
                 {
                     // Only refresh z-order when our app owns the foreground — don't steal focus
@@ -2953,8 +2971,12 @@ namespace ConditioningControlPanel
                 SpeechBubble.Visibility = Visibility.Visible;
 
                 // Start z-order refresh to keep bubble on top of main window
-                StartZOrderRefreshTimer();
-                BringAttachedPairToFront();
+                // Skip all z-order work when pop quiz is open — must not cover the quiz
+                if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
+                {
+                    StartZOrderRefreshTimer();
+                    BringAttachedPairToFront();
+                }
 
                 // Play the voice line audio in sync with the bubble
                 PlayVoiceLineAudio(filePath);
@@ -3095,8 +3117,12 @@ namespace ConditioningControlPanel
             SpeechBubble.Visibility = Visibility.Visible;
 
             // Start z-order refresh to keep bubble on top of main window
-            StartZOrderRefreshTimer();
-            BringAttachedPairToFront();
+            // Skip all z-order work when pop quiz is open — must not cover the quiz
+            if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
+            {
+                StartZOrderRefreshTimer();
+                BringAttachedPairToFront();
+            }
 
             App.Logger?.Information("TriggerMode: Displayed trigger '{Trigger}'", trigger);
 

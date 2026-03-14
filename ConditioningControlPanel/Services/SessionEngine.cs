@@ -762,6 +762,10 @@ namespace ConditioningControlPanel.Services
             _savedSettings.VideosPerHour = current.VideosPerHour;
             _savedSettings.LockCardEnabled = current.LockCardEnabled;
             _savedSettings.LockCardFrequency = current.LockCardFrequency;
+
+            // Save lock card pool (deep copy)
+            _savedLockCardPool = new Dictionary<string, bool>(current.LockCardPhrases);
+
             _savedSettings.PopQuizEnabled = current.PopQuizEnabled;
             _savedSettings.PopQuizFrequency = current.PopQuizFrequency;
             _savedSettings.BubbleCountEnabled = current.BubbleCountEnabled;
@@ -770,6 +774,7 @@ namespace ConditioningControlPanel.Services
         
         private Dictionary<string, bool>? _savedBouncingTextPool;
         private Dictionary<string, bool>? _savedSubliminalPool;
+        private Dictionary<string, bool>? _savedLockCardPool;
         
         private void ApplySessionSettings(SessionSettings settings)
         {
@@ -949,6 +954,27 @@ namespace ConditioningControlPanel.Services
                 {
                     current.LockCardFrequency = settings.LockCardFrequency.Value;
                 }
+
+                // Override lock card pool with session-specific phrases
+                if (settings.LockCardPhrases.Count > 0)
+                {
+                    var keys = current.LockCardPhrases.Keys.ToList();
+                    foreach (var key in keys)
+                    {
+                        current.LockCardPhrases[key] = false;
+                    }
+
+                    var contentMode = App.Settings?.Current?.ContentMode ?? ContentMode.BambiSleep;
+                    foreach (var phrase in settings.LockCardPhrases)
+                    {
+                        var modePhrase = Session.MakeModeAware(phrase, contentMode);
+                        current.LockCardPhrases[modePhrase] = true;
+                    }
+
+                    App.Logger?.Information("Session: Using lock card phrases: {Phrases}",
+                        string.Join(", ", settings.LockCardPhrases));
+                }
+
                 App.LockCard?.Start();
             }
             else
@@ -1052,6 +1078,18 @@ namespace ConditioningControlPanel.Services
             current.VideosPerHour = _savedSettings.VideosPerHour;
             current.LockCardEnabled = _savedSettings.LockCardEnabled;
             current.LockCardFrequency = _savedSettings.LockCardFrequency;
+
+            // Restore lock card pool
+            if (_savedLockCardPool != null)
+            {
+                current.LockCardPhrases.Clear();
+                foreach (var kvp in _savedLockCardPool)
+                {
+                    current.LockCardPhrases[kvp.Key] = kvp.Value;
+                }
+                _savedLockCardPool = null;
+            }
+
             current.PopQuizEnabled = _savedSettings.PopQuizEnabled;
             current.PopQuizFrequency = _savedSettings.PopQuizFrequency;
             current.BubbleCountEnabled = _savedSettings.BubbleCountEnabled;

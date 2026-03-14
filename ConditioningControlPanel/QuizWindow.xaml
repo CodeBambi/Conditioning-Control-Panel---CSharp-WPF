@@ -387,11 +387,19 @@
                                    TextWrapping="Wrap" LineHeight="34" TextAlignment="Center"/>
                     </Border>
 
-                    <!-- Recommendations -->
-                    <TextBlock x:Name="TxtRecommendationsHeader" Text="RECOMMENDATIONS" FontSize="14" FontWeight="Bold"
-                               Foreground="#606080" HorizontalAlignment="Center" Margin="0,0,0,10"
-                               Visibility="Collapsed"/>
-                    <StackPanel x:Name="RecommendationsPanel" Margin="0,0,0,20"/>
+                    <!-- Quiz Session -->
+                    <Border x:Name="BtnTrySession" Cursor="Hand" CornerRadius="10" Padding="20,16"
+                            Margin="0,0,0,20" IsHitTestVisible="False" Opacity="0.5"
+                            Background="#209B59B6" BorderBrush="#409B59B6" BorderThickness="1.5"
+                            MouseLeftButtonDown="BtnTrySession_Click">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock x:Name="TxtTrySessionIcon" Text="&#x23F3;" FontSize="22"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <TextBlock x:Name="TxtTrySessionLabel" Text="Generating your session..."
+                                       Foreground="#C0C0D8" FontSize="18" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
 
                     <!-- Score Trend -->
                     <TextBlock x:Name="TxtTrendHeader" Text="YOUR JOURNEY" FontSize="14" FontWeight="Bold"

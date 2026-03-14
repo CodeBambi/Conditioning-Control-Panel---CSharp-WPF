@@ -14,8 +14,11 @@ namespace ConditioningControlPanel
 {
     public partial class PopQuizWindow : Window
     {
+        public static bool IsOpen { get; private set; }
+
         private readonly PopQuizQuestion _question;
         private readonly bool _isTest;
+        private readonly bool _wasAvatarMuted;
         private bool _answered;
         private static readonly Random _random = new();
         private readonly DispatcherTimer _keepOnTopTimer;
@@ -25,12 +28,24 @@ namespace ConditioningControlPanel
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_SHOWWINDOW = 0x0040;
 
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
         public PopQuizWindow(PopQuizQuestion question, bool isTest = false)
         {
+            IsOpen = true;
+
+            // Mute avatar while quiz is open — prevents her z-order work from covering us
+            var avatar = App.AvatarWindow;
+            _wasAvatarMuted = avatar?.IsMuted ?? true;
+            if (avatar != null && !_wasAvatarMuted)
+                avatar.SetMuteAvatar(true);
+
             InitializeComponent();
             _question = question;
             _isTest = isTest;
@@ -43,9 +58,8 @@ namespace ConditioningControlPanel
                 (indices[i], indices[j]) = (indices[j], indices[i]);
             }
 
-            // Use Win32 SetWindowPos to re-assert topmost without toggling
-            // (toggling Topmost=false/true creates a gap that the avatar z-order timer exploits)
-            _keepOnTopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            // Timer: re-assert topmost AND check if main window closed
+            _keepOnTopTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
             _keepOnTopTimer.Tick += (s, e) =>
             {
                 if (_answered || !IsVisible)
@@ -53,13 +67,43 @@ namespace ConditioningControlPanel
                     _keepOnTopTimer.Stop();
                     return;
                 }
+
+                // Self-close if main window is gone (closed or minimized to tray)
+                var mainWindow = Application.Current?.MainWindow;
+                if (mainWindow == null || !mainWindow.IsVisible)
+                {
+                    CleanupAndClose();
+                    return;
+                }
+
+                // Re-assert topmost + force to front
                 if (_hwnd != IntPtr.Zero)
-                    SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                {
+                    SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                }
             };
             Loaded += (s, e) =>
             {
                 _hwnd = new WindowInteropHelper(this).Handle;
                 _keepOnTopTimer.Start();
+            };
+
+            // When something steals focus from us, grab it right back
+            Deactivated += (s, e) =>
+            {
+                if (_answered) return;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (_answered || !IsVisible) return;
+                    if (_hwnd != IntPtr.Zero)
+                    {
+                        SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                        SetForegroundWindow(_hwnd);
+                    }
+                    Activate();
+                }), DispatcherPriority.Input);
             };
 
             TxtQuestion.Text = question.QuestionText;
@@ -196,7 +240,16 @@ namespace ConditioningControlPanel
 
         protected override void OnClosed(EventArgs e)
         {
+            IsOpen = false;
             _keepOnTopTimer.Stop();
+
+            // Restore avatar mute state
+            if (!_wasAvatarMuted)
+            {
+                try { App.AvatarWindow?.SetMuteAvatar(false); }
+                catch { }
+            }
+
             // Ensure queue is cleared even if close happens unexpectedly
             if (!_answered)
             {

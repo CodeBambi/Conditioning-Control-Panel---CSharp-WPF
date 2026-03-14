@@ -1738,8 +1738,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.6.14 IS OUT! 💖"
-                            Click="BtnUpdateAvailable_Click" ToolTip="v5.6.14 - Quiz Training Update"
+                    <Button x:Name="BtnUpdateAvailable" Content="💖 v5.6.15 IS OUT! 💖"
+                            Click="BtnUpdateAvailable_Click" ToolTip="v5.6.15 - Quiz Training Update"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">

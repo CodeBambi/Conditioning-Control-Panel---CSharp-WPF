@@ -11,6 +11,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Controls;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using NAudio.Wave;
 
@@ -18,6 +19,8 @@ namespace ConditioningControlPanel
 {
     public partial class QuizWindow : Window
     {
+        public static bool IsOpen { get; private set; }
+
         /// <summary>WaveStream wrapper that loops the source indefinitely.</summary>
         private class LoopStream : WaveStream
         {
@@ -64,6 +67,8 @@ namespace ConditioningControlPanel
         private int _loadingDotCount;
         private readonly Ellipse[] _progressDots = new Ellipse[10];
         private List<QuizAnswerRecord> _answerHistory = new();
+        private Session? _generatedSession;
+        private bool _sessionReady;
 
         private static readonly string[] LoadingFlavors = new[]
         {
@@ -125,8 +130,18 @@ namespace ConditioningControlPanel
             Color.FromRgb(0x22, 0x0A, 0x2A), // Deep fuchsia
         };
 
+        private readonly bool _wasAvatarMuted;
+
         public QuizWindow(bool fullscreen = true, bool playDrone = false)
         {
+            IsOpen = true;
+
+            // Mute avatar while quiz is open — prevents her z-order work from covering us
+            var avatar = App.AvatarWindow;
+            _wasAvatarMuted = avatar?.IsMuted ?? true;
+            if (avatar != null && !_wasAvatarMuted)
+                avatar.SetMuteAvatar(true);
+
             InitializeComponent();
             _isFullscreen = fullscreen;
             _playDrone = playDrone;
@@ -503,126 +518,113 @@ namespace ConditioningControlPanel
 
             TxtProfileText.Text = result.ProfileText;
 
-            // Build recommendations and trend display
+            // Build trend display and start session generation
             if (savedEntry != null)
             {
-                BuildRecommendations(savedEntry);
                 BuildTrendDisplay(savedEntry.Category);
+                _ = GenerateSessionInBackgroundAsync(result, savedEntry);
             }
 
             ShowPanel(ResultPanel);
             PlayResultSound();
         }
 
-        private void BuildRecommendations(QuizHistoryEntry entry)
+        private async Task GenerateSessionInBackgroundAsync(QuizResult result, QuizHistoryEntry entry)
         {
             try
             {
-                RecommendationsPanel.Children.Clear();
-                var recs = QuizService.GenerateRecommendations(entry);
-                if (recs.Count == 0) return;
+                var catDef = _quizService?.CurrentCategoryDefinition;
+                var categoryId = catDef?.Id ?? result.Category.ToString();
+                var categoryName = catDef?.Name ?? result.Category.ToString();
+                var scorePercent = result.MaxScore > 0 ? (double)result.TotalScore / result.MaxScore * 100 : 0;
 
-                TxtRecommendationsHeader.Visibility = Visibility.Visible;
-
-                foreach (var rec in recs)
+                // Try AI generation
+                SessionTextContent? textContent = null;
+                try
                 {
-                    var card = new Border
-                    {
-                        CornerRadius = new CornerRadius(10),
-                        Padding = new Thickness(14, 10, 14, 10),
-                        Margin = new Thickness(0, 0, 0, 8),
-                        Background = new SolidColorBrush(Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF)),
-                        BorderBrush = new SolidColorBrush(Color.FromArgb(0x25, 0xFF, 0x69, 0xB4)),
-                        BorderThickness = new Thickness(1),
-                        Cursor = System.Windows.Input.Cursors.Hand
-                    };
-                    card.MouseEnter += (s, _) => { if (s is Border b) b.Background = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)); };
-                    card.MouseLeave += (s, _) => { if (s is Border b) b.Background = new SolidColorBrush(Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF)); };
-
-                    var grid = new Grid();
-                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-                    var textStack = new StackPanel();
-                    textStack.Children.Add(new TextBlock
-                    {
-                        Text = rec.Title,
-                        Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)),
-                        FontWeight = FontWeights.SemiBold,
-                        FontSize = 14
-                    });
-                    textStack.Children.Add(new TextBlock
-                    {
-                        Text = rec.Description,
-                        Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x90)),
-                        FontSize = 12,
-                        TextWrapping = TextWrapping.Wrap,
-                        Margin = new Thickness(0, 2, 0, 0)
-                    });
-                    Grid.SetColumn(textStack, 0);
-                    grid.Children.Add(textStack);
-
-                    var actionBtn = new TextBlock
-                    {
-                        Text = rec.ActionLabel,
-                        Foreground = new SolidColorBrush(Color.FromRgb(0x9B, 0x59, 0xB6)),
-                        FontSize = 12,
-                        FontWeight = FontWeights.SemiBold,
-                        VerticalAlignment = VerticalAlignment.Center,
-                        Margin = new Thickness(10, 0, 0, 0)
-                    };
-                    Grid.SetColumn(actionBtn, 1);
-                    grid.Children.Add(actionBtn);
-
-                    card.Child = grid;
-
-                    var capturedKey = rec.ActionKey;
-                    card.MouseLeftButtonDown += (s, _) => HandleRecommendationAction(capturedKey);
-
-                    RecommendationsPanel.Children.Add(card);
+                    textContent = await _quizService!.GenerateSessionContentAsync();
                 }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "QuizWindow: AI session content generation failed, using fallback");
+                }
+
+                // Fall back to deterministic content
+                if (textContent == null)
+                {
+                    textContent = QuizSessionGenerator.GetFallbackContent(categoryId, scorePercent);
+                }
+
+                var session = QuizSessionGenerator.GenerateSession(
+                    result.TotalScore, result.MaxScore, categoryId, categoryName, textContent);
+
+                _generatedSession = session;
+                _sessionReady = true;
+
+                // Update button to ready state
+                Dispatcher.Invoke(() =>
+                {
+                    var displayName = session.Name.Length > 30 ? session.Name.Substring(0, 30) + "..." : session.Name;
+                    TxtTrySessionIcon.Text = "\u2728"; // sparkles
+                    TxtTrySessionLabel.Text = $"Save: {displayName}";
+                    BtnTrySession.IsHitTestVisible = true;
+                    BtnTrySession.Opacity = 1.0;
+
+                    // Add hover effects
+                    BtnTrySession.MouseEnter += (s, _) =>
+                    {
+                        if (s is Border b)
+                        {
+                            b.Background = new SolidColorBrush(Color.FromArgb(0x40, 0x9B, 0x59, 0xB6));
+                            b.BorderBrush = new SolidColorBrush(Color.FromArgb(0x80, 0x9B, 0x59, 0xB6));
+                        }
+                    };
+                    BtnTrySession.MouseLeave += (s, _) =>
+                    {
+                        if (s is Border b)
+                        {
+                            b.Background = new SolidColorBrush(Color.FromArgb(0x20, 0x9B, 0x59, 0xB6));
+                            b.BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x9B, 0x59, 0xB6));
+                        }
+                    };
+                });
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "QuizWindow: Failed to build recommendations");
+                App.Logger?.Warning(ex, "QuizWindow: Failed to generate session in background");
+                // Hide the button on failure
+                Dispatcher.Invoke(() =>
+                {
+                    BtnTrySession.Visibility = Visibility.Collapsed;
+                });
             }
         }
 
-        private void HandleRecommendationAction(string actionKey)
+        private void BtnTrySession_Click(object sender, MouseButtonEventArgs e)
         {
-            try
-            {
-                if (actionKey.StartsWith("difficulty:"))
-                {
-                    // Navigate to sessions tab — the main window handles it
-                    if (Application.Current.MainWindow is MainWindow mw)
-                    {
-                        mw.Activate();
-                    }
-                }
-                else if (actionKey.StartsWith("setting:"))
-                {
-                    var settingName = actionKey.Substring("setting:".Length);
-                    var settings = App.Settings?.Current;
-                    if (settings == null) return;
+            if (_generatedSession == null || !_sessionReady) return;
 
-                    switch (settingName)
-                    {
-                        case "LockCardEnabled":
-                            settings.LockCardEnabled = true;
-                            break;
-                        case "SubliminalEnabled":
-                            settings.SubliminalEnabled = true;
-                            break;
-                        case "MandatoryVideosEnabled":
-                            settings.MandatoryVideosEnabled = true;
-                            break;
-                    }
-                }
-            }
-            catch (Exception ex)
+            var fileService = new Services.SessionFileService();
+            var dialog = new Microsoft.Win32.SaveFileDialog
             {
-                App.Logger?.Warning(ex, "QuizWindow: Failed to handle recommendation action: {Key}", actionKey);
+                Title = "Save Quiz Session",
+                Filter = "Session files (*.session.json)|*.session.json",
+                FileName = Services.SessionFileService.GetExportFileName(_generatedSession),
+                DefaultExt = ".session.json"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                try
+                {
+                    fileService.ExportSession(_generatedSession, dialog.FileName);
+                    TxtTrySessionLabel.Text = "Session saved!";
+                    BtnTrySession.IsHitTestVisible = false;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "QuizWindow: Failed to export session");
+                }
             }
         }
 
@@ -1421,6 +1423,8 @@ namespace ConditioningControlPanel
 
         protected override void OnClosed(EventArgs e)
         {
+            IsOpen = false;
+
             _loadingDotsTimer.Stop();
             _gradientTimer.Stop();
             StopDrone();
@@ -1434,6 +1438,13 @@ namespace ConditioningControlPanel
                 {
                     try { _audioPool.Dequeue().Dispose(); } catch { }
                 }
+            }
+
+            // Restore avatar mute state
+            if (!_wasAvatarMuted)
+            {
+                try { App.AvatarWindow?.SetMuteAvatar(false); }
+                catch { }
             }
 
             base.OnClosed(e);
