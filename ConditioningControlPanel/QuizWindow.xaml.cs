@@ -1416,6 +1416,21 @@ namespace ConditioningControlPanel
 
         // ============ CLEANUP ============
 
+        /// <summary>
+        /// Force close all quiz windows (used by panic button)
+        /// </summary>
+        public static void ForceCloseAll()
+        {
+            try
+            {
+                foreach (var window in Application.Current.Windows.OfType<QuizWindow>().ToList())
+                {
+                    try { window.Close(); } catch { }
+                }
+            }
+            catch { }
+        }
+
         private void CleanupAndClose()
         {
             Close();

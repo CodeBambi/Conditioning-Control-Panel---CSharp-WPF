@@ -265,12 +265,20 @@ namespace ConditioningControlPanel.Services
 
             _conversationHistory.Add(new ProxyChatMessage { Role = "assistant", Content = response });
 
+            var rawProfile = response.Trim();
+            var fixedProfile = FixArchetypeIfWrong(rawProfile, _totalScore, MaxPossibleScore, _currentCategory, _currentCategoryDefinition);
+
+            // If the AI assigned the wrong archetype, the entire description text
+            // is likely incoherent (describes the wrong personality). Use the
+            // deterministic fallback which is always correct for the score.
+            var profileText = (fixedProfile != rawProfile) ? GetFallbackProfile() : rawProfile;
+
             return new QuizResult
             {
                 TotalScore = _totalScore,
                 MaxScore = MaxPossibleScore,
                 Category = _currentCategory,
-                ProfileText = FixArchetypeIfWrong(response.Trim(), _totalScore, MaxPossibleScore, _currentCategory, _currentCategoryDefinition)
+                ProfileText = profileText
             };
         }
 
@@ -813,7 +821,9 @@ Do NOT include any other text before or after the question format. Just the ques
 
         /// <summary>
         /// The AI sometimes assigns the wrong archetype for the score. This detects
-        /// when the "You are a [WRONG]" opening doesn't match the score and replaces it.
+        /// when the "You are a [WRONG]" opening doesn't match the score and replaces
+        /// the archetype name. Any change signals the caller to use a fallback profile.
+        /// Also fixes wrong percentage ranges like "(0-25%)" when archetype is correct.
         /// </summary>
         private static string FixArchetypeIfWrong(string text, int score, int maxScore, QuizCategory category, QuizCategoryDefinition? categoryDef = null)
         {
@@ -833,6 +843,15 @@ Do NOT include any other text before or after the question format. Just the ques
                     {
                         text = text.Replace(archetype, correctArchetype, StringComparison.OrdinalIgnoreCase);
                     }
+                }
+
+                // Fix wrong percentage range in parentheses, e.g. "(0-25%)" → "(71-85%)"
+                var correctDef = catDef.Archetypes.FirstOrDefault(a => a.Name == correctArchetype);
+                if (correctDef != null)
+                {
+                    var correctRange = $"({correctDef.MinPercentage}-{correctDef.MaxPercentage}%)";
+                    // Match any "(XX-YY%)" pattern near the archetype name
+                    text = Regex.Replace(text, @"\(\d+-\d+%\)", correctRange);
                 }
 
                 return text;

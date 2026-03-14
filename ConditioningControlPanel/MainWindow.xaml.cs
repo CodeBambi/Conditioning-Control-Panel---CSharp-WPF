@@ -13876,10 +13876,12 @@ namespace ConditioningControlPanel
             App.SkillTree?.Stop();
             App.Audio.ForceUnduck();
 
-            // Force close any open lock card windows (panic button should close them immediately)
+            // Force close any open lock card / quiz windows (panic button should close them immediately)
             LockCardWindow.ForceCloseAll();
             BubbleCountWindow.ForceCloseAll();
             BubbleCountResultWindow.ForceCloseAll();
+            QuizWindow.ForceCloseAll();
+            PopQuizWindow.ForceCloseAll();
 
             // Stop ramp timer and reset sliders
             StopRampTimer();

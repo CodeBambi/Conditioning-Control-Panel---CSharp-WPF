@@ -90,6 +90,22 @@
                     <ComboBox x:Name="CboTemplate" FontSize="13" Foreground="White"
                               Background="#20FFFFFF" BorderBrush="#30FFFFFF" BorderThickness="1"
                               Padding="8,6" SelectionChanged="CboTemplate_SelectionChanged">
+                        <ComboBox.Resources>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#1A1A2E"/>
+                        </ComboBox.Resources>
+                        <ComboBox.ItemContainerStyle>
+                            <Style TargetType="ComboBoxItem">
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="Background" Value="#1A1A2E"/>
+                                <Setter Property="Padding" Value="8,6"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsHighlighted" Value="True">
+                                        <Setter Property="Background" Value="#30FF69B4"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ComboBox.ItemContainerStyle>
                         <ComboBoxItem Content="Blank (write your own)" Tag="" IsSelected="True"/>
                         <ComboBoxItem Content="Copy from: Sissy" Tag="sissy"/>
                         <ComboBoxItem Content="Copy from: Bambi" Tag="bambi"/>

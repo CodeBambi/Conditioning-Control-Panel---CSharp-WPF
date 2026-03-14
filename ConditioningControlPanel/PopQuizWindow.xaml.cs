@@ -238,6 +238,21 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Force close all pop quiz windows (used by panic button)
+        /// </summary>
+        public static void ForceCloseAll()
+        {
+            try
+            {
+                foreach (var window in Application.Current.Windows.OfType<PopQuizWindow>().ToList())
+                {
+                    try { window.Close(); } catch { }
+                }
+            }
+            catch { }
+        }
+
         protected override void OnClosed(EventArgs e)
         {
             IsOpen = false;
