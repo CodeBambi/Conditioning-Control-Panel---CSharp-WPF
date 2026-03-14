@@ -28,34 +28,52 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.15 - Quiz Training Update
+        public const string CurrentPatchNotes = @"v5.6.15 - Polish & Optimization Update
 
-🧠 QUIZ TRAINING [BETA]
-• New AI-powered personality quiz — 10 questions that adapt to your answers in real time
-• Each quiz is unique: the AI reads your responses and tailors follow-up questions to dig deeper
-• Fullscreen mode with ambient drone audio option for deeper immersion
-• Personality breakdown with category scores, personality type, and written summary
-• Past quiz results saved and viewable from the main UI
-• Detailed report window with per-question score breakdowns
-• Added (?) help tooltip explaining how the quiz works
+🧠 POP QUIZZES [BETA]
+• Random reinforcement quizzes pop up during sessions to test your focus
+• Companion AI reacts to your quiz answers with personalized feedback
+• Configurable quiz frequency in settings
+• Category editor — create and manage custom question sets
+• Generate full AI sessions from your quiz results
 
-🏆 ALL-TIME LEADERBOARD
-• New monthly/all-time toggle on the leaderboard — both in-app and on the web page
-• All-time leaderboard tracks your total XP earned across every season
-• Your lifetime dedication is now permanently recorded — seasonal resets no longer erase history
-• Hall of Fame view on the GitHub Pages leaderboard
+✨ VISUAL EFFECTS
+• Flash images now glow pink based on your sparkle boost tier
+• Lucky flash procs pulse with a golden glow
+• Bubbles burst with sparkle particles on pop (pink for sparkle, gold for lucky)
+• New setting to toggle flash glow effects (lucky glow always shows)
+
+🏆 PROGRESSION
+• Earn 1 skill point every 100 bubbles popped
+• Skill points are now server-authoritative — no more desync or exploits
+• Skill tree prerequisites fixed to match the linear UI layout
+• Fixed Hydra gen 2+ giving 0 XP due to integer division bug
+
+⚡ HYDRA LINKED TIMING
+• Hydra children can now expire with parent flash (linked) or run independently
+• New toggle in flash settings — linked mode is default
 
 🛠️ BUG FIXES
-• Fixed audio ducking getting permanently stuck at 0% for other programs after repeated duck/unduck cycles
-• Fixed XP exploit via custom session editor — duplicate feature counting and unbounded multipliers
-• Fixed memory leak from unbounded flash and subliminal windows accumulating over long sessions
+• Fixed Lab tab locked for whitelisted Discord-only users
+• Fixed quest progress lost on PC crash — atomic saves with .tmp recovery
+• Fixed corner GIF crash from invalid window handle
+• Fixed avatar not showing feedback when double-clicked while muted
+• Fixed pop quiz windows fighting with avatar for z-order
+• Panic button now closes all quiz windows
+• Fixed session AI assigning wrong archetype percentages
+• Fixed category editor dropdown unreadable on dark theme
 
-🔒 SECURITY
-• Validated Discord webhook achievement names against server-side allowlist
-• Validated level-up webhook requests against actual stored user level
-• Capped session XP multiplier at 5.0x and bonus XP at 2500 before multiplier
-• Capped concurrent flash windows at 30 and subliminal windows at 15
-• Installer now excludes unnecessary locale folders — smaller, cleaner install";
+🧹 MEMORY & PERFORMANCE (Special thanks to Pherik)
+• Fixed flash image cache leaking up to 200 MB — now cleared between sessions
+• Fixed spiral overlay holding 120+ decoded frames in memory
+• Fixed avatar GIF animation frames not releasing on close
+• Fixed 7 timers still firing after window close
+• Fixed 12 event handler leaks on static services
+• Fixed HttpResponseMessage leak (~28,800 objects/day from remote polling)
+• Fixed FlashService scheduler timer and CancellationTokenSource leaks
+• Added LOH compaction between sessions to return memory to OS
+• Reduced sound volumes 30% across the board
+• Lucky procs now use random chime sounds";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

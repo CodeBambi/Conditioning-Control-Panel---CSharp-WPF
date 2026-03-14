@@ -4003,25 +4003,96 @@ namespace ConditioningControlPanel
             {
                 if (BtnLeaderboardMonthly == null || BtnLeaderboardAllTime == null) return;
 
-                if (_leaderboardMode == "all-time")
+                var isAllTime = _leaderboardMode == "all-time";
+                var gold = (Color)ColorConverter.ConvertFromString("#FFD700");
+                var pink = (Color)ColorConverter.ConvertFromString("#FF69B4");
+                var dark = (Color)ColorConverter.ConvertFromString("#1A1A2E");
+                var inactive = (Color)ColorConverter.ConvertFromString("#352545");
+
+                if (isAllTime)
                 {
-                    BtnLeaderboardMonthly.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#352545"));
-                    BtnLeaderboardMonthly.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
-                    BtnLeaderboardAllTime.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
-                    BtnLeaderboardAllTime.Foreground = new SolidColorBrush(Colors.White);
+                    BtnLeaderboardMonthly.Background = new SolidColorBrush(inactive);
+                    BtnLeaderboardMonthly.Foreground = new SolidColorBrush(pink);
+                    BtnLeaderboardAllTime.Background = new SolidColorBrush(gold);
+                    BtnLeaderboardAllTime.Foreground = new SolidColorBrush(dark);
                 }
                 else
                 {
-                    BtnLeaderboardMonthly.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
+                    BtnLeaderboardMonthly.Background = new SolidColorBrush(pink);
                     BtnLeaderboardMonthly.Foreground = new SolidColorBrush(Colors.White);
-                    BtnLeaderboardAllTime.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#352545"));
-                    BtnLeaderboardAllTime.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
+                    BtnLeaderboardAllTime.Background = new SolidColorBrush(inactive);
+                    BtnLeaderboardAllTime.Foreground = new SolidColorBrush(pink);
                 }
+
+                // Update All-Time button border color
+                var allTimeBorder = BtnLeaderboardAllTime.Template?.FindName("AllTimeBorder", BtnLeaderboardAllTime) as Border;
+                if (allTimeBorder != null)
+                    allTimeBorder.BorderBrush = new SolidColorBrush(isAllTime ? gold : pink);
+
+                // Apply accent theme to rows, headers, and hover colors
+                ApplyLeaderboardTheme(isAllTime ? gold : pink);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Error updating leaderboard mode buttons");
             }
+        }
+
+        private void ApplyLeaderboardTheme(Color accent)
+        {
+            if (LstLeaderboard == null) return;
+
+            var accentBrush = new SolidColorBrush(accent);
+            var hoverBrush = new SolidColorBrush(Color.FromArgb(0x40, accent.R, accent.G, accent.B));
+            var selectedBrush = new SolidColorBrush(Color.FromArgb(0x50, accent.R, accent.G, accent.B));
+            var headerHoverBg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#452555"));
+            var headerBg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#352545"));
+
+            // Rebuild ItemContainerStyle with the new accent color
+            var itemStyle = new Style(typeof(ListViewItem));
+            itemStyle.Setters.Add(new Setter(ForegroundProperty, accentBrush));
+            itemStyle.Setters.Add(new Setter(BackgroundProperty, Brushes.Transparent));
+            itemStyle.Setters.Add(new Setter(PaddingProperty, new Thickness(8)));
+            itemStyle.Setters.Add(new Setter(MarginProperty, new Thickness(0, 2, 0, 0)));
+            itemStyle.Setters.Add(new Setter(FontSizeProperty, 18.0));
+            itemStyle.Setters.Add(new Setter(FontWeightProperty, FontWeights.ExtraBold));
+            itemStyle.Setters.Add(new Setter(FontFamilyProperty, new FontFamily("Segoe Print")));
+            itemStyle.Setters.Add(new Setter(HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
+
+            // OG gold-tinted row (always gold regardless of mode)
+            var ogTrigger = new DataTrigger { Binding = new System.Windows.Data.Binding("IsSeason0Og"), Value = true };
+            ogTrigger.Setters.Add(new Setter(BackgroundProperty, new SolidColorBrush(Color.FromArgb(0x25, 0xFF, 0xD7, 0x00))));
+            ogTrigger.Setters.Add(new Setter(BorderBrushProperty, new SolidColorBrush(Color.FromArgb(0x50, 0xFF, 0xD7, 0x00))));
+            ogTrigger.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(0, 0, 0, 2)));
+            itemStyle.Triggers.Add(ogTrigger);
+
+            var hoverTrigger = new Trigger { Property = IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new Setter(BackgroundProperty, hoverBrush));
+            itemStyle.Triggers.Add(hoverTrigger);
+
+            var selectedTrigger = new Trigger { Property = ListViewItem.IsSelectedProperty, Value = true };
+            selectedTrigger.Setters.Add(new Setter(BackgroundProperty, selectedBrush));
+            itemStyle.Triggers.Add(selectedTrigger);
+
+            LstLeaderboard.ItemContainerStyle = itemStyle;
+
+            // Rebuild header style in ListView.Resources
+            var headerStyle = new Style(typeof(GridViewColumnHeader));
+            headerStyle.Setters.Add(new Setter(BackgroundProperty, headerBg));
+            headerStyle.Setters.Add(new Setter(ForegroundProperty, accentBrush));
+            headerStyle.Setters.Add(new Setter(FontWeightProperty, FontWeights.ExtraBold));
+            headerStyle.Setters.Add(new Setter(FontSizeProperty, 18.0));
+            headerStyle.Setters.Add(new Setter(FontFamilyProperty, new FontFamily("Segoe Print")));
+            headerStyle.Setters.Add(new Setter(PaddingProperty, new Thickness(12, 10, 12, 10)));
+            headerStyle.Setters.Add(new Setter(BorderThicknessProperty, new Thickness(0, 0, 1, 2)));
+            headerStyle.Setters.Add(new Setter(BorderBrushProperty, accentBrush));
+            headerStyle.Setters.Add(new Setter(CursorProperty, Cursors.Hand));
+
+            var headerHoverTrigger = new Trigger { Property = IsMouseOverProperty, Value = true };
+            headerHoverTrigger.Setters.Add(new Setter(BackgroundProperty, headerHoverBg));
+            headerStyle.Triggers.Add(headerHoverTrigger);
+
+            LstLeaderboard.Resources[typeof(GridViewColumnHeader)] = headerStyle;
         }
 
         private void UpdateSeasonsColumn()
