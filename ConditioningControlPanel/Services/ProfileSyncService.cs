@@ -1136,9 +1136,22 @@ namespace ConditioningControlPanel.Services
                         }
                         if (cloudDateIsToday && cloudCount > questProgress.GetDailyQuestsCompletedToday())
                         {
-                            questProgress.DailyQuestsCompletedToday = cloudCount;
-                            questProgress.DailyCompletionResetDate = DateTime.Today;
-                            needsSave = true;
+                            // Cross-reference: only accept cloud counter if completion dates actually
+                            // show evidence of today's quests. This prevents stale max-merged server
+                            // values from marking quests as completed when they weren't done today.
+                            bool hasCompletionEvidence = questProgress.DailyQuestCompletionDates
+                                .Any(d => d.Date == DateTime.Today);
+                            if (hasCompletionEvidence)
+                            {
+                                questProgress.DailyQuestsCompletedToday = cloudCount;
+                                questProgress.DailyCompletionResetDate = DateTime.Today;
+                                needsSave = true;
+                                App.Logger?.Debug("Quest sync: Restored daily counter to {Count} (verified by completion dates)", cloudCount);
+                            }
+                            else
+                            {
+                                App.Logger?.Debug("Quest sync: Rejected cloud daily counter {Count} — no completion evidence for today", cloudCount);
+                            }
                         }
                     }
 

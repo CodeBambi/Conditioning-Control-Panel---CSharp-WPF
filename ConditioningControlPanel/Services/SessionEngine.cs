@@ -282,7 +282,7 @@ namespace ConditioningControlPanel.Services
                 double durationMinutes = Math.Max(0, finalElapsedTime.TotalMinutes - 2);
                 int durationBonus = (int)Math.Round(durationMinutes * (8 + level * 0.15));
 
-                int finalXP = (int)Math.Round(baseXP * multiplier) + durationBonus;
+                int finalXP = Math.Max(0, (int)Math.Round(baseXP * multiplier) + durationBonus);
 
                 // Track achievement using settings captured at session START (not current settings).
                 // AutonomyService.TriggerVideoSafely() temporarily sets StrictLockEnabled=false mid-session,

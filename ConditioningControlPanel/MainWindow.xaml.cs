@@ -2147,12 +2147,12 @@ namespace ConditioningControlPanel
                 TxtDailyQuestName.Text = dailyDef.Name;
                 TxtDailyQuestDesc.Text = dailyDef.Description;
                 TxtDailyProgress.Text = $"{dailyProgress.CurrentProgress} / {dailyDef.TargetValue}";
-                // Show scaled XP based on level (+2% per level), reroll bonus, and streak bonus
+                // Show scaled XP based on level (+4% per level), reroll bonus, and streak bonus
                 var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
                 var rerollMult = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
                 var questStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
                 var streakMult = 1.0 + (questStreak * 0.03);
-                var scaledDailyXP = (int)Math.Round(dailyDef.XPReward * (1 + playerLevel * 0.02) * rerollMult * streakMult);
+                var scaledDailyXP = (int)Math.Round(dailyDef.XPReward * (1 + playerLevel * 0.04) * rerollMult * streakMult);
                 TxtDailyXP.Text = $"🎁 {scaledDailyXP} XP";
                 if (questStreak > 0)
                 {
@@ -2218,12 +2218,12 @@ namespace ConditioningControlPanel
                 TxtWeeklyQuestName.Text = weeklyDef.Name;
                 TxtWeeklyQuestDesc.Text = weeklyDef.Description;
                 TxtWeeklyProgress.Text = $"{weeklyProgress.CurrentProgress} / {weeklyDef.TargetValue}";
-                // Show scaled XP based on level (+2% per level), reroll bonus, and streak bonus
+                // Show scaled XP based on level (+4% per level), reroll bonus, and streak bonus
                 var wPlayerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
                 var wRerollMult = App.SkillTree?.GetRerollBonusMultiplier() ?? 1.0;
                 var wQuestStreak = App.Settings?.Current?.DailyQuestStreak ?? 0;
                 var wStreakMult = 1.0 + (wQuestStreak * 0.03);
-                var scaledWeeklyXP = (int)Math.Round(weeklyDef.XPReward * (1 + wPlayerLevel * 0.02) * wRerollMult * wStreakMult);
+                var scaledWeeklyXP = (int)Math.Round(weeklyDef.XPReward * (1 + wPlayerLevel * 0.04) * wRerollMult * wStreakMult);
                 TxtWeeklyXP.Text = $"🎁 {scaledWeeklyXP} XP";
                 if (wQuestStreak > 0)
                 {
