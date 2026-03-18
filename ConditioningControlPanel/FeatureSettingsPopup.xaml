@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Width="320" Background="Transparent">
 
-    <Border Background="#1E1E3A" CornerRadius="10" BorderBrush="#FF69B4" BorderThickness="2"
+    <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
             Padding="15">
         <Grid>
             <Grid.RowDefinitions>
@@ -18,7 +18,7 @@
                 <TextBlock x:Name="TxtIcon" Text="⚡" FontSize="24" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <StackPanel>
                     <TextBlock x:Name="TxtFeatureName" Text="Feature Name"
-                               Foreground="#FF69B4" FontSize="16" FontWeight="SemiBold"/>
+                               Foreground="{DynamicResource PinkBrush}" FontSize="16" FontWeight="SemiBold"/>
                     <TextBlock x:Name="TxtEventType" Text="Start Event"
                                Foreground="#888" FontSize="11"/>
                 </StackPanel>
@@ -75,7 +75,7 @@
                 </Button>
 
                 <Button Grid.Column="2" x:Name="BtnDone" Content="Done" Click="BtnDone_Click"
-                        Background="#FF69B4" Foreground="White" Padding="20,8"
+                        Background="{DynamicResource PinkBrush}" Foreground="White" Padding="20,8"
                         FontWeight="SemiBold" Cursor="Hand">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">

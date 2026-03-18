@@ -4,7 +4,7 @@
         Title="Subliminal Colors" 
         Height="480" Width="450"
         WindowStartupLocation="CenterOwner"
-        Background="#1A1A2E"
+        Background="{DynamicResource DarkerBgBrush}"
         ResizeMode="NoResize">
 
     <Window.Resources>

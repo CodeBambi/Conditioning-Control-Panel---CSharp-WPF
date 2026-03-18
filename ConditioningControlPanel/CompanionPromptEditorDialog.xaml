@@ -5,7 +5,7 @@
         Title="Customize AI Companion"
         Width="700" Height="750"
         WindowStartupLocation="CenterOwner"
-        Background="#1A1A2E"
+        Background="{DynamicResource DarkerBgBrush}"
         ResizeMode="CanResizeWithGrip">
 
     <Window.Resources>
@@ -27,9 +27,9 @@
         </Style>
 
         <Style x:Key="PromptTextBox" TargetType="TextBox">
-            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
             <Setter Property="Foreground" Value="#E0E0E0"/>
-            <Setter Property="BorderBrush" Value="#404060"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8"/>
             <Setter Property="FontFamily" Value="Consolas"/>
@@ -40,7 +40,7 @@
         </Style>
 
         <Style x:Key="ResetButton" TargetType="Button">
-            <Setter Property="Background" Value="#404060"/>
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="8,4"/>
@@ -54,7 +54,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#505080"/>
+                                <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -71,7 +71,7 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Border Grid.Row="0" Background="#252542" Padding="20,15">
+        <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Padding="20,15">
             <StackPanel>
                 <Grid>
                     <StackPanel Orientation="Horizontal">
@@ -84,7 +84,7 @@
                     </StackPanel>
                     <!-- Active Prompt Badge -->
                     <Border x:Name="ActivePromptBadge" HorizontalAlignment="Right" VerticalAlignment="Center"
-                            Background="#1A1A2E" CornerRadius="12" Padding="12,6">
+                            Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="12,6">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Active:" Foreground="#707070" FontSize="11" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtActivePromptName" Text="Default" Foreground="#9370DB"
@@ -163,7 +163,7 @@
                     <Expander.Header>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Slut Mode Personality" Style="{StaticResource SectionHeader}"/>
-                            <TextBlock Text="(Patreon)" Foreground="#9B59B6" FontSize="11"
+                            <TextBlock Text="(Patreon)" Foreground="{DynamicResource SecondaryBrush}" FontSize="11"
                                        VerticalAlignment="Center" Margin="8,0,0,0"/>
                         </StackPanel>
                     </Expander.Header>
@@ -274,7 +274,7 @@
                         </TextBlock>
 
                         <!-- Links List -->
-                        <Border Background="#252542" CornerRadius="4" Padding="8" Margin="0,0,0,8">
+                        <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="4" Padding="8" Margin="0,0,0,8">
                             <ListBox x:Name="LstKnowledgeLinks" Height="120"
                                      Background="Transparent" BorderThickness="0"
                                      Foreground="White" FontSize="11"
@@ -282,7 +282,7 @@
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel Margin="0,2">
-                                            <TextBlock Text="{Binding Title}" Foreground="#FF69B4" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Title}" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
                                             <TextBlock Text="{Binding Url}" Foreground="#707070" FontSize="10"/>
                                             <TextBlock Text="{Binding Description}" Foreground="#A0A0A0" FontSize="10"
                                                        TextWrapping="Wrap" Visibility="{Binding Description, Converter={StaticResource NullToCollapsedConverter}}"/>
@@ -306,7 +306,7 @@
         </ScrollViewer>
 
         <!-- Footer -->
-        <Border Grid.Row="2" Background="#252542" Padding="20,15">
+        <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" Padding="20,15">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>

@@ -83,7 +83,7 @@
         <Border x:Name="GlowOverlay" Opacity="0">
             <Border.Background>
                 <RadialGradientBrush Center="0.5,0.6" RadiusX="0.4" RadiusY="0.4">
-                    <GradientStop Color="#FF69B4" Offset="0"/>
+                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
                     <GradientStop Color="Transparent" Offset="1"/>
                 </RadialGradientBrush>
             </Border.Background>
@@ -118,11 +118,11 @@
                 </StackPanel>
                 <StackPanel Margin="30,0">
                     <TextBlock Text="STREAK" Foreground="#606080" FontSize="11" HorizontalAlignment="Center" FontWeight="Bold"/>
-                    <TextBlock x:Name="TxtStreak" Text="0" Foreground="#FF69B4" FontSize="36" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="TxtStreak" Text="0" Foreground="{DynamicResource PinkBrush}" FontSize="36" FontWeight="Bold" HorizontalAlignment="Center"/>
                 </StackPanel>
                 <StackPanel Margin="30,0">
                     <TextBlock Text="BEST" Foreground="#606080" FontSize="11" HorizontalAlignment="Center" FontWeight="Bold"/>
-                    <TextBlock x:Name="TxtBestStreak" Text="0" Foreground="#9B59B6" FontSize="36" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="TxtBestStreak" Text="0" Foreground="{DynamicResource SecondaryBrush}" FontSize="36" FontWeight="Bold" HorizontalAlignment="Center"/>
                 </StackPanel>
             </StackPanel>
 
@@ -162,11 +162,11 @@
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="TxtInput" Grid.Column="0"
                              Background="Transparent" Foreground="White" FontSize="22"
-                             BorderThickness="0" CaretBrush="#FF69B4"
+                             BorderThickness="0" CaretBrush="{DynamicResource PinkBrush}"
                              VerticalAlignment="Center"
                              TextChanged="TxtInput_TextChanged"
                              PreviewKeyDown="TxtInput_PreviewKeyDown"/>
-                    <TextBlock Grid.Column="1" Text="ESC to exit" Foreground="#404060" FontSize="11"
+                    <TextBlock Grid.Column="1" Text="ESC to exit" Foreground="{DynamicResource PanelAccentBrush}" FontSize="11"
                                VerticalAlignment="Center" Margin="10,0,0,0"/>
                 </Grid>
             </Border>
@@ -175,13 +175,13 @@
         <!-- Session complete overlay -->
         <Border x:Name="CompletionOverlay" Background="#E0000000" Visibility="Collapsed">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock Text="SESSION COMPLETE" Foreground="#FF69B4" FontSize="48" FontWeight="Bold"
+                <TextBlock Text="SESSION COMPLETE" Foreground="{DynamicResource PinkBrush}" FontSize="48" FontWeight="Bold"
                            HorizontalAlignment="Center">
                     <TextBlock.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="30" ShadowDepth="0" Opacity="0.8"/>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="30" ShadowDepth="0" Opacity="0.8"/>
                     </TextBlock.Effect>
                 </TextBlock>
-                <TextBlock x:Name="TxtCompletionStats" Text="" Foreground="#9B59B6" FontSize="22"
+                <TextBlock x:Name="TxtCompletionStats" Text="" Foreground="{DynamicResource SecondaryBrush}" FontSize="22"
                            HorizontalAlignment="Center" Margin="0,16,0,0"/>
                 <TextBlock Text="Press any key to close" Foreground="#606080" FontSize="14"
                            HorizontalAlignment="Center" Margin="0,24,0,0"/>

@@ -9,7 +9,7 @@
         AllowsTransparency="True"
         Background="Transparent">
 
-    <Border Background="#1A1A2E" BorderBrush="{StaticResource PinkBrush}" BorderThickness="2" CornerRadius="12">
+    <Border Background="{DynamicResource DarkerBgBrush}" BorderBrush="{StaticResource PinkBrush}" BorderThickness="2" CornerRadius="12">
         <Grid Margin="25">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -30,7 +30,7 @@
                            Margin="0,0,0,10"/>
                 <TextBlock x:Name="TxtStepTitle" Foreground="{StaticResource PinkBrush}" FontSize="16"
                            FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,15"/>
-                <Border Background="#252542" CornerRadius="8" Padding="12">
+                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="12">
                     <TextBlock x:Name="TxtRequirement" Foreground="#AAAAAA" FontSize="13"
                                TextWrapping="Wrap"/>
                 </Border>
@@ -41,7 +41,7 @@
                 <Button Content="No, Choose Another" Click="BtnNo_Click" Cursor="Hand" Margin="0,0,10,0">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Setter Property="Background" Value="#404060"/>
+                            <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
                             <Setter Property="Foreground" Value="White"/>
                             <Setter Property="FontWeight" Value="Bold"/>
                             <Setter Property="FontSize" Value="13"/>
@@ -56,7 +56,7 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="#505080"/>
+                                                <Setter TargetName="border" Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>

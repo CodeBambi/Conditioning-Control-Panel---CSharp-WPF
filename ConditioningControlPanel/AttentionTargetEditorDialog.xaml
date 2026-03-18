@@ -4,7 +4,7 @@
         Title="Attention Target Style"
         Height="520" Width="480"
         WindowStartupLocation="CenterOwner"
-        Background="#1A1A2E"
+        Background="{DynamicResource DarkerBgBrush}"
         ResizeMode="NoResize">
 
     <Grid Margin="20">
@@ -21,7 +21,7 @@
                    FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
 
         <!-- Preview Section -->
-        <Border Grid.Row="1" Background="#101020" CornerRadius="8" Padding="20" Margin="0,0,0,15">
+        <Border Grid.Row="1" Background="{DynamicResource PreviewBgBrush}" CornerRadius="8" Padding="20" Margin="0,0,0,15">
             <StackPanel>
                 <TextBlock Text="Preview" Foreground="#808080" FontSize="11" Margin="0,0,0,10"/>
                 <Border x:Name="PreviewBorder" HorizontalAlignment="Center"
@@ -145,7 +145,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="Font" Foreground="White" VerticalAlignment="Center"/>
-                        <ComboBox x:Name="CmbFont" Grid.Column="1" Background="#1E1E3A"
+                        <ComboBox x:Name="CmbFont" Grid.Column="1" Background="{DynamicResource SurfaceBgBrush}"
                                   Foreground="White" Padding="8,6"
                                   SelectionChanged="CmbFont_SelectionChanged">
                             <ComboBoxItem Content="Segoe UI" Tag="Segoe UI"/>

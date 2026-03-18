@@ -102,6 +102,9 @@ namespace ConditioningControlPanel.Services
                         // Merge any new default subliminal triggers that were added in updates
                         MergeNewDefaultSubliminalTriggers(settings);
 
+                        // Migrate legacy ContentMode-based settings to mod-based settings
+                        settings.MigrateFromContentModeToMod();
+
                         return settings;
                     }
                 }
@@ -158,7 +161,7 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
-                var defaults = ContentModeConfig.GetDefaultSubliminalPool(settings.ContentMode);
+                var defaults = App.Mods?.GetDefaultSubliminalPool() ?? Models.BuiltInMods.BambiSleep.SubliminalPool ?? new Dictionary<string, bool>();
                 var added = new List<string>();
 
                 foreach (var trigger in defaults.Keys)

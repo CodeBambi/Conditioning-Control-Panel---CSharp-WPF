@@ -14,7 +14,7 @@
     <Border Background="#E0151530" CornerRadius="12" BorderBrush="{StaticResource PinkBrush}" BorderThickness="2"
             Margin="10">
         <Border.Effect>
-            <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
         </Border.Effect>
         
         <Grid Margin="15">
@@ -24,7 +24,7 @@
             </Grid.ColumnDefinitions>
             
             <!-- Achievement Image -->
-            <Border Grid.Column="0" Width="120" Height="120" Background="#1A1A2E" Margin="0,0,15,0">
+            <Border Grid.Column="0" Width="120" Height="120" Background="{DynamicResource DarkerBgBrush}" Margin="0,0,15,0">
                 <Image x:Name="AchievementImage" Stretch="Uniform" Margin="5"/>
             </Border>
             

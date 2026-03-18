@@ -4,19 +4,19 @@
         Title="Manage Companion Phrases"
         Width="820" Height="620"
         WindowStartupLocation="CenterOwner"
-        Background="#1A1A2E"
+        Background="{DynamicResource DarkerBgBrush}"
         ResizeMode="CanResizeWithGrip">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="PinkBrush" Color="#FF69B4"/>
-        <SolidColorBrush x:Key="DarkBg" Color="#1A1A2E"/>
-        <SolidColorBrush x:Key="CardBg" Color="#1E1E3A"/>
-        <SolidColorBrush x:Key="InputBg" Color="#252542"/>
+        <SolidColorBrush x:Key="PinkBrush" Color="{DynamicResource PinkColor}"/>
+        <SolidColorBrush x:Key="DarkBg" Color="{DynamicResource DarkerBg}"/>
+        <SolidColorBrush x:Key="CardBg" Color="{DynamicResource SurfaceBg}"/>
+        <SolidColorBrush x:Key="InputBg" Color="{DynamicResource PanelBg}"/>
         <SolidColorBrush x:Key="BorderColor" Color="#353550"/>
         <SolidColorBrush x:Key="MutedText" Color="#808080"/>
 
         <Style x:Key="ActionButton" TargetType="Button">
-            <Setter Property="Background" Value="#FF69B4"/>
+            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12,6"/>
@@ -61,7 +61,7 @@
             </Setter>
         </Style>
         <Style x:Key="DarkComboBox" TargetType="ComboBox">
-            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderBrush" Value="#505070"/>
             <Setter Property="BorderThickness" Value="1"/>
@@ -75,7 +75,7 @@
                                           Focusable="False" ClickMode="Press">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
-                                        <Border Background="#252542" BorderBrush="#505070"
+                                        <Border Background="{DynamicResource PanelBgBrush}" BorderBrush="#505070"
                                                 BorderThickness="1" CornerRadius="4" Cursor="Hand">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
@@ -102,7 +102,7 @@
                             <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}"
                                    Placement="Bottom" AllowsTransparency="True" Focusable="False"
                                    PopupAnimation="Slide">
-                                <Border Background="#1E1E3A" BorderBrush="#FF69B4"
+                                <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
                                         BorderThickness="1" CornerRadius="4" Margin="0,2,0,0"
                                         MinWidth="{TemplateBinding ActualWidth}">
                                     <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
@@ -118,7 +118,7 @@
                 <Setter.Value>
                     <Style TargetType="ComboBoxItem">
                         <Setter Property="Foreground" Value="White"/>
-                        <Setter Property="Background" Value="#1E1E3A"/>
+                        <Setter Property="Background" Value="{DynamicResource SurfaceBgBrush}"/>
                         <Setter Property="Padding" Value="8,5"/>
                         <Setter Property="Cursor" Value="Hand"/>
                         <Setter Property="Template">
@@ -129,10 +129,10 @@
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="#352545"/>
+                                            <Setter Property="Background" Value="{DynamicResource AccentTintedBgBrush}"/>
                                         </Trigger>
                                         <Trigger Property="IsSelected" Value="True">
-                                            <Setter Property="Background" Value="#FF69B4"/>
+                                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
                                             <Setter Property="Foreground" Value="White"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
@@ -155,7 +155,7 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
-            <TextBlock Text="PHRASE MANAGER" Foreground="#FF69B4" FontSize="18" FontWeight="Bold"/>
+            <TextBlock Text="PHRASE MANAGER" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
             <TextBlock Text="Manage companion speech bubble phrases and connect audio files"
                        Foreground="#808080" FontSize="11" Margin="0,3,0,0"/>
         </StackPanel>

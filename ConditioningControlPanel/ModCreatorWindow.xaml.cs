@@ -29,8 +29,10 @@ namespace ConditioningControlPanel
 
         // Section text field controls
         private TextBox? _txtModName, _txtAuthor, _txtVersion, _txtDescription;
-        private TextBox? _txtAccentHex, _txtLightHex, _txtDarkHex;
-        private Border? _swatchAccent, _swatchLight, _swatchDark;
+        private TextBox? _txtAccentHex, _txtLightHex, _txtDarkHex, _txtFilterHex;
+        private TextBox? _txtBgHex, _txtPanelHex, _txtSurfaceHex;
+        private Border? _swatchAccent, _swatchLight, _swatchDark, _swatchFilter;
+        private Border? _swatchBg, _swatchPanel, _swatchSurface;
         private StackPanel? _previewStrip;
         private TextBox? _txtCompanionName, _txtUserTerm, _txtModeDisplayName, _txtTalkToLabel, _txtTakeoverLabel;
         private TextBox? _txtFreeze, _txtReset, _txtCumCollapse, _txtAutonomyOn;
@@ -442,14 +444,20 @@ namespace ConditioningControlPanel
             (_swatchAccent, _txtAccentHex) = CreateColorRow(stack, "Accent Color", "#FF69B4");
             (_swatchLight, _txtLightHex) = CreateColorRow(stack, "Light Color", "#FFB6C1");
             (_swatchDark, _txtDarkHex) = CreateColorRow(stack, "Dark Color", "#FF1493");
+            (_swatchFilter, _txtFilterHex) = CreateColorRow(stack, "Filter Color", "#FF69B4");
+
+            stack.Children.Add(CreateSubHeader("Background Colors"));
+            (_swatchBg, _txtBgHex) = CreateColorRow(stack, "Background Color", "#1A1A2E");
+            (_swatchPanel, _txtPanelHex) = CreateColorRow(stack, "Panel Color", "#252542");
+            (_swatchSurface, _txtSurfaceHex) = CreateColorRow(stack, "Surface Color", "#1E1E3A");
 
             stack.Children.Add(CreateSubHeader("Preview"));
             _previewStrip = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 6; i++)
             {
                 _previewStrip.Children.Add(new Border
                 {
-                    Width = 80,
+                    Width = 60,
                     Height = 30,
                     CornerRadius = new CornerRadius(4),
                     Margin = new Thickness(0, 0, 6, 0),
@@ -519,8 +527,12 @@ namespace ConditioningControlPanel
         {
             if (_previewStrip == null || _txtAccentHex == null || _txtLightHex == null || _txtDarkHex == null) return;
 
-            var hexes = new[] { _txtAccentHex.Text.Trim(), _txtLightHex.Text.Trim(), _txtDarkHex.Text.Trim() };
-            for (int i = 0; i < 3 && i < _previewStrip.Children.Count; i++)
+            var hexes = new[]
+            {
+                _txtAccentHex.Text.Trim(), _txtLightHex.Text.Trim(), _txtDarkHex.Text.Trim(),
+                _txtBgHex?.Text.Trim() ?? "#1A1A2E", _txtPanelHex?.Text.Trim() ?? "#252542", _txtSurfaceHex?.Text.Trim() ?? "#1E1E3A"
+            };
+            for (int i = 0; i < hexes.Length && i < _previewStrip.Children.Count; i++)
             {
                 if (_previewStrip.Children[i] is Border b)
                     b.Background = BrushFromHex(hexes[i]);
@@ -1191,6 +1203,10 @@ namespace ConditioningControlPanel
                 if (_txtAccentHex != null) _txtAccentHex.Text = manifest.Theme.AccentColor ?? "#FF69B4";
                 if (_txtLightHex != null) _txtLightHex.Text = manifest.Theme.AccentLightColor ?? "#FFB6C1";
                 if (_txtDarkHex != null) _txtDarkHex.Text = manifest.Theme.AccentDarkColor ?? "#FF1493";
+                if (_txtBgHex != null) _txtBgHex.Text = manifest.Theme.BackgroundColor ?? "#1A1A2E";
+                if (_txtPanelHex != null) _txtPanelHex.Text = manifest.Theme.PanelColor ?? "#252542";
+                if (_txtSurfaceHex != null) _txtSurfaceHex.Text = manifest.Theme.SurfaceColor ?? "#1E1E3A";
+                if (_txtFilterHex != null) _txtFilterHex.Text = manifest.Theme.FilterColor ?? "#FF69B4";
             }
 
             // Identity
@@ -1270,13 +1286,23 @@ namespace ConditioningControlPanel
             var accent = _txtAccentHex?.Text.Trim() ?? "#FF69B4";
             var light = _txtLightHex?.Text.Trim() ?? "#FFB6C1";
             var dark = _txtDarkHex?.Text.Trim() ?? "#FF1493";
-            if (accent != "#FF69B4" || light != "#FFB6C1" || dark != "#FF1493")
+            var bg = _txtBgHex?.Text.Trim() ?? "#1A1A2E";
+            var panel = _txtPanelHex?.Text.Trim() ?? "#252542";
+            var surface = _txtSurfaceHex?.Text.Trim() ?? "#1E1E3A";
+            var filter = _txtFilterHex?.Text.Trim() ?? "#FF69B4";
+            if (accent != "#FF69B4" || light != "#FFB6C1" || dark != "#FF1493"
+                || bg != "#1A1A2E" || panel != "#252542" || surface != "#1E1E3A"
+                || filter != accent)
             {
                 manifest.Theme = new ModTheme
                 {
                     AccentColor = accent,
                     AccentLightColor = light,
                     AccentDarkColor = dark,
+                    BackgroundColor = bg != "#1A1A2E" ? bg : null,
+                    PanelColor = panel != "#252542" ? panel : null,
+                    SurfaceColor = surface != "#1E1E3A" ? surface : null,
+                    FilterColor = filter != accent ? filter : null,
                 };
             }
 
@@ -1512,6 +1538,10 @@ namespace ConditioningControlPanel
             if (_txtAccentHex != null) _txtAccentHex.Text = "#FF69B4";
             if (_txtLightHex != null) _txtLightHex.Text = "#FFB6C1";
             if (_txtDarkHex != null) _txtDarkHex.Text = "#FF1493";
+            if (_txtBgHex != null) _txtBgHex.Text = "#1A1A2E";
+            if (_txtPanelHex != null) _txtPanelHex.Text = "#252542";
+            if (_txtSurfaceHex != null) _txtSurfaceHex.Text = "#1E1E3A";
+            if (_txtFilterHex != null) _txtFilterHex.Text = "#FF69B4";
 
             // Clear identity
             SetTextBoxValue(_txtCompanionName, "");

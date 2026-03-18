@@ -75,9 +75,7 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public string GetModeAwareName()
         {
-            var mode = App.Settings?.Current?.ContentMode ?? ContentMode.BambiSleep;
-            if (mode == ContentMode.BambiSleep) return Name;
-            return MakeModeAware(Name, mode);
+            return App.Mods?.MakeModAware(Name) ?? Name;
         }
 
         /// <summary>
@@ -86,9 +84,7 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public string GetModeAwareDescription()
         {
-            var mode = App.Settings?.Current?.ContentMode ?? ContentMode.BambiSleep;
-            if (mode == ContentMode.BambiSleep) return Description;
-            return MakeModeAware(Description, mode);
+            return App.Mods?.MakeModAware(Description) ?? Description;
         }
 
         /// <summary>

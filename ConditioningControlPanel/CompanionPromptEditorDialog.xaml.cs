@@ -103,7 +103,7 @@ namespace ConditioningControlPanel
                 // Custom prompt is active
                 TxtActivePromptName.Text = "Custom";
                 TxtActivePromptName.Foreground = new System.Windows.Media.SolidColorBrush(
-                    System.Windows.Media.Color.FromRgb(255, 105, 180)); // Pink
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
             }
             else
             {
