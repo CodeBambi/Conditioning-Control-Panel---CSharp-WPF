@@ -16,22 +16,22 @@
     <Window.Resources>
         <!-- Purplish gradient background for speech bubble -->
         <LinearGradientBrush x:Key="BubbleGradient" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#3D2066" Offset="0"/>
-            <GradientStop Color="#1A1A2E" Offset="1"/>
+            <GradientStop Color="{DynamicResource PatreonDarkPurple}" Offset="0"/>
+            <GradientStop Color="{DynamicResource DarkerBg}" Offset="1"/>
         </LinearGradientBrush>
 
         <!-- Tiny pink scrollbar style -->
         <Style x:Key="TinyPinkScrollBar" TargetType="ScrollBar">
             <Setter Property="Width" Value="6"/>
             <Setter Property="MinWidth" Value="6"/>
-            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
                         <Grid Background="{TemplateBinding Background}">
                             <Track x:Name="PART_Track" IsDirectionReversed="True">
                                 <Track.Thumb>
-                                    <Thumb Background="#FF69B4" BorderThickness="0">
+                                    <Thumb Background="{DynamicResource PinkBrush}" BorderThickness="0">
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
                                                 <Border Background="{TemplateBinding Background}"
@@ -99,7 +99,7 @@
                     MinWidth="120" MaxWidth="380"
                     Background="{StaticResource BubbleGradient}"
                     CornerRadius="20"
-                    BorderBrush="#FF69B4"
+                    BorderBrush="{DynamicResource PinkBrush}"
                     BorderThickness="3"
                     Padding="15,12">
 
@@ -113,7 +113,7 @@
                     <!-- Speech text with bubbly pink font -->
                     <TextBlock x:Name="TxtSpeech"
                                Text=""
-                               Foreground="#FF69B4"
+                               Foreground="{DynamicResource PinkBrush}"
                                FontSize="20"
                                FontWeight="Bold"
                                TextWrapping="Wrap"
@@ -133,19 +133,19 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
                     Margin="0,0,126,520"
-                    Background="#252542"
+                    Background="{DynamicResource PanelBgBrush}"
                     CornerRadius="10"
                     Padding="10"
-                    BorderBrush="#FF69B4"
+                    BorderBrush="{DynamicResource PinkBrush}"
                     BorderThickness="2">
                 <StackPanel Orientation="Horizontal">
                     <TextBox x:Name="TxtUserInput"
                              Width="180"
                              Height="30"
                              FontSize="14"
-                             Background="#1A1A2E"
+                             Background="{DynamicResource DarkerBgBrush}"
                              Foreground="White"
-                             BorderBrush="#FF69B4"
+                             BorderBrush="{DynamicResource PinkBrush}"
                              BorderThickness="1"
                              Padding="5,3"
                              VerticalContentAlignment="Center"
@@ -155,7 +155,7 @@
                             Width="50"
                             Height="30"
                             Margin="5,0,0,0"
-                            Background="#FF69B4"
+                            Background="{DynamicResource PinkBrush}"
                             Foreground="White"
                             FontWeight="Bold"
                             BorderThickness="0"
@@ -206,7 +206,7 @@
                                                 <Popup x:Name="PART_Popup" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
                                                        Placement="Right" HorizontalOffset="-2" AllowsTransparency="True" Focusable="False"
                                                        PopupAnimation="Fade">
-                                                    <Border Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="2"
+                                                    <Border Background="{DynamicResource DarkerBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
                                                             CornerRadius="8" Padding="4">
                                                         <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
                                                     </Border>
@@ -231,7 +231,7 @@
                             <Style TargetType="{x:Type Separator}">
                                 <Setter Property="Height" Value="1"/>
                                 <Setter Property="Margin" Value="8,4"/>
-                                <Setter Property="Background" Value="#FF69B4"/>
+                                <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
                                 <Setter Property="Template">
                                     <Setter.Value>
                                         <ControlTemplate TargetType="{x:Type Separator}">
@@ -243,8 +243,8 @@
                         </ContextMenu.Resources>
                         <ContextMenu.Style>
                             <Style TargetType="{x:Type ContextMenu}">
-                                <Setter Property="Background" Value="#1A1A2E"/>
-                                <Setter Property="BorderBrush" Value="#FF69B4"/>
+                                <Setter Property="Background" Value="{DynamicResource DarkerBgBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
                                 <Setter Property="BorderThickness" Value="2"/>
                                 <Setter Property="Padding" Value="4"/>
                                 <Setter Property="Template">
@@ -261,7 +261,7 @@
                                 </Setter>
                             </Style>
                         </ContextMenu.Style>
-                        <MenuItem x:Name="MenuItemTalkToBambi" Header="💬 Talk to Bambi" Click="MenuItemTalkToBambi_Click" Foreground="#FF69B4" FontWeight="Bold"/>
+                        <MenuItem x:Name="MenuItemTalkToBambi" Header="💬 Talk to Bambi" Click="MenuItemTalkToBambi_Click" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
                         <Separator/>
                         <MenuItem x:Name="MenuItemDetach" Header="📌 Detach" Click="MenuItemDetach_Click"/>
                         <MenuItem x:Name="MenuItemAttach" Header="📌 Attach to Main Window" Click="MenuItemAttach_Click" Visibility="Collapsed"/>
@@ -272,7 +272,7 @@
                         <MenuItem x:Name="MenuItemEngine" Header="▶ Start Engine" Click="MenuItemEngine_Click" Foreground="#90EE90"/>
                         <MenuItem x:Name="MenuItemTriggerMode" Header="☐ Trigger Mode" Click="MenuItemTriggerMode_Click"/>
                         <MenuItem x:Name="MenuItemBambiTakeover" Header="☐ Bimbo Takeover" Click="MenuItemBambiTakeover_Click"/>
-                        <MenuItem x:Name="MenuItemPersonality" Header="👤 Personality" Foreground="#FF69B4">
+                        <MenuItem x:Name="MenuItemPersonality" Header="👤 Personality" Foreground="{DynamicResource PinkBrush}">
                             <MenuItem.ItemContainerStyle>
                                 <Style TargetType="MenuItem">
                                     <Setter Property="Background" Value="Transparent"/>
@@ -312,7 +312,7 @@
                             <TranslateTransform x:Name="AvatarTranslate" Y="0"/>
                         </Image.RenderTransform>
                         <Image.Effect>
-                            <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
                         </Image.Effect>
                     </Image>
                     <!-- Animated GIF avatar (for level 20+) -->
@@ -325,7 +325,7 @@
                             <TranslateTransform x:Name="AvatarAnimatedTranslate" Y="0"/>
                         </Image.RenderTransform>
                         <Image.Effect>
-                            <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
                         </Image.Effect>
                     </Image>
                 </Grid>
@@ -339,7 +339,7 @@
                     Margin="0,0,121,180"
                     Background="#CC1A1A2E"
                     CornerRadius="12"
-                    BorderBrush="#FF69B4"
+                    BorderBrush="{DynamicResource PinkBrush}"
                     BorderThickness="2"
                     Padding="8,6">
                 <Grid>
@@ -355,9 +355,9 @@
                             MouseLeftButtonDown="BtnPrevAvatar_Click"
                             Visibility="Collapsed"
                             VerticalAlignment="Center" Margin="0,0,10,0">
-                        <TextBlock Text="◀" FontSize="27" Foreground="#9370DB" FontWeight="Bold">
+                        <TextBlock Text="◀" FontSize="27" Foreground="{DynamicResource SecondaryBrush}" FontWeight="Bold">
                             <TextBlock.Effect>
-                                <DropShadowEffect Color="#9370DB" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
+                                <DropShadowEffect Color="{DynamicResource PatreonPurple}" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
                             </TextBlock.Effect>
                         </TextBlock>
                     </Border>
@@ -368,7 +368,7 @@
                                    Text="BASIC BIMBO"
                                    FontSize="16"
                                    FontWeight="Bold"
-                                   Foreground="#FF69B4"
+                                   Foreground="{DynamicResource PinkBrush}"
                                    TextAlignment="Center"
                                    HorizontalAlignment="Center">
                             <TextBlock.Effect>
@@ -390,9 +390,9 @@
                             MouseLeftButtonDown="BtnNextAvatar_Click"
                             Visibility="Collapsed"
                             VerticalAlignment="Center" Margin="10,0,0,0">
-                        <TextBlock Text="▶" FontSize="27" Foreground="#9370DB" FontWeight="Bold">
+                        <TextBlock Text="▶" FontSize="27" Foreground="{DynamicResource SecondaryBrush}" FontWeight="Bold">
                             <TextBlock.Effect>
-                                <DropShadowEffect Color="#9370DB" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
+                                <DropShadowEffect Color="{DynamicResource PatreonPurple}" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
                             </TextBlock.Effect>
                         </TextBlock>
                     </Border>

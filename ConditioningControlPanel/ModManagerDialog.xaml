@@ -9,7 +9,7 @@
         AllowsTransparency="True"
         Background="Transparent">
 
-    <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -18,10 +18,10 @@
             </Grid.RowDefinitions>
 
             <!-- Title Bar -->
-            <Border Grid.Row="0" Background="#252542" CornerRadius="12,12,0,0" Padding="20,12"
+            <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="12,12,0,0" Padding="20,12"
                     MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid>
-                    <TextBlock Text="Mod Manager" Foreground="#FF69B4" FontSize="18" FontWeight="Bold"
+                    <TextBlock Text="Mod Manager" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
                                VerticalAlignment="Center"/>
                     <Button x:Name="BtnClose" Content="X" Click="BtnClose_Click"
                             HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -39,7 +39,7 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Mod List -->
-                <Border Grid.Column="0" Background="#252542" CornerRadius="8" Margin="0,0,10,0" Padding="5">
+                <Border Grid.Column="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Margin="0,0,10,0" Padding="5">
                     <ListBox x:Name="ModList" Background="Transparent" BorderThickness="0"
                              SelectionChanged="ModList_SelectionChanged"
                              Foreground="White" FontSize="13">
@@ -61,7 +61,7 @@
                                                 </Trigger>
                                                 <Trigger Property="IsSelected" Value="True">
                                                     <Setter TargetName="Bd" Property="Background" Value="#353560"/>
-                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#FF69B4"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
                                                     <Setter TargetName="Bd" Property="BorderThickness" Value="1"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
@@ -74,7 +74,7 @@
                 </Border>
 
                 <!-- Details Panel -->
-                <Border Grid.Column="1" Background="#252542" CornerRadius="8" Padding="20">
+                <Border Grid.Column="1" Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="20">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel x:Name="DetailsPanel" Visibility="Collapsed">
                             <TextBlock x:Name="TxtModName" FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,0,0,5"/>
@@ -102,7 +102,7 @@
                             <!-- Action Buttons -->
                             <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                                 <Button x:Name="BtnActivate" Content="Activate" Click="BtnActivate_Click"
-                                        Background="#FF69B4" Foreground="White" FontWeight="SemiBold"
+                                        Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="SemiBold"
                                         Padding="16,8" BorderThickness="0" Cursor="Hand" Margin="0,0,10,0">
                                     <Button.Style>
                                         <Style TargetType="Button">
@@ -125,7 +125,7 @@
                                     </Button.Style>
                                 </Button>
                                 <Button x:Name="BtnUninstall" Content="Uninstall" Click="BtnUninstall_Click"
-                                        Background="#404060" Foreground="#FF6B6B" FontWeight="SemiBold"
+                                        Background="{DynamicResource PanelAccentBrush}" Foreground="#FF6B6B" FontWeight="SemiBold"
                                         Padding="16,8" BorderThickness="0" Cursor="Hand">
                                     <Button.Style>
                                         <Style TargetType="Button">
@@ -154,10 +154,10 @@
             </Grid>
 
             <!-- Bottom Bar -->
-            <Border Grid.Row="2" Background="#252542" CornerRadius="0,0,12,12" Padding="15,10">
+            <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,12,12" Padding="15,10">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                     <Button x:Name="BtnInstall" Content="Install from file..." Click="BtnInstall_Click"
-                            Background="#404060" Foreground="White" Padding="14,7" BorderThickness="0"
+                            Background="{DynamicResource PanelAccentBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
                             Cursor="Hand" Margin="0,0,10,0" FontSize="12">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -170,7 +170,7 @@
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="bd" Property="Background" Value="#505080"/>
+                                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -180,7 +180,7 @@
                         </Button.Style>
                     </Button>
                     <Button x:Name="BtnExport" Content="Export current..." Click="BtnExport_Click"
-                            Background="#404060" Foreground="White" Padding="14,7" BorderThickness="0"
+                            Background="{DynamicResource PanelAccentBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
                             Cursor="Hand" Margin="0,0,10,0" FontSize="12">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -193,7 +193,7 @@
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="bd" Property="Background" Value="#505080"/>
+                                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -203,7 +203,7 @@
                         </Button.Style>
                     </Button>
                     <Button x:Name="BtnCreate" Content="Create New" Click="BtnCreate_Click"
-                            Background="#FF69B4" Foreground="White" Padding="14,7" BorderThickness="0"
+                            Background="{DynamicResource PinkBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
                             Cursor="Hand" Margin="0,0,10,0" FontSize="12" FontWeight="SemiBold">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -226,7 +226,7 @@
                         </Button.Style>
                     </Button>
                     <Button x:Name="BtnTemplate" Content="Generate Template" Click="BtnTemplate_Click"
-                            Background="#404060" Foreground="White" Padding="14,7" BorderThickness="0"
+                            Background="{DynamicResource PanelAccentBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
                             Cursor="Hand" FontSize="12">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -239,7 +239,7 @@
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="bd" Property="Background" Value="#505080"/>
+                                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>

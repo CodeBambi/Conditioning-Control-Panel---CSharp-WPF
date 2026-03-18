@@ -213,6 +213,7 @@ namespace ConditioningControlPanel
         public static CompanionPhraseService CompanionPhrases { get; private set; } = null!;
         public static LockdownService Lockdown { get; private set; } = null!;
         public static MantraService Mantra { get; private set; } = null!;
+        public static ModService Mods { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -575,6 +576,10 @@ namespace ConditioningControlPanel
 
             // Clean up stale temp files from previous sessions (crash recovery, leaked files)
             CleanupStaleTempFiles();
+
+            // Initialize mod system (must be after settings, before services that use content config)
+            Mods = new ModService();
+            Mods.Initialize(Settings?.Current?.ActiveModId);
 
             splash.SetProgress(0.3, "Initializing audio...");
             Audio = new AudioService();

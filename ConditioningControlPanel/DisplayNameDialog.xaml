@@ -4,13 +4,13 @@
         Title="Choose Your Display Name"
         Height="240" Width="450"
         WindowStartupLocation="CenterOwner"
-        Background="#1A1A2E"
+        Background="{DynamicResource DarkerBgBrush}"
         ResizeMode="NoResize"
         WindowStyle="None"
         AllowsTransparency="False">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="PinkBrush" Color="#FF69B4"/>
+        <SolidColorBrush x:Key="PinkBrush" Color="{DynamicResource PinkColor}"/>
         <SolidColorBrush x:Key="DarkPinkBrush" Color="#FF1493"/>
         <SolidColorBrush x:Key="WarningBrush" Color="#FFB347"/>
     </Window.Resources>
@@ -49,7 +49,7 @@
 
             <!-- Input -->
             <TextBox x:Name="TxtDisplayName" Grid.Row="3"
-                     Background="#252542" Foreground="White"
+                     Background="{DynamicResource PanelBgBrush}" Foreground="White"
                      BorderBrush="{StaticResource PinkBrush}"
                      Padding="12,10" FontSize="15"
                      MaxLength="20"
@@ -63,7 +63,7 @@
             <!-- Buttons -->
             <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
                 <Button Content="Cancel" Width="90" Padding="10,10" Margin="0,0,10,0"
-                        Background="#404060" Foreground="White" BorderThickness="0"
+                        Background="{DynamicResource PanelAccentBrush}" Foreground="White" BorderThickness="0"
                         Click="BtnCancel_Click" Cursor="Hand" FontSize="13"/>
                 <Button x:Name="BtnConfirm" Content="Confirm" Width="90" Padding="10,10"
                         Background="{StaticResource PinkBrush}" Foreground="White"

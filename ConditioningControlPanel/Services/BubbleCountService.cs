@@ -261,9 +261,8 @@ public class BubbleCountService : IDisposable
                 {
                     // Mercy after 3 retries - let them go
                     App.Logger?.Information("Bubble count mercy after {Retries} retries", _retryCount);
-                    var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
                     ShowFullscreenMessage(
-                        Models.ContentModeConfig.GetAttentionCheckMercyMessage(mode),
+                        App.Mods?.GetAttentionCheckMercyMessage() ?? "BAMBI GETS MERCY",
                         2500,
                         () =>
                         {
@@ -278,9 +277,8 @@ public class BubbleCountService : IDisposable
                 {
                     // Replay - show message then start new video
                     App.Logger?.Information("Bubble count retry {Count} (mercy at 3)", _retryCount);
-                    var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
                     ShowFullscreenMessage(
-                        Models.ContentModeConfig.GetBubbleCountRetryMessage(mode),
+                        App.Mods?.GetBubbleCountRetryMessage() ?? "WRONG!\nWATCH AGAIN",
                         2000,
                         RetryGame);
                 }

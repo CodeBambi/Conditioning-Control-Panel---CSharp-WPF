@@ -171,7 +171,7 @@ namespace ConditioningControlPanel
         {
             var border = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(37, 37, 66)), // #252542
+                Background = (SolidColorBrush)Application.Current.Resources["PanelBgBrush"],
                 CornerRadius = new CornerRadius(7),
                 Width = 68,
                 Height = 68,

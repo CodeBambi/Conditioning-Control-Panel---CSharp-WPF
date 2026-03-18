@@ -1084,6 +1084,9 @@ namespace ConditioningControlPanel.Services
                                 questProgress.DailyQuestCompletionDates.RemoveAll(d => d.Date < cutoff);
                                 App.Logger?.Debug("Quest sync: Merged completion dates from cloud");
                                 needsSave = true;
+
+                                // Recompute streak from the merged calendar to fix LastDailyQuestDate desync
+                                App.Quests?.RecalculateStreak();
                             }
                         }
                     }

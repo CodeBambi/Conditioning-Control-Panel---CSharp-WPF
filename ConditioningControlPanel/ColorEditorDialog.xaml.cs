@@ -45,7 +45,7 @@ namespace ConditioningControlPanel
         {
             if (ChkBgTransparent.IsChecked == true)
             {
-                PreviewBorder.Background = new SolidColorBrush(Color.FromRgb(26, 26, 46)); // Dark purple like app bg
+                PreviewBorder.Background = Application.Current.Resources["DarkerBgBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(26, 26, 46));
             }
             else
             {

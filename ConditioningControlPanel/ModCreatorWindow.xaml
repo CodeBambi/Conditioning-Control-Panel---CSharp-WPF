@@ -16,7 +16,7 @@
     <Window.Resources>
         <!-- Action Button (pink primary) -->
         <Style x:Key="ActionButton" TargetType="Button">
-            <Setter Property="Background" Value="#FF69B4"/>
+            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="13"/>
@@ -121,7 +121,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
+    <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -133,7 +133,7 @@
             <Border Grid.Row="0" Background="#252542" CornerRadius="12,12,0,0" Padding="20,10"
                     MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid>
-                    <TextBlock Text="Mod Creator" Foreground="#FF69B4" FontSize="18" FontWeight="Bold"
+                    <TextBlock Text="Mod Creator" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
                                VerticalAlignment="Center"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <Button Content="&#x2014;" Click="BtnMinimize_Click"

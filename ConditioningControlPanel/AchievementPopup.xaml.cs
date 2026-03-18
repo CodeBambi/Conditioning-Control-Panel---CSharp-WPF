@@ -100,14 +100,14 @@ public partial class AchievementPopup : Window
             }
             else
             {
-                // Try pack URI (embedded resource)
+                // Try mod override, then pack URI (embedded resource)
                 try
                 {
-                    App.Logger?.Debug("Trying pack URI for: {Name}", imageName);
-                    var packUri = new Uri($"pack://application:,,,/Resources/achievements/{imageName}", UriKind.Absolute);
-                    var bitmap = new BitmapImage(packUri);
-                    AchievementImage.Source = bitmap;
-                    App.Logger?.Debug("Loaded image from pack URI");
+                    App.Logger?.Debug("Trying mod/pack URI for: {Name}", imageName);
+                    var image = Services.ModResourceResolver.ResolveImage($"achievements/{imageName}");
+                    if (image != null)
+                        AchievementImage.Source = image;
+                    App.Logger?.Debug("Loaded achievement image");
                 }
                 catch (Exception packEx)
                 {

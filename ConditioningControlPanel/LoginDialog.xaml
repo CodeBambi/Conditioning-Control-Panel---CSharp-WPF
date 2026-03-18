@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Login" Height="560" Width="420"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
-        Background="#1A1A2E" WindowStyle="None" AllowsTransparency="True"
+        Background="{DynamicResource DarkerBgBrush}" WindowStyle="None" AllowsTransparency="True"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
-    <Border BorderBrush="#FF69B4" BorderThickness="2" CornerRadius="10">
+    <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" CornerRadius="10">
         <Grid Margin="25">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -18,7 +18,7 @@
             <!-- Title -->
             <StackPanel Grid.Row="0" Margin="0,0,0,20">
                 <TextBlock Text="Welcome!"
-                           FontSize="28" FontWeight="Bold" Foreground="#FF69B4"
+                           FontSize="28" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
                            HorizontalAlignment="Center"/>
                 <TextBlock Text="Choose how you'd like to login"
                            FontSize="13" Foreground="#B0B0B0"
@@ -51,7 +51,7 @@
 
                 <Button x:Name="BtnLoginAccount"
                         Padding="20,15" Margin="0,0,0,15"
-                        Background="#352545" Foreground="White"
+                        Background="{DynamicResource AccentTintedBgBrush}" Foreground="White"
                         BorderThickness="0" FontWeight="Bold" FontSize="16"
                         Cursor="Hand" Click="BtnLoginAccount_Click">
                     <StackPanel Orientation="Horizontal">
@@ -78,7 +78,7 @@
                            FontSize="12" Foreground="#B0B0B0" Margin="0,0,0,4"
                            Visibility="Collapsed"/>
                 <TextBox x:Name="TxtInviteCode" FontSize="14" Padding="10,8"
-                         Background="#252542" Foreground="White" BorderBrush="#FF69B4"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
                          MaxLength="8" HorizontalAlignment="Stretch" Visibility="Collapsed"
                          CharacterCasing="Upper"/>
 
@@ -87,14 +87,14 @@
                            FontSize="12" Foreground="#B0B0B0" Margin="0,0,0,4"
                            Visibility="Collapsed"/>
                 <TextBox x:Name="TxtLoginDisplayName" FontSize="14" Padding="10,8"
-                         Background="#252542" Foreground="White" BorderBrush="#FF69B4"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
                          MaxLength="30" HorizontalAlignment="Stretch" Visibility="Collapsed"/>
 
                 <!-- Password -->
                 <TextBlock x:Name="LblPassword" Text="Password"
                            FontSize="12" Foreground="#B0B0B0" Margin="0,10,0,4"/>
                 <PasswordBox x:Name="TxtPassword" FontSize="14" Padding="10,8"
-                             Background="#252542" Foreground="White" BorderBrush="#FF69B4"
+                             Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
                              MaxLength="128"/>
 
                 <!-- Confirm password (register mode only) -->
@@ -102,7 +102,7 @@
                            FontSize="12" Foreground="#B0B0B0" Margin="0,10,0,4"
                            Visibility="Collapsed"/>
                 <PasswordBox x:Name="TxtPasswordConfirm" FontSize="14" Padding="10,8"
-                             Background="#252542" Foreground="White" BorderBrush="#FF69B4"
+                             Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
                              MaxLength="128" Visibility="Collapsed"/>
 
                 <TextBlock x:Name="TxtAccountError" FontSize="11" Margin="0,8,0,0"
@@ -112,7 +112,7 @@
                 <Button x:Name="BtnAccountSubmit"
                         Content="Login"
                         Padding="30,12" Margin="0,15,0,0"
-                        Background="#FF69B4" Foreground="White"
+                        Background="{DynamicResource PinkBrush}" Foreground="White"
                         BorderThickness="0" FontWeight="Bold" FontSize="14"
                         Cursor="Hand" HorizontalAlignment="Center"
                         Click="BtnAccountSubmit_Click"/>
@@ -122,7 +122,7 @@
                            HorizontalAlignment="Center" Cursor="Hand"
                            MouseLeftButtonDown="TxtAccountToggle_Click">
                     <Run Text="Don't have an account? "/>
-                    <Run Text="Create one" Foreground="#FF69B4" TextDecorations="Underline"/>
+                    <Run Text="Create one" Foreground="{DynamicResource PinkBrush}" TextDecorations="Underline"/>
                 </TextBlock>
 
                 <TextBlock Text="Back" Margin="0,10,0,0"
@@ -141,7 +141,7 @@
                            HorizontalAlignment="Center" Margin="0,0,0,15"/>
 
                 <TextBox x:Name="TxtUsername" FontSize="18" Padding="12,10"
-                         Background="#252542" Foreground="White" BorderBrush="#FF69B4"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
                          MaxLength="30" TextChanged="TxtUsername_TextChanged"
                          HorizontalAlignment="Stretch"/>
 
@@ -152,7 +152,7 @@
                 <Button x:Name="BtnConfirmUsername"
                         Content="Confirm"
                         Padding="30,12" Margin="0,20,0,0"
-                        Background="#FF69B4" Foreground="White"
+                        Background="{DynamicResource PinkBrush}" Foreground="White"
                         BorderThickness="0" FontWeight="Bold" FontSize="14"
                         Cursor="Hand" IsEnabled="False"
                         HorizontalAlignment="Center"
@@ -165,7 +165,7 @@
                 <TextBlock x:Name="TxtLoadingMessage" Text="Connecting..."
                            FontSize="16" Foreground="White" HorizontalAlignment="Center"/>
                 <ProgressBar IsIndeterminate="True" Width="200" Height="4" Margin="0,15,0,0"
-                             Foreground="#FF69B4" Background="#352545"/>
+                             Foreground="{DynamicResource PinkBrush}" Background="{DynamicResource AccentTintedBgBrush}"/>
             </StackPanel>
 
             <!-- Cancel Button -->

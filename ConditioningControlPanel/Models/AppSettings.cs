@@ -7,6 +7,17 @@ using Newtonsoft.Json;
 namespace ConditioningControlPanel.Models
 {
     /// <summary>
+    /// Legacy content mode enum. Kept for settings deserialization backward compatibility.
+    /// Use App.Mods (ModService) instead.
+    /// </summary>
+    [Obsolete("Use App.Mods (ModService) and ActiveModId instead")]
+    public enum ContentMode
+    {
+        BambiSleep,
+        SissyHypno
+    }
+
+    /// <summary>
     /// Application settings model - matches Python DEFAULT_SETTINGS
     /// </summary>
     public class AppSettings : INotifyPropertyChanged
@@ -732,7 +743,8 @@ namespace ConditioningControlPanel.Models
 
         private ContentMode _contentMode = ContentMode.BambiSleep;
         /// <summary>
-        /// Content mode determines theming: Bambi Sleep specific or generic Sissy Hypno.
+        /// [LEGACY] Content mode determines theming. Kept for migration only.
+        /// New code should use ActiveModId instead.
         /// </summary>
         public ContentMode ContentMode
         {
@@ -752,20 +764,43 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
-        /// Convenience property for XAML binding - true when in Bambi Sleep mode.
+        /// Convenience property - true when active mod is BambiSleep.
         /// </summary>
         [JsonIgnore]
-        public bool IsBambiMode => _contentMode == ContentMode.BambiSleep;
+        public bool IsBambiMode => ActiveModId == BuiltInMods.BambiSleepId;
 
         /// <summary>
-        /// Convenience property for XAML binding - true when in Sissy Hypno mode.
+        /// Convenience property - true when active mod is SissyHypno.
         /// </summary>
         [JsonIgnore]
-        public bool IsSissyMode => _contentMode == ContentMode.SissyHypno;
+        public bool IsSissyMode => ActiveModId == BuiltInMods.SissyHypnoId;
+
+        private string _activeModId = BuiltInMods.BambiSleepId;
+        /// <summary>
+        /// The ID of the currently active mod. Replaces ContentMode enum.
+        /// </summary>
+        public string ActiveModId
+        {
+            get => _activeModId;
+            set
+            {
+                if (_activeModId != value)
+                {
+                    _activeModId = value;
+                    // Keep legacy field in sync for backward compat
+                    _contentMode = value == BuiltInMods.SissyHypnoId ? ContentMode.SissyHypno : ContentMode.BambiSleep;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsBambiMode));
+                    OnPropertyChanged(nameof(IsSissyMode));
+                    OnPropertyChanged(nameof(ActiveHypnotubeLinks));
+                    OnPropertyChanged(nameof(ContentModeDisplay));
+                }
+            }
+        }
 
         private bool _contentModeChosen = false;
         /// <summary>
-        /// Whether the user has chosen a content mode (shown on first run).
+        /// Whether the user has chosen a content mode / mod (shown on first run).
         /// </summary>
         public bool ContentModeChosen
         {
@@ -774,8 +809,17 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
-        /// Per-mode pool backups so custom edits survive mode switching.
-        /// Keyed by ContentMode enum value. Null entries mean "use defaults".
+        /// Alias for ContentModeChosen — used by new mod system code.
+        /// </summary>
+        [JsonIgnore]
+        public bool ModChosen
+        {
+            get => _contentModeChosen;
+            set => ContentModeChosen = value;
+        }
+
+        /// <summary>
+        /// [LEGACY] Per-mode pool backups. Kept for migration to *ByMod dictionaries.
         /// </summary>
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public Dictionary<ContentMode, Dictionary<string, bool>>? SubliminalPoolByMode { get; set; }
@@ -785,6 +829,73 @@ namespace ConditioningControlPanel.Models
         public Dictionary<ContentMode, Dictionary<string, bool>>? LockCardPhrasesByMode { get; set; }
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public Dictionary<ContentMode, List<string>>? CustomTriggersByMode { get; set; }
+
+        /// <summary>
+        /// Per-mod pool backups so custom edits survive mod switching.
+        /// Keyed by mod ID string.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, Dictionary<string, bool>>? SubliminalPoolByMod { get; set; }
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, Dictionary<string, bool>>? AttentionPoolByMod { get; set; }
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, Dictionary<string, bool>>? LockCardPhrasesByMod { get; set; }
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, List<string>>? CustomTriggersByMod { get; set; }
+
+        /// <summary>
+        /// Migrate legacy ContentMode-based settings to mod-based settings.
+        /// Called once after deserialization when ActiveModId hasn't been set yet.
+        /// </summary>
+        internal void MigrateFromContentModeToMod()
+        {
+            // If ActiveModId is already set to a non-default value, migration already happened
+            if (_activeModId != BuiltInMods.BambiSleepId) return;
+
+            // Check if old ContentMode was SissyHypno — if so, migrate
+            if (_contentMode == ContentMode.SissyHypno)
+            {
+                _activeModId = BuiltInMods.SissyHypnoId;
+            }
+
+            // Migrate *ByMode dictionaries to *ByMod
+            if (SubliminalPoolByMode != null && SubliminalPoolByMod == null)
+            {
+                SubliminalPoolByMod = new Dictionary<string, Dictionary<string, bool>>();
+                foreach (var kvp in SubliminalPoolByMode)
+                {
+                    var modId = kvp.Key == ContentMode.SissyHypno ? BuiltInMods.SissyHypnoId : BuiltInMods.BambiSleepId;
+                    SubliminalPoolByMod[modId] = kvp.Value;
+                }
+            }
+            if (AttentionPoolByMode != null && AttentionPoolByMod == null)
+            {
+                AttentionPoolByMod = new Dictionary<string, Dictionary<string, bool>>();
+                foreach (var kvp in AttentionPoolByMode)
+                {
+                    var modId = kvp.Key == ContentMode.SissyHypno ? BuiltInMods.SissyHypnoId : BuiltInMods.BambiSleepId;
+                    AttentionPoolByMod[modId] = kvp.Value;
+                }
+            }
+            if (LockCardPhrasesByMode != null && LockCardPhrasesByMod == null)
+            {
+                LockCardPhrasesByMod = new Dictionary<string, Dictionary<string, bool>>();
+                foreach (var kvp in LockCardPhrasesByMode)
+                {
+                    var modId = kvp.Key == ContentMode.SissyHypno ? BuiltInMods.SissyHypnoId : BuiltInMods.BambiSleepId;
+                    LockCardPhrasesByMod[modId] = kvp.Value;
+                }
+            }
+            if (CustomTriggersByMode != null && CustomTriggersByMod == null)
+            {
+                CustomTriggersByMod = new Dictionary<string, List<string>>();
+                foreach (var kvp in CustomTriggersByMode)
+                {
+                    var modId = kvp.Key == ContentMode.SissyHypno ? BuiltInMods.SissyHypnoId : BuiltInMods.BambiSleepId;
+                    CustomTriggersByMod[modId] = kvp.Value;
+                }
+            }
+        }
 
         private string _bambiCloudUrl = "https://bambicloud.com/";
         public string BambiCloudUrl
@@ -2005,7 +2116,7 @@ namespace ConditioningControlPanel.Models
         /// Display name for current content mode.
         /// </summary>
         [JsonIgnore]
-        public string ContentModeDisplay => IsBambiMode ? "Bambi Sleep" : "Sissy Hypno";
+        public string ContentModeDisplay => App.Mods?.GetModeDisplayName() ?? (IsBambiMode ? "Bambi Sleep" : "Sissy Hypno");
 
         /// <summary>
         /// Gets/sets the hypnotube links for the currently active content mode.

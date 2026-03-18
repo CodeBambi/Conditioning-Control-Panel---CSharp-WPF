@@ -577,13 +577,22 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var resourceUri = new Uri("pack://application:,,,/Resources/bubble.png", UriKind.Absolute);
-                _bubbleImage = new BitmapImage();
-                _bubbleImage.BeginInit();
-                _bubbleImage.UriSource = resourceUri;
-                _bubbleImage.CacheOption = BitmapCacheOption.OnLoad;
-                _bubbleImage.EndInit();
-                _bubbleImage.Freeze();
+                var resolved = Services.ModResourceResolver.ResolveImage("bubble.png");
+                if (resolved is BitmapImage bmp)
+                {
+                    _bubbleImage = bmp.IsFrozen ? bmp : bmp.Clone();
+                    if (!_bubbleImage.IsFrozen) _bubbleImage.Freeze();
+                }
+                else
+                {
+                    var resourceUri = new Uri("pack://application:,,,/Resources/bubble.png", UriKind.Absolute);
+                    _bubbleImage = new BitmapImage();
+                    _bubbleImage.BeginInit();
+                    _bubbleImage.UriSource = resourceUri;
+                    _bubbleImage.CacheOption = BitmapCacheOption.OnLoad;
+                    _bubbleImage.EndInit();
+                    _bubbleImage.Freeze();
+                }
             }
             catch (Exception ex)
             {

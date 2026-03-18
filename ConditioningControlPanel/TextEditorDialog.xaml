@@ -4,7 +4,7 @@
         Title="Text Manager" 
         Height="500" Width="550"
         WindowStartupLocation="CenterOwner"
-        Background="#1A1A2E"
+        Background="{DynamicResource DarkerBgBrush}"
         ResizeMode="CanResizeWithGrip">
 
     <Window.Resources>
@@ -37,7 +37,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBox x:Name="TxtNewItem" Grid.Column="0" 
-                     Background="#1E1E3A" Foreground="White" 
+                     Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
                      BorderBrush="{StaticResource PinkBrush}" BorderThickness="1"
                      Padding="10,8" FontSize="13" VerticalContentAlignment="Center"
                      KeyDown="TxtNewItem_KeyDown"/>
@@ -51,7 +51,7 @@
                 <ItemsControl x:Name="ItemList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border x:Name="ItemBorder" Background="#1E1E3A" CornerRadius="5" 
+                            <Border x:Name="ItemBorder" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="5"
                                     Margin="3" Padding="10,8" Cursor="Hand"
                                     MouseLeftButtonDown="Item_Click">
                                 <Grid>

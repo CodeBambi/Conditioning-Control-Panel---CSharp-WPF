@@ -127,7 +127,7 @@ public class OverlayService : IDisposable
                     return settings.SpiralPath;
                 }
                 
-                return "pack://application:,,,/Resources/spiral.gif";
+                return ModResourceResolver.ResolveUri("spirals/spiral.gif");
             }
     public void Start()
     {
@@ -253,12 +253,13 @@ public class OverlayService : IDisposable
             {
                 var boosted = Math.Min(settings.PinkFilterOpacity * 2, 100);
                 var alpha = (byte)(boosted / 100.0 * 255);
+                var (fr, fg, fb) = GetFilterRgb();
                 foreach (var window in _pinkFilterWindows)
                 {
                     if (window.Content is Border border &&
                         border.Background is System.Windows.Media.SolidColorBrush brush)
                     {
-                        brush.Color = System.Windows.Media.Color.FromArgb(alpha, 255, 105, 180);
+                        brush.Color = System.Windows.Media.Color.FromArgb(alpha, fr, fg, fb);
                     }
                 }
                 _lastAppliedPinkOpacity = -1;
@@ -403,6 +404,11 @@ public class OverlayService : IDisposable
 
     #region Pink Filter
 
+    private static (byte R, byte G, byte B) GetFilterRgb()
+    {
+        return App.Mods?.GetFilterColorRgb() ?? (255, 105, 180);
+    }
+
     private void StartPinkFilter()
     {
         if (_pinkFilterWindows.Count > 0) return;
@@ -442,11 +448,12 @@ public class OverlayService : IDisposable
 
             // Linear opacity (no exponential curve)
             var actualOpacity = opacity / 100.0;
+            var (fr, fg, fb) = GetFilterRgb();
 
             var pinkOverlay = new Border
             {
                 Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(
-                                    (byte)(actualOpacity * 255), 255, 105, 180)),
+                                    (byte)(actualOpacity * 255), fr, fg, fb)),
                 Opacity = 1.0
             };
 
@@ -516,13 +523,14 @@ public class OverlayService : IDisposable
         var actualOpacity = App.Settings.Current.PinkFilterOpacity / 100.0;
         if (actualOpacity == _lastAppliedPinkOpacity) return;
         _lastAppliedPinkOpacity = actualOpacity;
+        var (fr, fg, fb) = GetFilterRgb();
         foreach (var window in _pinkFilterWindows)
         {
             if (window.Content is Border border)
             {
                 if (border.Background is System.Windows.Media.SolidColorBrush brush)
                 {
-                    brush.Color = System.Windows.Media.Color.FromArgb((byte)(actualOpacity * 255), 255, 105, 180);
+                    brush.Color = System.Windows.Media.Color.FromArgb((byte)(actualOpacity * 255), fr, fg, fb);
                 }
             }
         }

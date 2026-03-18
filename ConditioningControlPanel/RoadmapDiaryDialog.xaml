@@ -10,7 +10,7 @@
         ResizeMode="NoResize"
         Topmost="True">
 
-    <Border Background="#1A1A2E" BorderBrush="{StaticResource PinkBrush}" BorderThickness="2" CornerRadius="15">
+    <Border Background="{DynamicResource DarkerBgBrush}" BorderBrush="{StaticResource PinkBrush}" BorderThickness="2" CornerRadius="15">
         <Grid Margin="25">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>  <!-- Header -->
@@ -47,7 +47,7 @@
             </Grid>
 
             <!-- Full Resolution Photo -->
-            <Border Grid.Row="1" CornerRadius="12" Background="#252542"
+            <Border Grid.Row="1" CornerRadius="12" Background="{DynamicResource PanelBgBrush}"
                     Margin="0,0,0,15" Height="280" ClipToBounds="True">
                 <Grid>
                     <Image x:Name="ImgFullPhoto" Stretch="Uniform"
@@ -60,7 +60,7 @@
             </Border>
 
             <!-- Objective/Requirement -->
-            <Border Grid.Row="2" Background="#252542" CornerRadius="10"
+            <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="10"
                     Padding="15" Margin="0,0,0,15">
                 <StackPanel>
                     <TextBlock Text="Objective" Foreground="#888888" FontSize="11" Margin="0,0,0,4"/>
@@ -70,7 +70,7 @@
             </Border>
 
             <!-- Completion Stats -->
-            <Border Grid.Row="3" Background="#252542" CornerRadius="10"
+            <Border Grid.Row="3" Background="{DynamicResource PanelBgBrush}" CornerRadius="10"
                     Padding="15" Margin="0,0,0,15">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -100,7 +100,7 @@
             </Border>
 
             <!-- User Note -->
-            <Border Grid.Row="4" Background="#252542" CornerRadius="10" Padding="15">
+            <Border Grid.Row="4" Background="{DynamicResource PanelBgBrush}" CornerRadius="10" Padding="15">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -136,7 +136,7 @@
                         </Style>
                     </Button.Style>
                 </Button>
-                <Button Content="Close" Background="#404060"
+                <Button Content="Close" Background="{DynamicResource PanelAccentBrush}"
                         Foreground="White" Padding="20,10"
                         BorderThickness="0" Cursor="Hand"
                         Click="BtnClose_Click">
@@ -144,7 +144,7 @@
                         <Style TargetType="Button">
                             <Style.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#505080"/>
+                                    <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
                                 </Trigger>
                             </Style.Triggers>
                         </Style>
