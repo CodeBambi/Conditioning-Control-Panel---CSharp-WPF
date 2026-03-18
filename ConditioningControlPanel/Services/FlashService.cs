@@ -997,52 +997,62 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private async void TriggerMultiplication(int maxHydra, int currentCount, int parentLifetimeMs, int parentRemainingMs, int parentGeneration)
         {
-            if (!_isRunning && !_oneShotActive) return;
-
-            var spaceAvailable = maxHydra - currentCount;
-            var numToSpawn = Math.Min(2, spaceAvailable);
-            
-            if (numToSpawn <= 0) return;
-
-            var settings = App.Settings.Current;
-            var images = GetNextImages(numToSpawn);
-            if (images.Count == 0) return;
-
-            var monitors = GetMonitors(settings.DualMonitorEnabled);
-            var scale = settings.ImageScale / 100.0;
-
-            // Decide hydra spawn lifetime based on the Linked timing setting~ 🔗✨
-            var hydraLifetimeMs = settings.HydraLinkedTiming
-                ? parentRemainingMs   // Linked: inherits whatever time the parent had left
-                : parentLifetimeMs;   // Independent: gets a fresh full-duration lifetime
-
-            var childGeneration = parentGeneration + 1;
-
-            var loadTasks = images.Select(imagePath => LoadImageAsync(imagePath)).ToArray();
-            var results = await Task.WhenAll(loadTasks);
-
-            var loadedImages = new List<LoadedImageData>();
-            foreach (var data in results)
+            try
             {
-                if (data != null)
+                if (!_isRunning && !_oneShotActive) return;
+
+                var spaceAvailable = maxHydra - currentCount;
+                var numToSpawn = Math.Min(2, spaceAvailable);
+
+                if (numToSpawn <= 0) return;
+
+                var settings = App.Settings.Current;
+                var images = GetNextImages(numToSpawn);
+                if (images.Count == 0) return;
+
+                var monitors = GetMonitors(settings.DualMonitorEnabled);
+                var scale = settings.ImageScale / 100.0;
+
+                // Decide hydra spawn lifetime based on the Linked timing setting~ 🔗✨
+                var hydraLifetimeMs = settings.HydraLinkedTiming
+                    ? parentRemainingMs   // Linked: inherits whatever time the parent had left
+                    : parentLifetimeMs;   // Independent: gets a fresh full-duration lifetime
+
+                var childGeneration = parentGeneration + 1;
+
+                var loadTasks = images.Select(imagePath => LoadImageAsync(imagePath)).ToArray();
+                var results = await Task.WhenAll(loadTasks);
+
+                // Safety: check app is still alive after await
+                if (System.Windows.Application.Current?.Dispatcher == null) return;
+
+                var loadedImages = new List<LoadedImageData>();
+                foreach (var data in results)
                 {
-                    var monitor = monitors[_random.Next(monitors.Count)];
-                    var geometry = CalculateGeometry(data.Width, data.Height, monitor, scale);
-                    data.Geometry = geometry;
-                    data.Monitor = monitor;
-                    loadedImages.Add(data);
+                    if (data != null)
+                    {
+                        var monitor = monitors[_random.Next(monitors.Count)];
+                        var geometry = CalculateGeometry(data.Width, data.Height, monitor, scale);
+                        data.Geometry = geometry;
+                        data.Monitor = monitor;
+                        loadedImages.Add(data);
+                    }
+                }
+
+                if (loadedImages.Count > 0)
+                {
+                    var capturedLifetime = hydraLifetimeMs;
+                    var capturedGeneration = childGeneration;
+                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        // Pass null for sound - NO AUDIO FOR HYDRA
+                        ShowImages(loadedImages, null, true, capturedLifetime, capturedGeneration);
+                    });
                 }
             }
-
-            if (loadedImages.Count > 0)
+            catch (Exception ex)
             {
-                var capturedLifetime = hydraLifetimeMs;
-                var capturedGeneration = childGeneration;
-                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    // Pass null for sound - NO AUDIO FOR HYDRA
-                    ShowImages(loadedImages, null, true, capturedLifetime, capturedGeneration);
-                });
+                App.Logger?.Error(ex, "FlashService: TriggerMultiplication failed");
             }
         }
 
