@@ -706,13 +706,14 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Convert relative position to screen coordinates, then to WPF DIPs
-                // size is in DIPs, so subtract centering offset after DPI conversion
+                // Convert relative position to screen coordinates (WPF DIPs)
+                // Use WorkingArea (excludes taskbar) and divide each component by DPI separately
                 var dpiScale = GetDpiForScreen(_screen);
-                var screenX = (_screen.Bounds.X + (relX * _screen.Bounds.Width)) / dpiScale - size / 2.0;
-                var screenY = (_screen.Bounds.Y + (relY * _screen.Bounds.Height)) / dpiScale - size / 2.0;
+                var area = _screen.WorkingArea;
+                var screenX = area.X / dpiScale + (relX * area.Width / dpiScale) - size / 2.0;
+                var screenY = area.Y / dpiScale + (relY * area.Height / dpiScale) - size / 2.0;
 
-                PlayPopSound();
+                // Sound plays on pop (in StartPopping), not on spawn
 
                 // Bubble is now a separate window (doesn't block video rendering)
                 var bubble = new CountBubble(_bubbleImage, size, screenX, screenY, _random,
