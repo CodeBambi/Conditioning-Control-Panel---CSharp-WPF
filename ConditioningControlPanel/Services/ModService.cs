@@ -218,11 +218,17 @@ namespace ConditioningControlPanel.Services
                     || uri.Scheme != "https")
                     return "Browser URL must be a valid HTTPS URL.";
             }
-            if (!string.IsNullOrEmpty(manifest.Browser?.DefaultVideoLinks))
+            if (manifest.Browser?.DefaultVideoLinks != null)
             {
-                if (!Uri.TryCreate(manifest.Browser.DefaultVideoLinks, UriKind.Absolute, out var uri)
-                    || uri.Scheme != "https")
-                    return "Video links URL must be a valid HTTPS URL.";
+                if (manifest.Browser.DefaultVideoLinks.Count > 100)
+                    return "Too many video links (max 100).";
+                foreach (var kvp in manifest.Browser.DefaultVideoLinks)
+                {
+                    if (kvp.Key.Length > 200) return "Video link name is too long (max 200).";
+                    if (kvp.Value.Length > 500) return "Video link URL is too long (max 500).";
+                    if (!Uri.TryCreate(kvp.Value, UriKind.Absolute, out var uri) || uri.Scheme != "https")
+                        return $"Video link URL must be HTTPS: '{kvp.Key}'";
+                }
             }
 
             // --- TextReplacements sanitization ---
@@ -277,6 +283,70 @@ namespace ConditioningControlPanel.Services
                                 return $"Personality prompt setting value too long for '{p.Name}'.";
                         }
                     }
+                }
+            }
+
+            // --- Supported avatar sets sanitization ---
+            if (manifest.SupportedAvatarSets != null)
+            {
+                if (manifest.SupportedAvatarSets.Count > 20)
+                    return "Too many supported avatar sets (max 20).";
+                // Only allow valid set numbers 1-7
+                manifest.SupportedAvatarSets = manifest.SupportedAvatarSets.Where(s => s >= 1 && s <= 7).Distinct().ToList();
+            }
+
+            // --- Custom avatar sets sanitization ---
+            if (manifest.CustomAvatarSets != null)
+            {
+                if (manifest.CustomAvatarSets.Count > 20)
+                    return "Too many custom avatar sets (max 20).";
+                foreach (var cs in manifest.CustomAvatarSets)
+                {
+                    if (cs.SetNumber < 8) return $"Custom avatar set number must be 8 or higher (got {cs.SetNumber}).";
+                    if (cs.UnlockLevel < 1 || cs.UnlockLevel > 9999) return $"Custom avatar set unlock level must be 1-9999.";
+                    if (cs.Label.Length > 100) cs.Label = cs.Label[..100];
+                }
+            }
+
+            // --- Tube layout sanitization ---
+            if (manifest.TubeLayout != null)
+            {
+                manifest.TubeLayout.AvatarOffsetX = Math.Clamp(manifest.TubeLayout.AvatarOffsetX, -1000, 1000);
+                manifest.TubeLayout.AvatarDetachedOffsetX = Math.Clamp(manifest.TubeLayout.AvatarDetachedOffsetX, -1000, 1000);
+                if (manifest.TubeLayout.AvatarScale.HasValue)
+                    manifest.TubeLayout.AvatarScale = Math.Clamp(manifest.TubeLayout.AvatarScale.Value, 0.1, 3.0);
+                manifest.TubeLayout.AvatarOffsetY = Math.Clamp(manifest.TubeLayout.AvatarOffsetY, -500, 500);
+                manifest.TubeLayout.AvatarDetachedOffsetY = Math.Clamp(manifest.TubeLayout.AvatarDetachedOffsetY, -500, 500);
+            }
+
+            // --- Enhancement overrides sanitization ---
+            if (manifest.EnhancementOverrides != null)
+            {
+                var eo = manifest.EnhancementOverrides;
+                // Cap string field lengths (200 chars for labels)
+                if (eo.TreeTitle?.Length > 200) eo.TreeTitle = eo.TreeTitle[..200];
+                if (eo.TreeSubtitle?.Length > 200) eo.TreeSubtitle = eo.TreeSubtitle[..200];
+                if (eo.TreeWarning?.Length > 200) eo.TreeWarning = eo.TreeWarning[..200];
+                if (eo.PointsLabel?.Length > 200) eo.PointsLabel = eo.PointsLabel[..200];
+                if (eo.StatsTitle?.Length > 200) eo.StatsTitle = eo.StatsTitle[..200];
+                if (eo.TabTooltip?.Length > 200) eo.TabTooltip = eo.TabTooltip[..200];
+                if (eo.PinkRushName?.Length > 200) eo.PinkRushName = eo.PinkRushName[..200];
+                if (eo.PinkRushDescription?.Length > 200) eo.PinkRushDescription = eo.PinkRushDescription[..200];
+                if (eo.LuckyFlashLabel?.Length > 200) eo.LuckyFlashLabel = eo.LuckyFlashLabel[..200];
+                if (eo.LuckyBubbleLabel?.Length > 200) eo.LuckyBubbleLabel = eo.LuckyBubbleLabel[..200];
+
+                // Tooltip dictionaries (max 30 entries, 500 chars per value)
+                if (eo.BoostTooltips != null)
+                {
+                    if (eo.BoostTooltips.Count > 30) return "Too many boost tooltips (max 30).";
+                    foreach (var kvp in eo.BoostTooltips)
+                        if (kvp.Value.Length > 500) return $"Boost tooltip too long for '{kvp.Key}' (max 500).";
+                }
+                if (eo.StatPillTooltips != null)
+                {
+                    if (eo.StatPillTooltips.Count > 30) return "Too many stat pill tooltips (max 30).";
+                    foreach (var kvp in eo.StatPillTooltips)
+                        if (kvp.Value.Length > 500) return $"Stat pill tooltip too long for '{kvp.Key}' (max 500).";
                 }
             }
 
@@ -350,6 +420,21 @@ namespace ConditioningControlPanel.Services
 
             // Clear resource cache
             ModResourceResolver.ClearCache();
+
+            // If the active companion isn't supported by the new mod, fall back to first supported companion
+            if (App.Companion != null && !IsCompanionSupported(App.Companion.ActiveCompanion))
+            {
+                // Find first supported companion
+                foreach (Models.CompanionId cid in Enum.GetValues(typeof(Models.CompanionId)))
+                {
+                    if (IsCompanionSupported(cid))
+                    {
+                        App.Companion.SwitchCompanion(cid);
+                        _log?.Information("Auto-switched companion to {CompanionId} (previous not supported by new mod)", cid);
+                        break;
+                    }
+                }
+            }
 
             _log?.Information("Mod activated: {ModId} (was {OldModId})", modId, oldModId);
             ModChanged?.Invoke(this, mod);
@@ -491,6 +576,13 @@ namespace ConditioningControlPanel.Services
             return _baseMod.Manifest.Browser?.DefaultUrl ?? "https://hypnotube.com/";
         }
 
+        public Dictionary<string, string>? GetVideoLinks()
+        {
+            var links = _activeMod.Manifest.Browser?.DefaultVideoLinks;
+            if (links != null && links.Count > 0) return links;
+            return _baseMod.Manifest.Browser?.DefaultVideoLinks;
+        }
+
         public bool ShowBambiCloudOption() =>
             _activeMod.Manifest.Browser?.ShowBambiCloudOption ?? _baseMod.Manifest.Browser?.ShowBambiCloudOption ?? true;
 
@@ -555,6 +647,77 @@ namespace ConditioningControlPanel.Services
             }
             return result;
         }
+
+        // Avatar set support — when specified, only listed sets appear in UI
+        public bool IsAvatarSetSupported(int setNumber)
+        {
+            var supported = _activeMod.Manifest.SupportedAvatarSets;
+            return supported == null || supported.Contains(setNumber);
+        }
+
+        public bool IsCompanionSupported(Models.CompanionId companionId)
+        {
+            var setNumber = companionId switch
+            {
+                Models.CompanionId.OGBambiSprite => 3,
+                Models.CompanionId.CultBunny => 4,
+                Models.CompanionId.BrainParasite => 5,
+                Models.CompanionId.BambiTrainer => 6,
+                Models.CompanionId.BimboCow => 7,
+                _ => 1
+            };
+            return IsAvatarSetSupported(setNumber);
+        }
+
+        // Custom avatar sets (8+)
+        public List<Models.CustomAvatarSet>? GetCustomAvatarSets() => _activeMod.Manifest.CustomAvatarSets;
+
+        public int? GetCustomAvatarSetUnlockLevel(int setNumber) =>
+            _activeMod.Manifest.CustomAvatarSets?.FirstOrDefault(c => c.SetNumber == setNumber)?.UnlockLevel;
+
+        // Tube layout offsets
+        public int GetAvatarOffsetX() => _activeMod.Manifest.TubeLayout?.AvatarOffsetX ?? 0;
+        public int GetAvatarDetachedOffsetX() => _activeMod.Manifest.TubeLayout?.AvatarDetachedOffsetX ?? 0;
+        public double GetAvatarScale() => _activeMod.Manifest.TubeLayout?.AvatarScale ?? 1.0;
+        public int GetAvatarOffsetY() => _activeMod.Manifest.TubeLayout?.AvatarOffsetY ?? 0;
+        public int GetAvatarDetachedOffsetY() => _activeMod.Manifest.TubeLayout?.AvatarDetachedOffsetY ?? 0;
+
+        // Enhancement overrides — check explicit override first, then fall back to MakeModAware(default)
+        public string GetEnhancementTreeTitle() =>
+            _activeMod.Manifest.EnhancementOverrides?.TreeTitle ?? MakeModAware("Bimbo Enhancement Tree");
+
+        public string GetEnhancementTreeSubtitle() =>
+            _activeMod.Manifest.EnhancementOverrides?.TreeSubtitle ?? MakeModAware("you earn sparkle points from leveling up + every 100 bubbles popped~");
+
+        public string GetEnhancementTreeWarning() =>
+            _activeMod.Manifest.EnhancementOverrides?.TreeWarning ?? MakeModAware("once you pick a path, there's no going back~");
+
+        public string GetPointsLabel() =>
+            _activeMod.Manifest.EnhancementOverrides?.PointsLabel ?? MakeModAware("Sparkle Points");
+
+        public string GetStatsTitle() =>
+            _activeMod.Manifest.EnhancementOverrides?.StatsTitle ?? MakeModAware("Ditzy Data Stats");
+
+        public string GetTabTooltip() =>
+            _activeMod.Manifest.EnhancementOverrides?.TabTooltip ?? MakeModAware("Bimbo Enhancement Tree");
+
+        public string GetPinkRushName() =>
+            _activeMod.Manifest.EnhancementOverrides?.PinkRushName ?? MakeModAware("PINK RUSH!");
+
+        public string GetPinkRushDescription() =>
+            _activeMod.Manifest.EnhancementOverrides?.PinkRushDescription ?? MakeModAware("3x XP for 60 seconds!");
+
+        public string GetLuckyFlashLabel() =>
+            _activeMod.Manifest.EnhancementOverrides?.LuckyFlashLabel ?? MakeModAware("Lucky Flash");
+
+        public string GetLuckyBubbleLabel() =>
+            _activeMod.Manifest.EnhancementOverrides?.LuckyBubbleLabel ?? MakeModAware("Lucky Bubble");
+
+        public string? GetBoostTooltip(string skillId) =>
+            _activeMod.Manifest.EnhancementOverrides?.BoostTooltips?.TryGetValue(skillId, out var tip) == true ? tip : null;
+
+        public string? GetStatPillTooltip(string skillId) =>
+            _activeMod.Manifest.EnhancementOverrides?.StatPillTooltips?.TryGetValue(skillId, out var tip) == true ? tip : null;
 
         /// <summary>
         /// Whether the active mod is the base (BambiSleep) mod.

@@ -10,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services;
 using Microsoft.Win32;
 using Newtonsoft.Json;
 
@@ -39,9 +40,33 @@ namespace ConditioningControlPanel
         private TextBox? _txtAttentionFail, _txtAttentionMercy, _txtBubbleRetry;
         private StackPanel? _replacementsPanel;
 
+        // Avatar set toggles and custom sets
+        private readonly Dictionary<int, CheckBox> _avatarSetCheckboxes = new();
+        private readonly Dictionary<int, StackPanel> _avatarSetContainers = new();
+        private StackPanel? _avatarSetsParent;
+        private readonly List<(int SetNum, TextBox LabelBox, TextBox LevelBox, StackPanel Container)> _customAvatarSets = new();
+        private int _nextCustomSetNum = 8;
+
+        // Audio slots and voice lines
+        private readonly Dictionary<string, string?> _audioSlots = new();
+        private readonly Dictionary<string, TextBlock> _audioFileLabels = new();
+        private readonly List<(string FilePath, StackPanel Row)> _voiceLines = new();
+        private StackPanel? _voiceLinesPanel;
+        private NAudio.Wave.WaveOutEvent? _previewPlayer;
+        private NAudio.Wave.AudioFileReader? _previewReader;
+        private Button? _activePlayButton;
+
+        // Browser / video links
+        private TextBox? _txtBrowserUrl, _txtBrowserSiteName;
+        private CheckBox? _chkShowBambiCloud;
+        private readonly List<(TextBox Name, TextBox Url)> _videoLinks = new();
+        private StackPanel? _videoLinksPanel;
+
         private string _activeSectionKey = "";
         private readonly Dictionary<string, Button> _sidebarButtons = new();
         private string? _loadedTempDir;
+        private TutorialOverlay? _tutorialOverlay;
+        private readonly bool _startWithTutorial;
 
         // ─── Slot Definitions ────────────────────────────────────
         private static readonly (string Key, string Name)[] AchievementSlots =
@@ -142,12 +167,6 @@ namespace ConditioningControlPanel
             ("tube2.png", "Tube Alt"),
             ("spiral.gif", "Spiral GIF"),
             ("logo.png", "Logo"),
-            ("logo2.png", "Logo Alt"),
-            ("speechbubble1.png", "Speech Bubble 1"),
-            ("speechbubble2.png", "Speech Bubble 2"),
-            ("Cards/fireworks.png", "Card: Fireworks"),
-            ("Cards/hearth.png", "Card: Hearth"),
-            ("Cards/spotlight.png", "Card: Spotlight"),
         };
 
         private static readonly string[] PhraseCategories =
@@ -170,6 +189,8 @@ namespace ConditioningControlPanel
             ("skills", "Skills"),
             ("avatars", "Avatars"),
             ("uiassets", "UI Assets"),
+            ("audio", "Audio"),
+            ("browser", "Browser"),
             ("triggers", "Triggers"),
             ("messages", "Messages"),
             ("phrases", "Phrases"),
@@ -177,14 +198,21 @@ namespace ConditioningControlPanel
         };
 
         // ─── Constructor ─────────────────────────────────────────
-        public ModCreatorWindow()
+        public ModCreatorWindow(bool startWithTutorial = false)
         {
+            _startWithTutorial = startWithTutorial;
             InitializeComponent();
             BuildSidebar();
             BuildAllSections();
             PopulateDefaults();
+            LoadActiveModAsPreset();
             NavigateToSection("info");
             UpdateStatusBar();
+
+            if (_startWithTutorial)
+            {
+                Loaded += (_, _) => LaunchTutorial();
+            }
         }
 
         // ─── Title Bar ──────────────────────────────────────────
@@ -197,9 +225,43 @@ namespace ConditioningControlPanel
         private void BtnMinimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
         private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
 
+        private void BtnHelp_Click(object sender, RoutedEventArgs e) => LaunchTutorial();
+
+        private void LaunchTutorial()
+        {
+            if (_tutorialOverlay != null) return;
+            if (App.Tutorial == null) return;
+
+            App.Tutorial.Start(TutorialType.Modding);
+
+            // Wire OnActivate callbacks: steps with RequiresTab="mod:xxx" navigate to that section
+            foreach (var step in App.Tutorial.CurrentSteps)
+            {
+                if (step.RequiresTab != null && step.RequiresTab.StartsWith("mod:"))
+                {
+                    var sectionKey = step.RequiresTab.Substring(4);
+                    step.OnActivate = () => NavigateToSection(sectionKey);
+                }
+            }
+
+            // Fire the first step's callback
+            App.Tutorial.CurrentStep?.OnActivate?.Invoke();
+
+            _tutorialOverlay = new TutorialOverlay(this, App.Tutorial);
+            _tutorialOverlay.Closed += (_, _) => _tutorialOverlay = null;
+            _tutorialOverlay.Show();
+        }
+
         protected override void OnClosed(EventArgs e)
         {
             base.OnClosed(e);
+            StopAudioPreview();
+            if (_tutorialOverlay != null)
+            {
+                App.Tutorial?.Skip();
+                _tutorialOverlay.Close();
+                _tutorialOverlay = null;
+            }
             CleanupTempDir();
         }
 
@@ -263,11 +325,13 @@ namespace ConditioningControlPanel
             BuildInfoSection();
             BuildThemeSection();
             BuildIdentitySection();
-            BuildImageSlotsSection("achievements", "Achievements", "Achievement badge images", AchievementSlots);
-            BuildImageSlotsSection("features", "Features", "Feature icon images", FeatureSlots);
-            BuildImageSlotsSection("skills", "Skills", "Skill tree icons", SkillSlots);
+            BuildImageSlotsSection("achievements", "Achievements", "Custom badge images for the built-in achievements shown in the Trophy Case. Use square PNGs (128x128 recommended). Achievement display names are changed via Text Replacements, not here.", AchievementSlots);
+            BuildImageSlotsSection("features", "Features", "Icons for the feature tiles in the main control panel tabs (Flashes, Videos, Overlays, etc). Use square PNGs with transparent backgrounds. Feature display names are changed via Text Replacements.", FeatureSlots);
+            BuildImageSlotsSection("skills", "Skills", "Icons for the nodes in the skill/enhancement tree. Each icon represents a specific unlockable skill. Use square PNGs. Skill display names are changed via Text Replacements.", SkillSlots);
             BuildAvatarsSection();
-            BuildImageSlotsSection("uiassets", "UI Assets", "Miscellaneous UI images", UiAssetSlots);
+            BuildImageSlotsSection("uiassets", "UI Assets", "Miscellaneous UI images: Bubble is the floating orb in the pop minigame, Tube is the glass container around the avatar, Spiral GIF is the hypnotic overlay animation, and Logo replaces the app logo.", UiAssetSlots);
+            BuildAudioSection();
+            BuildBrowserSection();
             BuildTriggersSection();
             BuildMessagesSection();
             BuildPhrasesSection();
@@ -295,6 +359,21 @@ namespace ConditioningControlPanel
                 FontSize = 16,
                 FontWeight = FontWeights.Bold,
                 Margin = new Thickness(0, 0, 0, 12),
+            };
+        }
+
+        private static TextBlock CreateSectionDescription(string text)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#909090")),
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, -6, 0, 14),
+                MaxWidth = 600,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                LineHeight = 18,
             };
         }
 
@@ -404,6 +483,7 @@ namespace ConditioningControlPanel
             panel.Child = stack;
 
             stack.Children.Add(CreateSectionHeader("Mod Info"));
+            stack.Children.Add(CreateSectionDescription("Basic metadata for your mod package. Name and author are required. The preview image appears as your mod's thumbnail in the mod browser."));
 
             stack.Children.Add(CreateFieldLabel("Mod Name *"));
             _txtModName = CreateDarkTextBox();
@@ -440,6 +520,7 @@ namespace ConditioningControlPanel
             panel.Child = stack;
 
             stack.Children.Add(CreateSectionHeader("Theme Colors"));
+            stack.Children.Add(CreateSectionDescription("Colors applied across the entire app UI when your mod is active. Accent is the primary highlight (buttons, links, progress bars). Filter Color tints the screen overlay. Keep sufficient contrast between Background/Panel/Surface or text becomes unreadable."));
 
             (_swatchAccent, _txtAccentHex) = CreateColorRow(stack, "Accent Color", "#FF69B4");
             (_swatchLight, _txtLightHex) = CreateColorRow(stack, "Light Color", "#FFB6C1");
@@ -547,29 +628,30 @@ namespace ConditioningControlPanel
             panel.Child = stack;
 
             stack.Children.Add(CreateSectionHeader("Identity"));
+            stack.Children.Add(CreateSectionDescription("Renames core concepts throughout the app. Companion Name replaces the avatar's name in speech bubbles. User Term is what the companion calls you. Mode Display Name appears in the title bar. Talk To / Takeover labels change the companion interaction buttons."));
 
             stack.Children.Add(CreateFieldLabel("Companion Name"));
-            _txtCompanionName = CreateDarkTextBox("BambiSprite");
+            _txtCompanionName = CreateDarkTextBox("");
             _txtCompanionName.Width = 250;
             stack.Children.Add(_txtCompanionName);
 
             stack.Children.Add(CreateFieldLabel("User Term"));
-            _txtUserTerm = CreateDarkTextBox("Bambi");
+            _txtUserTerm = CreateDarkTextBox("");
             _txtUserTerm.Width = 250;
             stack.Children.Add(_txtUserTerm);
 
             stack.Children.Add(CreateFieldLabel("Mode Display Name"));
-            _txtModeDisplayName = CreateDarkTextBox("Bambi Sleep");
+            _txtModeDisplayName = CreateDarkTextBox("");
             _txtModeDisplayName.Width = 250;
             stack.Children.Add(_txtModeDisplayName);
 
             stack.Children.Add(CreateFieldLabel("Talk To Label"));
-            _txtTalkToLabel = CreateDarkTextBox("Talk to Bambi");
+            _txtTalkToLabel = CreateDarkTextBox("");
             _txtTalkToLabel.Width = 250;
             stack.Children.Add(_txtTalkToLabel);
 
             stack.Children.Add(CreateFieldLabel("Takeover Label"));
-            _txtTakeoverLabel = CreateDarkTextBox("Bambi Takeover");
+            _txtTakeoverLabel = CreateDarkTextBox("");
             _txtTakeoverLabel.Width = 250;
             stack.Children.Add(_txtTakeoverLabel);
         }
@@ -593,7 +675,8 @@ namespace ConditioningControlPanel
             var wrap = new WrapPanel();
             foreach (var (slotKey, name) in slots)
             {
-                wrap.Children.Add(CreateImageSlot(slotKey, name));
+                var displayName = App.Mods?.MakeModAware(name) ?? name;
+                wrap.Children.Add(CreateImageSlot(slotKey, displayName));
             }
             stack.Children.Add(wrap);
         }
@@ -604,19 +687,43 @@ namespace ConditioningControlPanel
             var panel = CreateSectionPanel("avatars");
             var stack = new StackPanel();
             panel.Child = stack;
+            _avatarSetsParent = stack;
 
             stack.Children.Add(CreateSectionHeader("Avatars"));
             stack.Children.Add(new TextBlock
             {
-                Text = "7 avatar sets with 4 poses each",
+                Text = "Toggle which avatar sets your mod supports. Uncheck sets you don't have images for.",
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#808080")),
                 FontSize = 12,
                 Margin = new Thickness(0, 0, 0, 8),
             });
 
+            // Checkbox row for toggling base sets
+            var checkboxRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 12) };
+            foreach (var (setLabel, _, setNum) in AvatarSets)
+            {
+                var cb = new CheckBox
+                {
+                    Content = $"Set {setNum}: {setLabel}",
+                    IsChecked = true,
+                    Foreground = Brushes.White,
+                    Margin = new Thickness(0, 0, 16, 4),
+                    FontSize = 11,
+                    VerticalContentAlignment = VerticalAlignment.Center
+                };
+                var capturedSetNum = setNum;
+                cb.Checked += (_, _) => ToggleAvatarSet(capturedSetNum, true);
+                cb.Unchecked += (_, _) => ToggleAvatarSet(capturedSetNum, false);
+                _avatarSetCheckboxes[setNum] = cb;
+                checkboxRow.Children.Add(cb);
+            }
+            stack.Children.Add(checkboxRow);
+
+            // Build each base set with a container for toggling visibility
             foreach (var (setLabel, prefix, setNum) in AvatarSets)
             {
-                stack.Children.Add(CreateSubHeader($"Set {setNum}: {setLabel}"));
+                var container = new StackPanel();
+                container.Children.Add(CreateSubHeader($"Set {setNum}: {setLabel}"));
 
                 var wrap = new WrapPanel();
                 for (int pose = 1; pose <= 4; pose++)
@@ -624,10 +731,615 @@ namespace ConditioningControlPanel
                     var filename = setNum == 1
                         ? $"avatar_pose{pose}.png"
                         : $"{prefix}_pose{pose}.png";
-                    wrap.Children.Add(CreateImageSlot($"avatars/{filename}", $"Pose {pose}"));
+                    wrap.Children.Add(CreateImageSlot(filename, $"Pose {pose}"));
                 }
-                stack.Children.Add(wrap);
+                container.Children.Add(wrap);
+                _avatarSetContainers[setNum] = container;
+                stack.Children.Add(container);
             }
+
+            // Add Custom Set button
+            var addBtn = new Button
+            {
+                Content = "+ Add Custom Avatar Set",
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2A2A4A")),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
+                Padding = new Thickness(16, 8, 16, 8),
+                Cursor = Cursors.Hand,
+                FontSize = 12,
+                Margin = new Thickness(0, 12, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            addBtn.Click += (_, _) => AddCustomAvatarSet();
+            stack.Children.Add(addBtn);
+        }
+
+        private void ToggleAvatarSet(int setNum, bool enabled)
+        {
+            if (_avatarSetContainers.TryGetValue(setNum, out var container))
+                container.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void AddCustomAvatarSet(int setNum = 0, string? label = null, int unlockLevel = 200)
+        {
+            if (setNum == 0) setNum = _nextCustomSetNum++;
+            if (setNum >= _nextCustomSetNum) _nextCustomSetNum = setNum + 1;
+
+            var container = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+
+            // Header row with label, level, and remove button
+            var headerRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
+            headerRow.Children.Add(new TextBlock
+            {
+                Text = $"Custom Set {setNum}:  Label ",
+                Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                FontSize = 12, VerticalAlignment = VerticalAlignment.Center
+            });
+            var lblBox = CreateDarkTextBox(label ?? $"Set {setNum}");
+            lblBox.Width = 150;
+            headerRow.Children.Add(lblBox);
+
+            headerRow.Children.Add(new TextBlock
+            {
+                Text = "  Unlock Level ",
+                Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                FontSize = 12, VerticalAlignment = VerticalAlignment.Center
+            });
+            var lvlBox = CreateDarkTextBox(unlockLevel.ToString());
+            lvlBox.Width = 60;
+            headerRow.Children.Add(lvlBox);
+
+            var capturedSetNum = setNum;
+            var capturedContainer = container;
+            var removeBtn = new Button
+            {
+                Content = "✕ Remove", Background = Brushes.Transparent,
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 100)),
+                BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
+                FontSize = 11, Margin = new Thickness(12, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            removeBtn.Click += (_, _) =>
+            {
+                _avatarSetsParent?.Children.Remove(capturedContainer);
+                _customAvatarSets.RemoveAll(c => c.SetNum == capturedSetNum);
+            };
+            headerRow.Children.Add(removeBtn);
+            container.Children.Add(headerRow);
+
+            // 4 pose image slots
+            var wrap = new WrapPanel();
+            for (int pose = 1; pose <= 4; pose++)
+                wrap.Children.Add(CreateImageSlot($"avatar{setNum}_pose{pose}.png", $"Pose {pose}"));
+            container.Children.Add(wrap);
+
+            _customAvatarSets.Add((setNum, lblBox, lvlBox, container));
+
+            // Insert before the "Add Custom Set" button (last child)
+            if (_avatarSetsParent != null)
+                _avatarSetsParent.Children.Insert(_avatarSetsParent.Children.Count - 1, container);
+        }
+
+        // ─── Audio Section ──────────────────────────────────────
+        private void BuildAudioSection()
+        {
+            var panel = CreateSectionPanel("audio");
+            var stack = new StackPanel();
+            panel.Child = stack;
+
+            stack.Children.Add(CreateSectionHeader("Audio"));
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Replace companion sounds, bubble pops, and add custom voice lines. Voice line filenames become the spoken text.",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#808080")),
+                FontSize = 12,
+                Margin = new Thickness(0, 0, 0, 12),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            // Sub-group A: Companion Sounds (Giggles)
+            stack.Children.Add(CreateSubHeader("Companion Sounds"));
+            for (int i = 1; i <= 8; i++)
+            {
+                var key = $"sounds/giggle{i}.wav";
+                stack.Children.Add(CreateAudioSlot(key, $"Giggle {i}"));
+            }
+
+            // Sub-group B: Bubble Pop Sounds
+            stack.Children.Add(CreateSubHeader("Bubble Pop Sounds"));
+            foreach (var name in new[] { "Pop", "Pop2", "Pop3" })
+            {
+                var key = $"sounds/bubbles/{name}.wav";
+                stack.Children.Add(CreateAudioSlot(key, name));
+            }
+
+            // Sub-group C: Lucky Bubble Chimes
+            stack.Children.Add(CreateSubHeader("Lucky Bubble Chimes"));
+            for (int i = 1; i <= 3; i++)
+            {
+                var key = $"sounds/chime{i}.mp3";
+                stack.Children.Add(CreateAudioSlot(key, $"Chime {i}"));
+            }
+
+            // Sub-group D: Voice Lines
+            stack.Children.Add(CreateSubHeader("Voice Lines"));
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Each file's name becomes the text the companion speaks. E.g. \"COMPLY.mp3\" → companion says \"COMPLY\".",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#606080")),
+                FontSize = 11,
+                Margin = new Thickness(0, 0, 0, 8),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            _voiceLinesPanel = new StackPanel();
+            var voiceScroll = new ScrollViewer
+            {
+                MaxHeight = 300,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = _voiceLinesPanel,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            stack.Children.Add(voiceScroll);
+
+            var addVoiceBtn = new Button
+            {
+                Content = "+ Add Voice Lines",
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2A2A4A")),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
+                Padding = new Thickness(16, 8, 16, 8),
+                Cursor = Cursors.Hand,
+                FontSize = 12,
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            addVoiceBtn.Click += (_, _) =>
+            {
+                var ofd = new OpenFileDialog
+                {
+                    Title = "Select voice line audio files",
+                    Filter = "Audio Files|*.mp3;*.wav;*.ogg;*.flac|All Files|*.*",
+                    Multiselect = true
+                };
+                if (ofd.ShowDialog() == true)
+                {
+                    foreach (var file in ofd.FileNames)
+                        AddVoiceLineRow(file);
+                    UpdateStatusBar();
+                }
+            };
+            stack.Children.Add(addVoiceBtn);
+        }
+
+        private Grid CreateAudioSlot(string resourceKey, string displayName)
+        {
+            _audioSlots[resourceKey] = null;
+
+            var grid = new Grid
+            {
+                Margin = new Thickness(0, 0, 0, 4),
+                Height = 32
+            };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // Label
+            var label = new TextBlock
+            {
+                Text = displayName,
+                Foreground = new SolidColorBrush(Color.FromRgb(192, 192, 192)),
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(label, 0);
+            grid.Children.Add(label);
+
+            // Filename display
+            var fileLabel = new TextBlock
+            {
+                Text = "No file",
+                Foreground = new SolidColorBrush(Color.FromRgb(96, 96, 128)),
+                FontSize = 11,
+                FontStyle = FontStyles.Italic,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            _audioFileLabels[resourceKey] = fileLabel;
+            Grid.SetColumn(fileLabel, 1);
+            grid.Children.Add(fileLabel);
+
+            // Play button
+            var playBtn = new Button
+            {
+                Content = "▶",
+                Width = 28, Height = 28,
+                Background = Brushes.Transparent,
+                Foreground = new SolidColorBrush(Color.FromRgb(100, 200, 100)),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                FontSize = 12,
+                Visibility = Visibility.Collapsed,
+                ToolTip = "Play preview"
+            };
+            var capturedKey = resourceKey;
+            playBtn.Click += (_, _) => ToggleAudioPreview(capturedKey, playBtn);
+            Grid.SetColumn(playBtn, 2);
+            grid.Children.Add(playBtn);
+
+            // Browse button
+            var browseBtn = new Button
+            {
+                Content = "Browse",
+                Background = new SolidColorBrush(Color.FromRgb(50, 50, 80)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                FontSize = 10,
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(4, 0, 0, 0)
+            };
+            browseBtn.Click += (_, _) =>
+            {
+                var ofd = new OpenFileDialog
+                {
+                    Title = $"Select audio for {displayName}",
+                    Filter = "Audio Files|*.mp3;*.wav;*.ogg;*.flac|All Files|*.*"
+                };
+                if (ofd.ShowDialog() == true)
+                    SetAudioSlot(resourceKey, ofd.FileName);
+            };
+            Grid.SetColumn(browseBtn, 3);
+            grid.Children.Add(browseBtn);
+
+            // Clear button
+            var clearBtn = new Button
+            {
+                Content = "✕",
+                Width = 24, Height = 24,
+                Background = Brushes.Transparent,
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 100)),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                FontSize = 10,
+                Margin = new Thickness(4, 0, 0, 0),
+                Visibility = Visibility.Collapsed
+            };
+            clearBtn.Click += (_, _) => ClearAudioSlot(resourceKey);
+            Grid.SetColumn(clearBtn, 4);
+            grid.Children.Add(clearBtn);
+
+            return grid;
+        }
+
+        private void SetAudioSlot(string key, string filePath)
+        {
+            _audioSlots[key] = filePath;
+            if (_audioFileLabels.TryGetValue(key, out var label))
+            {
+                label.Text = Path.GetFileName(filePath);
+                label.FontStyle = FontStyles.Normal;
+                label.Foreground = Brushes.White;
+            }
+
+            // Show play and clear buttons
+            var grid = label?.Parent as Grid;
+            if (grid != null)
+            {
+                foreach (var child in grid.Children)
+                {
+                    if (child is Button btn)
+                    {
+                        if (btn.Content?.ToString() == "▶" || btn.Content?.ToString() == "⏹")
+                            btn.Visibility = Visibility.Visible;
+                        if (btn.Content?.ToString() == "✕")
+                            btn.Visibility = Visibility.Visible;
+                    }
+                }
+            }
+            UpdateStatusBar();
+        }
+
+        private void ClearAudioSlot(string key)
+        {
+            _audioSlots[key] = null;
+            if (_audioFileLabels.TryGetValue(key, out var label))
+            {
+                label.Text = "No file";
+                label.FontStyle = FontStyles.Italic;
+                label.Foreground = new SolidColorBrush(Color.FromRgb(96, 96, 128));
+            }
+
+            var grid = label?.Parent as Grid;
+            if (grid != null)
+            {
+                foreach (var child in grid.Children)
+                {
+                    if (child is Button btn && (btn.Content?.ToString() == "▶" || btn.Content?.ToString() == "⏹" || btn.Content?.ToString() == "✕"))
+                        btn.Visibility = Visibility.Collapsed;
+                }
+            }
+            UpdateStatusBar();
+        }
+
+        private void AddVoiceLineRow(string filePath)
+        {
+            // Check for duplicate filenames
+            var fileName = Path.GetFileName(filePath);
+            if (_voiceLines.Any(v => Path.GetFileName(v.FilePath).Equals(fileName, StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 3) };
+
+            // Play button
+            var playBtn = new Button
+            {
+                Content = "▶",
+                Width = 24, Height = 24,
+                Background = Brushes.Transparent,
+                Foreground = new SolidColorBrush(Color.FromRgb(100, 200, 100)),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var capturedPath = filePath;
+            playBtn.Click += (_, _) => ToggleAudioPreview(capturedPath, playBtn);
+            row.Children.Add(playBtn);
+
+            // Filename (= spoken text)
+            row.Children.Add(new TextBlock
+            {
+                Text = Path.GetFileNameWithoutExtension(filePath),
+                Foreground = Brushes.White,
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(6, 0, 0, 0)
+            });
+
+            // Extension tag
+            row.Children.Add(new TextBlock
+            {
+                Text = Path.GetExtension(filePath),
+                Foreground = new SolidColorBrush(Color.FromRgb(96, 96, 128)),
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(4, 0, 0, 0)
+            });
+
+            // Remove button
+            var removeBtn = new Button
+            {
+                Content = "✕",
+                Width = 20, Height = 20,
+                Background = Brushes.Transparent,
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 100)),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                FontSize = 9,
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var capturedRow = row;
+            removeBtn.Click += (_, _) =>
+            {
+                _voiceLinesPanel?.Children.Remove(capturedRow);
+                _voiceLines.RemoveAll(v => v.Row == capturedRow);
+                UpdateStatusBar();
+            };
+            row.Children.Add(removeBtn);
+
+            _voiceLines.Add((filePath, row));
+            _voiceLinesPanel?.Children.Add(row);
+        }
+
+        private void ToggleAudioPreview(string keyOrPath, Button playBtn)
+        {
+            // If this button is already playing, stop it
+            if (_activePlayButton == playBtn && _previewPlayer?.PlaybackState == NAudio.Wave.PlaybackState.Playing)
+            {
+                StopAudioPreview();
+                return;
+            }
+
+            StopAudioPreview();
+
+            // Resolve file path
+            string? filePath;
+            if (_audioSlots.TryGetValue(keyOrPath, out var slotPath))
+                filePath = slotPath;
+            else
+                filePath = keyOrPath; // Direct path for voice lines
+
+            if (filePath == null || !File.Exists(filePath)) return;
+
+            try
+            {
+                _previewReader = new NAudio.Wave.AudioFileReader(filePath);
+                _previewPlayer = new NAudio.Wave.WaveOutEvent();
+                _previewPlayer.Init(_previewReader);
+                _previewPlayer.Play();
+                _activePlayButton = playBtn;
+                playBtn.Content = "⏹";
+                playBtn.Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 100));
+
+                _previewPlayer.PlaybackStopped += (_, _) =>
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        playBtn.Content = "▶";
+                        playBtn.Foreground = new SolidColorBrush(Color.FromRgb(100, 200, 100));
+                        _activePlayButton = null;
+                    });
+                };
+            }
+            catch { /* invalid audio */ }
+        }
+
+        private void StopAudioPreview()
+        {
+            if (_activePlayButton != null)
+            {
+                _activePlayButton.Content = "▶";
+                _activePlayButton.Foreground = new SolidColorBrush(Color.FromRgb(100, 200, 100));
+                _activePlayButton = null;
+            }
+            _previewPlayer?.Stop();
+            _previewPlayer?.Dispose();
+            _previewReader?.Dispose();
+            _previewPlayer = null;
+            _previewReader = null;
+        }
+
+        private void LoadAudioFromResources(string resourcesDir)
+        {
+            // Load fixed audio slots
+            foreach (var key in _audioSlots.Keys.ToList())
+            {
+                var audioPath = Path.Combine(resourcesDir, key.Replace('/', Path.DirectorySeparatorChar));
+                if (!File.Exists(audioPath))
+                {
+                    var altExt = Path.GetExtension(audioPath).ToLower() == ".wav" ? ".mp3" : ".wav";
+                    audioPath = Path.ChangeExtension(audioPath, altExt);
+                }
+                if (File.Exists(audioPath))
+                    SetAudioSlot(key, audioPath);
+            }
+
+            // Load voice lines
+            var voiceDir = Path.Combine(resourcesDir, "sounds", "flashes_audio");
+            if (Directory.Exists(voiceDir))
+            {
+                foreach (var ext in new[] { "*.mp3", "*.wav", "*.ogg", "*.flac" })
+                    foreach (var file in Directory.GetFiles(voiceDir, ext).OrderBy(f => f))
+                        AddVoiceLineRow(file);
+            }
+        }
+
+        // ─── Browser Section ─────────────────────────────────────
+        private void BuildBrowserSection()
+        {
+            var panel = CreateSectionPanel("browser");
+            var stack = new StackPanel();
+            panel.Child = stack;
+
+            stack.Children.Add(CreateSectionHeader("Browser"));
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Configure the embedded browser defaults and video links the companion will suggest.",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#808080")),
+                FontSize = 12,
+                Margin = new Thickness(0, 0, 0, 12),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            // Default URL
+            stack.Children.Add(CreateFieldLabel("Default Browser URL"));
+            _txtBrowserUrl = CreateDarkTextBox("");
+            _txtBrowserUrl.Width = 400;
+            stack.Children.Add(_txtBrowserUrl);
+
+            // Site Name
+            stack.Children.Add(CreateFieldLabel("Site Name"));
+            _txtBrowserSiteName = CreateDarkTextBox("");
+            _txtBrowserSiteName.Width = 250;
+            stack.Children.Add(_txtBrowserSiteName);
+
+            // Show BambiCloud option
+            _chkShowBambiCloud = new CheckBox
+            {
+                Content = "Show BambiCloud option in browser menu",
+                IsChecked = true,
+                Foreground = Brushes.White,
+                Margin = new Thickness(0, 8, 0, 12),
+                FontSize = 12
+            };
+            stack.Children.Add(_chkShowBambiCloud);
+
+            // Video Links
+            stack.Children.Add(CreateSubHeader("Video Links"));
+            stack.Children.Add(new TextBlock
+            {
+                Text = "Video name → URL pairs. The companion will suggest these videos and make them clickable in speech bubbles.",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#606080")),
+                FontSize = 11,
+                Margin = new Thickness(0, 0, 0, 8),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            _videoLinksPanel = new StackPanel();
+            var linksScroll = new ScrollViewer
+            {
+                MaxHeight = 400,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = _videoLinksPanel,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            stack.Children.Add(linksScroll);
+
+            var addLinkBtn = new Button
+            {
+                Content = "+ Add Video Link",
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2A2A4A")),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
+                Padding = new Thickness(16, 8, 16, 8),
+                Cursor = Cursors.Hand,
+                FontSize = 12,
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            addLinkBtn.Click += (_, _) => AddVideoLinkRow("", "");
+            stack.Children.Add(addLinkBtn);
+        }
+
+        private void AddVideoLinkRow(string name, string url)
+        {
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var nameBox = CreateDarkTextBox(name);
+            nameBox.Tag = "VideoName";
+            Grid.SetColumn(nameBox, 0);
+            row.Children.Add(nameBox);
+
+            var urlBox = CreateDarkTextBox(url);
+            urlBox.Tag = "VideoUrl";
+            urlBox.Foreground = new SolidColorBrush(Color.FromRgb(100, 200, 255));
+            Grid.SetColumn(urlBox, 2);
+            row.Children.Add(urlBox);
+
+            var removeBtn = new Button
+            {
+                Content = "✕",
+                Width = 24, Height = 24,
+                Background = Brushes.Transparent,
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 100)),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                FontSize = 10,
+                Margin = new Thickness(4, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var capturedRow = row;
+            removeBtn.Click += (_, _) =>
+            {
+                _videoLinksPanel?.Children.Remove(capturedRow);
+                _videoLinks.RemoveAll(v => v.Name == nameBox && v.Url == urlBox);
+            };
+            Grid.SetColumn(removeBtn, 3);
+            row.Children.Add(removeBtn);
+
+            _videoLinks.Add((nameBox, urlBox));
+            _videoLinksPanel?.Children.Add(row);
         }
 
         // ─── Triggers Section ────────────────────────────────────
@@ -638,24 +1350,25 @@ namespace ConditioningControlPanel
             panel.Child = stack;
 
             stack.Children.Add(CreateSectionHeader("Triggers"));
+            stack.Children.Add(CreateSectionDescription("Text displayed as large fullscreen overlays during sessions. These appear before mandatory videos and during special events. Keep them short and punchy -- they're shown briefly in large centered text."));
 
             stack.Children.Add(CreateFieldLabel("Freeze Trigger"));
-            _txtFreeze = CreateDarkTextBox("Bambi Freeze");
+            _txtFreeze = CreateDarkTextBox("");
             _txtFreeze.Width = 350;
             stack.Children.Add(_txtFreeze);
 
             stack.Children.Add(CreateFieldLabel("Reset Trigger"));
-            _txtReset = CreateDarkTextBox("Bambi Reset");
+            _txtReset = CreateDarkTextBox("");
             _txtReset.Width = 350;
             stack.Children.Add(_txtReset);
 
             stack.Children.Add(CreateFieldLabel("Cum & Collapse"));
-            _txtCumCollapse = CreateDarkTextBox("BAMBI CUM AND COLLAPSE");
+            _txtCumCollapse = CreateDarkTextBox("");
             _txtCumCollapse.Width = 350;
             stack.Children.Add(_txtCumCollapse);
 
             stack.Children.Add(CreateFieldLabel("Autonomy On"));
-            _txtAutonomyOn = CreateDarkTextBox("Bambi takes over~ *giggles*");
+            _txtAutonomyOn = CreateDarkTextBox("");
             _txtAutonomyOn.Width = 350;
             stack.Children.Add(_txtAutonomyOn);
         }
@@ -668,6 +1381,7 @@ namespace ConditioningControlPanel
             panel.Child = stack;
 
             stack.Children.Add(CreateSectionHeader("Messages"));
+            stack.Children.Add(CreateSectionDescription("System messages shown during minigames and attention checks. These appear as overlays when the user fails a video check or miscounts bubbles. Use \\n for line breaks."));
 
             stack.Children.Add(CreateFieldLabel("Attention Check Fail"));
             _txtAttentionFail = CreateDarkTextBox(multiline: true, height: 50);
@@ -693,13 +1407,7 @@ namespace ConditioningControlPanel
             panel.Child = stack;
 
             stack.Children.Add(CreateSectionHeader("Phrases"));
-            stack.Children.Add(new TextBlock
-            {
-                Text = "Edit phrases for each category. These are used by the companion for speech bubbles.",
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#808080")),
-                FontSize = 12,
-                Margin = new Thickness(0, 0, 0, 12),
-            });
+            stack.Children.Add(CreateSectionDescription("What the companion says in speech bubbles during different situations. Each category triggers contextually -- Gaming/Browsing/Social fire based on the active window, FlashPre before showing images, LevelUp on rank-up, etc. Use {0} as a placeholder for the detected app/site name in activity categories. Empty categories fall back to defaults."));
 
             foreach (var cat in PhraseCategories)
             {
@@ -844,14 +1552,7 @@ namespace ConditioningControlPanel
             panel.Child = stack;
 
             stack.Children.Add(CreateSectionHeader("Text Replacements"));
-            stack.Children.Add(new TextBlock
-            {
-                Text = "Longer strings are matched first during replacement.",
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#808080")),
-                FontSize = 12,
-                FontStyle = FontStyles.Italic,
-                Margin = new Thickness(0, 0, 0, 12),
-            });
+            stack.Children.Add(CreateSectionDescription("Find-and-replace pairs applied globally across the entire UI -- button labels, achievement names, quest descriptions, companion speech, tab headers, and more. Longer match strings are applied first to prevent partial replacements. This is the most powerful theming tool for completely re-skinning the app's vocabulary."));
 
             _replacementsPanel = new StackPanel();
             stack.Children.Add(_replacementsPanel);
@@ -1164,27 +1865,49 @@ namespace ConditioningControlPanel
         // ─── Populate Defaults ───────────────────────────────────
         private void PopulateDefaults()
         {
-            var bs = BuiltInMods.BambiSleep;
+            // New mods start empty — no pre-filled content from the base mod.
+            // Users fill in their own identity, triggers, messages, and phrases.
+        }
 
-            // Messages
-            SetTextBoxValue(_txtAttentionFail, bs.Messages?.AttentionCheckFail);
-            SetTextBoxValue(_txtAttentionMercy, bs.Messages?.AttentionCheckMercy);
-            SetTextBoxValue(_txtBubbleRetry, bs.Messages?.BubbleCountRetry);
-
-            // Phrases
-            if (bs.Phrases != null)
+        /// <summary>
+        /// Auto-loads the currently active mod's manifest and resources as a starting preset.
+        /// Skips if the active mod is a built-in mod (no installed path).
+        /// </summary>
+        private void LoadActiveModAsPreset()
+        {
+            try
             {
-                foreach (var (cat, phrases) in bs.Phrases)
+                var activeMod = App.Mods?.ActiveMod;
+                if (activeMod == null || activeMod.IsBuiltIn || string.IsNullOrEmpty(activeMod.InstalledPath))
+                    return;
+
+                var manifestPath = Path.Combine(activeMod.InstalledPath, "mod.json");
+                if (!File.Exists(manifestPath)) return;
+
+                var json = File.ReadAllText(manifestPath);
+                var manifest = JsonConvert.DeserializeObject<ModManifest>(json);
+                if (manifest == null) return;
+
+                PopulateFromManifest(manifest);
+
+                // Load images and audio from the installed mod's resources folder
+                var resourcesDir = Path.Combine(activeMod.InstalledPath, "resources");
+                if (Directory.Exists(resourcesDir))
                 {
-                    if (!_phraseData.ContainsKey(cat)) continue;
-                    _phraseData[cat].Clear();
-                    _phrasePanels[cat].Children.Clear();
-
-                    foreach (var phrase in phrases)
-                        AddPhraseRow(cat, phrase);
-
-                    UpdatePhraseHeaderByCategory(cat);
+                    foreach (var key in _imageSlots.Keys.ToList())
+                    {
+                        var imgPath = Path.Combine(resourcesDir, key.Replace('/', Path.DirectorySeparatorChar));
+                        if (File.Exists(imgPath))
+                            SetImageSlot(key, imgPath);
+                    }
+                    LoadAudioFromResources(resourcesDir);
                 }
+
+                TxtStatus.Text = $"Loaded active mod: {manifest.Name}";
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to auto-load active mod as preset");
             }
         }
 
@@ -1252,6 +1975,22 @@ namespace ConditioningControlPanel
                 }
             }
 
+            // Browser
+            if (manifest.Browser != null)
+            {
+                SetTextBoxValue(_txtBrowserUrl, manifest.Browser.DefaultUrl);
+                SetTextBoxValue(_txtBrowserSiteName, manifest.Browser.SiteName);
+                if (_chkShowBambiCloud != null)
+                    _chkShowBambiCloud.IsChecked = manifest.Browser.ShowBambiCloudOption ?? true;
+                if (manifest.Browser.DefaultVideoLinks != null)
+                {
+                    _videoLinks.Clear();
+                    _videoLinksPanel?.Children.Clear();
+                    foreach (var (vName, vUrl) in manifest.Browser.DefaultVideoLinks)
+                        AddVideoLinkRow(vName, vUrl);
+                }
+            }
+
             // Text Replacements
             if (manifest.TextReplacements != null)
             {
@@ -1260,6 +1999,24 @@ namespace ConditioningControlPanel
 
                 foreach (var (from, to) in manifest.TextReplacements)
                     AddReplacementRow(from, to);
+            }
+
+            // Supported avatar sets — uncheck sets not in the list
+            if (manifest.SupportedAvatarSets != null)
+            {
+                foreach (var (setNum, cb) in _avatarSetCheckboxes)
+                {
+                    var supported = manifest.SupportedAvatarSets.Contains(setNum);
+                    cb.IsChecked = supported;
+                    ToggleAvatarSet(setNum, supported);
+                }
+            }
+
+            // Custom avatar sets
+            if (manifest.CustomAvatarSets != null)
+            {
+                foreach (var cs in manifest.CustomAvatarSets)
+                    AddCustomAvatarSet(cs.SetNumber, cs.Label, cs.UnlockLevel);
             }
 
             UpdateStatusBar();
@@ -1379,6 +2136,53 @@ namespace ConditioningControlPanel
             if (replacements.Count > 0)
                 manifest.TextReplacements = replacements;
 
+            // Browser
+            var browserUrl = GetTextBoxValue(_txtBrowserUrl);
+            var siteName = GetTextBoxValue(_txtBrowserSiteName);
+            var showBambi = _chkShowBambiCloud?.IsChecked;
+            var vidLinks = new Dictionary<string, string>();
+            foreach (var (nameBox, urlBox) in _videoLinks)
+            {
+                var vName = nameBox.Text.Trim();
+                var vUrl = urlBox.Text.Trim();
+                if (!string.IsNullOrEmpty(vName) && !string.IsNullOrEmpty(vUrl) && !vidLinks.ContainsKey(vName))
+                    vidLinks[vName] = vUrl;
+            }
+            if (!string.IsNullOrEmpty(browserUrl) || !string.IsNullOrEmpty(siteName)
+                || showBambi == false || vidLinks.Count > 0)
+            {
+                manifest.Browser = new ModBrowser
+                {
+                    DefaultUrl = string.IsNullOrEmpty(browserUrl) ? null : browserUrl,
+                    SiteName = string.IsNullOrEmpty(siteName) ? null : siteName,
+                    ShowBambiCloudOption = showBambi == false ? false : null,
+                    DefaultVideoLinks = vidLinks.Count > 0 ? vidLinks : null,
+                };
+            }
+
+            // Supported avatar sets — only write if some are unchecked
+            var enabledSets = _avatarSetCheckboxes
+                .Where(kv => kv.Value.IsChecked == true)
+                .Select(kv => kv.Key)
+                .OrderBy(x => x)
+                .ToList();
+            // Also include custom set numbers
+            foreach (var cs in _customAvatarSets)
+                enabledSets.Add(cs.SetNum);
+            if (enabledSets.Count < _avatarSetCheckboxes.Count + _customAvatarSets.Count || _customAvatarSets.Count > 0)
+                manifest.SupportedAvatarSets = enabledSets.Distinct().OrderBy(x => x).ToList();
+
+            // Custom avatar sets
+            if (_customAvatarSets.Count > 0)
+            {
+                manifest.CustomAvatarSets = _customAvatarSets.Select(cs => new Models.CustomAvatarSet
+                {
+                    SetNumber = cs.SetNum,
+                    Label = cs.LabelBox.Text.Trim(),
+                    UnlockLevel = int.TryParse(cs.LevelBox.Text.Trim(), out var lv) ? lv : 200
+                }).ToList();
+            }
+
             return manifest;
         }
 
@@ -1436,6 +2240,29 @@ namespace ConditioningControlPanel
                     var destDir = Path.GetDirectoryName(destPath);
                     if (destDir != null) Directory.CreateDirectory(destDir);
                     File.Copy(filePath, destPath, overwrite: true);
+                }
+
+                // Copy filled audio slots
+                foreach (var (key, audioPath) in _audioSlots)
+                {
+                    if (audioPath == null) continue;
+                    var destPath = Path.Combine(resourcesDir, key.Replace('/', Path.DirectorySeparatorChar));
+                    var destDir = Path.GetDirectoryName(destPath);
+                    if (destDir != null) Directory.CreateDirectory(destDir);
+                    File.Copy(audioPath, destPath, overwrite: true);
+                }
+
+                // Copy voice line files
+                if (_voiceLines.Count > 0)
+                {
+                    var voiceDir = Path.Combine(resourcesDir, "sounds", "flashes_audio");
+                    Directory.CreateDirectory(voiceDir);
+                    foreach (var (srcPath, _) in _voiceLines)
+                    {
+                        if (!File.Exists(srcPath)) continue;
+                        var destPath = Path.Combine(voiceDir, Path.GetFileName(srcPath));
+                        File.Copy(srcPath, destPath, overwrite: true);
+                    }
                 }
 
                 // Create ZIP
@@ -1499,7 +2326,7 @@ namespace ConditioningControlPanel
 
                 PopulateFromManifest(manifest);
 
-                // Load images from resources folder
+                // Load images and audio from resources folder
                 var resourcesDir = Path.Combine(_loadedTempDir, "resources");
                 if (Directory.Exists(resourcesDir))
                 {
@@ -1509,6 +2336,7 @@ namespace ConditioningControlPanel
                         if (File.Exists(imgPath))
                             SetImageSlot(key, imgPath);
                     }
+                    LoadAudioFromResources(resourcesDir);
                 }
 
                 NavigateToSection("info");
@@ -1564,8 +2392,21 @@ namespace ConditioningControlPanel
             _textReplacements.Clear();
             _replacementsPanel?.Children.Clear();
 
-            // Reset phrases to defaults
-            PopulateDefaults();
+            // Clear all phrases
+            foreach (var (cat, phrases) in _phraseData)
+            {
+                phrases.Clear();
+                if (_phrasePanels.TryGetValue(cat, out var panel))
+                    panel.Children.Clear();
+                UpdatePhraseHeaderByCategory(cat);
+            }
+
+            // Clear audio
+            StopAudioPreview();
+            foreach (var key in _audioSlots.Keys.ToList())
+                ClearAudioSlot(key);
+            _voiceLines.Clear();
+            _voiceLinesPanel?.Children.Clear();
 
             NavigateToSection("info");
             UpdateStatusBar();
@@ -1577,8 +2418,9 @@ namespace ConditioningControlPanel
         {
             var filled = _imageSlots.Count(kv => kv.Value != null);
             var total = _imageSlots.Count;
+            var audioFilled = _audioSlots.Count(kv => kv.Value != null);
             var phraseCount = _phraseData.Values.Sum(l => l.Count(p => !string.IsNullOrWhiteSpace(p)));
-            TxtStatus.Text = $"Images: {filled}/{total}  |  Phrases: {phraseCount}  |  Replacements: {_textReplacements.Count}";
+            TxtStatus.Text = $"Images: {filled}/{total}  |  Audio: {audioFilled}/14  |  Voice Lines: {_voiceLines.Count}  |  Phrases: {phraseCount}  |  Replacements: {_textReplacements.Count}";
         }
 
         // ─── Helpers ─────────────────────────────────────────────

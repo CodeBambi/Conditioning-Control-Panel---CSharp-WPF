@@ -172,7 +172,7 @@
                     Cursor="Hand"
                     MouseLeftButtonDown="ImgAvatar_MouseLeftButtonDown"
                     MouseRightButtonDown="ImgAvatar_MouseRightButtonDown"
-                    CornerRadius="20" ClipToBounds="True">
+                    ClipToBounds="False">
                 <Border.ContextMenu>
                     <ContextMenu x:Name="AvatarContextMenu" Opened="AvatarContextMenu_Opened">
                         <ContextMenu.Resources>
@@ -306,7 +306,8 @@
                     <!-- Static PNG avatar (default) -->
                     <Image x:Name="ImgAvatar"
                            Stretch="Uniform"
-                           MaxHeight="340"
+                           MaxHeight="306"
+                           MaxWidth="198"
                            RenderTransformOrigin="0.5,0.5">
                         <Image.RenderTransform>
                             <TranslateTransform x:Name="AvatarTranslate" Y="0"/>
@@ -318,7 +319,8 @@
                     <!-- Animated GIF avatar (for level 20+) -->
                     <Image x:Name="ImgAvatarAnimated"
                            Stretch="Uniform"
-                           MaxHeight="340"
+                           MaxHeight="306"
+                           MaxWidth="198"
                            Visibility="Collapsed"
                            RenderTransformOrigin="0.5,0.5">
                         <Image.RenderTransform>

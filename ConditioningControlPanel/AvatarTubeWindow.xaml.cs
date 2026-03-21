@@ -97,7 +97,7 @@ namespace ConditioningControlPanel
 
         // Voice lines from flash audio folder (used for idle comments and 50% of triggers)
         private List<string> _voiceLineFiles = new();
-        private readonly string _voiceLinesPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "flashes_audio");
+        private string _voiceLinesPath = Services.CompanionPhraseService.VoiceLineFolder;
         private NAudio.Wave.WaveOutEvent? _voiceLinePlayer;
         private NAudio.Wave.AudioFileReader? _voiceLineAudio;
 
@@ -262,6 +262,9 @@ namespace ConditioningControlPanel
 
             // Refresh tube image from mod on startup (XAML hardcodes pack:// URI)
             SetTubeStyle(!_isAttached);
+
+            // Apply tube layout offsets for current mod
+            ApplyTubeLayoutOffsets();
 
             // Subscribe to mod changes to refresh tube, avatars, and titles
             if (App.Mods != null)
@@ -436,7 +439,8 @@ namespace ConditioningControlPanel
                 5 => settings.IsLevelUnlocked(125),     // Level 125
                 6 => settings.IsLevelUnlocked(150),     // Level 150
                 7 => settings.IsLevelUnlocked(75),      // Level 75 (Bambi Cow)
-                _ => false
+                _ => App.Mods?.GetCustomAvatarSetUnlockLevel(setNumber) is int unlockLevel
+                     && settings.IsLevelUnlocked(unlockLevel)
             };
         }
 
@@ -446,14 +450,26 @@ namespace ConditioningControlPanel
         /// </summary>
         public static int[] GetUnlockedAvatarSets(int level)
         {
-            // Sets in unlock-level order (not numerical order)
+            // Base sets in unlock-level order (not numerical order)
             int[] setsInOrder = { 1, 2, 3, 4, 7, 5, 6 };
             var unlocked = new System.Collections.Generic.List<int>();
             foreach (int set in setsInOrder)
             {
-                if (IsAvatarSetUnlocked(set, level))
+                if (IsAvatarSetUnlocked(set, level) && (App.Mods?.IsAvatarSetSupported(set) ?? true))
                     unlocked.Add(set);
             }
+
+            // Append custom avatar sets (8+) sorted by unlock level
+            var customSets = App.Mods?.GetCustomAvatarSets();
+            if (customSets != null)
+            {
+                foreach (var cs in customSets.OrderBy(c => c.UnlockLevel))
+                {
+                    if (IsAvatarSetUnlocked(cs.SetNumber, level) && (App.Mods?.IsAvatarSetSupported(cs.SetNumber) ?? true))
+                        unlocked.Add(cs.SetNumber);
+                }
+            }
+
             return unlocked.ToArray();
         }
 
@@ -755,6 +771,12 @@ namespace ConditioningControlPanel
                 // Refresh tube frame
                 SetTubeStyle(!_isAttached);
 
+                // Apply tube layout offsets for new mod's tube glass position
+                ApplyTubeLayoutOffsets();
+
+                // Reload video links for companion speech bubbles
+                ReloadVideoLinks();
+
                 // Reload avatar poses from new mod
                 _avatarPoses = LoadAvatarPoses(_currentAvatarSet);
                 if (_avatarPoses.Length > 0)
@@ -763,12 +785,55 @@ namespace ConditioningControlPanel
                     ImgAvatar.Source = _avatarPoses[0];
                 }
 
+                // Refresh voice lines from new mod
+                _voiceLinesPath = Services.CompanionPhraseService.VoiceLineFolder;
+                RefreshVoiceLines();
+
                 // Refresh title (applies text replacements)
                 UpdateTitleDisplay(App.Settings?.Current?.PlayerLevel ?? 1);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to refresh resources after mod change");
+            }
+        }
+
+        /// <summary>
+        /// Applies the active mod's tube layout offsets to avatar, title, input, and speech bubble positions.
+        /// Mod tube images may have the glass cylinder in a different position than the default,
+        /// so the offset shifts all UI elements horizontally to align with the glass.
+        /// </summary>
+        private void ApplyTubeLayoutOffsets()
+        {
+            // Apply avatar scale from mod
+            var scale = App.Mods?.GetAvatarScale() ?? 1.0;
+            if (Math.Abs(scale - 1.0) > 0.001)
+            {
+                var scaleTransform = new System.Windows.Media.ScaleTransform(scale, scale);
+                ImgAvatar.LayoutTransform = scaleTransform;
+                ImgAvatarAnimated.LayoutTransform = scaleTransform;
+            }
+            else
+            {
+                ImgAvatar.LayoutTransform = null;
+                ImgAvatarAnimated.LayoutTransform = null;
+            }
+
+            if (_isAttached)
+            {
+                var dx = App.Mods?.GetAvatarOffsetX() ?? 0;
+                var dy = App.Mods?.GetAvatarOffsetY() ?? 0;
+                AvatarBorder.Margin = new Thickness(5, 100, 126 - dx, 205 + dy);
+                TitleBox.Margin = new Thickness(0, 0, 121 - dx, 180);
+                InputPanel.Margin = new Thickness(0, 0, 126 - dx, 520);
+            }
+            else
+            {
+                var dx = App.Mods?.GetAvatarDetachedOffsetX() ?? 0;
+                var dy = App.Mods?.GetAvatarDetachedOffsetY() ?? 0;
+                AvatarBorder.Margin = new Thickness(5, 100, 426 - dx, 203 + dy);
+                TitleBox.Margin = new Thickness(0, 0, 416 - dx, 193);
+                InputPanel.Margin = new Thickness(0, 0, 426 - dx, 520);
             }
         }
 
@@ -2144,9 +2209,9 @@ namespace ConditioningControlPanel
                 // Explicitly requested giggle sound (AI responses, etc.)
                 PlayGiggleSound();
             }
-            else
+            else if (source != SpeechSource.AI)
             {
-                // No audio connected - play fallback sound (um/giggle) so every bubble has audio
+                // Fallback sound for regular bubbles (skip for AI thinking — response will play its own)
                 PlayFallbackBubbleSound();
             }
 
@@ -2283,9 +2348,7 @@ namespace ConditioningControlPanel
             // Reset scroll position to top when new text is shown
             SpeechScroller?.ScrollToTop();
 
-            // Position bubble next to avatar - same position in both attached and detached modes.
-            // In detached mode the avatar shifts left inside the tube, but the bubble stays
-            // on the right side of the tube where it's clearly visible (not behind the tube PNG).
+            // Position bubble next to avatar — stays at a fixed position near the tube.
             SpeechBubble.Margin = new Thickness(0, 0, 125, 550);
         }
 
@@ -2296,8 +2359,9 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Exact HypnoTube video titles mapped to URLs.
         /// Names match exactly as shown on HypnoTube.
+        /// Reloaded when the active mod changes via ReloadVideoLinks().
         /// </summary>
-        internal static readonly Dictionary<string, string> KnownVideoLinks = new(StringComparer.OrdinalIgnoreCase)
+        internal static Dictionary<string, string> KnownVideoLinks = new(StringComparer.OrdinalIgnoreCase)
         {
             { "Naughty Bambi", "https://hypnotube.com/video/naughty-bambi-109749.html" },
             { "Bambi Bae", "https://hypnotube.com/video/bambi-bae-113979.html" },
@@ -2358,6 +2422,29 @@ namespace ConditioningControlPanel
             { "Eat Your Cum", "https://hypnotube.com/video/eat-your-cum-116026.html" },
             { "Trans Love Hypno - CrimsonPMV", "https://hypnotube.com/video/trans-love-hypno-crimsonpmv-121310.html" },
         };
+
+        // Cached copy of the built-in links for restoring when switching away from custom mods
+        private static Dictionary<string, string>? _builtInVideoLinks;
+
+        /// <summary>
+        /// Reloads KnownVideoLinks from the active mod's defaultVideoLinks, or restores built-in defaults.
+        /// Called on mod switch.
+        /// </summary>
+        internal static void ReloadVideoLinks()
+        {
+            // Cache built-in links on first call
+            _builtInVideoLinks ??= new Dictionary<string, string>(KnownVideoLinks, StringComparer.OrdinalIgnoreCase);
+
+            var modLinks = App.Mods?.GetVideoLinks();
+            if (modLinks != null && modLinks.Count > 0)
+            {
+                KnownVideoLinks = new Dictionary<string, string>(modLinks, StringComparer.OrdinalIgnoreCase);
+            }
+            else
+            {
+                KnownVideoLinks = new Dictionary<string, string>(_builtInVideoLinks, StringComparer.OrdinalIgnoreCase);
+            }
+        }
 
         private void PopulateSpeechBubble(string text)
         {
@@ -3579,14 +3666,12 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var soundsPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds");
-
                 // Use giggle sounds 1-4 for regular speech bubbles
                 var fallbackSounds = new[] {
                     "giggle1.MP3", "giggle2.MP3", "giggle3.MP3", "giggle4.MP3"
                 };
                 var chosenSound = fallbackSounds[_random.Next(fallbackSounds.Length)];
-                var soundPath = System.IO.Path.Combine(soundsPath, chosenSound);
+                var soundPath = Services.ModResourceResolver.ResolveAudioPath(chosenSound);
 
                 if (!System.IO.File.Exists(soundPath))
                 {
@@ -3666,13 +3751,12 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var soundsPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds");
                 // Use giggle sounds 5-8 for AI responses (reserved for special interactions)
                 var giggleFiles = new[] {
                     "giggle5.mp3", "giggle6.mp3", "giggle7.mp3", "giggle8.mp3"
                 };
                 var chosenGiggle = giggleFiles[_random.Next(giggleFiles.Length)];
-                var gigglePath = System.IO.Path.Combine(soundsPath, chosenGiggle);
+                var gigglePath = Services.ModResourceResolver.ResolveAudioPath(chosenGiggle);
 
                 if (System.IO.File.Exists(gigglePath))
                 {
@@ -3709,10 +3793,9 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var soundsPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
                 var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
                 var chosenPop = popFiles[_random.Next(popFiles.Length)];
-                var popPath = System.IO.Path.Combine(soundsPath, chosenPop);
+                var popPath = Services.ModResourceResolver.ResolveAudioPath("bubbles/" + chosenPop);
 
                 if (System.IO.File.Exists(popPath))
                 {
@@ -3754,7 +3837,7 @@ namespace ConditioningControlPanel
             // Play the "cum and collapse" audio
             try
             {
-                var soundsPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "flashes_audio");
+                var soundsPath = Services.CompanionPhraseService.VoiceLineFolder;
                 var collapseFiles = new[] { "come and coll.mp3", "come and coll (1).mp3", "come and coll (2).mp3" };
                 var chosenFile = collapseFiles[_random.Next(collapseFiles.Length)];
                 var audioPath = System.IO.Path.Combine(soundsPath, chosenFile);
@@ -4059,8 +4142,8 @@ namespace ConditioningControlPanel
             _ = SendChatMessageAsync();
         }
 
-        // Quick "thinking" phrases shown while waiting for AI
-        private static readonly string[] ThinkingPhrases = new[]
+        // Default thinking phrases (used when no mod overrides)
+        private static readonly string[] DefaultThinkingPhrases = new[]
         {
             "*POP*",
             "*Poppin bubbles...*",
@@ -4072,7 +4155,9 @@ namespace ConditioningControlPanel
 
         private string GetRandomThinkingPhrase()
         {
-            return ThinkingPhrases[_random.Next(ThinkingPhrases.Length)];
+            var modPhrases = App.Mods?.GetPhrases("Thinking");
+            var phrases = modPhrases != null && modPhrases.Length > 0 ? modPhrases : DefaultThinkingPhrases;
+            return phrases[_random.Next(phrases.Length)];
         }
 
         /// <summary>
@@ -4209,24 +4294,14 @@ namespace ConditioningControlPanel
             // Switch to alternative tube image
             SetTubeStyle(true);
 
-            // Move avatar position when detached (6px more left from previous)
-            AvatarBorder.Margin = new Thickness(5, 100, 426, 203);
+            // Apply tube layout offsets for detached mode
+            ApplyTubeLayoutOffsets();
 
             // Speech bubble stays at same position in both modes (right side of tube, clearly visible)
             if (SpeechBubble.Visibility == Visibility.Visible && !string.IsNullOrEmpty(TxtSpeech.Text))
             {
                 AdjustBubbleSize(TxtSpeech.Text);
             }
-            else
-            {
-                SpeechBubble.Margin = new Thickness(0, 0, 125, 550);
-            }
-
-            // Input panel position when detached (match avatar's horizontal offset)
-            InputPanel.Margin = new Thickness(0, 0, 426, 520);
-
-            // Title box position when detached (120px to the left)
-            TitleBox.Margin = new Thickness(0, 0, 416, 193);
 
             // Keep hidden from taskbar and Alt+Tab
             ShowInTaskbar = false;
@@ -4259,24 +4334,14 @@ namespace ConditioningControlPanel
             // Switch back to original tube image
             SetTubeStyle(false);
 
-            // Restore avatar position when attached (matches XAML default)
-            AvatarBorder.Margin = new Thickness(5, 100, 126, 205);
+            // Apply tube layout offsets for attached mode
+            ApplyTubeLayoutOffsets();
 
-            // Restore speech bubble position when attached (matches XAML default - centered with right offset)
+            // Restore speech bubble position when attached
             if (SpeechBubble.Visibility == Visibility.Visible && !string.IsNullOrEmpty(TxtSpeech.Text))
             {
                 AdjustBubbleSize(TxtSpeech.Text);
             }
-            else
-            {
-                SpeechBubble.Margin = new Thickness(0, 0, 125, 550);
-            }
-
-            // Restore input panel position when attached (matches XAML default)
-            InputPanel.Margin = new Thickness(0, 0, 126, 520);
-
-            // Restore title box position when attached (matches XAML default)
-            TitleBox.Margin = new Thickness(0, 0, 121, 180);
 
             // Hide from taskbar and Alt+Tab when attached
             ShowInTaskbar = false;

@@ -322,14 +322,11 @@ public class BubbleService : IDisposable
     {
         try
         {
-            var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
-
             // If lucky bubble, play a random chime sound
             if (isLucky)
             {
-                var chimeSoundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds");
                 var chimeFiles = new[] { "chime1.mp3", "chime2.mp3", "chime3.mp3" };
-                var chimePath = Path.Combine(chimeSoundsPath, chimeFiles[_random.Next(chimeFiles.Length)]);
+                var chimePath = ModResourceResolver.ResolveAudioPath(chimeFiles[_random.Next(chimeFiles.Length)]);
                 if (File.Exists(chimePath))
                 {
                     var masterVolume = App.Settings.Current.MasterVolume / 100f;
@@ -344,7 +341,7 @@ public class BubbleService : IDisposable
             // Normal pop sound
             var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
             var chosenPop = popFiles[_random.Next(popFiles.Length)];
-            var popPath = Path.Combine(soundsPath, chosenPop);
+            var popPath = ModResourceResolver.ResolveAudioPath("bubbles/" + chosenPop);
 
             if (File.Exists(popPath))
             {
@@ -599,7 +596,7 @@ internal class Bubble
         {
             Width = _size,
             Height = _size,
-            Fill = Brushes.Transparent, // Invisible but captures hits
+            Fill = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)), // Nearly invisible but captures hits on transparent windows
             IsHitTestVisible = _isClickable,
             Cursor = _isClickable ? Cursors.Hand : Cursors.Arrow
         };

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -229,22 +228,5 @@ namespace ConditioningControlPanel
             creator.ShowDialog();
         }
 
-        private void BtnTemplate_Click(object sender, RoutedEventArgs e)
-        {
-            if (App.Mods == null) return;
-
-            var outputDir = Path.Combine(App.UserDataPath, "mod-template");
-            if (Directory.Exists(outputDir))
-                Directory.Delete(outputDir, recursive: true);
-
-            App.Mods.GenerateModTemplate(outputDir);
-
-            // Open folder in explorer
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = outputDir,
-                UseShellExecute = true
-            });
-        }
     }
 }

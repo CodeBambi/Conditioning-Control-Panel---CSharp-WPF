@@ -1267,6 +1267,11 @@ namespace ConditioningControlPanel
             // Initialize hypnotube links UI
             RefreshHypnotubeLinksUI();
 
+            // Apply mod-aware feature names to static XAML labels
+            ApplyModFeatureNames();
+            if (App.Mods != null)
+                App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
+
             // Initialize quick login UI
             UpdateQuickLoginUI();
 
@@ -4452,6 +4457,14 @@ namespace ConditioningControlPanel
                 var def = Models.CompanionDefinition.GetById(companionId);
                 var progress = App.Companion.GetProgress(companionId);
                 var isUnlocked = App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false;
+
+                // Hide companion card if the active mod doesn't support this avatar set
+                if (App.Mods?.IsCompanionSupported(companionId) == false)
+                {
+                    cards[i].Visibility = Visibility.Collapsed;
+                    continue;
+                }
+                cards[i].Visibility = Visibility.Visible;
 
                 // Update companion name with mod text replacements
                 bool isSlutMode = App.Settings?.Current?.SlutModeEnabled ?? false;
@@ -7997,9 +8010,12 @@ namespace ConditioningControlPanel
                 var isUnlocked = App.Achievements?.Progress.IsUnlocked(achievement.Id) ?? false;
                 
                 var border = new Border { Style = tileStyle };
+                var achName = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name;
+                var achFlavor = App.Mods?.MakeModAware(achievement.FlavorText) ?? achievement.FlavorText;
+                var achReq = App.Mods?.MakeModAware(achievement.Requirement) ?? achievement.Requirement;
                 border.ToolTip = isUnlocked
-                    ? $"{achievement.Name}\n\n\"{achievement.FlavorText}\""
-                    : $"???\n\nRequirement: {achievement.Requirement}";
+                    ? $"{achName}\n\n\"{achFlavor}\""
+                    : $"???\n\nRequirement: {achReq}";
 
                 var image = new Image
                 {
@@ -8055,9 +8071,12 @@ namespace ConditioningControlPanel
                 var parent = image.Parent as Border;
                 if (parent != null)
                 {
+                    var achName2 = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name;
+                    var achFlavor2 = App.Mods?.MakeModAware(achievement.FlavorText) ?? achievement.FlavorText;
+                    var achReq2 = App.Mods?.MakeModAware(achievement.Requirement) ?? achievement.Requirement;
                     parent.ToolTip = isUnlocked
-                        ? $"{achievement.Name}\n\n\"{achievement.FlavorText}\""
-                        : $"???\n\nRequirement: {achievement.Requirement}";
+                        ? $"{achName2}\n\n\"{achFlavor2}\""
+                        : $"???\n\nRequirement: {achReq2}";
                 }
             }
 
@@ -8287,14 +8306,14 @@ namespace ConditioningControlPanel
             var titleStack = new StackPanel { Margin = new Thickness(0, 0, 0, 15) };
             titleStack.Children.Add(new TextBlock
             {
-                Text = "✨ Bimbo Enhancement Tree",
+                Text = "✨ " + (App.Mods?.GetEnhancementTreeTitle() ?? "Bimbo Enhancement Tree"),
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 FontSize = 22,
                 FontWeight = FontWeights.Bold
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = "you earn sparkle points from leveling up + every 100 bubbles popped~",
+                Text = App.Mods?.GetEnhancementTreeSubtitle() ?? "you earn sparkle points from leveling up + every 100 bubbles popped~",
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 11,
                 FontStyle = FontStyles.Italic,
@@ -8302,7 +8321,7 @@ namespace ConditioningControlPanel
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = "once you pick a path, there's no going back~",
+                Text = App.Mods?.GetEnhancementTreeWarning() ?? "once you pick a path, there's no going back~",
                 Foreground = new SolidColorBrush(Color.FromRgb(136, 170, 204)),
                 FontSize = 10,
                 FontStyle = FontStyles.Italic,
@@ -8333,7 +8352,7 @@ namespace ConditioningControlPanel
             var pointsInfoStack = new StackPanel();
             pointsInfoStack.Children.Add(new TextBlock
             {
-                Text = "Sparkle Points",
+                Text = App.Mods?.GetPointsLabel() ?? "Sparkle Points",
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 10
             });
@@ -8376,7 +8395,7 @@ namespace ConditioningControlPanel
             });
             ditzyButtonStack.Children.Add(new TextBlock
             {
-                Text = "Ditzy Data Stats",
+                Text = App.Mods?.GetStatsTitle() ?? "Ditzy Data Stats",
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                 FontSize = 11,
                 FontWeight = FontWeights.Bold,
@@ -8409,7 +8428,7 @@ namespace ConditioningControlPanel
             // Stats title
             detailedStatsStack.Children.Add(new TextBlock
             {
-                Text = "📊 Ditzy Data Stats",
+                Text = "📊 " + (App.Mods?.GetStatsTitle() ?? "Ditzy Data Stats"),
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 11,
                 FontWeight = FontWeights.Bold,
@@ -8942,7 +8961,7 @@ namespace ConditioningControlPanel
             var tooltipStack = new StackPanel { MaxWidth = 280 };
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = skill.FlavorText,
+                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText,
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                 FontStyle = FontStyles.Italic,
                 TextWrapping = TextWrapping.Wrap,
@@ -8950,7 +8969,7 @@ namespace ConditioningControlPanel
             });
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = skill.Description,
+                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.Description,
                 Foreground = Brushes.White,
                 TextWrapping = TextWrapping.Wrap
             });
@@ -9334,7 +9353,7 @@ namespace ConditioningControlPanel
             var tooltipStack = new StackPanel { MaxWidth = 280 };
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = skill.FlavorText,
+                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText,
                 Foreground = new SolidColorBrush(Color.FromRgb(200, 150, 255)),
                 FontStyle = FontStyles.Italic,
                 TextWrapping = TextWrapping.Wrap,
@@ -9342,7 +9361,7 @@ namespace ConditioningControlPanel
             });
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = skill.Description,
+                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.Description,
                 Foreground = Brushes.White,
                 TextWrapping = TextWrapping.Wrap
             });
@@ -9420,7 +9439,7 @@ namespace ConditioningControlPanel
 
                 // Show confirmation dialog
                 var result = MessageBox.Show(
-                    $"Purchase '{App.Mods?.MakeModAware(skill.Name) ?? skill.Name}' for {skill.Cost} sparkle points?\n\n{App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText}\n\n{App.Mods?.MakeModAware(skill.Description) ?? skill.Description}",
+                    $"Purchase '{App.Mods?.MakeModAware(skill.Name) ?? skill.Name}' for {skill.Cost} {(App.Mods?.GetPointsLabel() ?? "sparkle points").ToLower()}?\n\n{App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText}\n\n{App.Mods?.MakeModAware(skill.Description) ?? skill.Description}",
                     "Purchase Enhancement",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
@@ -13471,7 +13490,7 @@ namespace ConditioningControlPanel
                     var image = LoadAchievementImage(achievement.ImageName);
                     if (image != null)
                     {
-                        achievementItems.Add(new { Name = achievement.Name, Image = image });
+                        achievementItems.Add(new { Name = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name, Image = image });
                     }
                 }
             }
@@ -15240,6 +15259,14 @@ namespace ConditioningControlPanel
             StartTutorial(TutorialType.Avatar);
         }
 
+        private void BtnTutorialModding_Click(object sender, RoutedEventArgs e)
+        {
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Visible;
+            var modCreator = new ModCreatorWindow(startWithTutorial: true) { Owner = this };
+            modCreator.Show();
+        }
+
         #endregion
 
         private void OpenLinktree()
@@ -15301,13 +15328,14 @@ namespace ConditioningControlPanel
             XPBar.Width = progress * (XPBar.Parent as Border)?.ActualWidth ?? 100;
 
             // Update title based on level
-            TxtPlayerTitle.Text = level switch
+            var rankTitle = level switch
             {
                 < 20 => "BASIC BIMBO",
                 < 50 => "DUMB AIRHEAD",
                 < 100 => "SYNTHETIC BLOWDOLL",
                 _ => "PERFECT FUCKPUPPET"
             };
+            TxtPlayerTitle.Text = App.Mods?.MakeModAware(rankTitle) ?? rankTitle;
 
             // Update unlockables visibility based on level
             UpdateUnlockablesVisibility(level);
@@ -15317,6 +15345,77 @@ namespace ConditioningControlPanel
 
             // Update stat pills visibility and values
             UpdateStatPills();
+        }
+
+        /// <summary>
+        /// Applies mod text replacements to all hardcoded feature/section labels in the XAML.
+        /// Called on startup and when the active mod changes.
+        /// </summary>
+        private void ApplyModFeatureNames()
+        {
+            string M(string text) => App.Mods?.MakeModAware(text) ?? text;
+
+            // Main section headers
+            if (TxtFeatureFlash != null) TxtFeatureFlash.Text = M("⚡ Flash Images");
+            if (TxtFeatureVideo != null) TxtFeatureVideo.Text = M("🎬 Mandatory Video");
+            if (TxtFeatureSubliminal != null) TxtFeatureSubliminal.Text = M("💭 Subliminals");
+            if (TxtFeatureWhispers != null) TxtFeatureWhispers.Text = M("📊 Audio Whispers");
+
+            // Enhancement locked/unlocked pairs
+            if (TxtFeatureSpiralLocked != null) TxtFeatureSpiralLocked.Text = M("🌀 Spiral Overlay");
+            if (TxtFeatureSpiral != null) TxtFeatureSpiral.Text = M("🌀 Spiral Overlay");
+            if (TxtFeaturePinkFilterLocked != null) TxtFeaturePinkFilterLocked.Text = M("💗 Pink Filter");
+            if (TxtFeaturePinkFilter != null) TxtFeaturePinkFilter.Text = M("💗 Pink Filter");
+            if (TxtFeatureBubblePopLocked != null) TxtFeatureBubblePopLocked.Text = M("🫧 Bubble Pop");
+            if (TxtFeatureBubblePop != null) TxtFeatureBubblePop.Text = M("🫧 Bubble Pop");
+            if (TxtFeatureLockCardLocked != null) TxtFeatureLockCardLocked.Text = M("📐 Lock Card");
+            if (TxtFeatureLockCard != null) TxtFeatureLockCard.Text = M("📐 Lock Card");
+            if (TxtFeatureBubbleCountLocked != null) TxtFeatureBubbleCountLocked.Text = M("🫧 Bubble Count");
+            if (TxtFeatureBubbleCount != null) TxtFeatureBubbleCount.Text = M("🫧 Bubble Count");
+            if (TxtFeatureBouncingLocked != null) TxtFeatureBouncingLocked.Text = M("📺 Bouncing Text");
+            if (TxtFeatureBouncing != null) TxtFeatureBouncing.Text = M("📺 Bouncing Text");
+            if (TxtFeatureBrainDrain != null) TxtFeatureBrainDrain.Text = M("💧 Brain Drain");
+            if (TxtFeatureMindWipeLocked != null) TxtFeatureMindWipeLocked.Text = M("🧠 Mind Wipe");
+            if (TxtFeatureMindWipe != null) TxtFeatureMindWipe.Text = M("🧠 Mind Wipe");
+            if (TxtFeatureCornerGif != null) TxtFeatureCornerGif.Text = M("🖼 Corner GIF");
+
+            // Preset/session detail labels
+            if (TxtDetailFlashLabel != null) TxtDetailFlashLabel.Text = M("⚡ Flash Images");
+            if (TxtDetailVideoLabel != null) TxtDetailVideoLabel.Text = M("🎬 Mandatory Videos");
+            if (TxtDetailSubLabel != null) TxtDetailSubLabel.Text = M("💭 Subliminals");
+            if (TxtSessionFlashLabel != null) TxtSessionFlashLabel.Text = M("⚡ Flash Images");
+            if (TxtSessionSubLabel != null) TxtSessionSubLabel.Text = M("💭 Subliminals");
+
+            // Autonomy toggle labels
+            if (TxtAutoFlash != null) TxtAutoFlash.Text = M("Flashes");
+            if (TxtAutoVideo != null) TxtAutoVideo.Text = M("Videos");
+            if (TxtAutoSubliminal != null) TxtAutoSubliminal.Text = M("Subliminals");
+            if (TxtAutoBubbles != null) TxtAutoBubbles.Text = M("Bubbles");
+            if (TxtAutoPinkFilter != null) TxtAutoPinkFilter.Text = M("Pink Filter");
+            if (TxtAutoLockCards != null) TxtAutoLockCards.Text = M("Lock Cards");
+            if (TxtAutoBouncing != null) TxtAutoBouncing.Text = M("Bouncing");
+            if (TxtAutoMindwipe != null) TxtAutoMindwipe.Text = M("Mindwipe");
+
+            // Enhancement tab tooltip
+            if (BtnEnhancements != null)
+                BtnEnhancements.ToolTip = App.Mods?.GetTabTooltip() ?? "Bimbo Enhancement Tree";
+
+            // Stat pill tooltips
+            if (PillConditioningTime != null)
+                PillConditioningTime.ToolTip = App.Mods?.GetStatPillTooltip("pink_hours")
+                    ?? M("Total conditioning time (Pink Hours skill)");
+            if (PillOnlineUsers != null)
+                PillOnlineUsers.ToolTip = App.Mods?.GetStatPillTooltip("hive_mind")
+                    ?? M("Bimbos online now (Hive Mind skill)");
+            if (PillRankPercentile != null)
+                PillRankPercentile.ToolTip = App.Mods?.GetStatPillTooltip("popular_girl")
+                    ?? M("Your rank percentile (Popular Girl skill)");
+
+            // Refresh bonus chips with updated names
+            RefreshXPBarBonuses();
+
+            // Also refresh rank title
+            UpdateLevelDisplay();
         }
 
         /// <summary>
@@ -15466,6 +15565,7 @@ namespace ConditioningControlPanel
             {
                 if (source == "Base") continue;
 
+                var displaySource = App.Mods?.MakeModAware(source) ?? source;
                 var chip = new Border
                 {
                     Background = new SolidColorBrush(Color.FromRgb(42, 42, 74)), // #2A2A4A - matches stat pills
@@ -15477,7 +15577,7 @@ namespace ConditioningControlPanel
 
                 chip.Child = new TextBlock
                 {
-                    Text = $"+{value:P0} {source}",
+                    Text = $"+{value:P0} {displaySource}",
                     Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                     FontSize = 10,
                     VerticalAlignment = VerticalAlignment.Center
@@ -15489,15 +15589,39 @@ namespace ConditioningControlPanel
 
         private static string? GetBonusChipTooltip(string source)
         {
-            if (source.StartsWith("Streak Power")) return "Skill tree bonus: +0.5% XP per day of consecutive use (max 15%)";
+            string M(string text) => App.Mods?.MakeModAware(text) ?? text;
+
+            // Check for explicit mod override first
+            string? modTip = null;
+            if (source.StartsWith("Streak Power"))
+                modTip = App.Mods?.GetBoostTooltip("streak_power");
+            else
+            {
+                var skillId = source switch
+                {
+                    "Sparkle Boost" => "sparkle_boost_1",
+                    "Extra Sparkly" => "sparkle_boost_2",
+                    "Maximum Sparkle" => "sparkle_boost_3",
+                    "Night Shift" => "night_shift",
+                    "Early Bird Bimbo" => "early_bird_bimbo",
+                    "PINK RUSH ACTIVE!" => "pink_rush",
+                    _ => null
+                };
+                if (skillId != null)
+                    modTip = App.Mods?.GetBoostTooltip(skillId);
+            }
+            if (modTip != null) return modTip;
+
+            // Fall back to defaults with MakeModAware
+            if (source.StartsWith("Streak Power")) return M("Skill tree bonus: +0.5% XP per day of consecutive use (max 15%)");
             return source switch
             {
-                "Sparkle Boost" => "Skill tree bonus: +10% XP from Sparkle Boost",
-                "Extra Sparkly" => "Skill tree bonus: +15% XP from Extra Sparkly (stacks with Sparkle Boost)",
-                "Maximum Sparkle" => "Skill tree bonus: +20% XP from Maximum Sparkle (stacks with other Sparkle skills)",
-                "Night Shift" => "Skill tree bonus: +50% XP for conditioning between 11 PM and 5 AM",
-                "Early Bird Bimbo" => "Skill tree bonus: +50% XP for conditioning between 5 AM and 8 AM",
-                "PINK RUSH ACTIVE!" => "Skill tree bonus: 3x XP multiplier! Random 60-second windows of boosted XP",
+                "Sparkle Boost" => M("Skill tree bonus: +10% XP from Sparkle Boost"),
+                "Extra Sparkly" => M("Skill tree bonus: +15% XP from Extra Sparkly (stacks with Sparkle Boost)"),
+                "Maximum Sparkle" => M("Skill tree bonus: +20% XP from Maximum Sparkle (stacks with other Sparkle skills)"),
+                "Night Shift" => M("Skill tree bonus: +50% XP for conditioning between 11 PM and 5 AM"),
+                "Early Bird Bimbo" => M("Skill tree bonus: +50% XP for conditioning between 5 AM and 8 AM"),
+                "PINK RUSH ACTIVE!" => M("Skill tree bonus: 3x XP multiplier! Random 60-second windows of boosted XP"),
                 _ => null
             };
         }

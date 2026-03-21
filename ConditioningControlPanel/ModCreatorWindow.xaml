@@ -136,6 +136,10 @@
                     <TextBlock Text="Mod Creator" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
                                VerticalAlignment="Center"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button Content="?" Click="BtnHelp_Click"
+                                Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontSize="16" FontWeight="Bold"
+                                BorderThickness="0" Cursor="Hand" Padding="8,2" Width="30" Height="30"
+                                ToolTip="Mod Creator Tutorial"/>
                         <Button Content="&#x2014;" Click="BtnMinimize_Click"
                                 Background="Transparent" Foreground="#B0B0B0" FontSize="14"
                                 BorderThickness="0" Cursor="Hand" Padding="8,2" Width="30" Height="30"/>

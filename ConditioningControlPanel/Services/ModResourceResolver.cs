@@ -126,6 +126,40 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Resolve a sound file path. If the active mod has an override in resources/sounds/,
+        /// returns the mod's file path. Otherwise returns the embedded Resources/sounds/ path.
+        /// </summary>
+        /// <param name="soundRelativePath">
+        /// Relative path within sounds/, e.g. "giggle5.mp3" or "bubbles/Pop.mp3".
+        /// </param>
+        public static string ResolveAudioPath(string soundRelativePath)
+        {
+            if (string.IsNullOrEmpty(soundRelativePath))
+                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", soundRelativePath);
+
+            soundRelativePath = soundRelativePath.Replace('\\', '/');
+
+            var modPath = App.Mods?.ActiveMod?.InstalledPath;
+            if (modPath != null)
+            {
+                var modSoundsDir = Path.Combine(modPath, "resources", "sounds");
+                var overridePath = Path.Combine(modSoundsDir, soundRelativePath.Replace('/', Path.DirectorySeparatorChar));
+
+                // Check exact match first
+                if (File.Exists(overridePath))
+                    return overridePath;
+
+                // Check alternate extensions (.wav <-> .mp3) so mods can use either format
+                var altExt = Path.GetExtension(overridePath).ToLowerInvariant() == ".mp3" ? ".wav" : ".mp3";
+                var altPath = Path.ChangeExtension(overridePath, altExt);
+                if (File.Exists(altPath))
+                    return altPath;
+            }
+
+            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", soundRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        /// <summary>
         /// Clear the image cache (call when mod switches).
         /// </summary>
         public static void ClearCache()

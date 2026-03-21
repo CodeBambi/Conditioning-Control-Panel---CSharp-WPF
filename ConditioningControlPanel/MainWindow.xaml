@@ -1976,7 +1976,7 @@
                         </Border.Effect>
                         <StackPanel>
                             <Grid Margin="0,0,0,2">
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="⚡ Flash Images" Margin="0"/>
+                                <TextBlock x:Name="TxtFeatureFlash" Style="{StaticResource SectionHeader}" Text="⚡ Flash Images" Margin="0"/>
                                 <Button x:Name="HelpBtnFlash" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="FlashImages"/>
                             </Grid>
                             
@@ -2165,7 +2165,7 @@
                         </Border.Effect>
                         <StackPanel>
                             <Grid>
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="🎬 Mandatory Video"/>
+                                <TextBlock x:Name="TxtFeatureVideo" Style="{StaticResource SectionHeader}" Text="🎬 Mandatory Video"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button x:Name="HelpBtnVideo" Style="{StaticResource HelpButtonStyle}" Tag="Video" Margin="0,0,8,0"/>
                                     <Button x:Name="BtnTestVideo" Content="▶ Test" Style="{StaticResource OutlineButton}"
@@ -2270,7 +2270,7 @@
                         </Border.Effect>
                         <StackPanel>
                             <Grid>
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="💭 Subliminals"/>
+                                <TextBlock x:Name="TxtFeatureSubliminal" Style="{StaticResource SectionHeader}" Text="💭 Subliminals"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button x:Name="HelpBtnSubliminals" Style="{StaticResource HelpButtonStyle}" Tag="Subliminals" Margin="0,0,8,0"/>
                                     <Button Content="📝" Style="{StaticResource OutlineButton}" Padding="6,3" Click="BtnManageMessages_Click" Margin="0,0,4,0"
@@ -2309,7 +2309,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <CheckBox x:Name="ChkAudioWhispers" Style="{StaticResource ToggleStyle}"
                                               Checked="ChkAudioWhispers_Changed" Unchecked="ChkAudioWhispers_Changed"/>
-                                    <TextBlock Style="{StaticResource SettingLabel}" Text="📊 Audio Whispers" Margin="6,0,0,0"/>
+                                    <TextBlock x:Name="TxtFeatureWhispers" Style="{StaticResource SettingLabel}" Text="📊 Audio Whispers" Margin="6,0,0,0"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Slider x:Name="SliderWhisperVol" Minimum="0" Maximum="100" Value="50" Width="100" ValueChanged="SliderWhisperVol_Changed"/>
@@ -3298,13 +3298,13 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" x:Name="PresetDetailScroller">
                         <StackPanel x:Name="DetailContentPanel">
                             <!-- Preset details will show here -->
-                            <TextBlock Text="⚡ Flash Images" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="TxtDetailFlashLabel" Text="⚡ Flash Images" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailFlash" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
-                            
-                            <TextBlock Text="🎬 Mandatory Videos" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+
+                            <TextBlock x:Name="TxtDetailVideoLabel" Text="🎬 Mandatory Videos" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailVideo" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
-                            
-                            <TextBlock Text="💭 Subliminals" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+
+                            <TextBlock x:Name="TxtDetailSubLabel" Text="💭 Subliminals" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailSubliminal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                             
                             <TextBlock Text="📊 Audio" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
@@ -3358,7 +3358,7 @@
                                     Margin="0,0,0,12" Visibility="Collapsed">
                                 <StackPanel>
                                     <Grid>
-                                        <TextBlock Text="🖼 Corner GIF" Foreground="{DynamicResource PinkBrush}" 
+                                        <TextBlock x:Name="TxtFeatureCornerGif" Text="🖼 Corner GIF" Foreground="{DynamicResource PinkBrush}"
                                                    FontWeight="Bold" FontSize="11"/>
                                         <CheckBox x:Name="ChkCornerGifEnabled" Style="{StaticResource ToggleStyle}" 
                                                   HorizontalAlignment="Right" Checked="ChkCornerGifEnabled_Changed" 
@@ -3446,10 +3446,10 @@
                                                FontWeight="Bold" HorizontalAlignment="Center"/>
                                 </Border>
                                 
-                                <TextBlock Text="⚡ Flash Images" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <TextBlock x:Name="TxtSessionFlashLabel" Text="⚡ Flash Images" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="TxtSessionFlash" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                                
-                                <TextBlock Text="💭 Subliminals" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+
+                                <TextBlock x:Name="TxtSessionSubLabel" Text="💭 Subliminals" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="TxtSessionSubliminal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10"/>
                                 
                                 <TextBlock Text="📊 Audio" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
@@ -3526,17 +3526,17 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="SpiralLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="🌀 Spiral Overlay" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock x:Name="TxtFeatureSpiralLocked" Text="🌀 Spiral Overlay" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
                                     <TextBlock Text="🔒 Lvl 10" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <TextBlock Text="Reach Level 10 to Unlock" Foreground="{DynamicResource PinkBrush}" 
+                                <TextBlock Text="Reach Level 10 to Unlock" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
-                            
+
                             <!-- Unlocked State -->
                             <StackPanel x:Name="SpiralUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock Text="🌀 Spiral Overlay" Foreground="White" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock x:Name="TxtFeatureSpiral" Text="🌀 Spiral Overlay" Foreground="White" FontWeight="Bold" FontSize="14"/>
                                     <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
@@ -3591,17 +3591,17 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="PinkFilterLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="💗 Pink Filter" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock x:Name="TxtFeaturePinkFilterLocked" Text="💗 Pink Filter" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
                                     <TextBlock Text="🔒 Lvl 10" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <TextBlock Text="Reach Level 10 to Unlock" Foreground="{DynamicResource PinkBrush}" 
+                                <TextBlock Text="Reach Level 10 to Unlock" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
-                            
+
                             <!-- Unlocked State -->
                             <StackPanel x:Name="PinkFilterUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock Text="💗 Pink Filter" Foreground="White" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock x:Name="TxtFeaturePinkFilter" Text="💗 Pink Filter" Foreground="White" FontWeight="Bold" FontSize="14"/>
                                     <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
@@ -3650,17 +3650,17 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="BubblesLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="🫧 Bubble Pop" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock x:Name="TxtFeatureBubblePopLocked" Text="🫧 Bubble Pop" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
                                     <TextBlock Text="🔒 Lvl 20" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <TextBlock Text="Reach Level 20 to Unlock" Foreground="{DynamicResource PinkBrush}" 
+                                <TextBlock Text="Reach Level 20 to Unlock" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
-                            
+
                             <!-- Unlocked State -->
                             <StackPanel x:Name="BubblesUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock Text="🫧 Bubble Pop" Foreground="White" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock x:Name="TxtFeatureBubblePop" Text="🫧 Bubble Pop" Foreground="White" FontWeight="Bold" FontSize="14"/>
                                     <TextBlock Text="✔ Unlocked" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
@@ -3722,17 +3722,17 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="LockCardLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="📐 Lock Card" Foreground="#666666" FontWeight="Bold"/>
+                                    <TextBlock x:Name="TxtFeatureLockCardLocked" Text="📐 Lock Card" Foreground="#666666" FontWeight="Bold"/>
                                     <TextBlock Text="🔒 Lvl 35" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <TextBlock Text="Reach Level 35 to Unlock" Foreground="{DynamicResource PinkBrush}" 
+                                <TextBlock Text="Reach Level 35 to Unlock" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
-                            
+
                             <!-- Unlocked State -->
                             <StackPanel x:Name="LockCardUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock Text="📐 Lock Card" Foreground="White" FontWeight="Bold"/>
+                                    <TextBlock x:Name="TxtFeatureLockCard" Text="📐 Lock Card" Foreground="White" FontWeight="Bold"/>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                         <Button Content="▶ Test" Style="{StaticResource OutlineButton}" 
                                                 Padding="10,4" FontSize="11" Margin="0,0,8,0"
@@ -3819,18 +3819,18 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="Level50Locked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="🫧 Bubble Count" Foreground="#666666" FontWeight="Bold"/>
+                                    <TextBlock x:Name="TxtFeatureBubbleCountLocked" Text="🫧 Bubble Count" Foreground="#666666" FontWeight="Bold"/>
                                     <TextBlock Text="🔒 Lvl 50" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <TextBlock Text="Reach Level 50 to Unlock" Foreground="{DynamicResource PinkBrush}" 
+                                <TextBlock Text="Reach Level 50 to Unlock" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
-                            
+
                             <!-- Unlocked State -->
                             <StackPanel x:Name="Level50Unlocked" Visibility="Collapsed">
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="🫧 Bubble Count" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
+                                        <TextBlock x:Name="TxtFeatureBubbleCount" Text="🫧 Bubble Count" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
                                         <TextBlock Text="✔ Lvl 50" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
                                     </StackPanel>
                                     <CheckBox x:Name="ChkBubbleCountEnabled" Style="{StaticResource ToggleStyle}" 
@@ -3910,18 +3910,18 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="Level60Locked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="📺 Bouncing Text" Foreground="#666666" FontWeight="Bold"/>
+                                    <TextBlock x:Name="TxtFeatureBouncingLocked" Text="📺 Bouncing Text" Foreground="#666666" FontWeight="Bold"/>
                                     <TextBlock Text="🔒 Lvl 60" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
-                                <TextBlock Text="Reach Level 60 to Unlock" Foreground="{DynamicResource PinkBrush}" 
+                                <TextBlock Text="Reach Level 60 to Unlock" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
                             </StackPanel>
-                            
+
                             <!-- Unlocked State -->
                             <StackPanel x:Name="Level60Unlocked" Visibility="Collapsed">
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="📺 Bouncing Text" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
+                                        <TextBlock x:Name="TxtFeatureBouncing" Text="📺 Bouncing Text" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
                                         <TextBlock Text="✔ Lvl 60" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
                                     </StackPanel>
                                     <CheckBox x:Name="ChkBouncingTextEnabled" Style="{StaticResource ToggleStyle}" 
@@ -4003,7 +4003,7 @@
                             <Grid Grid.Column="0">
                                 <StackPanel>
                                     <Grid>
-                                        <TextBlock Text="💧 Brain Drain" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                        <TextBlock x:Name="TxtFeatureBrainDrain" Text="💧 Brain Drain" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
                                         <TextBlock Text="🔧 REWORK" Foreground="#FFA500" HorizontalAlignment="Right" FontSize="13" FontWeight="Bold"/>
                                     </Grid>
                                     <Border Background="#2A2A4A" CornerRadius="4" Padding="8" Margin="0,8,0,0">
@@ -4046,7 +4046,7 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="MindWipeLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock Text="🧠 Mind Wipe" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <TextBlock x:Name="TxtFeatureMindWipeLocked" Text="🧠 Mind Wipe" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
                                     <TextBlock Text="🔒 Lvl 75" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <TextBlock Text="Reach Level 75 to Unlock" Foreground="{DynamicResource PinkBrush}"
@@ -4057,7 +4057,7 @@
                             <StackPanel x:Name="MindWipeUnlocked" Visibility="Collapsed">
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="🧠 Mind Wipe" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
+                                        <TextBlock x:Name="TxtFeatureMindWipe" Text="🧠 Mind Wipe" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
                                         <TextBlock Text="✔ Lvl 75" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
                                     </StackPanel>
                                     <CheckBox x:Name="ChkMindWipeEnabled" Style="{StaticResource ToggleStyle}"
@@ -5965,20 +5965,20 @@
                                                 <!-- Basic -->
                                                 <StackPanel Grid.Column="2">
                                                     <TextBlock Text="Basic" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
-                                                    <Grid Margin="0,1"><TextBlock Text="Flashes" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock Text="Videos" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoFlash" Text="Flashes" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoVideo" Text="Videos" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                     <Grid Margin="0,1"><TextBlock Text="Web Videos" FontSize="10" Foreground="#CCC" ToolTip="Auto-plays HypnoTube videos fullscreen"/><CheckBox x:Name="ChkAutonomyWebVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock Text="Subliminals" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoSubliminal" Text="Subliminals" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                     <Grid Margin="0,1"><TextBlock Text="Comments" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyComment" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                 </StackPanel>
                                                 <!-- Advanced -->
                                                 <StackPanel Grid.Column="4">
                                                     <TextBlock Text="Advanced" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
-                                                    <Grid Margin="0,1"><TextBlock Text="Bubbles" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBubbles" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock Text="Pink Filter" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyPinkFilter" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock Text="Lock Cards" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyLockCard" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock Text="Bouncing" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBouncingText" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock Text="Mindwipe" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyMindWipe" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoBubbles" Text="Bubbles" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBubbles" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoPinkFilter" Text="Pink Filter" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyPinkFilter" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoLockCards" Text="Lock Cards" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyLockCard" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoBouncing" Text="Bouncing" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBouncingText" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoMindwipe" Text="Mindwipe" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyMindWipe" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                                 </StackPanel>
                                             </Grid>
 
@@ -8734,6 +8734,24 @@
                                             <TextBlock Text="Interacting, detaching, resizing, evolution stages, and animations" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="Start Guide" Click="BtnTutorialAvatar_Click"
+                                                Style="{StaticResource SmallPinkButton}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Modding Guide -->
+                                <Border Background="#1A1A32" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="&#x1F527;" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="Modding Guide" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Opens the Mod Creator with a step-by-step walkthrough of every tab" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Content="Start Guide" Click="BtnTutorialModding_Click"
                                                 Style="{StaticResource SmallPinkButton}" VerticalAlignment="Center"/>
                                     </Grid>
                                 </Border>

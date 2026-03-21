@@ -30,9 +30,9 @@
 
             <!-- Text Content -->
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock Text="⚡ PINK RUSH!" Foreground="#FF1493"
+                <TextBlock x:Name="TxtPinkRushTitle" Text="⚡ PINK RUSH!" Foreground="#FF1493"
                            FontWeight="Bold" FontSize="18" Margin="0,0,0,4"/>
-                <TextBlock Text="3x XP for 60 seconds!" Foreground="{DynamicResource PinkBrush}"
+                <TextBlock x:Name="TxtPinkRushSubtitle" Text="3x XP for 60 seconds!" Foreground="{DynamicResource PinkBrush}"
                            FontSize="13" Margin="0,0,0,6"/>
                 <TextBlock x:Name="TxtCountdown" Text="60s remaining" Foreground="#AAAAAA"
                            FontSize="12"/>
