@@ -69,13 +69,7 @@ namespace ConditioningControlPanel
             // Load bubble image from resources
             try
             {
-                var resourceUri = new Uri("pack://application:,,,/Resources/bubble.png", UriKind.Absolute);
-                var bubbleImg = new BitmapImage();
-                bubbleImg.BeginInit();
-                bubbleImg.UriSource = resourceUri;
-                bubbleImg.CacheOption = BitmapCacheOption.OnLoad;
-                bubbleImg.EndInit();
-                bubbleImg.Freeze();
+                var bubbleImg = Services.ModResourceResolver.ResolveImage("bubble.png");
                 _bubbleImage.Source = bubbleImg;
             }
             catch
@@ -107,9 +101,12 @@ namespace ConditioningControlPanel
             };
 
             // Create container grid with the bubble
+            // Use alpha=1 (nearly invisible) instead of Transparent so the grid is still
+            // hit-testable in layered windows — Transparent (alpha=0) is click-through at OS level.
+            // This ensures clicks on transparent gaps in the bubble image (e.g. hexagonal grid) still register.
             var grid = new Grid
             {
-                Background = Brushes.Transparent,
+                Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)),
                 IsHitTestVisible = true,
                 Children = { _bubbleImage }
             };

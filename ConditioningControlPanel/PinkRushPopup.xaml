@@ -24,15 +24,15 @@
             </Grid.ColumnDefinitions>
 
             <!-- Skill Image -->
-            <Border Grid.Column="0" Width="80" Height="80" Background="#1A1A2E" CornerRadius="8" Margin="0,0,15,0">
+            <Border Grid.Column="0" Width="80" Height="80" Background="{DynamicResource DarkerBgBrush}" CornerRadius="8" Margin="0,0,15,0">
                 <Image Source="pack://application:,,,/Resources/skills/pink_rush.png" Stretch="Uniform" Margin="5"/>
             </Border>
 
             <!-- Text Content -->
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock Text="⚡ PINK RUSH!" Foreground="#FF1493"
+                <TextBlock x:Name="TxtPinkRushTitle" Text="⚡ PINK RUSH!" Foreground="#FF1493"
                            FontWeight="Bold" FontSize="18" Margin="0,0,0,4"/>
-                <TextBlock Text="3x XP for 60 seconds!" Foreground="#FFB6C1"
+                <TextBlock x:Name="TxtPinkRushSubtitle" Text="3x XP for 60 seconds!" Foreground="{DynamicResource PinkBrush}"
                            FontSize="13" Margin="0,0,0,6"/>
                 <TextBlock x:Name="TxtCountdown" Text="60s remaining" Foreground="#AAAAAA"
                            FontSize="12"/>

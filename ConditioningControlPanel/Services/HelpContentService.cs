@@ -898,6 +898,33 @@ namespace ConditioningControlPanel.Services
                              "are calculated server-side and cached for performance. Your XP syncs when " +
                              "you're online. The board shows top players globally - aim for a spot at " +
                              "the top through consistent conditioning!"
+            },
+
+            ["Modding"] = new HelpContent
+            {
+                SectionId = "Modding",
+                Icon = "\uD83D\uDD27",
+                Title = "Modding Guide",
+                WhatItDoes = "Create custom mods that completely transform the app experience. " +
+                             "Mods can change theme colors, companion identity, phrases, voice lines, " +
+                             "subliminals, triggers, images, and more. Package everything into a single " +
+                             ".ccpmod file and share it with others!",
+                Tips = new List<string>
+                {
+                    "Start with just theme colors and identity \u2014 it's the fastest way to see results",
+                    "A .ccpmod is just a renamed ZIP file containing mod.json + an optional resources/ folder",
+                    "Any section you skip in mod.json falls back to the base mod \u2014 override only what you need",
+                    "Use the Mod Creator window for a visual builder with live preview",
+                    "Voice line filenames become the displayed text, so name them clearly (e.g. 'Hello Unit.mp3')",
+                    "Check the interactive Modding tutorial (? button) for a full step-by-step walkthrough"
+                },
+                HowItWorks = "Mods are .ccpmod files (ZIP format) containing a mod.json manifest and optional " +
+                             "resource overrides. On installation, the package is extracted to the mods folder. " +
+                             "When activated, the mod system resolves everything through a fallback chain: " +
+                             "Active Mod \u2192 Base Mod. Images in resources/ override built-in images by matching " +
+                             "filenames (achievements/*.png, features/*.png, skills/*.png, avatar_pose*.png, etc). " +
+                             "Voice lines in resources/sounds/flashes_audio/ replace the default set entirely. " +
+                             "Text replacements are applied globally across all UI text."
             }
         };
 

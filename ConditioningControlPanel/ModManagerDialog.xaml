@@ -1,0 +1,232 @@
+<Window x:Class="ConditioningControlPanel.ModManagerDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Mod Manager"
+        Height="500" Width="700"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title Bar -->
+            <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="12,12,0,0" Padding="20,12"
+                    MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <Grid>
+                    <TextBlock Text="Mod Manager" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <Button x:Name="BtnClose" Content="X" Click="BtnClose_Click"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Background="Transparent" Foreground="#B0B0B0" FontSize="16" FontWeight="Bold"
+                            BorderThickness="0" Cursor="Hand" Padding="8,2"
+                            Width="30" Height="30"/>
+                </Grid>
+            </Border>
+
+            <!-- Main Content -->
+            <Grid Grid.Row="1" Margin="15">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Mod List -->
+                <Border Grid.Column="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Margin="0,0,10,0" Padding="5">
+                    <ListBox x:Name="ModList" Background="Transparent" BorderThickness="0"
+                             SelectionChanged="ModList_SelectionChanged"
+                             Foreground="White" FontSize="13">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="Padding" Value="10,8"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="Bd" Background="Transparent" CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}" Margin="2">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#2A2A4A"/>
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background" Value="#353560"/>
+                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                                    <Setter TargetName="Bd" Property="BorderThickness" Value="1"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                    </ListBox>
+                </Border>
+
+                <!-- Details Panel -->
+                <Border Grid.Column="1" Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="20">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="DetailsPanel" Visibility="Collapsed">
+                            <TextBlock x:Name="TxtModName" FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,0,0,5"/>
+                            <TextBlock x:Name="TxtModAuthor" FontSize="12" Foreground="#808080" Margin="0,0,0,3"/>
+                            <TextBlock x:Name="TxtModVersion" FontSize="12" Foreground="#808080" Margin="0,0,0,12"/>
+                            <TextBlock x:Name="TxtModDescription" FontSize="13" Foreground="#C0C0C0" TextWrapping="Wrap" Margin="0,0,0,15"/>
+
+                            <!-- Theme Color Preview -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Theme:" Foreground="#808080" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <Border x:Name="ThemeColorPreview" Width="20" Height="20" CornerRadius="4" Margin="0,0,5,0"/>
+                                <TextBlock x:Name="TxtThemeColor" FontSize="12" Foreground="#A0A0A0" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Companion Info -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Companion:" Foreground="#808080" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock x:Name="TxtCompanion" FontSize="12" Foreground="#A0A0A0" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Active Indicator -->
+                            <TextBlock x:Name="TxtActiveIndicator" Text="Currently Active" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="#4CAF50" Margin="0,10,0,10" Visibility="Collapsed"/>
+
+                            <!-- Action Buttons -->
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <Button x:Name="BtnActivate" Content="Activate" Click="BtnActivate_Click"
+                                        Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="SemiBold"
+                                        Padding="16,8" BorderThickness="0" Cursor="Hand" Margin="0,0,10,0">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button x:Name="BtnUninstall" Content="Uninstall" Click="BtnUninstall_Click"
+                                        Background="{DynamicResource PanelAccentBrush}" Foreground="#FF6B6B" FontWeight="SemiBold"
+                                        Padding="16,8" BorderThickness="0" Cursor="Hand">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <!-- Bottom Bar -->
+            <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,12,12" Padding="15,10">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="BtnInstall" Content="Install from file..." Click="BtnInstall_Click"
+                            Background="{DynamicResource PanelAccentBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
+                            Cursor="Hand" Margin="0,0,10,0" FontSize="12">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button x:Name="BtnExport" Content="Export current..." Click="BtnExport_Click"
+                            Background="{DynamicResource PanelAccentBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
+                            Cursor="Hand" Margin="0,0,10,0" FontSize="12">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="bd" Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button x:Name="BtnCreate" Content="Create New" Click="BtnCreate_Click"
+                            Background="{DynamicResource PinkBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
+                            Cursor="Hand" Margin="0,0,10,0" FontSize="12" FontWeight="SemiBold">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="bd" Property="Background" Value="#FF1493"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

@@ -194,8 +194,7 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("Triggering Bambi Freeze (subliminals disabled but special trigger allowed)");
             }
 
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var text = Models.ContentModeConfig.GetFreezeTriggerText(mode);
+            var text = App.Mods?.GetFreezeTriggerText() ?? "Bambi Freeze";
             string? audioPath = FindLinkedAudio(text);
 
             if (audioPath != null)
@@ -289,8 +288,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void PlayBambiReset()
         {
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var resetText = Models.ContentModeConfig.GetResetTriggerText(mode);
+            var resetText = App.Mods?.GetResetTriggerText() ?? "Bambi Reset";
             string? resetAudio = FindLinkedAudio(resetText);
 
             if (resetAudio != null && App.Settings.Current.SubAudioEnabled)
@@ -455,17 +453,24 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private async void TriggerSubliminalWithHapticPattern(string text)
         {
-            // Get anticipation delay from haptic service (Buttplug needs ~1.3s, Lovense ~250ms)
-            var anticipationMs = App.Haptics?.SubliminalAnticipationMs ?? 250;
+            try
+            {
+                // Get anticipation delay from haptic service (Buttplug needs ~1.3s, Lovense ~250ms)
+                var anticipationMs = App.Haptics?.SubliminalAnticipationMs ?? 250;
 
-            // Trigger haptic pattern first (pattern depends on text)
-            _ = App.Haptics?.TriggerSubliminalPatternAsync(text);
+                // Trigger haptic pattern first (pattern depends on text)
+                _ = App.Haptics?.TriggerSubliminalPatternAsync(text);
 
-            // Wait for anticipation delay before showing visual
-            await Task.Delay(anticipationMs);
+                // Wait for anticipation delay before showing visual
+                await Task.Delay(anticipationMs);
 
-            // Now show on UI thread
-            Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(text));
+                // Now show on UI thread
+                Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(text));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("SubliminalService: TriggerSubliminalWithHapticPattern failed: {Error}", ex.Message);
+            }
         }
 
         private void ShowSubliminalVisuals(string text)

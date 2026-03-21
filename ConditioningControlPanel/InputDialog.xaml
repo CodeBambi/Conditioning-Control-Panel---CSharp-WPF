@@ -4,7 +4,7 @@
         Title="Input"
         Height="180" Width="400"
         WindowStartupLocation="CenterOwner"
-        Background="#1A1A2E"
+        Background="{DynamicResource DarkerBgBrush}"
         ResizeMode="NoResize"
         WindowStyle="None"
         AllowsTransparency="False"
@@ -34,7 +34,7 @@
 
             <!-- Input -->
             <TextBox x:Name="TxtInput" Grid.Row="2" 
-                     Background="#252542" Foreground="White" 
+                     Background="{DynamicResource PanelBgBrush}" Foreground="White"
                      BorderBrush="{StaticResource PinkBrush}"
                      Padding="10,8" FontSize="14"
                      KeyDown="TxtInput_KeyDown"/>
@@ -42,7 +42,7 @@
             <!-- Buttons -->
             <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
                 <Button Content="Cancel" Width="80" Padding="10,8" Margin="0,0,10,0"
-                        Background="#404060" Foreground="White" BorderThickness="0"
+                        Background="{DynamicResource PanelAccentBrush}" Foreground="White" BorderThickness="0"
                         Click="BtnCancel_Click" Cursor="Hand"/>
                 <Button Content="OK" Width="80" Padding="10,8"
                         Background="{StaticResource PinkBrush}" Foreground="White" 

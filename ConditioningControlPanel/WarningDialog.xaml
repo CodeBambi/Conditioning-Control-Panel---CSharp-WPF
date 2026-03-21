@@ -9,7 +9,7 @@
         AllowsTransparency="True"
         Background="Transparent">
     
-    <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
         <Grid Margin="25">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -21,7 +21,7 @@
             <!-- Title -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,18">
                 <TextBlock x:Name="TxtIcon" Text="⚠" FontSize="32" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                <TextBlock x:Name="TxtTitle" Text="Warning" Foreground="#FF69B4" FontSize="24" FontWeight="Bold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                <TextBlock x:Name="TxtTitle" Text="Warning" Foreground="{DynamicResource PinkBrush}" FontSize="24" FontWeight="Bold" VerticalAlignment="Center" TextWrapping="Wrap"/>
             </StackPanel>
             
             <!-- Message -->
@@ -42,8 +42,8 @@
                                     <ControlTemplate TargetType="CheckBox">
                                         <Grid>
                                             <Border x:Name="border" Width="24" Height="24" CornerRadius="4" 
-                                                    Background="#252542" BorderBrush="#FF69B4" BorderThickness="2" Cursor="Hand"/>
-                                            <TextBlock x:Name="check" Text="✔" Foreground="#FF69B4" FontSize="16" 
+                                                    Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2" Cursor="Hand"/>
+                                            <TextBlock x:Name="check" Text="✔" Foreground="{DynamicResource PinkBrush}" FontSize="16" 
                                                        FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                        Visibility="Collapsed"/>
                                         </Grid>
@@ -84,7 +84,7 @@
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
                                         <Border Background="{TemplateBinding Background}" CornerRadius="6" 
-                                                Padding="{TemplateBinding Padding}" BorderBrush="#404060" BorderThickness="1">
+                                                Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
                                         <ControlTemplate.Triggers>

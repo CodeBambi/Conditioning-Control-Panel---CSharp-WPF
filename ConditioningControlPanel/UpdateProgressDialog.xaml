@@ -6,7 +6,7 @@
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         WindowStyle="ToolWindow"
-        Background="#1A1A2E">
+        Background="{DynamicResource DarkerBgBrush}">
 
     <Grid Margin="20">
         <Grid.RowDefinitions>
@@ -17,12 +17,12 @@
 
         <!-- Title -->
         <TextBlock Grid.Row="0" Text="Downloading Update..."
-                   Foreground="#FF69B4" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
+                   Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
 
         <!-- Progress Bar -->
-        <Border Grid.Row="1" Background="#252542" CornerRadius="4" Height="20" Padding="2">
+        <Border Grid.Row="1" Background="{DynamicResource PanelBgBrush}" CornerRadius="4" Height="20" Padding="2">
             <Grid>
-                <Border x:Name="ProgressFill" Background="#FF69B4" CornerRadius="3" HorizontalAlignment="Left" Width="0"/>
+                <Border x:Name="ProgressFill" Background="{DynamicResource PinkBrush}" CornerRadius="3" HorizontalAlignment="Left" Width="0"/>
             </Grid>
         </Border>
 

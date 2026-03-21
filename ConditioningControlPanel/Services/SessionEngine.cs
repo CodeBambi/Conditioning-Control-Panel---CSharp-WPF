@@ -518,7 +518,7 @@ namespace ConditioningControlPanel.Services
                     if (App.Settings.Current.BubblesFrequency != currentBubbleFreq)
                     {
                         App.Settings.Current.BubblesFrequency = currentBubbleFreq;
-                        App.Bubbles.RefreshFrequency();
+                        App.Bubbles?.RefreshFrequency();
                     }
                 }
             }
@@ -584,7 +584,7 @@ namespace ConditioningControlPanel.Services
                 if (elapsedMinutes >= settings.BubblesStartMinute)
                 {
                     App.Settings.Current.BubblesEnabled = true;
-                    App.Bubbles.Start(bypassLevelCheck: true); // Bypass level check during sessions
+                    App.Bubbles?.Start(bypassLevelCheck: true); // Bypass level check during sessions
                 }
             }
 
@@ -819,11 +819,10 @@ namespace ConditioningControlPanel.Services
                         current.SubliminalPool[key] = false;
                     }
 
-                    // Add/enable session phrases (mode-aware: transform Bambi triggers for SissyHypno mode)
-                    var contentMode = App.Settings?.Current?.ContentMode ?? ContentMode.BambiSleep;
+                    // Add/enable session phrases (mod-aware: transform triggers for active mod)
                     foreach (var phrase in settings.SubliminalPhrases)
                     {
-                        var modePhrase = Session.MakeModeAware(phrase, contentMode);
+                        var modePhrase = App.Mods?.MakeModAware(phrase) ?? phrase;
                         current.SubliminalPool[modePhrase] = true;
                     }
 
@@ -879,15 +878,15 @@ namespace ConditioningControlPanel.Services
                 }
                 
                 // Start bouncing text (bypass level requirement during sessions)
-                App.BouncingText.Stop(); // Stop first to reset state
-                App.BouncingText.Start(bypassLevelCheck: true);
+                App.BouncingText?.Stop(); // Stop first to reset state
+                App.BouncingText?.Start(bypassLevelCheck: true);
                 App.Logger?.Information("Session: Started bouncing text with phrases: {Phrases}",
                     string.Join(", ", settings.BouncingTextPhrases));
             }
             else
             {
                 // Stop bouncing text if session disables it
-                App.BouncingText.Stop();
+                App.BouncingText?.Stop();
             }
             
             // Pink Filter (delayed start - don't enable yet if delayed)
@@ -964,10 +963,9 @@ namespace ConditioningControlPanel.Services
                         current.LockCardPhrases[key] = false;
                     }
 
-                    var contentMode = App.Settings?.Current?.ContentMode ?? ContentMode.BambiSleep;
                     foreach (var phrase in settings.LockCardPhrases)
                     {
-                        var modePhrase = Session.MakeModeAware(phrase, contentMode);
+                        var modePhrase = App.Mods?.MakeModAware(phrase) ?? phrase;
                         current.LockCardPhrases[modePhrase] = true;
                     }
 
@@ -1129,7 +1127,7 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        gifUri = new Uri("pack://application:,,,/Resources/spiral.gif", UriKind.Absolute);
+                        gifUri = new Uri(ModResourceResolver.ResolveUri("spirals/spiral.gif"), UriKind.Absolute);
                         var resourceInfo = Application.GetResourceStream(gifUri);
                         if (resourceInfo?.Stream != null)
                         {

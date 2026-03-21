@@ -39,8 +39,7 @@ namespace ConditioningControlPanel.Services
         private static readonly Random _fallbackRandom = new();
         private static string GetFallbackResponse()
         {
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var phrases = Models.ContentModeConfig.GetIdlePhrases(mode);
+            var phrases = App.Mods?.GetPhrases("Idle") ?? new[] { "Good girl~" };
             return phrases[_fallbackRandom.Next(phrases.Length)];
         }
 

@@ -37,9 +37,9 @@
             <StackPanel Grid.Row="0" Margin="0,0,0,16">
                 <Grid>
                     <TextBlock x:Name="TxtTitle" Text="CREATE CUSTOM CATEGORY" FontSize="22" FontWeight="Bold"
-                               Foreground="#FF69B4" HorizontalAlignment="Left">
+                               Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Left">
                         <TextBlock.Effect>
-                            <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
                         </TextBlock.Effect>
                     </TextBlock>
                     <!-- Close button -->
@@ -91,12 +91,12 @@
                               Background="#20FFFFFF" BorderBrush="#30FFFFFF" BorderThickness="1"
                               Padding="8,6" SelectionChanged="CboTemplate_SelectionChanged">
                         <ComboBox.Resources>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#1A1A2E"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="{DynamicResource DarkerBg}"/>
                         </ComboBox.Resources>
                         <ComboBox.ItemContainerStyle>
                             <Style TargetType="ComboBoxItem">
                                 <Setter Property="Foreground" Value="White"/>
-                                <Setter Property="Background" Value="#1A1A2E"/>
+                                <Setter Property="Background" Value="{DynamicResource DarkerBgBrush}"/>
                                 <Setter Property="Padding" Value="8,6"/>
                                 <Style.Triggers>
                                     <Trigger Property="IsHighlighted" Value="True">
@@ -166,7 +166,7 @@
                             <Thickness>1</Thickness>
                         </Border.BorderThickness>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Preview" Foreground="#9B59B6" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock Text="Preview" Foreground="{DynamicResource SecondaryBrush}" FontSize="13" FontWeight="SemiBold"/>
                             <TextBlock x:Name="TxtPreviewHint" Text="  — generate a sample question" Foreground="#505060" FontSize="12"/>
                         </StackPanel>
                     </Border>
@@ -229,7 +229,7 @@
                     <Border.BorderThickness>
                         <Thickness>1</Thickness>
                     </Border.BorderThickness>
-                    <TextBlock x:Name="TxtSave" Text="Save Category" Foreground="#FF69B4"
+                    <TextBlock x:Name="TxtSave" Text="Save Category" Foreground="{DynamicResource PinkBrush}"
                                FontSize="14" FontWeight="Bold"/>
                 </Border>
             </StackPanel>

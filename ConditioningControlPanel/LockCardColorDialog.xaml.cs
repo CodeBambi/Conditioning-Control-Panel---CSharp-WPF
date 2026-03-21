@@ -26,10 +26,10 @@ namespace ConditioningControlPanel
             var settings = App.Settings.Current;
             
             _bgColor = ParseColor(settings.LockCardBackgroundColor, Color.FromRgb(26, 26, 46));
-            _textColor = ParseColor(settings.LockCardTextColor, Color.FromRgb(255, 105, 180));
+            _textColor = ParseColor(settings.LockCardTextColor, (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
             _inputBgColor = ParseColor(settings.LockCardInputBackgroundColor, Color.FromRgb(37, 37, 66));
             _inputTextColor = ParseColor(settings.LockCardInputTextColor, Colors.White);
-            _accentColor = ParseColor(settings.LockCardAccentColor, Color.FromRgb(255, 105, 180));
+            _accentColor = ParseColor(settings.LockCardAccentColor, (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
             
             UpdateColorButtons();
         }

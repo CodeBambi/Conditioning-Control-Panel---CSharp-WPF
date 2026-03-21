@@ -109,6 +109,12 @@ check_*.js
 reset_*.js
 set_force_*.js
 
+# Mod packages (built artifacts, too large for git)
+*.ccpmod
+
+# DroneMod (distributed separately)
+ConditioningControlPanel/DroneMod/
+
 # Environment and secrets
 *.env
 *.env.*

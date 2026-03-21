@@ -218,8 +218,8 @@ namespace ConditioningControlPanel
             // Load logo
             LoadLogo();
 
-            // Initialize content mode toggle (BS/SH switch)
-            InitializeContentModeToggle();
+            // Initialize mod selector display
+            InitializeModSelector();
 
             // Initialize tray icon
             _trayIcon = new TrayIconService(this);
@@ -339,8 +339,8 @@ namespace ConditioningControlPanel
             App.BouncingText.Stop();
             App.Overlay.Stop();
             
-            // Show content mode selection on first launch (before welcome dialog)
-            ContentModeDialog.ShowIfNeeded();
+            // Show mod selection on first launch (before welcome dialog)
+            ModSelectorDialog.ShowIfNeeded();
 
             // Show welcome dialog on first launch, then start tutorial
             // But delay tutorial if update dialog is being shown
@@ -729,18 +729,11 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-                var logoFile = mode == Models.ContentMode.SissyHypno ? "logo2.png" : "logo.png";
-                var resourceUri = new Uri($"pack://application:,,,/Resources/{logoFile}", UriKind.Absolute);
-
-                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = resourceUri;
-                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                bitmap.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreImageCache;
-                bitmap.EndInit();
-
-                ImgLogo.Source = bitmap;
+                // Use mod resource resolver for logo — allows mod overrides
+                var logoFile = App.Settings?.Current?.IsSissyMode == true ? "logo2.png" : "logo.png";
+                var image = Services.ModResourceResolver.ResolveImage(logoFile);
+                if (image != null)
+                    ImgLogo.Source = image;
                 App.Logger?.Debug("Logo loaded: {Logo}", logoFile);
             }
             catch (Exception ex)
@@ -756,21 +749,13 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-                var imageFile = mode == Models.ContentMode.SissyHypno ? "takeover.png" : "bambi takeover.png";
-                var resourceUri = new Uri($"pack://application:,,,/Resources/features/{imageFile}", UriKind.Absolute);
+                var imageFile = App.Settings?.Current?.IsSissyMode == true ? "takeover.png" : "bambi takeover.png";
+                var image = Services.ModResourceResolver.ResolveImage($"features/{imageFile}");
+                if (image != null)
+                    ImgTakeover.Source = image;
 
-                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = resourceUri;
-                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                bitmap.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreImageCache;
-                bitmap.EndInit();
-
-                ImgTakeover.Source = bitmap;
-
-                // Update mode-aware takeover labels
-                var takeoverLabel = Models.ContentModeConfig.GetTakeoverLabel(mode);
+                // Update mod-aware takeover labels
+                var takeoverLabel = App.Mods?.GetTakeoverLabel() ?? "Bambi Takeover";
                 TxtTakeoverHeader.Text = $"🤖 {takeoverLabel}";
                 TxtTakeoverLocked.Text = $"🤖 {takeoverLabel}";
                 TxtTakeoverUnlocked.Text = $"🤖 {takeoverLabel}";
@@ -786,48 +771,130 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Refreshes UI elements that need manual updates when theme changes.
-        /// Updates colors based on content mode (Bambi Sleep = Pink, Sissy Hypno = Purple).
+        /// Updates Application.Current.Resources Color and Brush entries so all
+        /// DynamicResource bindings across the app auto-update.
+        /// Also updates named elements that use direct property assignment.
         /// </summary>
         private void RefreshThemeAwareElements()
         {
             try
             {
-                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-                var accentHex = Models.ContentModeConfig.GetAccentColorHex(mode);
-                var accentLightHex = Models.ContentModeConfig.GetAccentLightColorHex(mode);
-                var accentDarkHex = Models.ContentModeConfig.GetAccentDarkColorHex(mode);
+                var accentHex = App.Mods?.GetAccentColorHex() ?? "#FF69B4";
+                var darkHex = App.Mods?.GetAccentDarkColorHex() ?? "#FF1493";
+                var lightHex = App.Mods?.GetAccentLightColorHex() ?? "#FF8FAF";
+                var secondaryHex = App.Mods?.GetSecondaryColorHex() ?? "#9B59B6";
 
-                var accentColor = (Color)ColorConverter.ConvertFromString(accentHex);
-                var accentLightColor = (Color)ColorConverter.ConvertFromString(accentLightHex);
-                var accentDarkColor = (Color)ColorConverter.ConvertFromString(accentDarkHex);
+                var accent = (Color)ColorConverter.ConvertFromString(accentHex);
+                var dark = (Color)ColorConverter.ConvertFromString(darkHex);
+                var light = (Color)ColorConverter.ConvertFromString(lightHex);
+                var secondary = (Color)ColorConverter.ConvertFromString(secondaryHex);
+                var transparent30 = Color.FromArgb(0x30, accent.R, accent.G, accent.B);
+                var transparent20 = Color.FromArgb(0x20, accent.R, accent.G, accent.B);
+                var accentPressed = Color.FromArgb(0xFF,
+                    (byte)Math.Max(0, accent.R - 30),
+                    (byte)Math.Max(0, accent.G - 30),
+                    (byte)Math.Max(0, accent.B - 30));
 
-                var accentBrush = new SolidColorBrush(accentColor);
-                var accentLightBrush = new SolidColorBrush(accentLightColor);
-                var accentDarkBrush = new SolidColorBrush(accentDarkColor);
+                // === BACKGROUND COLORS (mod-customizable) ===
+                var bgHex = App.Mods?.GetBackgroundColorHex() ?? "#1A1A2E";
+                var panelHex = App.Mods?.GetPanelColorHex() ?? "#252542";
+                var surfaceHex = App.Mods?.GetSurfaceColorHex() ?? "#1E1E3A";
 
-                // === TITLE BAR (most visible) ===
+                var bgColor = (Color)ColorConverter.ConvertFromString(bgHex);
+                var panelColor = (Color)ColorConverter.ConvertFromString(panelHex);
+                var surfaceColor = (Color)ColorConverter.ConvertFromString(surfaceHex);
+
+                // Auto-computed derivatives
+                var panelAccentColor = LightenColor(panelColor, 0.15);
+                var panelAccentHoverColor = LightenColor(panelColor, 0.25);
+                var previewBgColor = DarkenColor(bgColor, 0.15);
+                var panelBgTransparent = Color.FromArgb(0xB0, panelColor.R, panelColor.G, panelColor.B);
+
+                var res = Application.Current.Resources;
+
+                // Update background Color resources
+                res["DarkerBg"] = bgColor;
+                res["PanelBg"] = panelColor;
+                res["SurfaceBg"] = surfaceColor;
+                res["PanelAccent"] = panelAccentColor;
+                res["PanelAccentHover"] = panelAccentHoverColor;
+                res["PreviewBg"] = previewBgColor;
+                res["PanelBgTransparent"] = panelBgTransparent;
+
+                // Update background Brush resources
+                res["DarkerBgBrush"] = new SolidColorBrush(bgColor);
+                res["PanelBgBrush"] = new SolidColorBrush(panelColor);
+                res["SurfaceBgBrush"] = new SolidColorBrush(surfaceColor);
+                res["PanelAccentBrush"] = new SolidColorBrush(panelAccentColor);
+                res["PanelAccentHoverBrush"] = new SolidColorBrush(panelAccentHoverColor);
+                res["PreviewBgBrush"] = new SolidColorBrush(previewBgColor);
+                res["PanelBgTransparentBrush"] = new SolidColorBrush(panelBgTransparent);
+
+                // Accent-tinted dark backgrounds: blend accent onto mod's background color
+                byte baseR = bgColor.R, baseG = bgColor.G, baseB = bgColor.B;
+                var tintedBg = Color.FromRgb(
+                    (byte)(baseR + (accent.R - baseR) * 0.15),
+                    (byte)(baseG + (accent.G - baseG) * 0.15),
+                    (byte)(baseB + (accent.B - baseB) * 0.15));
+                var tintedBgHover = Color.FromRgb(
+                    (byte)(baseR + (accent.R - baseR) * 0.20),
+                    (byte)(baseG + (accent.G - baseG) * 0.20),
+                    (byte)(baseB + (accent.B - baseB) * 0.20));
+                var midGradient = Color.FromRgb(
+                    (byte)(baseR + (accent.R - baseR) * 0.10),
+                    (byte)(baseG + (accent.G - baseG) * 0.10),
+                    (byte)(baseB + (accent.B - baseB) * 0.10));
+
+                var transparent40 = Color.FromArgb(0x40, accent.R, accent.G, accent.B);
+                var transparent50 = Color.FromArgb(0x50, accent.R, accent.G, accent.B);
+
+                // === UPDATE COLOR RESOURCES (drives DynamicResource brushes in Brushes.xaml) ===
+                res["PinkColor"] = accent;
+                res["DarkPink"] = dark;
+                res["PinkButtonHovered"] = light;
+                res["TransparentPink"] = transparent30;
+                res["TransparentPink20"] = transparent20;
+                res["TransparentPink40"] = transparent40;
+                res["TransparentPink50"] = transparent50;
+                res["AccentPressed"] = accentPressed;
+                res["PatreonPurple"] = secondary;
+                res["AccentTintedBg"] = tintedBg;
+                res["AccentTintedBgHover"] = tintedBgHover;
+                res["AccentMidGradient"] = midGradient;
+
+                // === ALSO UPDATE BRUSH RESOURCES (in case any are frozen from initial load) ===
+                res["PinkBrush"] = new SolidColorBrush(accent);
+                res["DarkPinkBrush"] = new SolidColorBrush(dark);
+                res["PinkButtonHoveredBrush"] = new SolidColorBrush(light);
+                res["TransparentPinkBrush"] = new SolidColorBrush(transparent30);
+                res["TransparentPink20Brush"] = new SolidColorBrush(transparent20);
+                res["TransparentPink40Brush"] = new SolidColorBrush(transparent40);
+                res["TransparentPink50Brush"] = new SolidColorBrush(transparent50);
+                res["AccentPressedBrush"] = new SolidColorBrush(accentPressed);
+                res["PatreonPurpleBrush"] = new SolidColorBrush(secondary);
+                res["SecondaryBrush"] = new SolidColorBrush(secondary);
+                res["AccentTintedBgBrush"] = new SolidColorBrush(tintedBg);
+                res["AccentTintedBgHoverBrush"] = new SolidColorBrush(tintedBgHover);
+                res["AccentMidGradientBrush"] = new SolidColorBrush(midGradient);
+
+                // === TITLE BAR (most visible — direct assignment for immediate update) ===
+                var accentBrush = new SolidColorBrush(accent);
                 if (TitleBarBorder != null)
                     TitleBarBorder.Background = accentBrush;
 
                 // === HEADER AREA ===
-                // Player title and glow
                 if (TxtPlayerTitle != null)
                 {
                     TxtPlayerTitle.Foreground = accentBrush;
                     if (TxtPlayerTitle.Effect is System.Windows.Media.Effects.DropShadowEffect glow)
-                        glow.Color = accentColor;
+                        glow.Color = accent;
                 }
-
-                // Header version text
                 if (TxtHeaderVersion != null)
                     TxtHeaderVersion.Foreground = accentBrush;
 
                 // === XP/LEVEL DISPLAY ===
-                // Level label (e.g., "LVL 42")
                 if (TxtLevelLabel != null)
                     TxtLevelLabel.Foreground = accentBrush;
-
-                // XP progress bar fill
                 if (XPBar != null)
                     XPBar.Background = accentBrush;
 
@@ -839,7 +906,11 @@ namespace ConditioningControlPanel
                 if (TxtBannerTertiary != null)
                     TxtBannerTertiary.Foreground = accentBrush;
 
-                App.Logger?.Debug("Theme-aware UI elements refreshed for mode {Mode}", mode);
+                // === MOD SELECTOR DOT ===
+                if (ModColorDot != null)
+                    ModColorDot.Background = accentBrush;
+
+                App.Logger?.Debug("Theme-aware UI elements refreshed for mod {ModId}", App.Mods?.ActiveModId);
             }
             catch (Exception ex)
             {
@@ -847,109 +918,131 @@ namespace ConditioningControlPanel
             }
         }
 
+        private static Color LightenColor(Color c, double amount)
+        {
+            return Color.FromRgb(
+                (byte)Math.Min(255, c.R + (255 - c.R) * amount),
+                (byte)Math.Min(255, c.G + (255 - c.G) * amount),
+                (byte)Math.Min(255, c.B + (255 - c.B) * amount));
+        }
+
+        private static Color DarkenColor(Color c, double amount)
+        {
+            return Color.FromRgb(
+                (byte)Math.Max(0, c.R * (1 - amount)),
+                (byte)Math.Max(0, c.G * (1 - amount)),
+                (byte)Math.Max(0, c.B * (1 - amount)));
+        }
+
         /// <summary>
         /// Initializes the content mode toggle based on current settings.
         /// </summary>
-        private void InitializeContentModeToggle()
+        private void InitializeModSelector()
         {
-            var mode = App.Settings.Current.ContentMode;
-            var isSissyMode = mode == Models.ContentMode.SissyHypno;
-            ChkContentMode.IsChecked = isSissyMode;
+            // Update mod name display
+            TxtModName.Text = App.Mods?.GetModeDisplayName() ?? "Bambi Sleep";
 
-            // Update toggle label colors using mode-aware accent
-            var (r, g, b) = Models.ContentModeConfig.GetAccentColorRgb(mode);
-            var accentColor = Color.FromRgb(r, g, b);
-            var mutedColor = Color.FromRgb(96, 96, 128);
-            TxtModeBS.Foreground = new SolidColorBrush(isSissyMode ? mutedColor : accentColor);
-            TxtModeSH.Foreground = new SolidColorBrush(isSissyMode ? accentColor : mutedColor);
-
-            // Hide BambiCloud option in Sissy mode
-            RbBambiCloud.Visibility = isSissyMode ? Visibility.Collapsed : Visibility.Visible;
-
-            // If in Sissy mode, ensure HypnoTube is selected
-            if (isSissyMode)
+            // Update mod color dot
+            var accentHex = App.Mods?.GetAccentColorHex() ?? "#FF69B4";
+            try
             {
-                RbHypnoTube.IsChecked = true;
+                ModColorDot.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(accentHex));
+            }
+            catch
+            {
+                ModColorDot.Background = new SolidColorBrush(Colors.HotPink);
             }
 
-            // Update browser loading text for current mode
-            var browserSiteName = isSissyMode ? "HypnoTube" : "BambiCloud";
+            // Hide BambiCloud option if mod doesn't want it
+            var showBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
+            RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
+
+            if (!showBambiCloud)
+                RbHypnoTube.IsChecked = true;
+
+            // Update browser loading text
+            var browserSiteName = showBambiCloud ? "BambiCloud" : "HypnoTube";
             BrowserLoadingText.Text = $"🌐 Click to connect to {browserSiteName}";
 
-            // Load mode-aware images
+            // Load mod-aware images
             LoadTakeoverImage();
+            LoadFeatureImages();
             RefreshThemeAwareElements();
         }
 
-        private void ChkContentMode_Changed(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Loads feature images from mod resources (if overrides exist) or embedded resources.
+        /// </summary>
+        private void LoadFeatureImages()
+        {
+            try
+            {
+                var featureMap = new (string resourcePath, System.Windows.Shapes.Rectangle? rect)[]
+                {
+                    ("features/spiral_overlay.png", SpiralFeatureImage),
+                    ("features/Pink_filter.png", PinkFilterFeatureImage),
+                    ("features/Bubble_pop.png", BubblePopFeatureImage),
+                    ("features/Phrase_Lock.png", LockCardFeatureImage),
+                    ("features/Bubble_count.png", BubbleCountFeatureImage),
+                    ("features/bouncing_text.png", BouncingTextFeatureImage),
+                    ("features/brain_drain.png", BrainDrainFeatureImage),
+                    ("features/Mind_Wipers.png", MindWipeFeatureImage),
+                };
+
+                foreach (var (path, rect) in featureMap)
+                {
+                    if (rect == null) continue;
+                    var image = ModResourceResolver.ResolveImage(path);
+                    if (image != null)
+                    {
+                        rect.Fill = new ImageBrush(image) { Stretch = Stretch.UniformToFill };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to load some feature images");
+            }
+        }
+
+        private void ModSelector_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             if (_isLoading) return;
 
-            var isSissyMode = ChkContentMode.IsChecked == true;
-            var newMode = isSissyMode ? Models.ContentMode.SissyHypno : Models.ContentMode.BambiSleep;
-            var oldMode = App.Settings.Current.ContentMode;
+            var dialog = new ModManagerDialog { Owner = this };
+            dialog.ShowDialog();
 
-            // Save current pools for the old mode before switching
-            App.Settings.Current.SubliminalPoolByMode ??= new();
-            App.Settings.Current.AttentionPoolByMode ??= new();
-            App.Settings.Current.LockCardPhrasesByMode ??= new();
-            App.Settings.Current.CustomTriggersByMode ??= new();
-
-            App.Settings.Current.SubliminalPoolByMode[oldMode] = new(App.Settings.Current.SubliminalPool);
-            App.Settings.Current.AttentionPoolByMode[oldMode] = new(App.Settings.Current.AttentionPool);
-            App.Settings.Current.LockCardPhrasesByMode[oldMode] = new(App.Settings.Current.LockCardPhrases);
-            App.Settings.Current.CustomTriggersByMode[oldMode] = new(App.Settings.Current.CustomTriggers);
-
-            // Update setting
-            App.Settings.Current.ContentMode = newMode;
-
-            // Restore saved pools for new mode, or use defaults if no backup exists
-            App.Settings.Current.SubliminalPool = App.Settings.Current.SubliminalPoolByMode.TryGetValue(newMode, out var savedSub) && savedSub.Count > 0
-                ? savedSub : Models.ContentModeConfig.GetDefaultSubliminalPool(newMode);
-            App.Settings.Current.AttentionPool = App.Settings.Current.AttentionPoolByMode.TryGetValue(newMode, out var savedAtt) && savedAtt.Count > 0
-                ? savedAtt : Models.ContentModeConfig.GetDefaultSubliminalPool(newMode);
-            App.Settings.Current.LockCardPhrases = App.Settings.Current.LockCardPhrasesByMode.TryGetValue(newMode, out var savedLock) && savedLock.Count > 0
-                ? savedLock : Models.ContentModeConfig.GetDefaultLockCardPhrases(newMode);
-            App.Settings.Current.CustomTriggers = App.Settings.Current.CustomTriggersByMode.TryGetValue(newMode, out var savedTrig) && savedTrig.Count > 0
-                ? savedTrig : Models.ContentModeConfig.GetDefaultCustomTriggers(newMode);
-
-            App.Settings.Save();
-
-            // Update toggle label colors using mode-aware accent
-            var (r, g, b) = Models.ContentModeConfig.GetAccentColorRgb(newMode);
-            var accentColor = Color.FromRgb(r, g, b);
-            var mutedColor = Color.FromRgb(96, 96, 128);
-            TxtModeBS.Foreground = new SolidColorBrush(isSissyMode ? mutedColor : accentColor);
-            TxtModeSH.Foreground = new SolidColorBrush(isSissyMode ? accentColor : mutedColor);
-
-            // Hide/show BambiCloud option based on mode
-            RbBambiCloud.Visibility = isSissyMode ? Visibility.Collapsed : Visibility.Visible;
-
-            // If switching to Sissy mode, always switch to HypnoTube and navigate browser
-            if (isSissyMode)
+            if (dialog.ModWasChanged)
             {
-                RbHypnoTube.IsChecked = true;
+                // Update settings to reflect new active mod
+                App.Settings.Current.ActiveModId = App.Mods.ActiveModId;
+                App.Settings.Save();
 
-                // Force browser navigation to HypnoTube regardless of current content
-                if (_browser != null && _browserInitialized)
+                // Refresh all mod-aware UI
+                InitializeModSelector();
+                LoadLogo();
+
+                // Hide/show BambiCloud based on mod
+                var showBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
+                RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
+                if (!showBambiCloud)
                 {
-                    _browser.Navigate("https://hypnotube.com/");
-                    App.Logger?.Information("Browser navigated to HypnoTube due to Sissy mode switch");
+                    RbHypnoTube.IsChecked = true;
+                    if (_browser != null && _browserInitialized)
+                    {
+                        var url = App.Mods?.GetDefaultBrowserUrl() ?? "https://hypnotube.com/";
+                        _browser.Navigate(url);
+                    }
                 }
+
+                // Update hypnotube links UI for new mod
+                RefreshHypnotubeLinksUI();
+
+                // Update avatar context menu
+                _avatarTubeWindow?.UpdateQuickMenuState();
+
+                App.Logger?.Information("Mod changed to {ModId}", App.Mods?.ActiveModId);
             }
-
-            // Refresh UI elements and mode-aware images
-            LoadLogo();
-            LoadTakeoverImage();
-            RefreshThemeAwareElements();
-
-            // Update hypnotube links UI for new mode
-            RefreshHypnotubeLinksUI();
-
-            // Update avatar context menu for new mode
-            _avatarTubeWindow?.UpdateQuickMenuState();
-
-            App.Logger?.Information("Content mode changed to {Mode}", newMode);
         }
 
         private void RefreshHypnotubeLinksUI()
@@ -994,15 +1087,26 @@ namespace ConditioningControlPanel
             if (string.IsNullOrEmpty(imagePath))
                 return imagePath;
 
-            // Only swap if in Sissy Hypno mode (only applies to embedded resources)
-            if (App.Settings?.Current?.IsSissyMode == true && imagePath.StartsWith("pack://"))
+            // For embedded resources, check if mod has overrides or if mode-specific swap is needed
+            if (imagePath.StartsWith("pack://"))
             {
-                // Swap Bambi-specific images to generic alternatives
-                if (imagePath.Contains("logo.png"))
-                    return "pack://application:,,,/Resources/logo2.png";
+                // Extract relative path from pack URI
+                var prefix = "pack://application:,,,/Resources/";
+                if (imagePath.StartsWith(prefix))
+                {
+                    var relativePath = imagePath.Substring(prefix.Length);
+                    if (Services.ModResourceResolver.HasModOverride(relativePath))
+                        return Services.ModResourceResolver.ResolveUri(relativePath);
+                }
 
-                if (imagePath.Contains("bambi takeover.png"))
-                    return "pack://application:,,,/Resources/features/mandatory_videos.png";
+                // Legacy mode-specific swaps for built-in mods
+                if (App.Settings?.Current?.IsSissyMode == true)
+                {
+                    if (imagePath.Contains("logo.png"))
+                        return "pack://application:,,,/Resources/logo2.png";
+                    if (imagePath.Contains("bambi takeover.png"))
+                        return "pack://application:,,,/Resources/features/mandatory_videos.png";
+                }
             }
 
             return imagePath;
@@ -1162,6 +1266,11 @@ namespace ConditioningControlPanel
 
             // Initialize hypnotube links UI
             RefreshHypnotubeLinksUI();
+
+            // Apply mod-aware feature names to static XAML labels
+            ApplyModFeatureNames();
+            if (App.Mods != null)
+                App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
 
             // Initialize quick login UI
             UpdateQuickLoginUI();
@@ -1752,13 +1861,11 @@ namespace ConditioningControlPanel
                 Height = 240,
                 Margin = new Thickness(10, 0, 10, 0),
                 CornerRadius = new CornerRadius(15),
-                Background = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#252542")),
+                Background = (SolidColorBrush)Application.Current.Resources["PanelBgBrush"],
                 BorderThickness = new Thickness(step.StepType == Models.RoadmapStepType.Boss ? 3 : 2),
                 BorderBrush = step.StepType == Models.RoadmapStepType.Boss
                     ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Gold)
-                    : (isActive ? accentBrush : new System.Windows.Media.SolidColorBrush(
-                        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#404060"))),
+                    : (isActive ? accentBrush : (SolidColorBrush)Application.Current.Resources["PanelAccentBrush"]),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Tag = step.Id
             };
@@ -1775,10 +1882,8 @@ namespace ConditioningControlPanel
             // Background ellipse
             var bgEllipse = new System.Windows.Shapes.Ellipse
             {
-                Fill = new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#1A1A2E")),
-                Stroke = isActive ? accentBrush : new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#404060")),
+                Fill = (SolidColorBrush)Application.Current.Resources["DarkerBgBrush"],
+                Stroke = isActive ? accentBrush : (SolidColorBrush)Application.Current.Resources["PanelAccentBrush"],
                 StrokeThickness = isActive ? 3 : 2
             };
             circleGrid.Children.Add(bgEllipse);
@@ -2108,6 +2213,9 @@ namespace ConditioningControlPanel
             var questService = App.Quests;
             if (questService == null) return;
 
+            // Proactively recalculate streak from calendar so stale values are caught immediately
+            questService.RecalculateStreak();
+
             // Update season title from server or defaults
             var seasonTitle = App.QuestDefinitions?.SeasonTitle;
             if (!string.IsNullOrEmpty(seasonTitle))
@@ -2144,8 +2252,8 @@ namespace ConditioningControlPanel
                 BtnRerollDaily.Visibility = Visibility.Visible;
 
                 TxtDailyQuestIcon.Text = dailyDef.Icon;
-                TxtDailyQuestName.Text = dailyDef.Name;
-                TxtDailyQuestDesc.Text = dailyDef.Description;
+                TxtDailyQuestName.Text = App.Mods?.MakeModAware(dailyDef.Name) ?? dailyDef.Name;
+                TxtDailyQuestDesc.Text = App.Mods?.MakeModAware(dailyDef.Description) ?? dailyDef.Description;
                 TxtDailyProgress.Text = $"{dailyProgress.CurrentProgress} / {dailyDef.TargetValue}";
                 // Show scaled XP based on level (+4% per level), reroll bonus, and streak bonus
                 var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
@@ -2215,8 +2323,8 @@ namespace ConditioningControlPanel
             if (weeklyDef != null && weeklyProgress != null)
             {
                 TxtWeeklyQuestIcon.Text = weeklyDef.Icon;
-                TxtWeeklyQuestName.Text = weeklyDef.Name;
-                TxtWeeklyQuestDesc.Text = weeklyDef.Description;
+                TxtWeeklyQuestName.Text = App.Mods?.MakeModAware(weeklyDef.Name) ?? weeklyDef.Name;
+                TxtWeeklyQuestDesc.Text = App.Mods?.MakeModAware(weeklyDef.Description) ?? weeklyDef.Description;
                 TxtWeeklyProgress.Text = $"{weeklyProgress.CurrentProgress} / {weeklyDef.TargetValue}";
                 // Show scaled XP based on level (+4% per level), reroll bonus, and streak bonus
                 var wPlayerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
@@ -2358,7 +2466,7 @@ namespace ConditioningControlPanel
                         Y2 = centerY,
                         StrokeThickness = 2,
                         Stroke = (isCompleted && prevCompleted)
-                            ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"))
+                            ? new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"))
                             : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3D3D60"))
                     };
                     Canvas.SetZIndex(line, 0);
@@ -2373,8 +2481,8 @@ namespace ConditioningControlPanel
                     RadiusX = nodeSize / 2.0,
                     RadiusY = nodeSize / 2.0,
                     Fill = isCompleted
-                        ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"))
-                        : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252542")),
+                        ? new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"))
+                        : (SolidColorBrush)Application.Current.Resources["PanelBgBrush"],
                     Stroke = isToday
                         ? new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFD700"))
                         : new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3D3D60")),
@@ -2434,7 +2542,7 @@ namespace ConditioningControlPanel
                         RadiusX = highlightSize / 2.0,
                         RadiusY = highlightSize / 2.0,
                         Fill = Brushes.Transparent,
-                        Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
+                        Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                         StrokeThickness = 2,
                         Cursor = System.Windows.Input.Cursors.Hand,
                         Tag = day.Date
@@ -2648,35 +2756,13 @@ namespace ConditioningControlPanel
             if (!_isStreakFixMode)
             {
                 TxtFixStreakStatus.Visibility = Visibility.Collapsed;
-                TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
+                TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
             }
         }
 
         private void RecalculateDailyQuestStreak()
         {
-            var settings = App.Settings?.Current;
-            if (settings == null) return;
-
-            var questService = App.Quests;
-            var completedDates = new HashSet<DateTime>(
-                questService?.Progress?.DailyQuestCompletionDates?.Select(d => d.Date)
-                ?? Enumerable.Empty<DateTime>());
-
-            // Walk backward from today through completion dates to compute contiguous streak
-            int streak = 0;
-            var checkDate = DateTime.Today;
-
-            // If today isn't completed yet, start checking from yesterday
-            if (!completedDates.Contains(checkDate))
-                checkDate = checkDate.AddDays(-1);
-
-            while (completedDates.Contains(checkDate))
-            {
-                streak++;
-                checkDate = checkDate.AddDays(-1);
-            }
-
-            settings.DailyQuestStreak = streak;
+            App.Quests?.RecalculateStreak();
         }
 
         private void BtnAchievements_Click(object sender, RoutedEventArgs e)
@@ -3845,23 +3931,21 @@ namespace ConditioningControlPanel
                 if (_preLockdownTitleBarBg != null && TitleBarBorder != null)
                     TitleBarBorder.Background = _preLockdownTitleBarBg;
 
-                // Restore resource brushes from theme
-                var res = Application.Current.Resources;
-                res["PinkBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4"));
-                res["DarkPinkBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF1493"));
-                res["TransparentPinkBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#30FF69B4"));
-                res["PinkButtonHoveredBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF8FAF"));
-
-                // Restore lockdown card to normal gradient border
+                // Restore lockdown card to normal gradient border using mod colors
                 if (LockdownCardBorder != null)
                 {
+                    var accentHex = App.Mods?.GetAccentColorHex() ?? "#FF69B4";
+                    var secondaryHex = App.Mods?.GetSecondaryColorHex() ?? "#9B59B6";
+                    var accentColor = (Color)ColorConverter.ConvertFromString(accentHex);
+                    var secondaryColor = (Color)ColorConverter.ConvertFromString(secondaryHex);
+
                     var borderBrush = new LinearGradientBrush
                     {
                         StartPoint = new System.Windows.Point(0, 0),
                         EndPoint = new System.Windows.Point(1, 1)
                     };
-                    borderBrush.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#FF69B4"), 0));
-                    borderBrush.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#9B59B6"), 1));
+                    borderBrush.GradientStops.Add(new GradientStop(accentColor, 0));
+                    borderBrush.GradientStops.Add(new GradientStop(secondaryColor, 1));
                     LockdownCardBorder.BorderBrush = borderBrush;
 
                     var bgBrush = new LinearGradientBrush
@@ -3874,7 +3958,7 @@ namespace ConditioningControlPanel
                     LockdownCardBorder.Background = bgBrush;
                 }
 
-                // Re-apply mode-aware theme colors
+                // Re-apply mode-aware theme colors (restores all resource brushes + named elements)
                 RefreshThemeAwareElements();
             }
             catch (Exception ex)
@@ -4005,9 +4089,9 @@ namespace ConditioningControlPanel
 
                 var isAllTime = _leaderboardMode == "all-time";
                 var gold = (Color)ColorConverter.ConvertFromString("#FFD700");
-                var pink = (Color)ColorConverter.ConvertFromString("#FF69B4");
-                var dark = (Color)ColorConverter.ConvertFromString("#1A1A2E");
-                var inactive = (Color)ColorConverter.ConvertFromString("#352545");
+                var pink = (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4");
+                var dark = Application.Current.Resources["DarkerBg"] is Color dbg ? dbg : (Color)ColorConverter.ConvertFromString("#1A1A2E");
+                var inactive = Application.Current.Resources["AccentTintedBg"] is Color itbg ? itbg : (Color)ColorConverter.ConvertFromString("#352545");
 
                 if (isAllTime)
                 {
@@ -4045,8 +4129,10 @@ namespace ConditioningControlPanel
             var accentBrush = new SolidColorBrush(accent);
             var hoverBrush = new SolidColorBrush(Color.FromArgb(0x40, accent.R, accent.G, accent.B));
             var selectedBrush = new SolidColorBrush(Color.FromArgb(0x50, accent.R, accent.G, accent.B));
-            var headerHoverBg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#452555"));
-            var headerBg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#352545"));
+            var headerBgColor = Application.Current.Resources["AccentTintedBg"] is Color tbg ? tbg : (Color)ColorConverter.ConvertFromString("#352545");
+            var headerHoverBgColor = Application.Current.Resources["AccentTintedBgHover"] is Color thbg ? thbg : (Color)ColorConverter.ConvertFromString("#452555");
+            var headerHoverBg = new SolidColorBrush(headerHoverBgColor);
+            var headerBg = new SolidColorBrush(headerBgColor);
 
             // Rebuild ItemContainerStyle with the new accent color
             var itemStyle = new Style(typeof(ListViewItem));
@@ -4362,7 +4448,8 @@ namespace ConditioningControlPanel
             var cards = new[] { CompanionCard0, CompanionCard1, CompanionCard2, CompanionCard3, CompanionCard4 };
             var levelTexts = new[] { TxtCompanion0Level, TxtCompanion1Level, TxtCompanion2Level, TxtCompanion3Level, TxtCompanion4Level };
             var lockTexts = new[] { TxtCompanion0Lock, TxtCompanion1Lock, TxtCompanion2Lock, TxtCompanion3Lock, TxtCompanion4Lock };
-            var colors = new[] { "#FF69B4", "#9370DB", "#50C878", "#FF6B6B", "#F5DEB3" };
+            var nameTexts = new[] { TxtCompanion0Name, TxtCompanion1Name, TxtCompanion2Name, TxtCompanion3Name, TxtCompanion4Name };
+            var colors = new[] { App.Mods?.GetAccentColorHex() ?? "#FF69B4", "#9370DB", "#50C878", "#FF6B6B", "#F5DEB3" };
 
             for (int i = 0; i < 5; i++)
             {
@@ -4370,6 +4457,19 @@ namespace ConditioningControlPanel
                 var def = Models.CompanionDefinition.GetById(companionId);
                 var progress = App.Companion.GetProgress(companionId);
                 var isUnlocked = App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false;
+
+                // Hide companion card if the active mod doesn't support this avatar set
+                if (App.Mods?.IsCompanionSupported(companionId) == false)
+                {
+                    cards[i].Visibility = Visibility.Collapsed;
+                    continue;
+                }
+                cards[i].Visibility = Visibility.Visible;
+
+                // Update companion name with mod text replacements
+                bool isSlutMode = App.Settings?.Current?.SlutModeEnabled ?? false;
+                var companionName = def.GetDisplayName(isSlutMode);
+                nameTexts[i].Text = App.Mods?.MakeModAware(companionName) ?? companionName;
 
                 // Update level text - show required level if locked
                 if (isUnlocked)
@@ -4393,7 +4493,8 @@ namespace ConditioningControlPanel
             var activeDef = Models.CompanionDefinition.GetById(activeId);
             var activeProgress = App.Companion.ActiveProgress;
 
-            TxtActiveCompanionName.Text = activeDef.Name;
+            var activeDisplayName = activeDef.GetDisplayName(App.Settings?.Current?.SlutModeEnabled ?? false);
+            TxtActiveCompanionName.Text = App.Mods?.MakeModAware(activeDisplayName) ?? activeDisplayName;
             TxtActiveCompanionLevel.Text = activeProgress.IsMaxLevel ? " · MAX LEVEL" : $" · Level {activeProgress.Level}";
             TxtActiveCompanionDesc.Text = activeDef.Description;
             TxtActiveCompanionXP.Text = activeProgress.IsMaxLevel
@@ -4723,8 +4824,9 @@ namespace ConditioningControlPanel
             for (int i = 0; i < promptTexts.Length; i++)
             {
                 var promptName = Services.CompanionService.GetAssignedPromptName((Models.CompanionId)i);
-                promptTexts[i].Text = promptName ?? "";
-                promptTexts[i].ToolTip = string.IsNullOrEmpty(promptName) ? null : $"AI Personality: {promptName}";
+                var displayName = App.Mods?.MakeModAware(promptName ?? "") ?? promptName ?? "";
+                promptTexts[i].Text = displayName;
+                promptTexts[i].ToolTip = string.IsNullOrEmpty(displayName) ? null : $"AI Personality: {displayName}";
             }
         }
 
@@ -5717,8 +5819,7 @@ namespace ConditioningControlPanel
 
         private void UpdatePhraseCountDisplay()
         {
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var count = App.CompanionPhrases?.GetActivePhraseCount(mode) ?? 0;
+            var count = App.CompanionPhrases?.GetActivePhraseCount() ?? 0;
             TxtPhraseCount.Text = $"{count} active";
         }
 
@@ -6382,7 +6483,7 @@ namespace ConditioningControlPanel
                 ? new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#555555"))
                 : new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF69B4"));
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
         }
 
         private void SliderKeywordBufferTimeout_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -7909,9 +8010,12 @@ namespace ConditioningControlPanel
                 var isUnlocked = App.Achievements?.Progress.IsUnlocked(achievement.Id) ?? false;
                 
                 var border = new Border { Style = tileStyle };
+                var achName = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name;
+                var achFlavor = App.Mods?.MakeModAware(achievement.FlavorText) ?? achievement.FlavorText;
+                var achReq = App.Mods?.MakeModAware(achievement.Requirement) ?? achievement.Requirement;
                 border.ToolTip = isUnlocked
-                    ? $"{achievement.Name}\n\n\"{achievement.FlavorText}\""
-                    : $"???\n\nRequirement: {achievement.Requirement}";
+                    ? $"{achName}\n\n\"{achFlavor}\""
+                    : $"???\n\nRequirement: {achReq}";
 
                 var image = new Image
                 {
@@ -7942,8 +8046,8 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var uri = new Uri($"pack://application:,,,/Resources/achievements/{imageName}", UriKind.Absolute);
-                return new BitmapImage(uri);
+                var image = Services.ModResourceResolver.ResolveImage($"achievements/{imageName}");
+                return image as BitmapImage ?? new BitmapImage(new Uri($"pack://application:,,,/Resources/achievements/{imageName}", UriKind.Absolute));
             }
             catch (Exception ex)
             {
@@ -7967,9 +8071,12 @@ namespace ConditioningControlPanel
                 var parent = image.Parent as Border;
                 if (parent != null)
                 {
+                    var achName2 = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name;
+                    var achFlavor2 = App.Mods?.MakeModAware(achievement.FlavorText) ?? achievement.FlavorText;
+                    var achReq2 = App.Mods?.MakeModAware(achievement.Requirement) ?? achievement.Requirement;
                     parent.ToolTip = isUnlocked
-                        ? $"{achievement.Name}\n\n\"{achievement.FlavorText}\""
-                        : $"???\n\nRequirement: {achievement.Requirement}";
+                        ? $"{achName2}\n\n\"{achFlavor2}\""
+                        : $"???\n\nRequirement: {achReq2}";
                 }
             }
 
@@ -8199,14 +8306,14 @@ namespace ConditioningControlPanel
             var titleStack = new StackPanel { Margin = new Thickness(0, 0, 0, 15) };
             titleStack.Children.Add(new TextBlock
             {
-                Text = "✨ Bimbo Enhancement Tree",
-                Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                Text = "✨ " + (App.Mods?.GetEnhancementTreeTitle() ?? "Bimbo Enhancement Tree"),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 FontSize = 22,
                 FontWeight = FontWeights.Bold
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = "you earn sparkle points from leveling up + every 100 bubbles popped~",
+                Text = App.Mods?.GetEnhancementTreeSubtitle() ?? "you earn sparkle points from leveling up + every 100 bubbles popped~",
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 11,
                 FontStyle = FontStyles.Italic,
@@ -8214,7 +8321,7 @@ namespace ConditioningControlPanel
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = "once you pick a path, there's no going back~",
+                Text = App.Mods?.GetEnhancementTreeWarning() ?? "once you pick a path, there's no going back~",
                 Foreground = new SolidColorBrush(Color.FromRgb(136, 170, 204)),
                 FontSize = 10,
                 FontStyle = FontStyles.Italic,
@@ -8245,14 +8352,14 @@ namespace ConditioningControlPanel
             var pointsInfoStack = new StackPanel();
             pointsInfoStack.Children.Add(new TextBlock
             {
-                Text = "Sparkle Points",
+                Text = App.Mods?.GetPointsLabel() ?? "Sparkle Points",
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 10
             });
             pointsInfoStack.Children.Add(new TextBlock
             {
                 Text = settings.SkillPoints.ToString(),
-                Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 FontSize = 24,
                 FontWeight = FontWeights.Bold
             });
@@ -8269,7 +8376,7 @@ namespace ConditioningControlPanel
                 Padding = new Thickness(12, 8, 12, 8),
                 Margin = new Thickness(0, 0, 0, 10),
                 Cursor = Cursors.Hand,
-                BorderBrush = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 BorderThickness = new Thickness(1)
             };
             var ditzyButtonStack = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
@@ -8288,8 +8395,8 @@ namespace ConditioningControlPanel
             });
             ditzyButtonStack.Children.Add(new TextBlock
             {
-                Text = "Ditzy Data Stats",
-                Foreground = new SolidColorBrush(Color.FromRgb(255, 182, 193)),
+                Text = App.Mods?.GetStatsTitle() ?? "Ditzy Data Stats",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                 FontSize = 11,
                 FontWeight = FontWeights.Bold,
                 VerticalAlignment = VerticalAlignment.Center
@@ -8321,7 +8428,7 @@ namespace ConditioningControlPanel
             // Stats title
             detailedStatsStack.Children.Add(new TextBlock
             {
-                Text = "📊 Ditzy Data Stats",
+                Text = "📊 " + (App.Mods?.GetStatsTitle() ?? "Ditzy Data Stats"),
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 11,
                 FontWeight = FontWeights.Bold,
@@ -8421,7 +8528,7 @@ namespace ConditioningControlPanel
             // Stats section
             var statsBorder = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(30, 30, 58)),
+                Background = Application.Current.Resources["SurfaceBgBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(30, 30, 58)),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(12)
             };
@@ -8454,7 +8561,7 @@ namespace ConditioningControlPanel
                 xpStack.Children.Add(new TextBlock
                 {
                     Text = " 🔥 RUSH!",
-                    Foreground = new SolidColorBrush(Color.FromRgb(255, 20, 147)),
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentDarkColorHex() ?? "#FF1493")),
                     FontSize = 12,
                     FontWeight = FontWeights.Bold,
                     VerticalAlignment = VerticalAlignment.Center
@@ -8516,7 +8623,7 @@ namespace ConditioningControlPanel
                     chip.Child = new TextBlock
                     {
                         Text = $"{source}: +{value:P0}",
-                        Foreground = new SolidColorBrush(Color.FromRgb(255, 182, 193)),
+                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                         FontSize = 11
                     };
 
@@ -8722,7 +8829,7 @@ namespace ConditioningControlPanel
 
                     // Line color based on unlock state
                     var lineColor = isChildUnlocked ? Color.FromRgb(100, 255, 150) :
-                                   isParentUnlocked ? Color.FromRgb(255, 105, 180) :
+                                   isParentUnlocked ? (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4") :
                                    Color.FromRgb(60, 60, 80);
 
                     // HORIZONTAL LAYOUT: Connect right edge of parent to left edge of child
@@ -8771,7 +8878,7 @@ namespace ConditioningControlPanel
             if (isUnlocked)
                 borderColor = Color.FromRgb(100, 255, 150);
             else if (canPurchase)
-                borderColor = Color.FromRgb(255, 105, 180);
+                borderColor = (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4");
             else
                 borderColor = Color.FromRgb(60, 50, 70);
 
@@ -8854,15 +8961,15 @@ namespace ConditioningControlPanel
             var tooltipStack = new StackPanel { MaxWidth = 280 };
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = skill.FlavorText,
-                Foreground = new SolidColorBrush(Color.FromRgb(255, 182, 193)),
+                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                 FontStyle = FontStyles.Italic,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 6)
             });
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = skill.Description,
+                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.Description,
                 Foreground = Brushes.White,
                 TextWrapping = TextWrapping.Wrap
             });
@@ -8882,7 +8989,7 @@ namespace ConditioningControlPanel
                 Content = tooltipStack,
                 Background = new SolidColorBrush(Color.FromRgb(30, 30, 50)),
                 Foreground = Brushes.White,
-                BorderBrush = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 Padding = new Thickness(10)
             };
 
@@ -8899,10 +9006,10 @@ namespace ConditioningControlPanel
             // Try to load skill image (will support individual files like skills/hive_mind.png)
             try
             {
-                var imagePath = $"pack://application:,,,/Resources/skills/{skill.Id}.png";
+                var skillImageSource = Services.ModResourceResolver.ResolveImage($"skills/{skill.Id}.png");
                 var skillImage = new System.Windows.Controls.Image
                 {
-                    Source = new BitmapImage(new Uri(imagePath, UriKind.Absolute)),
+                    Source = skillImageSource,
                     Stretch = Stretch.UniformToFill
                 };
 
@@ -8947,7 +9054,7 @@ namespace ConditioningControlPanel
                 Background = new SolidColorBrush(Color.FromRgb(30, 28, 45)),
                 Child = new TextBlock
                 {
-                    Text = skill.Name,
+                    Text = App.Mods?.MakeModAware(skill.Name) ?? skill.Name,
                     Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 210)),
                     FontSize = 9.5,
                     FontWeight = FontWeights.SemiBold,
@@ -8961,7 +9068,7 @@ namespace ConditioningControlPanel
 
             // Row 3: Cost/Status Button
             var buttonBg = isUnlocked ? Color.FromRgb(100, 255, 150) :
-                          canPurchase ? Color.FromRgb(255, 105, 180) :
+                          canPurchase ? (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4") :
                           Color.FromRgb(40, 35, 50);
 
             var buttonText = isUnlocked ? $"💎{skill.Cost} ✓ OWNED" :
@@ -9028,8 +9135,8 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var uri = new Uri("pack://application:,,,/Resources/skills1.png", UriKind.Absolute);
-                var bitmap = new BitmapImage(uri);
+                var resolvedImg = Services.ModResourceResolver.ResolveImage("skills1.png");
+                var bitmap = resolvedImg as BitmapImage ?? new BitmapImage(new Uri("pack://application:,,,/Resources/skills1.png", UriKind.Absolute));
 
                 // Grid is 3 columns × 2 rows
                 int cellWidth = bitmap.PixelWidth / 3;
@@ -9246,7 +9353,7 @@ namespace ConditioningControlPanel
             var tooltipStack = new StackPanel { MaxWidth = 280 };
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = skill.FlavorText,
+                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText,
                 Foreground = new SolidColorBrush(Color.FromRgb(200, 150, 255)),
                 FontStyle = FontStyles.Italic,
                 TextWrapping = TextWrapping.Wrap,
@@ -9254,7 +9361,7 @@ namespace ConditioningControlPanel
             });
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = skill.Description,
+                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.Description,
                 Foreground = Brushes.White,
                 TextWrapping = TextWrapping.Wrap
             });
@@ -9280,7 +9387,7 @@ namespace ConditioningControlPanel
 
             stack.Children.Add(new TextBlock
             {
-                Text = skill.Name,
+                Text = App.Mods?.MakeModAware(skill.Name) ?? skill.Name,
                 Foreground = new SolidColorBrush(isUnlocked ? Color.FromRgb(180, 130, 255) : Color.FromRgb(153, 50, 204)),
                 FontSize = 10,
                 FontWeight = FontWeights.Bold,
@@ -9332,7 +9439,7 @@ namespace ConditioningControlPanel
 
                 // Show confirmation dialog
                 var result = MessageBox.Show(
-                    $"Purchase '{skill.Name}' for {skill.Cost} sparkle points?\n\n{skill.FlavorText}\n\n{skill.Description}",
+                    $"Purchase '{App.Mods?.MakeModAware(skill.Name) ?? skill.Name}' for {skill.Cost} {(App.Mods?.GetPointsLabel() ?? "sparkle points").ToLower()}?\n\n{App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText}\n\n{App.Mods?.MakeModAware(skill.Description) ?? skill.Description}",
                     "Purchase Enhancement",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
@@ -9404,7 +9511,7 @@ namespace ConditioningControlPanel
                 chip.Child = new TextBlock
                 {
                     Text = $"{source}: +{value:P0}",
-                    Foreground = new SolidColorBrush(Color.FromRgb(255, 182, 193)),
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                     FontSize = 11
                 };
 
@@ -9820,7 +9927,7 @@ namespace ConditioningControlPanel
             {
                 CmbPresets.Items.Add(new ComboBoxItem
                 {
-                    Content = preset.Name,
+                    Content = App.Mods?.MakeModAware(preset.Name) ?? preset.Name,
                     Tag = preset.Id,
                     Foreground = new SolidColorBrush(Color.FromRgb(224, 224, 224)) // Light gray #E0E0E0
                 });
@@ -9832,7 +9939,7 @@ namespace ConditioningControlPanel
             {
                 Content = "➕ Save as New Preset...",
                 Tag = "new",
-                Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 180)) // Bright pink for visibility
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")) // Bright pink for visibility
             });
 
             // Select current preset
@@ -9907,7 +10014,7 @@ namespace ConditioningControlPanel
             var card = new Border
             {
                 Background = new SolidColorBrush(isSelected ? Color.FromRgb(60, 60, 100) : Color.FromRgb(42, 42, 74)),
-                BorderBrush = isSelected ? pinkBrush : new SolidColorBrush(Color.FromRgb(64, 64, 96)),
+                BorderBrush = isSelected ? pinkBrush : (Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96))),
                 BorderThickness = new Thickness(2),
                 CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(8),
@@ -9925,7 +10032,7 @@ namespace ConditioningControlPanel
             };
             card.MouseLeave += (s, e) => {
                 if (_selectedPreset?.Id != preset.Id)
-                    card.BorderBrush = new SolidColorBrush(Color.FromRgb(64, 64, 96));
+                    card.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96));
             };
             
             var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Top };
@@ -9933,7 +10040,7 @@ namespace ConditioningControlPanel
             // Name
             var nameText = new TextBlock
             {
-                Text = preset.Name,
+                Text = App.Mods?.MakeModAware(preset.Name) ?? preset.Name,
                 Foreground = Brushes.White,
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 10,
@@ -10003,8 +10110,8 @@ namespace ConditioningControlPanel
             SessionButtonsPanel.Visibility = Visibility.Collapsed;
             
             // Update detail panel
-            TxtDetailTitle.Text = preset.Name;
-            TxtDetailSubtitle.Text = preset.Description;
+            TxtDetailTitle.Text = App.Mods?.MakeModAware(preset.Name) ?? preset.Name;
+            TxtDetailSubtitle.Text = App.Mods?.MakeModAware(preset.Description) ?? preset.Description;
             
             TxtDetailFlash.Text = preset.FlashEnabled 
                 ? $"Enabled | {preset.FlashFrequency}/hr | Opacity: {preset.FlashOpacity}%"
@@ -10181,7 +10288,7 @@ namespace ConditioningControlPanel
             
             var border = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(26, 26, 46)),
+                Background = Application.Current.Resources["DarkerBgBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(26, 26, 46)),
                 BorderBrush = FindResource("PinkBrush") as SolidColorBrush,
                 BorderThickness = new Thickness(2),
                 CornerRadius = new CornerRadius(12),
@@ -10895,11 +11002,11 @@ namespace ConditioningControlPanel
             };
 
             // Style with border
-            border.SetValue(Border.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(64, 64, 96)));
+            border.SetValue(Border.BorderBrushProperty, Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96)));
             border.SetValue(Border.BorderThicknessProperty, new Thickness(2));
 
             border.MouseEnter += (s, e) => border.BorderBrush = FindResource("PinkBrush") as SolidColorBrush;
-            border.MouseLeave += (s, e) => border.BorderBrush = new SolidColorBrush(Color.FromRgb(64, 64, 96));
+            border.MouseLeave += (s, e) => border.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96));
             border.MouseLeftButtonUp += SessionCard_Click;
 
             var grid = new Grid();
@@ -11244,7 +11351,7 @@ namespace ConditioningControlPanel
 
         private void SessionDropZone_DragLeave(object sender, DragEventArgs e)
         {
-            SessionDropZone.BorderBrush = new SolidColorBrush(Color.FromRgb(64, 64, 96));
+            SessionDropZone.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96));
             DropZoneIcon.Text = "📂";
             DropZoneIcon.Foreground = new SolidColorBrush(Color.FromRgb(112, 112, 144));
             DropZoneStatus.Visibility = Visibility.Collapsed;
@@ -11607,7 +11714,7 @@ namespace ConditioningControlPanel
             e.Handled = true;
 
             // Reset visual state
-            SessionDropZone.BorderBrush = new SolidColorBrush(Color.FromRgb(64, 64, 96));
+            SessionDropZone.BorderBrush = Application.Current.Resources["PanelAccentBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(64, 64, 96));
             DropZoneIcon.Text = "📂";
             DropZoneIcon.Foreground = new SolidColorBrush(Color.FromRgb(112, 112, 144));
 
@@ -11819,8 +11926,7 @@ namespace ConditioningControlPanel
                 BrowserLoadingText.Text = "🌐 Creating browser...";
 
                 // Navigate to mode-appropriate site
-                var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-                var startUrl = Models.ContentModeConfig.GetDefaultBrowserUrl(mode);
+                var startUrl = App.Mods?.GetDefaultBrowserUrl() ?? "https://bambicloud.com/";
                 var webView = await _browser.CreateBrowserAsync(startUrl);
 
                 if (webView != null)
@@ -13384,7 +13490,7 @@ namespace ConditioningControlPanel
                     var image = LoadAchievementImage(achievement.ImageName);
                     if (image != null)
                     {
-                        achievementItems.Add(new { Name = achievement.Name, Image = image });
+                        achievementItems.Add(new { Name = App.Mods?.MakeModAware(achievement.Name) ?? achievement.Name, Image = image });
                     }
                 }
             }
@@ -15153,6 +15259,14 @@ namespace ConditioningControlPanel
             StartTutorial(TutorialType.Avatar);
         }
 
+        private void BtnTutorialModding_Click(object sender, RoutedEventArgs e)
+        {
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Visible;
+            var modCreator = new ModCreatorWindow(startWithTutorial: true) { Owner = this };
+            modCreator.Show();
+        }
+
         #endregion
 
         private void OpenLinktree()
@@ -15214,13 +15328,14 @@ namespace ConditioningControlPanel
             XPBar.Width = progress * (XPBar.Parent as Border)?.ActualWidth ?? 100;
 
             // Update title based on level
-            TxtPlayerTitle.Text = level switch
+            var rankTitle = level switch
             {
                 < 20 => "BASIC BIMBO",
                 < 50 => "DUMB AIRHEAD",
                 < 100 => "SYNTHETIC BLOWDOLL",
                 _ => "PERFECT FUCKPUPPET"
             };
+            TxtPlayerTitle.Text = App.Mods?.MakeModAware(rankTitle) ?? rankTitle;
 
             // Update unlockables visibility based on level
             UpdateUnlockablesVisibility(level);
@@ -15230,6 +15345,77 @@ namespace ConditioningControlPanel
 
             // Update stat pills visibility and values
             UpdateStatPills();
+        }
+
+        /// <summary>
+        /// Applies mod text replacements to all hardcoded feature/section labels in the XAML.
+        /// Called on startup and when the active mod changes.
+        /// </summary>
+        private void ApplyModFeatureNames()
+        {
+            string M(string text) => App.Mods?.MakeModAware(text) ?? text;
+
+            // Main section headers
+            if (TxtFeatureFlash != null) TxtFeatureFlash.Text = M("⚡ Flash Images");
+            if (TxtFeatureVideo != null) TxtFeatureVideo.Text = M("🎬 Mandatory Video");
+            if (TxtFeatureSubliminal != null) TxtFeatureSubliminal.Text = M("💭 Subliminals");
+            if (TxtFeatureWhispers != null) TxtFeatureWhispers.Text = M("📊 Audio Whispers");
+
+            // Enhancement locked/unlocked pairs
+            if (TxtFeatureSpiralLocked != null) TxtFeatureSpiralLocked.Text = M("🌀 Spiral Overlay");
+            if (TxtFeatureSpiral != null) TxtFeatureSpiral.Text = M("🌀 Spiral Overlay");
+            if (TxtFeaturePinkFilterLocked != null) TxtFeaturePinkFilterLocked.Text = M("💗 Pink Filter");
+            if (TxtFeaturePinkFilter != null) TxtFeaturePinkFilter.Text = M("💗 Pink Filter");
+            if (TxtFeatureBubblePopLocked != null) TxtFeatureBubblePopLocked.Text = M("🫧 Bubble Pop");
+            if (TxtFeatureBubblePop != null) TxtFeatureBubblePop.Text = M("🫧 Bubble Pop");
+            if (TxtFeatureLockCardLocked != null) TxtFeatureLockCardLocked.Text = M("📐 Lock Card");
+            if (TxtFeatureLockCard != null) TxtFeatureLockCard.Text = M("📐 Lock Card");
+            if (TxtFeatureBubbleCountLocked != null) TxtFeatureBubbleCountLocked.Text = M("🫧 Bubble Count");
+            if (TxtFeatureBubbleCount != null) TxtFeatureBubbleCount.Text = M("🫧 Bubble Count");
+            if (TxtFeatureBouncingLocked != null) TxtFeatureBouncingLocked.Text = M("📺 Bouncing Text");
+            if (TxtFeatureBouncing != null) TxtFeatureBouncing.Text = M("📺 Bouncing Text");
+            if (TxtFeatureBrainDrain != null) TxtFeatureBrainDrain.Text = M("💧 Brain Drain");
+            if (TxtFeatureMindWipeLocked != null) TxtFeatureMindWipeLocked.Text = M("🧠 Mind Wipe");
+            if (TxtFeatureMindWipe != null) TxtFeatureMindWipe.Text = M("🧠 Mind Wipe");
+            if (TxtFeatureCornerGif != null) TxtFeatureCornerGif.Text = M("🖼 Corner GIF");
+
+            // Preset/session detail labels
+            if (TxtDetailFlashLabel != null) TxtDetailFlashLabel.Text = M("⚡ Flash Images");
+            if (TxtDetailVideoLabel != null) TxtDetailVideoLabel.Text = M("🎬 Mandatory Videos");
+            if (TxtDetailSubLabel != null) TxtDetailSubLabel.Text = M("💭 Subliminals");
+            if (TxtSessionFlashLabel != null) TxtSessionFlashLabel.Text = M("⚡ Flash Images");
+            if (TxtSessionSubLabel != null) TxtSessionSubLabel.Text = M("💭 Subliminals");
+
+            // Autonomy toggle labels
+            if (TxtAutoFlash != null) TxtAutoFlash.Text = M("Flashes");
+            if (TxtAutoVideo != null) TxtAutoVideo.Text = M("Videos");
+            if (TxtAutoSubliminal != null) TxtAutoSubliminal.Text = M("Subliminals");
+            if (TxtAutoBubbles != null) TxtAutoBubbles.Text = M("Bubbles");
+            if (TxtAutoPinkFilter != null) TxtAutoPinkFilter.Text = M("Pink Filter");
+            if (TxtAutoLockCards != null) TxtAutoLockCards.Text = M("Lock Cards");
+            if (TxtAutoBouncing != null) TxtAutoBouncing.Text = M("Bouncing");
+            if (TxtAutoMindwipe != null) TxtAutoMindwipe.Text = M("Mindwipe");
+
+            // Enhancement tab tooltip
+            if (BtnEnhancements != null)
+                BtnEnhancements.ToolTip = App.Mods?.GetTabTooltip() ?? "Bimbo Enhancement Tree";
+
+            // Stat pill tooltips
+            if (PillConditioningTime != null)
+                PillConditioningTime.ToolTip = App.Mods?.GetStatPillTooltip("pink_hours")
+                    ?? M("Total conditioning time (Pink Hours skill)");
+            if (PillOnlineUsers != null)
+                PillOnlineUsers.ToolTip = App.Mods?.GetStatPillTooltip("hive_mind")
+                    ?? M("Bimbos online now (Hive Mind skill)");
+            if (PillRankPercentile != null)
+                PillRankPercentile.ToolTip = App.Mods?.GetStatPillTooltip("popular_girl")
+                    ?? M("Your rank percentile (Popular Girl skill)");
+
+            // Refresh bonus chips with updated names
+            RefreshXPBarBonuses();
+
+            // Also refresh rank title
+            UpdateLevelDisplay();
         }
 
         /// <summary>
@@ -15379,6 +15565,7 @@ namespace ConditioningControlPanel
             {
                 if (source == "Base") continue;
 
+                var displaySource = App.Mods?.MakeModAware(source) ?? source;
                 var chip = new Border
                 {
                     Background = new SolidColorBrush(Color.FromRgb(42, 42, 74)), // #2A2A4A - matches stat pills
@@ -15390,8 +15577,8 @@ namespace ConditioningControlPanel
 
                 chip.Child = new TextBlock
                 {
-                    Text = $"+{value:P0} {source}",
-                    Foreground = new SolidColorBrush(Color.FromRgb(255, 182, 193)), // #FFB6C1
+                    Text = $"+{value:P0} {displaySource}",
+                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                     FontSize = 10,
                     VerticalAlignment = VerticalAlignment.Center
                 };
@@ -15402,15 +15589,39 @@ namespace ConditioningControlPanel
 
         private static string? GetBonusChipTooltip(string source)
         {
-            if (source.StartsWith("Streak Power")) return "Skill tree bonus: +0.5% XP per day of consecutive use (max 15%)";
+            string M(string text) => App.Mods?.MakeModAware(text) ?? text;
+
+            // Check for explicit mod override first
+            string? modTip = null;
+            if (source.StartsWith("Streak Power"))
+                modTip = App.Mods?.GetBoostTooltip("streak_power");
+            else
+            {
+                var skillId = source switch
+                {
+                    "Sparkle Boost" => "sparkle_boost_1",
+                    "Extra Sparkly" => "sparkle_boost_2",
+                    "Maximum Sparkle" => "sparkle_boost_3",
+                    "Night Shift" => "night_shift",
+                    "Early Bird Bimbo" => "early_bird_bimbo",
+                    "PINK RUSH ACTIVE!" => "pink_rush",
+                    _ => null
+                };
+                if (skillId != null)
+                    modTip = App.Mods?.GetBoostTooltip(skillId);
+            }
+            if (modTip != null) return modTip;
+
+            // Fall back to defaults with MakeModAware
+            if (source.StartsWith("Streak Power")) return M("Skill tree bonus: +0.5% XP per day of consecutive use (max 15%)");
             return source switch
             {
-                "Sparkle Boost" => "Skill tree bonus: +10% XP from Sparkle Boost",
-                "Extra Sparkly" => "Skill tree bonus: +15% XP from Extra Sparkly (stacks with Sparkle Boost)",
-                "Maximum Sparkle" => "Skill tree bonus: +20% XP from Maximum Sparkle (stacks with other Sparkle skills)",
-                "Night Shift" => "Skill tree bonus: +50% XP for conditioning between 11 PM and 5 AM",
-                "Early Bird Bimbo" => "Skill tree bonus: +50% XP for conditioning between 5 AM and 8 AM",
-                "PINK RUSH ACTIVE!" => "Skill tree bonus: 3x XP multiplier! Random 60-second windows of boosted XP",
+                "Sparkle Boost" => M("Skill tree bonus: +10% XP from Sparkle Boost"),
+                "Extra Sparkly" => M("Skill tree bonus: +15% XP from Extra Sparkly (stacks with Sparkle Boost)"),
+                "Maximum Sparkle" => M("Skill tree bonus: +20% XP from Maximum Sparkle (stacks with other Sparkle skills)"),
+                "Night Shift" => M("Skill tree bonus: +50% XP for conditioning between 11 PM and 5 AM"),
+                "Early Bird Bimbo" => M("Skill tree bonus: +50% XP for conditioning between 5 AM and 8 AM"),
+                "PINK RUSH ACTIVE!" => M("Skill tree bonus: 3x XP multiplier! Random 60-second windows of boosted XP"),
                 _ => null
             };
         }
@@ -16611,7 +16822,7 @@ namespace ConditioningControlPanel
             if (isEnabled)
             {
                 BtnAutonomyStartStop.Content = "■ Stop";
-                BtnAutonomyStartStop.Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)); // Pink
+                BtnAutonomyStartStop.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")); // Pink
             }
             else
             {
@@ -18831,7 +19042,7 @@ namespace ConditioningControlPanel
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Owner = this,
                 ResizeMode = ResizeMode.NoResize,
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A1A2E")),
+                Background = (SolidColorBrush)Application.Current.Resources["DarkerBgBrush"],
                 WindowStyle = WindowStyle.ToolWindow
             };
 
@@ -18852,9 +19063,9 @@ namespace ConditioningControlPanel
             var textBox = new TextBox
             {
                 Text = $"Preset {App.Settings.Current.AssetPresets.Count}",
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252542")),
+                Background = (SolidColorBrush)Application.Current.Resources["PanelBgBrush"],
                 Foreground = new SolidColorBrush(Colors.White),
-                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 Padding = new Thickness(8, 5, 8, 5),
                 Margin = new Thickness(0, 0, 0, 15)
             };
@@ -18869,7 +19080,7 @@ namespace ConditioningControlPanel
                 Width = 80,
                 Padding = new Thickness(8, 5, 8, 5),
                 Margin = new Thickness(0, 0, 8, 0),
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 Foreground = new SolidColorBrush(Colors.White),
                 BorderThickness = new Thickness(0)
             };
@@ -18878,7 +19089,7 @@ namespace ConditioningControlPanel
                 Content = "Cancel",
                 Width = 80,
                 Padding = new Thickness(8, 5, 8, 5),
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#404060")),
+                Background = (SolidColorBrush)Application.Current.Resources["PanelAccentBrush"],
                 Foreground = new SolidColorBrush(Colors.White),
                 BorderThickness = new Thickness(0)
             };
@@ -19051,8 +19262,7 @@ namespace ConditioningControlPanel
 
         private void BtnSavePhrasePreset_Click(object sender, RoutedEventArgs e)
         {
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var activePhraseCount = App.CompanionPhrases?.GetActivePhraseCount(mode) ?? 0;
+            var activePhraseCount = App.CompanionPhrases?.GetActivePhraseCount() ?? 0;
 
             var dialog = new System.Windows.Window
             {
@@ -19062,7 +19272,7 @@ namespace ConditioningControlPanel
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Owner = this,
                 ResizeMode = ResizeMode.NoResize,
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A1A2E")),
+                Background = (SolidColorBrush)Application.Current.Resources["DarkerBgBrush"],
                 WindowStyle = WindowStyle.ToolWindow
             };
 
@@ -19083,9 +19293,9 @@ namespace ConditioningControlPanel
             var textBox = new TextBox
             {
                 Text = $"Preset {App.Settings.Current.PhrasePresets.Count + 1}",
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#252542")),
+                Background = (SolidColorBrush)Application.Current.Resources["PanelBgBrush"],
                 Foreground = new SolidColorBrush(Colors.White),
-                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 Padding = new Thickness(8, 5, 8, 5),
                 Margin = new Thickness(0, 0, 0, 15)
             };
@@ -19100,7 +19310,7 @@ namespace ConditioningControlPanel
                 Width = 80,
                 Padding = new Thickness(8, 5, 8, 5),
                 Margin = new Thickness(0, 0, 8, 0),
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF69B4")),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 Foreground = new SolidColorBrush(Colors.White),
                 BorderThickness = new Thickness(0)
             };
@@ -19109,7 +19319,7 @@ namespace ConditioningControlPanel
                 Content = "Cancel",
                 Width = 80,
                 Padding = new Thickness(8, 5, 8, 5),
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#404060")),
+                Background = (SolidColorBrush)Application.Current.Resources["PanelAccentBrush"],
                 Foreground = new SolidColorBrush(Colors.White),
                 BorderThickness = new Thickness(0)
             };

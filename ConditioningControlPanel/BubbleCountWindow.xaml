@@ -24,15 +24,15 @@
                 <TextBlock Text="🫧 COUNT THE BUBBLES! 🫧"
                            FontSize="32"
                            FontWeight="Bold"
-                           Foreground="#FF69B4">
+                           Foreground="{DynamicResource PinkBrush}">
                     <TextBlock.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.6"/>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.6"/>
                     </TextBlock.Effect>
                 </TextBlock>
                 <TextBlock x:Name="TxtDifficulty"
                            Text=" (Medium)"
                            FontSize="22"
-                           Foreground="#FFB6C1"
+                           Foreground="{DynamicResource PinkBrush}"
                            VerticalAlignment="Center"
                            Margin="10,0,0,0"/>
             </StackPanel>

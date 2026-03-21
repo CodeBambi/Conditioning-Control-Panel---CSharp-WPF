@@ -9,7 +9,7 @@
         AllowsTransparency="True"
         Background="Transparent">
     
-    <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
         <Grid Margin="30">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -19,7 +19,7 @@
             </Grid.RowDefinitions>
             
             <!-- Title Bar with Pink Background -->
-            <Border Grid.Row="0" Background="#FF69B4" CornerRadius="8" Margin="-10,-10,-10,20" Padding="20,15">
+            <Border Grid.Row="0" Background="{DynamicResource PinkBrush}" CornerRadius="8" Margin="-10,-10,-10,20" Padding="20,15">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                     <TextBlock Text="💖" FontSize="28" VerticalAlignment="Center" Margin="0,0,12,0"/>
                     <TextBlock Text="Conditioning Control Panel" Foreground="White" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
@@ -28,7 +28,7 @@
             
             <!-- Welcome Message -->
             <TextBlock Grid.Row="1" Text="Welcome, Good Girl!" 
-                       Foreground="#FF69B4" FontSize="26" FontWeight="Bold" 
+                       Foreground="{DynamicResource PinkBrush}" FontSize="26" FontWeight="Bold" 
                        HorizontalAlignment="Center" Margin="0,10,0,20"/>
             
             <!-- Description -->
@@ -41,14 +41,14 @@
                     <Run Text="Features unlock as you level up through use. Start the engine and let the conditioning begin!"/>
                 </TextBlock>
                 
-                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,20,0,0">
+                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="15" Margin="0,20,0,0">
                     <StackPanel>
                         <TextBlock Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center">
                             <Run Text="💡 Tips"/>
                         </TextBlock>
-                        <TextBlock Foreground="#FF69B4" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0" FontWeight="SemiBold">
+                        <TextBlock Foreground="{DynamicResource PinkBrush}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0" FontWeight="SemiBold">
                             <Run Text="• Click the"/>
-                            <Run Text=" ? " FontWeight="Bold" Foreground="White" Background="#FF69B4"/>
+                            <Run Text=" ? " FontWeight="Bold" Foreground="White" Background="{DynamicResource PinkBrush}"/>
                             <Run Text="button in the top bar for a full tutorial"/>
                         </TextBlock>
                         <TextBlock Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
@@ -63,7 +63,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,20,0,0">
+                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="15" Margin="0,20,0,0">
                     <StackPanel>
                         <TextBlock Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center">
                             <Run Text="⚠️ Performance Warning"/>

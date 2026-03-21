@@ -1079,11 +1079,26 @@ namespace ConditioningControlPanel.Services
                             }
                             if (datesChanged)
                             {
-                                // Trim to last 30 days
-                                var cutoff = DateTime.Today.AddDays(-30);
+                                // Trim to last 90 days (supports long streaks)
+                                var cutoff = DateTime.Today.AddDays(-90);
                                 questProgress.DailyQuestCompletionDates.RemoveAll(d => d.Date < cutoff);
                                 App.Logger?.Debug("Quest sync: Merged completion dates from cloud");
                                 needsSave = true;
+
+                                // Recompute streak from the merged calendar to fix LastDailyQuestDate desync
+                                App.Quests?.RecalculateStreak();
+
+                                // RecalculateStreak may compute a lower value if completion dates
+                                // were trimmed or incomplete. Restore the cloud streak if higher.
+                                if (cloudProfile.Stats.TryGetValue("daily_quest_streak", out var cloudStreakAfter))
+                                {
+                                    var csAfter = Convert.ToInt32(cloudStreakAfter);
+                                    if (csAfter > settings.DailyQuestStreak)
+                                    {
+                                        App.Logger?.Debug("Quest sync: Restoring cloud streak {Cloud} (recalculated was {Recalc})", csAfter, settings.DailyQuestStreak);
+                                        settings.DailyQuestStreak = csAfter;
+                                    }
+                                }
                             }
                         }
                     }
