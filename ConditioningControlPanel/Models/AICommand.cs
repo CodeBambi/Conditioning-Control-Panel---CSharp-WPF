@@ -62,6 +62,7 @@ public class AICommandConverter : JsonConverter<AICommand>
                 AICommandType.spiral    => dataProp.Deserialize<SpiralPinkFiler>(options),
                 AICommandType.subliminal    => dataProp.Deserialize<Subliminal>(options),
                 AICommandType.bounce    => dataProp.Deserialize<Bounce>(options),
+                AICommandType.haptic    => dataProp.Deserialize<HapticCommand>(options),
                 _ => null
             };
         }

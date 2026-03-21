@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
@@ -5,7 +6,7 @@ using OllamaSharp;
 
 namespace ConditioningControlPanel.Services.AIService;
 
-public class LocalAiService : IAiService, IDisposable
+public class LocalAiService : IAiService
 {
     public bool IsAvailable { get; }
     public int DailyRequestsRemaining { get; }
@@ -13,7 +14,7 @@ public class LocalAiService : IAiService, IDisposable
     private readonly BambiSprite _bambiSprite;
     private readonly Uri _localUri = new Uri("http://localhost:5259/");
     private Chat _chat;
-    private List<AICommand> CurrentCommands { get; set; }
+    private List<AICommand> CurrentCommands { get; set; } = [];
     public MainWindow? MainWindowRef { get; set; }
     
     public LocalAiService()
@@ -22,7 +23,7 @@ public class LocalAiService : IAiService, IDisposable
         DailyRequestsRemaining = -1;
         _bambiSprite = new BambiSprite();
         AiService = new OllamaApiClient(_localUri);
-        AiService.SelectedModel = "bambi-model-v5:t";
+        AiService.SelectedModel = "bambi-model-v6";
         _chat = new Chat(AiService);
     }
     
@@ -32,7 +33,7 @@ public class LocalAiService : IAiService, IDisposable
     /// <returns></returns>
     private static string GetFallbackResponse()
     {
-        var mode = App.Settings.Current?.ContentMode ?? ContentMode.BambiSleep;
+        var mode = App.Settings.Current.ContentMode;
         return mode == ContentMode.BambiSleep
             ? "Bambi's head is so empty right now~ *giggles*"
             : "My head is so empty right now~ *giggles*";
@@ -133,20 +134,56 @@ public class LocalAiService : IAiService, IDisposable
 
     private string ParseJson(string response)
     {
-        var pattern = new Regex(@"```json\s*([\s\S]*?)\s*```", RegexOptions.Compiled);
         CurrentCommands = new List<AICommand>();
+        try
+        {
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                ReadCommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true
+            };
+            var jsonDoc = JsonDocument.Parse(response);
+            if (jsonDoc.RootElement.TryGetProperty("response", out var respProp))
+            {
+                var text = respProp.GetString() ?? string.Empty;
+                if (jsonDoc.RootElement.TryGetProperty("effects", out var effectsProp) && effectsProp.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var effect in effectsProp.EnumerateArray())
+                    {
+                        var cmd = AICommand.ParseCommand(effect.GetRawText());
+                        if (cmd != null)
+                            CurrentCommands.Add(cmd);
+                    }
+                }
+                LogCommands();
+                foreach (var command in CurrentCommands)
+                {
+                    TriggerCommand(command);
+                }
+                return text.Trim();
+            }
+        }
+        catch
+        {
+            // Fallback to old regex parsing if it's not the new format or parsing fails
+        }
+
+        var pattern = new Regex(@"{\s*([\s\S]*?)\s*}", RegexOptions.Compiled);
         string clean = pattern.Replace(response, m =>
         {
-            var body = m.Groups[1].Value;
+            var body = m.Groups[0].Value; // Use the whole match including braces
             try
             {
-                CurrentCommands.Add(AICommand.ParseCommand(body) ?? new AICommand());
+                var cmd = AICommand.ParseCommand(body);
+                if (cmd != null)
+                    CurrentCommands.Add(cmd);
             }
             catch
             {
                 // If parsing fails, you may choose to ignore, log, or keep it
             }
-            // Return empty string to strip the entire code fence from output
+            // Return empty string to strip the entire JSON from output
             return string.Empty;
         });
 
@@ -171,7 +208,7 @@ public class LocalAiService : IAiService, IDisposable
 
     private void TriggerCommand(AICommand command)
     {
-        App.Logger?.Debug("AiService: Triggering command: {Command}", command);
+        App.Logger.Debug("AiService: Triggering command: {Command}", command);
         switch (command.Command)
         {
             case AICommandType.flash_image:
@@ -196,7 +233,7 @@ public class LocalAiService : IAiService, IDisposable
                     if (App.Overlay.IsRunning != true)
                     {
                         App.Overlay.Start();
-                        App.Logger?.Information("AIService: Pink - started overlay service");
+                        App.Logger.Information("AIService: Pink - started overlay service");
                     }
                 }
                 else
@@ -211,7 +248,7 @@ public class LocalAiService : IAiService, IDisposable
                     if (App.Overlay.IsRunning != true)
                     {
                         App.Overlay.Start();
-                        App.Logger?.Information("AutonomyService: Spiral - started overlay service");
+                        App.Logger.Information("AutonomyService: Spiral - started overlay service");
                     }
                 }
                 else
@@ -236,7 +273,11 @@ public class LocalAiService : IAiService, IDisposable
                     App.BouncingText.Stop();
                 break;
             case AICommandType.haptic:
-                _ = App.Haptics.ApplyVibrationModeAsync((command.Data as HapticCommand)?.Intensity ?? 0, ((command.Data as HapticCommand)?.Duration ?? 100) * 2, VibrationMode.Pulse);
+                if (command.Data is HapticCommand data)
+                {
+                    _ = App.Haptics.ApplyVibrationModeAsync(data.Intensity, data.Duration * 2, VibrationMode.Pulse);
+                }
+
                 break;
             case AICommandType.none:
             default:
