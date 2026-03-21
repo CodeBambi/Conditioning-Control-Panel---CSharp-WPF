@@ -17,7 +17,8 @@ namespace ConditioningControlPanel.Services
         Achievements,   // Achievements tab
         Companion,      // Companion tab
         Patreon,        // Patreon exclusives tab
-        Avatar          // Avatar companion
+        Avatar,         // Avatar companion
+        Modding         // Mod creation guide
     }
 
     public class TutorialService
@@ -45,6 +46,7 @@ namespace ConditioningControlPanel.Services
 
         public int CurrentStepIndex => _currentStepIndex;
         public int TotalSteps => _currentSteps.Count;
+        public IReadOnlyList<TutorialStep> CurrentSteps => _currentSteps;
         public bool IsActive { get; private set; }
         public bool IsFirstStep => _currentStepIndex == 0;
         public bool IsLastStep => _currentStepIndex == _currentSteps.Count - 1;
@@ -90,6 +92,7 @@ namespace ConditioningControlPanel.Services
                 TutorialType.Companion => CreateCompanionSteps(),
                 TutorialType.Patreon => CreatePatreonSteps(),
                 TutorialType.Avatar => CreateAvatarSteps(),
+                TutorialType.Modding => CreateModdingSteps(),
                 _ => CreateFullTourSteps()
             };
         }
@@ -783,6 +786,153 @@ namespace ConditioningControlPanel.Services
                                   "• Blinks and idles\n" +
                                   "• Reacts to flashes and videos\n" +
                                   "• Shows emotions during interactions",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        private List<TutorialStep> CreateModdingSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "mod_welcome",
+                    Icon = "\uD83D\uDD27",
+                    Title = "Welcome to the Mod Creator!",
+                    Description = "This tool lets you build a complete mod visually \u2014 no manual file editing needed.\n\n" +
+                                  "We'll walk through each tab so you know exactly what everything does. " +
+                                  "You can reopen this guide anytime with the ? button in the title bar.",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_info",
+                    Icon = "\u2139",
+                    Title = "Info",
+                    Description = "Start here \u2014 give your mod a name, author, version, and description.\n\n" +
+                                  "Add a preview image that shows in the mod manager so people know what your mod looks like at a glance.",
+                    RequiresTab = "mod:info",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_theme",
+                    Icon = "\uD83C\uDFA8",
+                    Title = "Theme",
+                    Description = "Pick your mod's color scheme. Click any color swatch to open a color picker, or type hex codes directly.\n\n" +
+                                  "The preview strip at the top shows all your colors together so you can see how they look as a set.",
+                    RequiresTab = "mod:theme",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_identity",
+                    Icon = "\uD83E\uDD16",
+                    Title = "Identity",
+                    Description = "Define who the companion is. Change their name, what they call the user, the mode name, and button labels.\n\n" +
+                                  "These labels appear throughout the entire app when your mod is active.",
+                    RequiresTab = "mod:identity",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_achievements",
+                    Icon = "\uD83C\uDFC6",
+                    Title = "Achievements",
+                    Description = "Drag and drop custom achievement icons onto each slot. These replace the default badges.\n\n" +
+                                  "Leave slots empty to keep the originals \u2014 you only need to replace what you want to change.",
+                    RequiresTab = "mod:achievements",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_features",
+                    Icon = "\u26A1",
+                    Title = "Features",
+                    Description = "Replace feature icons (flash, video, subliminal, etc.) with your own artwork.\n\n" +
+                                  "Drag PNG images onto any slot. These are the icons that appear on the main tabs and UI controls.",
+                    RequiresTab = "mod:features",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_skills",
+                    Icon = "\uD83C\uDF32",
+                    Title = "Skills",
+                    Description = "Custom skill tree icons. Each slot maps to a skill in the progression system.\n\n" +
+                                  "Drag and drop your own icons to give the skill tree a completely different look.",
+                    RequiresTab = "mod:skills",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_avatars",
+                    Icon = "\uD83D\uDC64",
+                    Title = "Avatars",
+                    Description = "Your mod can have up to 7 avatar sets with 4 poses each (Standby, Active, Alert, Override).\n\n" +
+                                  "Drag images to customize your companion's appearance at each evolution stage.",
+                    RequiresTab = "mod:avatars",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_uiassets",
+                    Icon = "\uD83D\uDDBC",
+                    Title = "UI Assets",
+                    Description = "Replace bubbles, tube frames, logo, speech bubbles, and card art.\n\n" +
+                                  "These are the decorative elements throughout the app. Drop your images onto any slot to replace them.",
+                    RequiresTab = "mod:uiassets",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_triggers",
+                    Icon = "\uD83D\uDCA5",
+                    Title = "Triggers",
+                    Description = "Customize trigger text \u2014 what happens on Freeze, Reset, Collapse, and Autonomy events.\n\n" +
+                                  "Type your own text for each trigger to match your mod's theme.",
+                    RequiresTab = "mod:triggers",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_messages",
+                    Icon = "\uD83D\uDCE2",
+                    Title = "Messages",
+                    Description = "Set the companion's attention check messages and bubble count retry text.\n\n" +
+                                  "These show up during interactive moments when the app needs the user's attention.",
+                    RequiresTab = "mod:messages",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_phrases",
+                    Icon = "\uD83D\uDCAC",
+                    Title = "Phrases",
+                    Description = "The big one! Add phrases for every situation \u2014 greetings, idle chatter, gaming, browsing, level ups, and more.\n\n" +
+                                  "Click a category to expand it, then add as many phrases as you want. " +
+                                  "The companion picks randomly from your list.",
+                    RequiresTab = "mod:phrases",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_tab_replacements",
+                    Icon = "\uD83D\uDD04",
+                    Title = "Text Replacements",
+                    Description = "Find-and-replace across the entire UI. Map words to your mod's equivalent.\n\n" +
+                                  "These apply everywhere automatically \u2014 every label, phrase, and message gets substituted.",
+                    RequiresTab = "mod:replacements",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "mod_export",
+                    Icon = "\uD83D\uDCE5",
+                    Title = "Export Your Mod",
+                    Description = "When you're done, click 'Export as .ccpmod' at the bottom. Your mod is packaged into a single file ready to share!\n\n" +
+                                  "You can also load an existing .ccpmod to edit it using the 'Load .ccpmod' button.",
                     TextPosition = TutorialStepPosition.Center
                 }
             };

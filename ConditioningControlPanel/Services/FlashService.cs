@@ -59,7 +59,7 @@ namespace ConditioningControlPanel.Services
 
         // Paths
         private string _imagesPath = "";
-        private readonly string _soundsPath;
+        private string _soundsPath;
 
         // Image decode cache: avoids reloading/re-decoding the same images every flash
         // Key = file path, Value = (data, lastAccess)
@@ -93,7 +93,7 @@ namespace ConditioningControlPanel.Services
         public FlashService()
         {
             RefreshImagesPath();
-            _soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "flashes_audio");
+            _soundsPath = CompanionPhraseService.VoiceLineFolder;
             Directory.CreateDirectory(_soundsPath);
 
             // Heartbeat timer for animation and fade management

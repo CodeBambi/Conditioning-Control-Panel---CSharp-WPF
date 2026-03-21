@@ -21,9 +21,22 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Folder where voice line audio files live (filename = phrase text).
+        /// Checks active mod's resources first, falls back to embedded folder.
         /// </summary>
-        public static string VoiceLineFolder =>
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "flashes_audio");
+        public static string VoiceLineFolder
+        {
+            get
+            {
+                var modPath = App.Mods?.ActiveMod?.InstalledPath;
+                if (modPath != null)
+                {
+                    var modVoiceDir = Path.Combine(modPath, "resources", "sounds", "flashes_audio");
+                    if (Directory.Exists(modVoiceDir))
+                        return modVoiceDir;
+                }
+                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "flashes_audio");
+            }
+        }
 
         public const string VoiceLineCategory = "VoiceLine";
 

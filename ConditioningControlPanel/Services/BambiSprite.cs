@@ -538,7 +538,12 @@ Example responses with REAL video names:
             }
 
             // Make the prompt mode-aware by replacing "Bambi" references with appropriate term
-            return MakePromptModeAware(sb.ToString());
+            var prompt = MakePromptModeAware(sb.ToString());
+
+            // Apply mod text replacements (e.g. "Bambi" → "Unit" for drone mod)
+            prompt = App.Mods?.MakeModAware(prompt) ?? prompt;
+
+            return prompt;
         }
 
         /// <summary>
@@ -688,7 +693,8 @@ OUTPUT RULES:
                 }
             }
 
-            return sb.ToString();
+            var defaultPrompt = sb.ToString();
+            return App.Mods?.MakeModAware(defaultPrompt) ?? defaultPrompt;
         }
 
         // ==========================================

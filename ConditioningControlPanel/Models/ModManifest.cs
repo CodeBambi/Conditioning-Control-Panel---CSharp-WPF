@@ -68,6 +68,30 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("textReplacements")]
         public Dictionary<string, string>? TextReplacements { get; set; }
+
+        [JsonProperty("enhancementOverrides")]
+        public ModEnhancementOverrides? EnhancementOverrides { get; set; }
+
+        [JsonProperty("tubeLayout")]
+        public ModTubeLayout? TubeLayout { get; set; }
+
+        [JsonProperty("supportedAvatarSets")]
+        public List<int>? SupportedAvatarSets { get; set; }
+
+        [JsonProperty("customAvatarSets")]
+        public List<CustomAvatarSet>? CustomAvatarSets { get; set; }
+    }
+
+    public class CustomAvatarSet
+    {
+        [JsonProperty("setNumber")]
+        public int SetNumber { get; set; }
+
+        [JsonProperty("label")]
+        public string Label { get; set; } = "";
+
+        [JsonProperty("unlockLevel")]
+        public int UnlockLevel { get; set; }
     }
 
     public class ModTheme
@@ -151,7 +175,69 @@ namespace ConditioningControlPanel.Models
         public bool? ShowBambiCloudOption { get; set; }
 
         [JsonProperty("defaultVideoLinks")]
-        public string? DefaultVideoLinks { get; set; }
+        public Dictionary<string, string>? DefaultVideoLinks { get; set; }
+    }
+
+    /// <summary>
+    /// Horizontal offset adjustments for avatar/UI positioning within the tube window.
+    /// Positive values shift elements RIGHT from the default position.
+    /// Used when a mod's tube image has the glass area in a different position than the default.
+    /// </summary>
+    public class ModTubeLayout
+    {
+        [JsonProperty("avatarOffsetX")]
+        public int AvatarOffsetX { get; set; }
+
+        [JsonProperty("avatarDetachedOffsetX")]
+        public int AvatarDetachedOffsetX { get; set; }
+
+        [JsonProperty("avatarScale")]
+        public double? AvatarScale { get; set; }
+
+        [JsonProperty("avatarOffsetY")]
+        public int AvatarOffsetY { get; set; }
+
+        [JsonProperty("avatarDetachedOffsetY")]
+        public int AvatarDetachedOffsetY { get; set; }
+    }
+
+    public class ModEnhancementOverrides
+    {
+        [JsonProperty("treeTitle")]
+        public string? TreeTitle { get; set; }
+
+        [JsonProperty("treeSubtitle")]
+        public string? TreeSubtitle { get; set; }
+
+        [JsonProperty("treeWarning")]
+        public string? TreeWarning { get; set; }
+
+        [JsonProperty("pointsLabel")]
+        public string? PointsLabel { get; set; }
+
+        [JsonProperty("statsTitle")]
+        public string? StatsTitle { get; set; }
+
+        [JsonProperty("tabTooltip")]
+        public string? TabTooltip { get; set; }
+
+        [JsonProperty("pinkRushName")]
+        public string? PinkRushName { get; set; }
+
+        [JsonProperty("pinkRushDescription")]
+        public string? PinkRushDescription { get; set; }
+
+        [JsonProperty("luckyFlashLabel")]
+        public string? LuckyFlashLabel { get; set; }
+
+        [JsonProperty("luckyBubbleLabel")]
+        public string? LuckyBubbleLabel { get; set; }
+
+        [JsonProperty("boostTooltips")]
+        public Dictionary<string, string>? BoostTooltips { get; set; }
+
+        [JsonProperty("statPillTooltips")]
+        public Dictionary<string, string>? StatPillTooltips { get; set; }
     }
 
     public class ModPersonality
