@@ -1075,11 +1075,26 @@ namespace ConditioningControlPanel.Services
                             }
                             if (datesChanged)
                             {
-                                // Trim to last 30 days
-                                var cutoff = DateTime.Today.AddDays(-30);
+                                // Trim to last 90 days (supports long streaks)
+                                var cutoff = DateTime.Today.AddDays(-90);
                                 questProgress.DailyQuestCompletionDates.RemoveAll(d => d.Date < cutoff);
                                 App.Logger?.Debug("Quest sync: Merged completion dates from cloud");
                                 needsSave = true;
+
+                                // Recompute streak from the merged calendar to fix LastDailyQuestDate desync
+                                App.Quests?.RecalculateStreak();
+
+                                // RecalculateStreak may compute a lower value if completion dates
+                                // were trimmed or incomplete. Restore the cloud streak if higher.
+                                if (cloudProfile.Stats.TryGetValue("daily_quest_streak", out var cloudStreakAfter))
+                                {
+                                    var csAfter = Convert.ToInt32(cloudStreakAfter);
+                                    if (csAfter > settings.DailyQuestStreak)
+                                    {
+                                        App.Logger?.Debug("Quest sync: Restoring cloud streak {Cloud} (recalculated was {Recalc})", csAfter, settings.DailyQuestStreak);
+                                        settings.DailyQuestStreak = csAfter;
+                                    }
+                                }
                             }
                         }
                     }
@@ -1132,9 +1147,22 @@ namespace ConditioningControlPanel.Services
                         }
                         if (cloudDateIsToday && cloudCount > questProgress.GetDailyQuestsCompletedToday())
                         {
-                            questProgress.DailyQuestsCompletedToday = cloudCount;
-                            questProgress.DailyCompletionResetDate = DateTime.Today;
-                            needsSave = true;
+                            // Cross-reference: only accept cloud counter if completion dates actually
+                            // show evidence of today's quests. This prevents stale max-merged server
+                            // values from marking quests as completed when they weren't done today.
+                            bool hasCompletionEvidence = questProgress.DailyQuestCompletionDates
+                                .Any(d => d.Date == DateTime.Today);
+                            if (hasCompletionEvidence)
+                            {
+                                questProgress.DailyQuestsCompletedToday = cloudCount;
+                                questProgress.DailyCompletionResetDate = DateTime.Today;
+                                needsSave = true;
+                                App.Logger?.Debug("Quest sync: Restored daily counter to {Count} (verified by completion dates)", cloudCount);
+                            }
+                            else
+                            {
+                                App.Logger?.Debug("Quest sync: Rejected cloud daily counter {Count} — no completion evidence for today", cloudCount);
+                            }
                         }
                     }
 

@@ -42,15 +42,15 @@
                 <TextBlock Text="QUIZ REPORT" FontSize="28" FontWeight="Bold" Foreground="White"
                            HorizontalAlignment="Center" Margin="0,0,0,4">
                     <TextBlock.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="25" ShadowDepth="0" Opacity="0.5"/>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="25" ShadowDepth="0" Opacity="0.5"/>
                     </TextBlock.Effect>
                 </TextBlock>
                 <TextBlock x:Name="TxtSubtitle" Foreground="#808090" FontSize="13"
                            HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                <TextBlock x:Name="TxtScore" FontSize="32" FontWeight="Bold" Foreground="#FF69B4"
+                <TextBlock x:Name="TxtScore" FontSize="32" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
                            HorizontalAlignment="Center">
                     <TextBlock.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.4"/>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.4"/>
                     </TextBlock.Effect>
                 </TextBlock>
             </StackPanel>

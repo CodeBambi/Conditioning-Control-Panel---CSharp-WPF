@@ -7,6 +7,7 @@
     <Color x:Key="PanelBg">#FF252542</Color>
     <Color x:Key="PanelBgTransparent">#B0252542</Color>
     <Color x:Key="DarkerBg">#FF1A1A2E</Color>
+    <Color x:Key="SurfaceBg">#FF1E1E3A</Color>
     <Color x:Key="TextLight">#FFE0E0E0</Color>
     <Color x:Key="TextMuted">#FF808080</Color>
     <Color x:Key="PanelAccent">#FF404060</Color>
@@ -18,6 +19,12 @@
 
     <Color x:Key="PinkButtonHovered">#FFFF8FAF</Color>
 
+    <!-- Accent pressed (darkened accent for press states) -->
+    <Color x:Key="AccentPressed">#FFE0507A</Color>
+
+    <!-- 20% alpha transparent accent -->
+    <Color x:Key="TransparentPink20">#20FF69B4</Color>
+
     <!-- Patreon palette -->
     <Color x:Key="PatreonPurple">#FF9B59B6</Color>
     <Color x:Key="PatreonLightPurple">#FFE0B0FF</Color>
@@ -28,5 +35,15 @@
 
     <!-- Added: alternate danger (used by Controls.xaml hover) -->
     <Color x:Key="DangerHover">#FFE84050</Color>
+
+    <!-- Accent-tinted dark backgrounds (computed at runtime from accent + base #1A1A2E) -->
+    <Color x:Key="AccentTintedBg">#FF352545</Color>
+    <Color x:Key="AccentTintedBgHover">#FF452555</Color>
+    <Color x:Key="AccentMidGradient">#FF2A1A35</Color>
+
+    <!-- 40% alpha accent for hover overlays -->
+    <Color x:Key="TransparentPink40">#40FF69B4</Color>
+    <!-- 50% alpha accent for selected overlays -->
+    <Color x:Key="TransparentPink50">#50FF69B4</Color>
 
 </ResourceDictionary>

@@ -9,7 +9,7 @@
         AllowsTransparency="True"
         Background="Transparent">
 
-    <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
         <Grid Margin="25">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -20,8 +20,8 @@
 
             <!-- Title -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,18">
-                <TextBlock Text="&#x2B06;" FontSize="28" Foreground="#FF69B4" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                <TextBlock Text="Update Available!" Foreground="#FF69B4" FontSize="24" FontWeight="Bold" VerticalAlignment="Center"/>
+                <TextBlock Text="&#x2B06;" FontSize="28" Foreground="{DynamicResource PinkBrush}" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                <TextBlock Text="Update Available!" Foreground="{DynamicResource PinkBrush}" FontSize="24" FontWeight="Bold" VerticalAlignment="Center"/>
             </StackPanel>
 
             <!-- Version Info -->
@@ -33,13 +33,13 @@
             </StackPanel>
 
             <!-- Release Notes -->
-            <Border Grid.Row="2" Background="#252542" CornerRadius="6" Padding="12" Margin="0,0,0,20">
+            <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,20">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Text="What's New" Foreground="#FF69B4" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <TextBlock Text="What's New" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MaxHeight="280">
                         <TextBlock x:Name="TxtReleaseNotes"
                                    Foreground="#C0C0C0" FontSize="13" TextWrapping="Wrap"
@@ -59,7 +59,7 @@
                         Click="BtnLater_Click" IsCancel="True">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Setter Property="Background" Value="#252542"/>
+                            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
                             <Setter Property="Foreground" Value="#E0E0E0"/>
                             <Setter Property="FontWeight" Value="Bold"/>
                             <Setter Property="FontSize" Value="15"/>
@@ -69,7 +69,7 @@
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
                                         <Border Background="{TemplateBinding Background}" CornerRadius="6"
-                                                Padding="{TemplateBinding Padding}" BorderBrush="#404060" BorderThickness="1">
+                                                Padding="{TemplateBinding Padding}" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
                                         <ControlTemplate.Triggers>
@@ -88,7 +88,7 @@
                         Click="BtnInstall_Click">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Setter Property="Background" Value="#FF69B4"/>
+                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
                             <Setter Property="Foreground" Value="White"/>
                             <Setter Property="FontWeight" Value="Bold"/>
                             <Setter Property="FontSize" Value="15"/>

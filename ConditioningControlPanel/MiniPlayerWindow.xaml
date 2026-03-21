@@ -6,13 +6,13 @@
         Title="Preview" Height="350" Width="450"
         MinHeight="200" MinWidth="300"
         WindowStartupLocation="CenterOwner"
-        Background="#1A1A2E"
+        Background="{DynamicResource DarkerBgBrush}"
         WindowStyle="None" AllowsTransparency="True"
         ResizeMode="CanResizeWithGrip"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
         KeyDown="Window_KeyDown">
 
-    <Border CornerRadius="8" Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="1">
+    <Border CornerRadius="8" Background="{DynamicResource DarkerBgBrush}" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="32"/>
@@ -21,13 +21,13 @@
             </Grid.RowDefinitions>
 
             <!-- Title Bar -->
-            <Grid Grid.Row="0" Background="#252542">
+            <Grid Grid.Row="0" Background="{DynamicResource PanelBgBrush}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="TxtFileName" Text="Preview"
-                           Foreground="#FF69B4" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="SemiBold"
                            VerticalAlignment="Center" Margin="12,0,0,0"
                            TextTrimming="CharacterEllipsis"/>
                 <Button Grid.Column="1" Content="✕" Width="32" Height="32"
@@ -77,7 +77,7 @@
             </Grid>
 
             <!-- Video Controls (only shown for videos) -->
-            <Grid x:Name="VideoControls" Grid.Row="2" Background="#252542" Height="40" Visibility="Collapsed">
+            <Grid x:Name="VideoControls" Grid.Row="2" Background="{DynamicResource PanelBgBrush}" Height="40" Visibility="Collapsed">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -87,7 +87,7 @@
                 <!-- Play/Pause Button -->
                 <Button x:Name="BtnPlayPause" Grid.Column="0"
                         Content="▶" Width="36" Height="28"
-                        Background="#353555" Foreground="#FF69B4"
+                        Background="#353555" Foreground="{DynamicResource PinkBrush}"
                         BorderThickness="0" FontSize="12" Cursor="Hand"
                         Margin="8,0,0,0"
                         Click="BtnPlayPause_Click"

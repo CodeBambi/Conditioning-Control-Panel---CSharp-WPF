@@ -11,7 +11,7 @@
         Topmost="True"
         ShowInTaskbar="False">
 
-    <Border Background="#1A1A2E" CornerRadius="15" BorderBrush="#FF69B4" BorderThickness="2">
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="15" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="5" Opacity="0.6"/>
         </Border.Effect>
@@ -29,7 +29,7 @@
                        Text="Conditioning Control Panel"
                        FontSize="22"
                        FontWeight="Bold"
-                       Foreground="#FF69B4"
+                       Foreground="{DynamicResource PinkBrush}"
                        HorizontalAlignment="Center"
                        FontFamily="Segoe UI"/>
 
@@ -45,11 +45,11 @@
 
             <!-- Progress bar -->
             <Grid Grid.Row="2" Height="8">
-                <Border Background="#252542" CornerRadius="4"/>
+                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="4"/>
                 <Border x:Name="ProgressFill">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                            <GradientStop Color="#FF69B4" Offset="0"/>
+                            <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
                             <GradientStop Color="#DA70D6" Offset="1"/>
                         </LinearGradientBrush>
                     </Border.Background>

@@ -28,7 +28,7 @@
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top">
             <Border.Effect>
-                <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.4"/>
+                <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.4"/>
             </Border.Effect>
 
             <Grid>
@@ -48,7 +48,7 @@
                            Margin="0,0,0,8"/>
 
                 <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
-                    <TextBlock x:Name="TxtIcon" Text="~" FontSize="24" Foreground="#FF69B4" FontWeight="Bold" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtIcon" Text="~" FontSize="24" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,10,0" VerticalAlignment="Center"/>
                     <TextBlock x:Name="TxtTitle"
                                Text="Welcome!"
                                Foreground="{StaticResource PinkBrush}"

@@ -111,7 +111,7 @@ namespace ConditioningControlPanel
             var header = new TextBlock
             {
                 Text = $"{rampSetting.Name} Ramping",
-                Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 FontSize = 13,
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 5, 0, 8)
@@ -268,7 +268,7 @@ namespace ConditioningControlPanel
 
             var comboBox = new ComboBox
             {
-                Background = new SolidColorBrush(Color.FromRgb(37, 37, 66)),
+                Background = Application.Current.Resources["PanelBgBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(37, 37, 66)),
                 Foreground = new SolidColorBrush(Color.FromRgb(224, 224, 224)),
                 Tag = key
             };
@@ -310,7 +310,7 @@ namespace ConditioningControlPanel
             var textBox = new TextBox
             {
                 Text = value,
-                Background = new SolidColorBrush(Color.FromRgb(37, 37, 66)),
+                Background = Application.Current.Resources["PanelBgBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(37, 37, 66)),
                 Foreground = new SolidColorBrush(Color.FromRgb(224, 224, 224)),
                 BorderBrush = new SolidColorBrush(Color.FromRgb(53, 53, 85)),
                 Padding = new Thickness(8, 5, 8, 5),
@@ -413,7 +413,7 @@ namespace ConditioningControlPanel
             var headerText = new TextBlock
             {
                 Text = title,
-                Foreground = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 FontSize = 13,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center
@@ -633,7 +633,7 @@ namespace ConditioningControlPanel
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             WindowStyle = WindowStyle.ToolWindow;
             ResizeMode = ResizeMode.NoResize;
-            Background = new SolidColorBrush(Color.FromRgb(30, 30, 58));
+            Background = Application.Current.Resources["SurfaceBgBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(30, 30, 58));
 
             var grid = new Grid { Margin = new Thickness(15) };
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -651,9 +651,9 @@ namespace ConditioningControlPanel
 
             var textBox = new TextBox
             {
-                Background = new SolidColorBrush(Color.FromRgb(37, 37, 66)),
+                Background = Application.Current.Resources["PanelBgBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(37, 37, 66)),
                 Foreground = Brushes.White,
-                BorderBrush = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 Padding = new Thickness(8, 5, 8, 5),
                 Margin = new Thickness(0, 0, 0, 15)
             };
@@ -671,7 +671,7 @@ namespace ConditioningControlPanel
                 Content = "Add",
                 Width = 70,
                 Padding = new Thickness(0, 5, 0, 5),
-                Background = new SolidColorBrush(Color.FromRgb(255, 105, 180)),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 Foreground = Brushes.White,
                 BorderThickness = new Thickness(0),
                 Margin = new Thickness(0, 0, 8, 0),

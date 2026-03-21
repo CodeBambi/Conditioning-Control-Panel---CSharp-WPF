@@ -1,8 +1,8 @@
-<Window x:Class="ConditioningControlPanel.ContentModeDialog"
+<Window x:Class="ConditioningControlPanel.ModSelectorDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Choose Your Mode"
-        Height="420" Width="580"
+        Title="Choose Your Experience"
+        Height="480" Width="620"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -10,21 +10,22 @@
         Background="Transparent"
         Topmost="True">
 
-    <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
+    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
         <Grid Margin="30">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Title -->
             <TextBlock Grid.Row="0" Text="Choose Your Experience"
-                       Foreground="#FF69B4" FontSize="24" FontWeight="Bold"
+                       Foreground="{DynamicResource PinkBrush}" FontSize="24" FontWeight="Bold"
                        HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
             <!-- Subtitle -->
-            <TextBlock Grid.Row="1" Text="Select which content mode best fits your interests. You can change this later."
+            <TextBlock Grid.Row="1" Text="Select a theme to customize your experience. You can change this later or install custom mods."
                        Foreground="#B0B0B0" FontSize="13"
                        HorizontalAlignment="Center" Margin="0,0,0,25" TextWrapping="Wrap" TextAlignment="Center"/>
 
@@ -37,22 +38,22 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Bambi Sleep Card -->
-                <Border x:Name="CardBambi" Grid.Column="0" Background="#252542" CornerRadius="10"
+                <Border x:Name="CardBambi" Grid.Column="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="10"
                         Cursor="Hand" MouseLeftButtonDown="CardBambi_Click">
                     <Border.Style>
                         <Style TargetType="Border">
-                            <Setter Property="BorderBrush" Value="#404060"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
                             <Setter Property="BorderThickness" Value="2"/>
                             <Style.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="BorderBrush" Value="#FF69B4"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
                                     <Setter Property="Background" Value="#2A2A4A"/>
                                 </Trigger>
                             </Style.Triggers>
                         </Style>
                     </Border.Style>
                     <StackPanel VerticalAlignment="Center" Margin="20">
-                        <TextBlock Text="BS" FontSize="36" FontWeight="Bold" Foreground="#FF69B4"
+                        <TextBlock Text="BS" FontSize="36" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
                                    HorizontalAlignment="Center" Margin="0,0,0,10"/>
                         <TextBlock Text="Bambi Sleep" FontSize="18" FontWeight="SemiBold" Foreground="White"
                                    HorizontalAlignment="Center" Margin="0,0,0,12"/>
@@ -67,22 +68,22 @@
                 </Border>
 
                 <!-- Sissy Hypno Card -->
-                <Border x:Name="CardSissy" Grid.Column="2" Background="#252542" CornerRadius="10"
+                <Border x:Name="CardSissy" Grid.Column="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="10"
                         Cursor="Hand" MouseLeftButtonDown="CardSissy_Click">
                     <Border.Style>
                         <Style TargetType="Border">
-                            <Setter Property="BorderBrush" Value="#404060"/>
+                            <Setter Property="BorderBrush" Value="{DynamicResource PanelAccentBrush}"/>
                             <Setter Property="BorderThickness" Value="2"/>
                             <Style.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="BorderBrush" Value="#FF69B4"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource SecondaryBrush}"/>
                                     <Setter Property="Background" Value="#2A2A4A"/>
                                 </Trigger>
                             </Style.Triggers>
                         </Style>
                     </Border.Style>
                     <StackPanel VerticalAlignment="Center" Margin="20">
-                        <TextBlock Text="SH" FontSize="36" FontWeight="Bold" Foreground="#FF69B4"
+                        <TextBlock Text="SH" FontSize="36" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
                                    HorizontalAlignment="Center" Margin="0,0,0,10"/>
                         <TextBlock Text="Sissy Hypno" FontSize="18" FontWeight="SemiBold" Foreground="White"
                                    HorizontalAlignment="Center" Margin="0,0,0,12"/>
@@ -96,6 +97,14 @@
                     </StackPanel>
                 </Border>
             </Grid>
+
+            <!-- Install mod link -->
+            <TextBlock Grid.Row="3" HorizontalAlignment="Center" Margin="0,15,0,0">
+                <Hyperlink x:Name="InstallModLink" Click="InstallModLink_Click"
+                           Foreground="#606080" FontSize="11">
+                    Have a .ccpmod file? Install it here
+                </Hyperlink>
+            </TextBlock>
         </Grid>
     </Border>
 </Window>

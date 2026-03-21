@@ -15,6 +15,13 @@ public partial class PinkRushPopup : Window
     {
         InitializeComponent();
 
+        // Apply mod overrides to text
+        if (App.Mods != null)
+        {
+            TxtPinkRushTitle.Text = "⚡ " + App.Mods.GetPinkRushName();
+            TxtPinkRushSubtitle.Text = App.Mods.GetPinkRushDescription();
+        }
+
         PositionWindow();
 
         // Countdown timer ticks every second
