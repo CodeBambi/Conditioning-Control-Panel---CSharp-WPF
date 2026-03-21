@@ -22,58 +22,56 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.6.15";
+        public const string AppVersion = "5.7.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.6.15 - Polish & Optimization Update
+        public const string CurrentPatchNotes = @"v5.7.0 - Mod System Update
 
-🧠 POP QUIZZES [BETA]
-• Random reinforcement quizzes pop up during sessions to test your focus
-• Companion AI reacts to your quiz answers with personalized feedback
-• Configurable quiz frequency in settings
-• Category editor — create and manage custom question sets
-• Generate full AI sessions from your quiz results
+🧩 MOD SYSTEM
+• New .ccpmod package format for installable mod bundles
+• Mod Manager — install, switch, and remove mods from the UI
+• Mod Creator — visual tool for building your own mods with drag-and-drop
+• Audio section in Mod Creator — manage voice lines, giggles, pops, and chimes with play preview
+• Browser section in Mod Creator — set default URL, site name, and video link suggestions
+• Mods can customize: theme colors, identity labels, triggers, messages, phrases, subliminal pools, lock card phrases, achievement badges, avatar poses, skill tree icons, bubble/tube assets, sounds, and more
+• Moddable enhancement tree: titles, tooltips, boost descriptions, stat pill text, points label
+• Configurable tube layout: avatar position offsets, scale, and per-mode Y offsets
+• Supported avatar sets — mods declare which avatar sets they provide, hiding unsupported companions
+• Custom avatar sets — mods can add sets 8+ with custom unlock levels
+• Video links — mods define name-to-URL pairs for companion speech bubble suggestions
+• Auto-loads active mod as preset when opening the Mod Creator
+• Fallback chain: active mod → base mod for any missing resources
 
-✨ VISUAL EFFECTS
-• Flash images now glow pink based on your sparkle boost tier
-• Lucky flash procs pulse with a golden glow
-• Bubbles burst with sparkle particles on pop (pink for sparkle, gold for lucky)
-• New setting to toggle flash glow effects (lucky glow always shows)
-
-🏆 PROGRESSION
-• Earn 1 skill point every 100 bubbles popped
-• Skill points are now server-authoritative — no more desync or exploits
-• Skill tree prerequisites fixed to match the linear UI layout
-• Fixed Hydra gen 2+ giving 0 XP due to integer division bug
-
-⚡ HYDRA LINKED TIMING
-• Hydra children can now expire with parent flash (linked) or run independently
-• New toggle in flash settings — linked mode is default
+🤖 DRONE MODE (Built-in Mod)
+• Matrix-inspired terminal aesthetic — green on black with custom tube artwork
+• Custom companion personality (DroneOS) with full phrase set across 20+ categories
+• 28 custom drone achievement badges
+• 5 custom avatar chassis (Alpha through Omega) with 4 poses each
+• 22 custom skill tree icons with drone-themed names
+• Custom bubble, pop sounds, and computing-style giggle sounds
+• 240 voice lines for companion speech
+• 20 curated video links for the companion to suggest
+• Full subliminal pool and lock card phrase set
 
 🛠️ BUG FIXES
-• Fixed Lab tab locked for whitelisted Discord-only users
-• Fixed quest progress lost on PC crash — atomic saves with .tmp recovery
-• Fixed corner GIF crash from invalid window handle
-• Fixed avatar not showing feedback when double-clicked while muted
-• Fixed pop quiz windows fighting with avatar for z-order
-• Panic button now closes all quiz windows
-• Fixed session AI assigning wrong archetype percentages
-• Fixed category editor dropdown unreadable on dark theme
+• Fixed bubble count double pop sound and off-screen positioning
+• Fixed quest streak resetting on login by preserving cloud streak value
+• Fixed custom session crashes from unhandled async void exceptions
+• Fixed daily quests permanently showing as completed after day rollover
+• Fixed bubble click-through on transparent windows
+• Fixed avatar head clipping during floating animation
+• Fixed Mod Creator avatar slots not loading from installed mods
 
-🧹 MEMORY & PERFORMANCE (Special thanks to Pherik)
-• Fixed flash image cache leaking up to 200 MB — now cleared between sessions
-• Fixed spiral overlay holding 120+ decoded frames in memory
-• Fixed avatar GIF animation frames not releasing on close
-• Fixed 7 timers still firing after window close
-• Fixed 12 event handler leaks on static services
-• Fixed HttpResponseMessage leak (~28,800 objects/day from remote polling)
-• Fixed FlashService scheduler timer and CancellationTokenSource leaks
-• Added LOH compaction between sessions to return memory to OS
-• Reduced sound volumes 30% across the board
-• Lucky procs now use random chime sounds";
+🔒 SECURITY
+• Path traversal protection in all mod resource resolvers
+• Mod manifests re-validated on every load (defense-in-depth)
+• All theme colors validated as hex codes
+• Video links filtered to HTTPS-only at runtime
+• Size caps on all manifest fields (phrases, triggers, pools, tooltips)
+• Duplicate custom avatar set detection";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
