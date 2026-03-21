@@ -286,9 +286,8 @@ namespace ConditioningControlPanel
                 window.Hide();
             }
             
-            // Mode-aware mercy phrases (no answer included!)
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var mercyPhrases = Models.ContentModeConfig.GetBubbleCountMercyPhrases(mode);
+            // Mod-aware mercy phrases (no answer included!)
+            var mercyPhrases = App.Mods?.GetPhrases("BubbleCountMercy") ?? new[] { "GOOD GIRLS PAY ATTENTION" };
 
             var random = new Random();
             var phrase = mercyPhrases[random.Next(mercyPhrases.Length)];

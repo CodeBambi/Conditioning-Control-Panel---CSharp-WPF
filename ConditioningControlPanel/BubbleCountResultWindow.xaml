@@ -24,7 +24,7 @@
                 MinWidth="500"
                 MaxWidth="600">
             <Border.Effect>
-                <DropShadowEffect Color="#FF69B4" BlurRadius="30" ShadowDepth="0" Opacity="0.5"/>
+                <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="30" ShadowDepth="0" Opacity="0.5"/>
             </Border.Effect>
             
             <StackPanel>
@@ -32,18 +32,18 @@
                 <TextBlock Text="🫧 How Many Bubbles? 🫧"
                            FontSize="40"
                            FontWeight="Bold"
-                           Foreground="#FF69B4"
+                           Foreground="{DynamicResource PinkBrush}"
                            HorizontalAlignment="Center"
                            Margin="0,0,0,20">
                     <TextBlock.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="12" ShadowDepth="0" Opacity="0.6"/>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="12" ShadowDepth="0" Opacity="0.6"/>
                     </TextBlock.Effect>
                 </TextBlock>
                 
                 <!-- Instruction -->
                 <TextBlock Text="Enter the number of bubbles you counted:"
                            FontSize="18"
-                           Foreground="#FFB6C1"
+                           Foreground="{DynamicResource PinkBrush}"
                            HorizontalAlignment="Center"
                            Margin="0,0,0,30"/>
                 
@@ -53,7 +53,7 @@
                          FontWeight="Bold"
                          Foreground="White"
                          Background="#40FFFFFF"
-                         BorderBrush="#FF69B4"
+                         BorderBrush="{DynamicResource PinkBrush}"
                          BorderThickness="3"
                          Padding="20,10"
                          HorizontalAlignment="Center"
@@ -84,7 +84,7 @@
                         FontSize="24"
                         FontWeight="Bold"
                         Foreground="White"
-                        Background="#FF69B4"
+                        Background="{DynamicResource PinkBrush}"
                         BorderThickness="0"
                         Padding="40,15"
                         Margin="0,30,0,0"

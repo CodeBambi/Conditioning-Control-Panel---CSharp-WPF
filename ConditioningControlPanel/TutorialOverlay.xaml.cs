@@ -134,11 +134,14 @@ namespace ConditioningControlPanel
 
         private void DrawFullOverlay()
         {
+            // Use lighter overlay when targeting non-MainWindow (e.g. Mod Creator)
+            // so the content behind remains visible
+            byte alpha = _targetWindow is MainWindow ? (byte)0xE0 : (byte)0x80;
             var overlay = new Rectangle
             {
                 Width = ActualWidth,
                 Height = ActualHeight,
-                Fill = new SolidColorBrush(Color.FromArgb(0xE0, 0x00, 0x00, 0x00))
+                Fill = new SolidColorBrush(Color.FromArgb(alpha, 0x00, 0x00, 0x00))
             };
             Canvas.SetLeft(overlay, 0);
             Canvas.SetTop(overlay, 0);
@@ -228,8 +231,17 @@ namespace ConditioningControlPanel
         private void CenterTextPanel()
         {
             TextPanel.HorizontalAlignment = HorizontalAlignment.Center;
-            TextPanel.VerticalAlignment = VerticalAlignment.Center;
-            TextPanel.Margin = new Thickness(0);
+            if (_targetWindow is MainWindow)
+            {
+                TextPanel.VerticalAlignment = VerticalAlignment.Center;
+                TextPanel.Margin = new Thickness(0);
+            }
+            else
+            {
+                // Position at bottom so the content behind stays visible
+                TextPanel.VerticalAlignment = VerticalAlignment.Bottom;
+                TextPanel.Margin = new Thickness(0, 0, 0, 30);
+            }
         }
 
         private FrameworkElement? FindElementByName(DependencyObject parent, string name)

@@ -24,7 +24,7 @@
     </Window.Resources>
 
     <Grid>
-        <Border Background="#1A1A2E" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2">
+        <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>  <!-- Title bar -->
@@ -32,7 +32,7 @@
                 </Grid.RowDefinitions>
 
                 <!-- Title Bar -->
-                <Grid Grid.Row="0" Background="#252542" Margin="2,2,2,0">
+                <Grid Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Margin="2,2,2,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -43,7 +43,7 @@
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,4,8,4">
                         <Button x:Name="BtnHelp" Content="?" Click="BtnHelp_Click" Width="24" Height="24"
-                                Background="#FF69B4" Foreground="White" FontSize="12" FontWeight="Bold"
+                                Background="{DynamicResource PinkBrush}" Foreground="White" FontSize="12" FontWeight="Bold"
                                 BorderThickness="0" Cursor="Hand" ToolTip="How to use the Session Editor">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
@@ -77,10 +77,10 @@
                         <StackPanel Grid.Row="0" Margin="20,12,20,8">
                             <!-- Session Name (editable) -->
                             <TextBox x:Name="TxtSessionName" Text="My New Session"
-                                     FontSize="22" FontWeight="Bold" Foreground="#FF69B4"
+                                     FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
                                      Background="Transparent" BorderThickness="0"
                                      HorizontalAlignment="Center" TextAlignment="Center"
-                                     CaretBrush="#FF69B4" SelectionBrush="#FF69B4"
+                                     CaretBrush="{DynamicResource PinkBrush}" SelectionBrush="{DynamicResource PinkBrush}"
                                      ToolTip="Click to edit session name"/>
 
                             <!-- Auto-calculated stats -->
@@ -116,7 +116,7 @@
                         </Grid>
 
                         <!-- Timeline -->
-                        <Border Grid.Row="2" Background="#1E1E3A" CornerRadius="6" Margin="20,6,20,6" Padding="10" MinHeight="100" MaxHeight="180">
+                        <Border Grid.Row="2" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Margin="20,6,20,6" Padding="10" MinHeight="100" MaxHeight="180">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>  <!-- Minute markers -->
@@ -128,7 +128,7 @@
 
                                 <!-- Timeline Track (drop zone) -->
                                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,15,0">
-                                    <Border Background="#252542" CornerRadius="4"
+                                    <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="4"
                                         AllowDrop="True"
                                         DragEnter="Timeline_DragEnter"
                                         DragOver="Timeline_DragOver"
@@ -159,35 +159,35 @@
 
                                 <!-- AUDIO Category -->
                                 <StackPanel Grid.Column="0" Margin="3,0">
-                                    <TextBlock Text="AUDIO" Foreground="#FF69B4" FontSize="9" FontWeight="SemiBold"
+                                    <TextBlock Text="AUDIO" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" Margin="0,3,0,5"/>
                                     <StackPanel x:Name="AudioFeatures" HorizontalAlignment="Center"/>
                                 </StackPanel>
 
                                 <!-- VIDEO Category -->
                                 <StackPanel Grid.Column="1" Margin="3,0">
-                                    <TextBlock Text="VIDEO" Foreground="#FF69B4" FontSize="9" FontWeight="SemiBold"
+                                    <TextBlock Text="VIDEO" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" Margin="0,3,0,5"/>
                                     <StackPanel x:Name="VideoFeatures" HorizontalAlignment="Center"/>
                                 </StackPanel>
 
                                 <!-- OVERLAYS Category -->
                                 <StackPanel Grid.Column="2" Margin="3,0">
-                                    <TextBlock Text="OVERLAYS" Foreground="#FF69B4" FontSize="9" FontWeight="SemiBold"
+                                    <TextBlock Text="OVERLAYS" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" Margin="0,3,0,5"/>
                                     <StackPanel x:Name="OverlayFeatures" HorizontalAlignment="Center"/>
                                 </StackPanel>
 
                                 <!-- INTERACTIVE Category -->
                                 <StackPanel Grid.Column="3" Margin="3,0">
-                                    <TextBlock Text="INTERACTIVE" Foreground="#FF69B4" FontSize="9" FontWeight="SemiBold"
+                                    <TextBlock Text="INTERACTIVE" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" Margin="0,3,0,5"/>
                                     <StackPanel x:Name="InteractiveFeatures" HorizontalAlignment="Center"/>
                                 </StackPanel>
 
                                 <!-- EXTRAS Category -->
                                 <StackPanel Grid.Column="4" Margin="3,0">
-                                    <TextBlock Text="EXTRAS" Foreground="#FF69B4" FontSize="9" FontWeight="SemiBold"
+                                    <TextBlock Text="EXTRAS" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" Margin="0,3,0,5"/>
                                     <StackPanel x:Name="ExtrasFeatures" HorizontalAlignment="Center"/>
                                 </StackPanel>
@@ -232,7 +232,7 @@
                                 <TextBlock Text="Vibe Description" Foreground="#888" FontSize="10" Margin="0,0,0,4"/>
                                 <TextBox x:Name="TxtDescription" Grid.Row="1"
                                          Height="55" TextWrapping="Wrap" AcceptsReturn="True"
-                                         Background="#252542" Foreground="#E0E0E0"
+                                         Background="{DynamicResource PanelBgBrush}" Foreground="#E0E0E0"
                                          BorderBrush="#353555" BorderThickness="1"
                                          Padding="8" FontSize="11" VerticalScrollBarVisibility="Auto"
                                          ToolTip="Enter a description for your session"/>
@@ -260,7 +260,7 @@
                 <Border Background="Transparent" MouseLeftButtonDown="TutorialOverlay_Close"/>
 
                 <!-- Tutorial Content -->
-                <Border Background="#1E1E3A" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2"
+                <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
                         MaxWidth="600" MaxHeight="550" VerticalAlignment="Center" HorizontalAlignment="Center"
                         Margin="50" MouseLeftButtonDown="TutorialContent_MouseDown">
                     <Grid>
@@ -271,10 +271,10 @@
                         </Grid.RowDefinitions>
 
                         <!-- Header -->
-                        <Border Grid.Row="0" Background="#252542" CornerRadius="10,10,0,0" Padding="20,15">
+                        <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="10,10,0,0" Padding="20,15">
                             <Grid>
                                 <TextBlock Text="📖 How to Use the Session Editor"
-                                           Foreground="#FF69B4" FontSize="18" FontWeight="Bold"
+                                           Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
                                            HorizontalAlignment="Center"/>
                                 <Button Content="✕" Click="TutorialOverlay_Close"
                                         HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -287,7 +287,7 @@
                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="25,20">
                             <StackPanel>
                                 <!-- Step 1 -->
-                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,12">
+                                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,12">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                             <Border Background="#4CAF50" CornerRadius="12" Width="24" Height="24" Margin="0,0,10,0">
@@ -303,7 +303,7 @@
                                 </Border>
 
                                 <!-- Step 2 -->
-                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,12">
+                                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,12">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                             <Border Background="#2196F3" CornerRadius="12" Width="24" Height="24" Margin="0,0,10,0">
@@ -319,7 +319,7 @@
                                 </Border>
 
                                 <!-- Step 3 -->
-                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,12">
+                                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,12">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                             <Border Background="#FF9800" CornerRadius="12" Width="24" Height="24" Margin="0,0,10,0">
@@ -335,7 +335,7 @@
                                 </Border>
 
                                 <!-- Step 4 -->
-                                <Border Background="#252542" CornerRadius="8" Padding="15" Margin="0,0,0,12">
+                                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="15" Margin="0,0,0,12">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                             <Border Background="#9C27B0" CornerRadius="12" Width="24" Height="24" Margin="0,0,10,0">
@@ -369,7 +369,7 @@
                         </ScrollViewer>
 
                         <!-- Footer -->
-                        <Border Grid.Row="2" Background="#252542" CornerRadius="0,0,10,10" Padding="20,15">
+                        <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,10,10" Padding="20,15">
                             <Button Content="Got it!" Style="{StaticResource PinkButton}"
                                     HorizontalAlignment="Center" Click="TutorialOverlay_Close"
                                     Padding="40,10"/>

@@ -30,10 +30,10 @@
                 MinWidth="500"
                 MaxWidth="700">
             <Border.Background>
-                <SolidColorBrush x:Name="CardBackground" Color="#1A1A2E"/>
+                <SolidColorBrush x:Name="CardBackground" Color="{DynamicResource DarkerBg}"/>
             </Border.Background>
             <Border.Effect>
-                <DropShadowEffect Color="#FF69B4" BlurRadius="30" ShadowDepth="0" Opacity="0.5"/>
+                <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="30" ShadowDepth="0" Opacity="0.5"/>
             </Border.Effect>
 
             <StackPanel>
@@ -42,7 +42,7 @@
                 <TextBlock x:Name="TxtTitle" Text="Type to Unlock" 
                            FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,25">
                     <TextBlock.Foreground>
-                        <SolidColorBrush x:Name="AccentBrush" Color="#FF69B4"/>
+                        <SolidColorBrush x:Name="AccentBrush" Color="{DynamicResource PinkColor}"/>
                     </TextBlock.Foreground>
                 </TextBlock>
 
@@ -51,7 +51,7 @@
                            FontSize="32" FontWeight="Bold" HorizontalAlignment="Center" 
                            Margin="0,0,0,25" TextWrapping="Wrap" TextAlignment="Center">
                     <TextBlock.Foreground>
-                        <SolidColorBrush x:Name="PhraseBrush" Color="#FF69B4"/>
+                        <SolidColorBrush x:Name="PhraseBrush" Color="{DynamicResource PinkColor}"/>
                     </TextBlock.Foreground>
                 </TextBlock>
 
@@ -59,10 +59,10 @@
                 <Border x:Name="InputBorder" CornerRadius="8" Padding="15,12" Margin="0,0,0,20"
                         BorderThickness="2">
                     <Border.Background>
-                        <SolidColorBrush x:Name="InputBackground" Color="#252542"/>
+                        <SolidColorBrush x:Name="InputBackground" Color="{DynamicResource PanelBg}"/>
                     </Border.Background>
                     <Border.BorderBrush>
-                        <SolidColorBrush x:Name="InputBorderBrush" Color="#FF69B4"/>
+                        <SolidColorBrush x:Name="InputBorderBrush" Color="{DynamicResource PinkColor}"/>
                     </Border.BorderBrush>
                     <TextBox x:Name="TxtInput" 
                              Background="Transparent"
@@ -77,7 +77,7 @@
                             <SolidColorBrush x:Name="InputTextBrush" Color="White"/>
                         </TextBox.Foreground>
                         <TextBox.CaretBrush>
-                            <SolidColorBrush Color="#FF69B4"/>
+                            <SolidColorBrush Color="{DynamicResource PinkColor}"/>
                         </TextBox.CaretBrush>
                     </TextBox>
                 </Border>
@@ -97,8 +97,8 @@
                         </TextBlock.Foreground>
                     </TextBlock>
 
-                    <Border x:Name="ProgressBarContainer" Grid.Column="1" Background="#404060" CornerRadius="4" Height="8" MinWidth="200">
-                        <Border x:Name="ProgressBar" Background="#FF69B4" CornerRadius="4"
+                    <Border x:Name="ProgressBarContainer" Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" MinWidth="200">
+                        <Border x:Name="ProgressBar" Background="{DynamicResource PinkBrush}" CornerRadius="4"
                                 HorizontalAlignment="Left" Width="0"/>
                     </Border>
 

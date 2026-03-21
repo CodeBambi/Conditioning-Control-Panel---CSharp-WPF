@@ -21,46 +21,45 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Folder where voice line audio files live (filename = phrase text).
+        /// Checks active mod's resources first, falls back to embedded folder.
         /// </summary>
-        public static string VoiceLineFolder =>
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "flashes_audio");
+        public static string VoiceLineFolder
+        {
+            get
+            {
+                var modPath = App.Mods?.ActiveMod?.InstalledPath;
+                if (modPath != null)
+                {
+                    var modVoiceDir = Path.Combine(modPath, "resources", "sounds", "flashes_audio");
+                    if (Directory.Exists(modVoiceDir))
+                        return modVoiceDir;
+                }
+                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "flashes_audio");
+            }
+        }
 
         public const string VoiceLineCategory = "VoiceLine";
 
         /// <summary>
-        /// Registry of all built-in phrase categories mapped to their ContentModeConfig getter.
+        /// All registered phrase category names.
         /// </summary>
-        private static readonly Dictionary<string, Func<ContentMode, string[]>> _categoryRegistry = new()
+        private static readonly string[] _categoryNames = new[]
         {
-            { "Greeting", ContentModeConfig.GetGreetingPhrases },
-            { "StartupGreeting", ContentModeConfig.GetStartupGreetingPhrases },
-            { "Idle", ContentModeConfig.GetIdlePhrases },
-            { "RandomFloating", ContentModeConfig.GetRandomFloatingPhrases },
-            { "Generic", ContentModeConfig.GetGenericPhrases },
-            { "Gaming", ContentModeConfig.GetGamingPhrases },
-            { "Browsing", ContentModeConfig.GetBrowsingPhrases },
-            { "Shopping", ContentModeConfig.GetShoppingPhrases },
-            { "Social", ContentModeConfig.GetSocialPhrases },
-            { "Discord", ContentModeConfig.GetDiscordPhrases },
-            { "TrainingSite", ContentModeConfig.GetTrainingSitePhrases },
-            { "HypnoContent", ContentModeConfig.GetHypnoContentPhrases },
-            { "Working", ContentModeConfig.GetWorkingPhrases },
-            { "Media", ContentModeConfig.GetMediaPhrases },
-            { "Learning", ContentModeConfig.GetLearningPhrases },
-            { "WindowAwarenessIdle", ContentModeConfig.GetWindowAwarenessIdlePhrases },
-            { "EngineStop", ContentModeConfig.GetEngineStopPhrases },
-            { "FlashPre", ContentModeConfig.GetFlashPrePhrases },
-            { "SubliminalAck", ContentModeConfig.GetSubliminalAckPhrases },
-            { "RandomBubble", ContentModeConfig.GetRandomBubblePhrases },
-            { "BubbleCountMercy", ContentModeConfig.GetBubbleCountMercyPhrases },
-            { "BubblePop", ContentModeConfig.GetBubblePopPhrases },
-            { "GameFailed", ContentModeConfig.GetGameFailedPhrases },
-            { "BubbleMissed", ContentModeConfig.GetBubbleMissedPhrases },
-            { "FlashClicked", ContentModeConfig.GetFlashClickedPhrases },
-            { "LevelUp", ContentModeConfig.GetLevelUpPhrases },
-            { "MindWipe", ContentModeConfig.GetMindWipePhrases },
-            { "BrainDrain", ContentModeConfig.GetBrainDrainPhrases },
+            "Greeting", "StartupGreeting", "Idle", "RandomFloating", "Generic",
+            "Gaming", "Browsing", "Shopping", "Social", "Discord",
+            "TrainingSite", "HypnoContent", "Working", "Media", "Learning",
+            "WindowAwarenessIdle", "EngineStop", "FlashPre", "SubliminalAck",
+            "RandomBubble", "BubbleCountMercy", "BubblePop", "GameFailed",
+            "BubbleMissed", "FlashClicked", "LevelUp", "MindWipe", "BrainDrain"
         };
+
+        /// <summary>
+        /// Gets phrases for a category from the active mod.
+        /// </summary>
+        private static string[] GetCategoryPhrases(string category)
+        {
+            return App.Mods?.GetPhrases(category) ?? System.Array.Empty<string>();
+        }
 
         public CompanionPhraseService()
         {
@@ -83,7 +82,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Returns all built-in + custom phrases with enabled/audio status resolved.
         /// </summary>
-        public List<CompanionPhrase> GetAllPhrases(ContentMode mode)
+        public List<CompanionPhrase> GetAllPhrases()
         {
             var settings = App.Settings?.Current;
             var disabledIds = settings?.DisabledPhraseIds ?? new HashSet<string>();
@@ -91,10 +90,10 @@ namespace ConditioningControlPanel.Services
             var audioOverrides = settings?.PhraseAudioOverrides ?? new Dictionary<string, string>();
             var result = new List<CompanionPhrase>();
 
-            // Built-in phrases from registry
-            foreach (var (category, getter) in _categoryRegistry)
+            // Built-in phrases from mod system
+            foreach (var category in _categoryNames)
             {
-                var phrases = getter(mode);
+                var phrases = GetCategoryPhrases(category);
                 for (int i = 0; i < phrases.Length; i++)
                 {
                     var id = $"{category}:{i}";
@@ -155,7 +154,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Gets only enabled phrase texts for a specific category (used by AvatarTubeWindow).
         /// </summary>
-        public string[] GetEnabledPhrases(string category, ContentMode mode)
+        public string[] GetEnabledPhrases(string category)
         {
             var settings = App.Settings?.Current;
             var disabledIds = settings?.DisabledPhraseIds ?? new HashSet<string>();
@@ -163,10 +162,10 @@ namespace ConditioningControlPanel.Services
 
             var result = new List<string>();
 
-            // Built-in phrases for this category
-            if (_categoryRegistry.TryGetValue(category, out var getter))
+            // Built-in phrases for this category from mod system
+            if (_categoryNames.Contains(category))
             {
-                var phrases = getter(mode);
+                var phrases = GetCategoryPhrases(category);
                 for (int i = 0; i < phrases.Length; i++)
                 {
                     var id = $"{category}:{i}";
@@ -199,12 +198,12 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Gets the phrase ID for a given category and text (resolves index at runtime).
         /// </summary>
-        public string? GetPhraseId(string category, string text, ContentMode mode)
+        public string? GetPhraseId(string category, string text)
         {
             // Check built-in first
-            if (_categoryRegistry.TryGetValue(category, out var getter))
+            if (_categoryNames.Contains(category))
             {
-                var phrases = getter(mode);
+                var phrases = GetCategoryPhrases(category);
                 for (int i = 0; i < phrases.Length; i++)
                 {
                     if (phrases[i] == text)
@@ -333,9 +332,9 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Get the total number of enabled (active) phrases.
         /// </summary>
-        public int GetActivePhraseCount(ContentMode mode)
+        public int GetActivePhraseCount()
         {
-            return GetAllPhrases(mode).Count(p => p.IsEnabled);
+            return GetAllPhrases().Count(p => p.IsEnabled);
         }
 
         /// <summary>
@@ -343,7 +342,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static IReadOnlyList<string> GetCategoryNames()
         {
-            var names = _categoryRegistry.Keys.ToList();
+            var names = _categoryNames.ToList();
             names.Add(VoiceLineCategory);
             return names;
         }

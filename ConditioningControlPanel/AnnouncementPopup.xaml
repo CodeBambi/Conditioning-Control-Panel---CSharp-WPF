@@ -11,10 +11,10 @@
         WindowStartupLocation="CenterScreen"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
-    <Border Background="#F0151530" CornerRadius="12" BorderBrush="#FF69B4" BorderThickness="2"
+    <Border Background="#F0151530" CornerRadius="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
             Margin="10">
         <Border.Effect>
-            <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
         </Border.Effect>
 
         <Grid>
@@ -47,7 +47,7 @@
 
                 <!-- Title -->
                 <TextBlock x:Name="TxtTitle"
-                           Foreground="#FF69B4" FontWeight="Bold" FontSize="20"
+                           Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="20"
                            TextWrapping="Wrap" TextAlignment="Center"
                            Margin="0,0,0,10"/>
 
@@ -66,7 +66,7 @@
                         FontSize="14" FontWeight="SemiBold">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Setter Property="Background" Value="#FF69B4"/>
+                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
                             <Setter Property="Foreground" Value="White"/>
                             <Setter Property="BorderThickness" Value="0"/>
                             <Setter Property="Template">
@@ -78,10 +78,10 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="#FF85C1"/>
+                                                <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
                                             </Trigger>
                                             <Trigger Property="IsPressed" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="#E0559A"/>
+                                                <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>

@@ -35,7 +35,7 @@
                            Foreground="White" TextWrapping="Wrap" TextAlignment="Center"
                            Margin="0,0,0,24">
                     <TextBlock.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.3"/>
                     </TextBlock.Effect>
                 </TextBlock>
 
@@ -115,12 +115,12 @@
             <StackPanel x:Name="AffirmationPanel" Visibility="Collapsed"
                         VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock x:Name="TxtAffirmation" FontSize="22" FontWeight="SemiBold"
-                           Foreground="#FF69B4" TextWrapping="Wrap" TextAlignment="Center">
+                           Foreground="{DynamicResource PinkBrush}" TextWrapping="Wrap" TextAlignment="Center">
                     <TextBlock.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
                     </TextBlock.Effect>
                 </TextBlock>
-                <TextBlock Text="+25 XP" Foreground="#9B59B6" FontSize="14" FontWeight="Bold"
+                <TextBlock Text="+25 XP" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"
                            HorizontalAlignment="Center" Margin="0,10,0,0"/>
             </StackPanel>
         </Grid>

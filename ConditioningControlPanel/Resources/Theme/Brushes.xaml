@@ -1,31 +1,50 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- Brushes (derived from Colors) -->
-    <SolidColorBrush x:Key="PinkBrush"   Color="{StaticResource PinkColor}"/>
-    <SolidColorBrush x:Key="DarkPinkBrush" Color="{StaticResource DarkPink}"/>
-    <SolidColorBrush x:Key="PanelBgBrush" Color="{StaticResource PanelBg}"/>
-    <SolidColorBrush x:Key="PanelBgTransparentBrush" Color="{StaticResource PanelBgTransparent}"/>
-    <SolidColorBrush x:Key="DarkerBgBrush" Color="{StaticResource DarkerBg}"/>
-    <SolidColorBrush x:Key="TextLightBrush" Color="{StaticResource TextLight}"/>
-    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMuted}"/>
-    <SolidColorBrush x:Key="PanelAccentBrush" Color="{StaticResource PanelAccent}"/>
-    <SolidColorBrush x:Key="PanelAccentHoverBrush" Color="{StaticResource PanelAccentHover}"/>
-    <SolidColorBrush x:Key="PreviewBgBrush" Color="{StaticResource PreviewBg}"/>
+    <!-- Brushes (derived from Colors — use DynamicResource so runtime color changes propagate) -->
+    <SolidColorBrush x:Key="PinkBrush"   Color="{DynamicResource PinkColor}"/>
+    <SolidColorBrush x:Key="DarkPinkBrush" Color="{DynamicResource DarkPink}"/>
+    <SolidColorBrush x:Key="PanelBgBrush" Color="{DynamicResource PanelBg}"/>
+    <SolidColorBrush x:Key="PanelBgTransparentBrush" Color="{DynamicResource PanelBgTransparent}"/>
+    <SolidColorBrush x:Key="DarkerBgBrush" Color="{DynamicResource DarkerBg}"/>
+    <SolidColorBrush x:Key="SurfaceBgBrush" Color="{DynamicResource SurfaceBg}"/>
+    <SolidColorBrush x:Key="TextLightBrush" Color="{DynamicResource TextLight}"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{DynamicResource TextMuted}"/>
+    <SolidColorBrush x:Key="PanelAccentBrush" Color="{DynamicResource PanelAccent}"/>
+    <SolidColorBrush x:Key="PanelAccentHoverBrush" Color="{DynamicResource PanelAccentHover}"/>
+    <SolidColorBrush x:Key="PreviewBgBrush" Color="{DynamicResource PreviewBg}"/>
 
-    <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Danger}"/>
-    <SolidColorBrush x:Key="TransparentPinkBrush" Color="{StaticResource TransparentPink}"/>
-    <SolidColorBrush x:Key="PinkButtonHoveredBrush" Color="{StaticResource PinkButtonHovered}"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="{DynamicResource Danger}"/>
+    <SolidColorBrush x:Key="TransparentPinkBrush" Color="{DynamicResource TransparentPink}"/>
+    <SolidColorBrush x:Key="PinkButtonHoveredBrush" Color="{DynamicResource PinkButtonHovered}"/>
 
-    <!-- Patreon brushes -->
-    <SolidColorBrush x:Key="PatreonPurpleBrush" Color="{StaticResource PatreonPurple}"/>
-    <SolidColorBrush x:Key="PatreonLightPurpleBrush" Color="{StaticResource PatreonLightPurple}"/>
-    <SolidColorBrush x:Key="PatreonDarkPurpleBrush" Color="{StaticResource PatreonDarkPurple}"/>
+    <!-- Accent pressed (darkened accent for press states) -->
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="{DynamicResource AccentPressed}"/>
+
+    <!-- 20% alpha transparent accent -->
+    <SolidColorBrush x:Key="TransparentPink20Brush" Color="{DynamicResource TransparentPink20}"/>
+
+    <!-- Patreon brushes (secondary color — auto-computed for custom mods) -->
+    <SolidColorBrush x:Key="PatreonPurpleBrush" Color="{DynamicResource PatreonPurple}"/>
+    <SolidColorBrush x:Key="PatreonLightPurpleBrush" Color="{DynamicResource PatreonLightPurple}"/>
+    <SolidColorBrush x:Key="PatreonDarkPurpleBrush" Color="{DynamicResource PatreonDarkPurple}"/>
+
+    <!-- Secondary brush (alias for PatreonPurpleBrush, used in UI elements) -->
+    <SolidColorBrush x:Key="SecondaryBrush" Color="{DynamicResource PatreonPurple}"/>
 
     <!-- Semi-transparent white -->
-    <SolidColorBrush x:Key="TransparentWhiteBrush" Color="{StaticResource TransparentWhite}"/>
+    <SolidColorBrush x:Key="TransparentWhiteBrush" Color="{DynamicResource TransparentWhite}"/>
 
     <!-- Added: brush for Controls.xaml hover color -->
-    <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHover}"/>
+    <SolidColorBrush x:Key="DangerHoverBrush" Color="{DynamicResource DangerHover}"/>
+
+    <!-- Accent-tinted dark backgrounds (for headers, panels that need subtle accent tint) -->
+    <SolidColorBrush x:Key="AccentTintedBgBrush" Color="{DynamicResource AccentTintedBg}"/>
+    <SolidColorBrush x:Key="AccentTintedBgHoverBrush" Color="{DynamicResource AccentTintedBgHover}"/>
+    <SolidColorBrush x:Key="AccentMidGradientBrush" Color="{DynamicResource AccentMidGradient}"/>
+
+    <!-- 40% and 50% alpha accent brushes (for hover/selected overlays) -->
+    <SolidColorBrush x:Key="TransparentPink40Brush" Color="{DynamicResource TransparentPink40}"/>
+    <SolidColorBrush x:Key="TransparentPink50Brush" Color="{DynamicResource TransparentPink50}"/>
 
 </ResourceDictionary>

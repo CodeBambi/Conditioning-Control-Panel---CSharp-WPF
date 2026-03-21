@@ -160,7 +160,7 @@ namespace ConditioningControlPanel
                 BackgroundBrush.Color = outerBg;
                 
                 // Phrase text color
-                var textColor = ParseColor(settings.LockCardTextColor, Color.FromRgb(255, 105, 180));
+                var textColor = ParseColor(settings.LockCardTextColor, (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
                 PhraseBrush.Color = textColor;
                 AccentBrush.Color = textColor;
                 
@@ -172,7 +172,7 @@ namespace ConditioningControlPanel
                 InputTextBrush.Color = inputTextColor;
                 
                 // Accent color
-                var accentColor = ParseColor(settings.LockCardAccentColor, Color.FromRgb(255, 105, 180));
+                var accentColor = ParseColor(settings.LockCardAccentColor, (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
                 InputBorderBrush.Color = accentColor;
                 ProgressBar.Background = new SolidColorBrush(accentColor);
                 

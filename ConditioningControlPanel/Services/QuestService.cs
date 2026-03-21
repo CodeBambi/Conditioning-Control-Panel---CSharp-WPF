@@ -793,20 +793,23 @@ public class QuestService : IDisposable
             var cutoff = today.AddDays(-30);
             Progress.DailyQuestCompletionDates.RemoveAll(d => d.Date < cutoff);
 
-            // Update streak in settings
-            var settings = App.Settings?.Current;
-            if (settings != null)
+            // Apply streak shield if yesterday is missing (would break streak)
+            var yesterday = today.AddDays(-1);
+            if (!Progress.DailyQuestCompletionDates.Any(d => d.Date == yesterday)
+                && App.Settings?.Current?.LastDailyQuestDate?.Date < yesterday)
             {
-                if (settings.LastDailyQuestDate?.Date == today.AddDays(-1))
+                if (App.SkillTree?.UseStreakShield() == true)
                 {
-                    settings.DailyQuestStreak++;
+                    Progress.DailyQuestCompletionDates.Add(yesterday);
+                    var settings = App.Settings?.Current;
+                    if (settings != null && !settings.StreakShieldUsedDates.Contains(yesterday))
+                        settings.StreakShieldUsedDates.Add(yesterday);
+                    App.Logger?.Information("Quest streak shield used! Filled gap at {Date}", yesterday);
                 }
-                else if (settings.LastDailyQuestDate?.Date != today)
-                {
-                    settings.DailyQuestStreak = 1;
-                }
-                settings.LastDailyQuestDate = today;
             }
+
+            // Recalculate streak from the calendar (single source of truth)
+            RecalculateStreak();
         }
         else
         {
@@ -881,6 +884,38 @@ public class QuestService : IDisposable
     }
 
     #endregion
+
+    /// <summary>
+    /// Recalculate daily quest streak from the completion calendar (single source of truth).
+    /// Replaces fragile LastDailyQuestDate-based comparison.
+    /// </summary>
+    public void RecalculateStreak()
+    {
+        var settings = App.Settings?.Current;
+        if (settings == null) return;
+
+        var completedDates = new HashSet<DateTime>(
+            Progress.DailyQuestCompletionDates.Select(d => d.Date));
+
+        int streak = 0;
+        var checkDate = DateTime.Today;
+
+        // If today isn't completed yet, start checking from yesterday
+        if (!completedDates.Contains(checkDate))
+            checkDate = checkDate.AddDays(-1);
+
+        while (completedDates.Contains(checkDate))
+        {
+            streak++;
+            checkDate = checkDate.AddDays(-1);
+        }
+
+        settings.DailyQuestStreak = streak;
+
+        // Keep LastDailyQuestDate in sync with the calendar
+        if (completedDates.Count > 0)
+            settings.LastDailyQuestDate = completedDates.Max();
+    }
 
     /// <summary>
     /// Reset all quest progress (used on logout to clear account-specific data)

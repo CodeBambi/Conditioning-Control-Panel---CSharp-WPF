@@ -58,14 +58,14 @@
         </Grid.RowDefinitions>
 
         <!-- Title bar (non-fullscreen only) -->
-        <Border x:Name="TitleBar" Grid.Row="0" Background="#252542" Height="36"
+        <Border x:Name="TitleBar" Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Height="36"
                 MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Quiz" Foreground="#FF69B4" FontSize="13" FontWeight="SemiBold"
+                <TextBlock Text="Quiz" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"
                            VerticalAlignment="Center" Margin="14,0,0,0"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button x:Name="BtnMaximizeTitleBar" Content="☐" Width="36" Height="36"
@@ -141,7 +141,7 @@
         <Border x:Name="GlowOverlay" Opacity="0.05" IsHitTestVisible="False">
             <Border.Background>
                 <RadialGradientBrush Center="0.5,0.4" RadiusX="0.5" RadiusY="0.5">
-                    <GradientStop Color="#FF69B4" Offset="0"/>
+                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
                     <GradientStop Color="Transparent" Offset="1"/>
                 </RadialGradientBrush>
             </Border.Background>
@@ -164,7 +164,7 @@
                 <TextBlock Text="SISSY QUIZ" FontSize="58" FontWeight="Bold" Foreground="White"
                            HorizontalAlignment="Center" Margin="0,0,0,8">
                     <TextBlock.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="30" ShadowDepth="0" Opacity="0.6"/>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="30" ShadowDepth="0" Opacity="0.6"/>
                     </TextBlock.Effect>
                 </TextBlock>
                 <TextBlock Text="AI-generated personality quiz" Foreground="#808090" FontSize="19"
@@ -179,7 +179,7 @@
                 </ScrollViewer>
 
                 <!-- ESC hint -->
-                <TextBlock Text="Press ESC to close" Foreground="#404060" FontSize="13"
+                <TextBlock Text="Press ESC to close" Foreground="{DynamicResource PanelAccentBrush}" FontSize="13"
                            HorizontalAlignment="Center" Margin="0,24,0,0"/>
             </StackPanel>
         </Grid>
@@ -188,9 +188,9 @@
         <Grid x:Name="LoadingPanel" Visibility="Collapsed">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                 <TextBlock x:Name="TxtLoadingDots" Text="Generating..." FontSize="36" FontWeight="Bold"
-                           Foreground="#FF69B4" HorizontalAlignment="Center">
+                           Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Center">
                     <TextBlock.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="20" ShadowDepth="0" Opacity="0.4"/>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.4"/>
                     </TextBlock.Effect>
                 </TextBlock>
                 <TextBlock x:Name="TxtLoadingFlavor" Text="The quiz master is thinking up something devious..."
@@ -217,13 +217,13 @@
 
                 <!-- Score -->
                 <TextBlock x:Name="ScoreText" Grid.Column="1" FontSize="28" FontWeight="Bold"
-                           Foreground="#FF69B4" VerticalAlignment="Center"
+                           Foreground="{DynamicResource PinkBrush}" VerticalAlignment="Center"
                            RenderTransformOrigin="0.5,0.5">
                     <TextBlock.RenderTransform>
                         <ScaleTransform ScaleX="1" ScaleY="1"/>
                     </TextBlock.RenderTransform>
                     <TextBlock.Effect>
-                        <DropShadowEffect Color="#FF69B4" BlurRadius="15" ShadowDepth="0" Opacity="0.4"/>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.4"/>
                     </TextBlock.Effect>
                 </TextBlock>
             </Grid>
@@ -267,7 +267,7 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="A" FontWeight="Bold" FontSize="20" Foreground="#FF69B4"
+                            <TextBlock Text="A" FontWeight="Bold" FontSize="20" Foreground="{DynamicResource PinkBrush}"
                                        VerticalAlignment="Center" Margin="0,0,16,0"/>
                             <TextBlock x:Name="TxtAnswerA" Grid.Column="1" FontSize="18" Foreground="#D0D0E0"
                                        TextWrapping="Wrap" VerticalAlignment="Center"/>
@@ -291,7 +291,7 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="B" FontWeight="Bold" FontSize="20" Foreground="#FF69B4"
+                            <TextBlock Text="B" FontWeight="Bold" FontSize="20" Foreground="{DynamicResource PinkBrush}"
                                        VerticalAlignment="Center" Margin="0,0,16,0"/>
                             <TextBlock x:Name="TxtAnswerB" Grid.Column="1" FontSize="18" Foreground="#D0D0E0"
                                        TextWrapping="Wrap" VerticalAlignment="Center"/>
@@ -315,7 +315,7 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="C" FontWeight="Bold" FontSize="20" Foreground="#FF69B4"
+                            <TextBlock Text="C" FontWeight="Bold" FontSize="20" Foreground="{DynamicResource PinkBrush}"
                                        VerticalAlignment="Center" Margin="0,0,16,0"/>
                             <TextBlock x:Name="TxtAnswerC" Grid.Column="1" FontSize="18" Foreground="#D0D0E0"
                                        TextWrapping="Wrap" VerticalAlignment="Center"/>
@@ -339,7 +339,7 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="D" FontWeight="Bold" FontSize="20" Foreground="#FF69B4"
+                            <TextBlock Text="D" FontWeight="Bold" FontSize="20" Foreground="{DynamicResource PinkBrush}"
                                        VerticalAlignment="Center" Margin="0,0,16,0"/>
                             <TextBlock x:Name="TxtAnswerD" Grid.Column="1" FontSize="18" Foreground="#D0D0E0"
                                        TextWrapping="Wrap" VerticalAlignment="Center"/>
@@ -360,9 +360,9 @@
                                Foreground="#808090" HorizontalAlignment="Center" Margin="0,0,0,8"/>
 
                     <TextBlock x:Name="TxtFinalScore" FontSize="67" FontWeight="Bold"
-                               Foreground="#FF69B4" HorizontalAlignment="Center" Margin="0,0,0,4">
+                               Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Center" Margin="0,0,0,4">
                         <TextBlock.Effect>
-                            <DropShadowEffect Color="#FF69B4" BlurRadius="30" ShadowDepth="0" Opacity="0.5"/>
+                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="30" ShadowDepth="0" Opacity="0.5"/>
                         </TextBlock.Effect>
                     </TextBlock>
 
@@ -410,7 +410,7 @@
                     <!-- Buttons -->
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                         <Button x:Name="BtnPlayAgain" Content="Play Again" Cursor="Hand"
-                                Background="#9B59B6" Foreground="White" FontWeight="Bold" FontSize="19"
+                                Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="19"
                                 BorderThickness="0" Padding="28,14" Margin="0,0,12,0"
                                 Click="BtnPlayAgain_Click">
                             <Button.Resources>
@@ -445,7 +445,7 @@
                 <TextBlock x:Name="TxtError" FontSize="17" Foreground="#808090"
                            TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,24"/>
                 <Button Content="Try Again" Cursor="Hand"
-                        Background="#9B59B6" Foreground="White" FontWeight="Bold" FontSize="17"
+                        Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="17"
                         BorderThickness="0" Padding="24,12" HorizontalAlignment="Center"
                         Click="BtnPlayAgain_Click">
                     <Button.Resources>
@@ -454,7 +454,7 @@
                         </Style>
                     </Button.Resources>
                 </Button>
-                <TextBlock Text="Press ESC to close" Foreground="#404060" FontSize="13"
+                <TextBlock Text="Press ESC to close" Foreground="{DynamicResource PanelAccentBrush}" FontSize="13"
                            HorizontalAlignment="Center" Margin="0,16,0,0"/>
             </StackPanel>
         </Grid>

@@ -301,7 +301,7 @@ public class SkillTreeService : IDisposable
 
         if (_random.NextDouble() < 0.05)
         {
-            LuckyProc?.Invoke(this, new LuckyProcEventArgs("Lucky Flash", 10));
+            LuckyProc?.Invoke(this, new LuckyProcEventArgs(App.Mods?.GetLuckyFlashLabel() ?? "Lucky Flash", 10));
             return 10;
         }
         return 1;
@@ -317,7 +317,7 @@ public class SkillTreeService : IDisposable
 
         if (_random.NextDouble() < 0.05)
         {
-            LuckyProc?.Invoke(this, new LuckyProcEventArgs("Lucky Bubble", 20));
+            LuckyProc?.Invoke(this, new LuckyProcEventArgs(App.Mods?.GetLuckyBubbleLabel() ?? "Lucky Bubble", 20));
             return 20;
         }
         return 1;

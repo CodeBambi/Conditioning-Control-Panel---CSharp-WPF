@@ -20,8 +20,7 @@ namespace ConditioningControlPanel.Services
         // These exact names match AvatarTubeWindow.KnownVideoLinks for clickable links
         private static string GetCoreMediaLinks()
         {
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var isBambiMode = mode == Models.ContentMode.BambiSleep;
+            var isBambiMode = App.Mods?.IsBaseMod ?? true;
 
             if (isBambiMode)
             {
@@ -313,10 +312,9 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
             var shopDomains = "amazon, shein, victoriassecret, dollskill, sephora, temu, etsy";
             var boringDomains = "vscode, visual studio, github, stackoverflow, outlook, teams, slack, word, excel, gmail, protonmail";
 
-            // Get mode-aware user term
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var userTerm = Models.ContentModeConfig.GetUserTerm(mode);
-            var isBambiMode = mode == Models.ContentMode.BambiSleep;
+            // Get mod-aware user term
+            var userTerm = App.Mods?.GetUserTerm() ?? "Bambi";
+            var isBambiMode = App.Mods?.IsBaseMod ?? true;
 
             // Example responses - use Bambi video titles (they're actual video names) but mode-aware user references
             var example1 = isBambiMode
@@ -540,7 +538,12 @@ Example responses with REAL video names:
             }
 
             // Make the prompt mode-aware by replacing "Bambi" references with appropriate term
-            return MakePromptModeAware(sb.ToString());
+            var prompt = MakePromptModeAware(sb.ToString());
+
+            // Apply mod text replacements (e.g. "Bambi" → "Unit" for drone mod)
+            prompt = App.Mods?.MakeModAware(prompt) ?? prompt;
+
+            return prompt;
         }
 
         /// <summary>
@@ -549,11 +552,10 @@ Example responses with REAL video names:
         /// </summary>
         private string MakePromptModeAware(string prompt)
         {
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            if (mode == Models.ContentMode.BambiSleep)
-                return prompt; // No changes needed in Bambi mode
+            if (App.Mods?.IsBaseMod != false)
+                return prompt; // No changes needed in base (Bambi) mod
 
-            var userTerm = Models.ContentModeConfig.GetUserTerm(mode); // "babe" in SH mode
+            var userTerm = App.Mods?.GetUserTerm() ?? "babe";
 
             // Replace user references while preserving video/file titles
             // These patterns match "call the user Bambi", "she IS Bambi", etc.
@@ -587,11 +589,10 @@ Example responses with REAL video names:
         /// </summary>
         private string GetDefaultBambiSpritePrompt()
         {
-            // Get mode-aware terms
-            var mode = App.Settings?.Current?.ContentMode ?? Models.ContentMode.BambiSleep;
-            var companionName = Models.ContentModeConfig.GetCompanionName(mode);
-            var userTerm = Models.ContentModeConfig.GetUserTerm(mode);
-            var isBambiMode = mode == Models.ContentMode.BambiSleep;
+            // Get mod-aware terms
+            var companionName = App.Mods?.GetCompanionName() ?? "BambiSprite";
+            var userTerm = App.Mods?.GetUserTerm() ?? "Bambi";
+            var isBambiMode = App.Mods?.IsBaseMod ?? true;
             var hasUserSHLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksSissyHypno);
 
             var sb = new StringBuilder();
@@ -692,7 +693,8 @@ OUTPUT RULES:
                 }
             }
 
-            return sb.ToString();
+            var defaultPrompt = sb.ToString();
+            return App.Mods?.MakeModAware(defaultPrompt) ?? defaultPrompt;
         }
 
         // ==========================================

@@ -4,18 +4,16 @@
         Title="Choose Your Offline Username"
         Height="300" Width="450"
         WindowStartupLocation="CenterOwner"
-        Background="#1A1A2E"
+        Background="{DynamicResource DarkerBgBrush}"
         ResizeMode="NoResize"
         WindowStyle="None"
         AllowsTransparency="False">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="PinkBrush" Color="#FF69B4"/>
-        <SolidColorBrush x:Key="DarkPinkBrush" Color="#FF1493"/>
         <SolidColorBrush x:Key="InfoBrush" Color="#88AAFF"/>
     </Window.Resources>
 
-    <Border BorderBrush="{StaticResource PinkBrush}" BorderThickness="1" CornerRadius="0">
+    <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" CornerRadius="0">
         <Grid Margin="20">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -28,7 +26,7 @@
 
             <!-- Title -->
             <TextBlock Grid.Row="0" Text="Choose Your Offline Username"
-                       Foreground="{StaticResource PinkBrush}"
+                       Foreground="{DynamicResource PinkBrush}"
                        FontSize="18" FontWeight="Bold" Margin="0,0,0,10"
                        HorizontalAlignment="Center"/>
 
@@ -50,8 +48,8 @@
 
             <!-- Input -->
             <TextBox x:Name="TxtUsername" Grid.Row="3"
-                     Background="#252542" Foreground="White"
-                     BorderBrush="{StaticResource PinkBrush}"
+                     Background="{DynamicResource PanelBgBrush}" Foreground="White"
+                     BorderBrush="{DynamicResource PinkBrush}"
                      Padding="12,10" FontSize="15"
                      MaxLength="30"
                      KeyDown="TxtUsername_KeyDown"/>
@@ -67,7 +65,7 @@
                         Background="#555577" Foreground="White" BorderThickness="0"
                         Click="BtnCancel_Click" Cursor="Hand" FontSize="13" FontWeight="SemiBold"/>
                 <Button x:Name="BtnConfirm" Content="Confirm" Width="90" Padding="10,10"
-                        Background="{StaticResource PinkBrush}" Foreground="White"
+                        Background="{DynamicResource PinkBrush}" Foreground="White"
                         BorderThickness="0" FontWeight="Bold" FontSize="13"
                         Click="BtnConfirm_Click" Cursor="Hand" IsEnabled="False"/>
             </StackPanel>
