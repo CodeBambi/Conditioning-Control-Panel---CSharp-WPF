@@ -2438,7 +2438,14 @@ namespace ConditioningControlPanel
             var modLinks = App.Mods?.GetVideoLinks();
             if (modLinks != null && modLinks.Count > 0)
             {
-                KnownVideoLinks = new Dictionary<string, string>(modLinks, StringComparer.OrdinalIgnoreCase);
+                // Filter to HTTPS-only at runtime (defense-in-depth)
+                var filtered = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kvp in modLinks)
+                {
+                    if (Uri.TryCreate(kvp.Value, UriKind.Absolute, out var uri) && uri.Scheme == "https")
+                        filtered[kvp.Key] = kvp.Value;
+                }
+                KnownVideoLinks = filtered;
             }
             else
             {
@@ -2578,9 +2585,12 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    // Fallback: open in external browser
-                    App.Logger?.Warning("Embedded browser unavailable, opening externally: {Url}", url);
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+                    // Fallback: open in external browser (HTTPS only for safety)
+                    if (Uri.TryCreate(url, UriKind.Absolute, out var fallbackUri) && fallbackUri.Scheme == "https")
+                    {
+                        App.Logger?.Warning("Embedded browser unavailable, opening externally: {Url}", url);
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+                    }
                 }
 
                 e.Handled = true;

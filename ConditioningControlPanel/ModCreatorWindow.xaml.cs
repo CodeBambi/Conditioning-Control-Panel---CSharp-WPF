@@ -1168,13 +1168,19 @@ namespace ConditioningControlPanel
                 playBtn.Content = "⏹";
                 playBtn.Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 100));
 
+                var playerRef = _previewPlayer;
+                var readerRef = _previewReader;
                 _previewPlayer.PlaybackStopped += (_, _) =>
                 {
+                    // Dispose on natural end to release file handles
+                    playerRef?.Dispose();
+                    readerRef?.Dispose();
                     Dispatcher.BeginInvoke(() =>
                     {
                         playBtn.Content = "▶";
                         playBtn.Foreground = new SolidColorBrush(Color.FromRgb(100, 200, 100));
-                        _activePlayButton = null;
+                        if (_activePlayButton == playBtn) _activePlayButton = null;
+                        if (_previewPlayer == playerRef) { _previewPlayer = null; _previewReader = null; }
                     });
                 };
             }

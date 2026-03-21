@@ -28,6 +28,9 @@ namespace ConditioningControlPanel.Services
         {
             if (string.IsNullOrEmpty(resourcePath)) return null;
 
+            // Reject path traversal attempts
+            if (resourcePath.Contains("..") || Path.IsPathRooted(resourcePath)) return null;
+
             // Normalize path separators
             resourcePath = resourcePath.Replace('\\', '/');
 
@@ -96,6 +99,10 @@ namespace ConditioningControlPanel.Services
             if (string.IsNullOrEmpty(resourcePath))
                 return $"pack://application:,,,/Resources/{resourcePath}";
 
+            // Reject path traversal attempts
+            if (resourcePath.Contains("..") || Path.IsPathRooted(resourcePath))
+                return $"pack://application:,,,/Resources/{resourcePath}";
+
             resourcePath = resourcePath.Replace('\\', '/');
 
             // Check active mod's resources folder
@@ -135,6 +142,10 @@ namespace ConditioningControlPanel.Services
         public static string ResolveAudioPath(string soundRelativePath)
         {
             if (string.IsNullOrEmpty(soundRelativePath))
+                return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", soundRelativePath);
+
+            // Reject path traversal attempts
+            if (soundRelativePath.Contains("..") || Path.IsPathRooted(soundRelativePath))
                 return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", soundRelativePath);
 
             soundRelativePath = soundRelativePath.Replace('\\', '/');

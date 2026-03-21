@@ -201,6 +201,12 @@ namespace ConditioningControlPanel.Services
             if (manifest.Theme != null)
             {
                 var hexPattern = new Regex(@"^#[0-9A-Fa-f]{6}$");
+                if (manifest.Theme.AccentColor != null && !hexPattern.IsMatch(manifest.Theme.AccentColor))
+                    return "Accent color must be a valid #RRGGBB hex code.";
+                if (manifest.Theme.AccentLightColor != null && !hexPattern.IsMatch(manifest.Theme.AccentLightColor))
+                    return "Light accent color must be a valid #RRGGBB hex code.";
+                if (manifest.Theme.AccentDarkColor != null && !hexPattern.IsMatch(manifest.Theme.AccentDarkColor))
+                    return "Dark accent color must be a valid #RRGGBB hex code.";
                 if (manifest.Theme.BackgroundColor != null && !hexPattern.IsMatch(manifest.Theme.BackgroundColor))
                     return "Background color must be a valid #RRGGBB hex code.";
                 if (manifest.Theme.PanelColor != null && !hexPattern.IsMatch(manifest.Theme.PanelColor))
@@ -260,12 +266,73 @@ namespace ConditioningControlPanel.Services
             }
 
             // --- Phrase pool sanitization ---
-            if (manifest.SubliminalPool != null && manifest.SubliminalPool.Count > 500)
-                return "Too many subliminal phrases (max 500).";
-            if (manifest.LockCardPhrases != null && manifest.LockCardPhrases.Count > 200)
-                return "Too many lock card phrases (max 200).";
-            if (manifest.CustomTriggers != null && manifest.CustomTriggers.Count > 50)
-                return "Too many custom triggers (max 50).";
+            if (manifest.SubliminalPool != null)
+            {
+                if (manifest.SubliminalPool.Count > 500) return "Too many subliminal phrases (max 500).";
+                if (manifest.SubliminalPool.Keys.Any(k => k.Length > 500))
+                    return "Subliminal phrase too long (max 500 characters).";
+            }
+            if (manifest.LockCardPhrases != null)
+            {
+                if (manifest.LockCardPhrases.Count > 200) return "Too many lock card phrases (max 200).";
+                if (manifest.LockCardPhrases.Keys.Any(k => k.Length > 500))
+                    return "Lock card phrase too long (max 500 characters).";
+            }
+            if (manifest.CustomTriggers != null)
+            {
+                if (manifest.CustomTriggers.Count > 50) return "Too many custom triggers (max 50).";
+                for (int i = 0; i < manifest.CustomTriggers.Count; i++)
+                    if (manifest.CustomTriggers[i].Length > 200)
+                        manifest.CustomTriggers[i] = manifest.CustomTriggers[i][..200];
+            }
+
+            // --- Phrases dictionary sanitization ---
+            if (manifest.Phrases != null)
+            {
+                if (manifest.Phrases.Count > 50) return "Too many phrase categories (max 50).";
+                foreach (var (cat, arr) in manifest.Phrases)
+                {
+                    if (cat.Length > 100) return "Phrase category name too long (max 100).";
+                    if (arr.Length > 500) return $"Too many phrases in category '{cat}' (max 500).";
+                    for (int i = 0; i < arr.Length; i++)
+                    {
+                        if (arr[i].Length > 500) arr[i] = arr[i][..500];
+                        arr[i] = StripControlChars(arr[i]);
+                    }
+                }
+            }
+
+            // --- Identity/Messages/Triggers string length caps ---
+            if (manifest.Identity != null)
+            {
+                if (manifest.Identity.CompanionName?.Length > 200) manifest.Identity.CompanionName = manifest.Identity.CompanionName[..200];
+                if (manifest.Identity.UserTerm?.Length > 200) manifest.Identity.UserTerm = manifest.Identity.UserTerm[..200];
+                if (manifest.Identity.ModeDisplayName?.Length > 200) manifest.Identity.ModeDisplayName = manifest.Identity.ModeDisplayName[..200];
+                if (manifest.Identity.TalkToLabel?.Length > 200) manifest.Identity.TalkToLabel = manifest.Identity.TalkToLabel[..200];
+                if (manifest.Identity.TakeoverLabel?.Length > 200) manifest.Identity.TakeoverLabel = manifest.Identity.TakeoverLabel[..200];
+            }
+            if (manifest.Messages != null)
+            {
+                if (manifest.Messages.AttentionCheckFail?.Length > 500) manifest.Messages.AttentionCheckFail = manifest.Messages.AttentionCheckFail[..500];
+                if (manifest.Messages.AttentionCheckMercy?.Length > 500) manifest.Messages.AttentionCheckMercy = manifest.Messages.AttentionCheckMercy[..500];
+                if (manifest.Messages.BubbleCountRetry?.Length > 500) manifest.Messages.BubbleCountRetry = manifest.Messages.BubbleCountRetry[..500];
+            }
+            if (manifest.Triggers != null)
+            {
+                if (manifest.Triggers.Freeze?.Length > 200) manifest.Triggers.Freeze = manifest.Triggers.Freeze[..200];
+                if (manifest.Triggers.Reset?.Length > 200) manifest.Triggers.Reset = manifest.Triggers.Reset[..200];
+                if (manifest.Triggers.CumAndCollapse?.Length > 200) manifest.Triggers.CumAndCollapse = manifest.Triggers.CumAndCollapse[..200];
+                if (manifest.Triggers.AutonomyOn?.Length > 200) manifest.Triggers.AutonomyOn = manifest.Triggers.AutonomyOn[..200];
+            }
+
+            // --- Tags sanitization ---
+            if (manifest.Tags != null)
+            {
+                if (manifest.Tags.Count > 20) return "Too many tags (max 20).";
+                for (int i = 0; i < manifest.Tags.Count; i++)
+                    if (manifest.Tags[i].Length > 50) manifest.Tags[i] = manifest.Tags[i][..50];
+            }
+
             if (manifest.Personalities != null && manifest.Personalities.Count > 20)
                 return "Too many personalities (max 20).";
 
@@ -300,9 +367,11 @@ namespace ConditioningControlPanel.Services
             {
                 if (manifest.CustomAvatarSets.Count > 20)
                     return "Too many custom avatar sets (max 20).";
+                var seenSetNums = new HashSet<int>();
                 foreach (var cs in manifest.CustomAvatarSets)
                 {
                     if (cs.SetNumber < 8) return $"Custom avatar set number must be 8 or higher (got {cs.SetNumber}).";
+                    if (!seenSetNums.Add(cs.SetNumber)) return $"Duplicate custom avatar set number: {cs.SetNumber}.";
                     if (cs.UnlockLevel < 1 || cs.UnlockLevel > 9999) return $"Custom avatar set unlock level must be 1-9999.";
                     if (cs.Label.Length > 100) cs.Label = cs.Label[..100];
                 }
@@ -652,7 +721,7 @@ namespace ConditioningControlPanel.Services
         public bool IsAvatarSetSupported(int setNumber)
         {
             var supported = _activeMod.Manifest.SupportedAvatarSets;
-            return supported == null || supported.Contains(setNumber);
+            return supported == null || supported.Count == 0 || supported.Contains(setNumber);
         }
 
         public bool IsCompanionSupported(Models.CompanionId companionId)
@@ -906,6 +975,13 @@ namespace ConditioningControlPanel.Services
                     var manifest = JsonConvert.DeserializeObject<ModManifest>(json);
                     if (manifest != null && !string.IsNullOrWhiteSpace(manifest.Id))
                     {
+                        // Re-validate on load (defense-in-depth against tampered mod.json)
+                        var sanitizeError = SanitizeManifest(manifest);
+                        if (sanitizeError != null)
+                        {
+                            _log?.Warning("Mod {ModId} failed re-validation on load: {Error}", manifest.Id, sanitizeError);
+                            continue;
+                        }
                         _installedMods[manifest.Id] = new ModPackage(manifest, dir, isBuiltIn: false);
                         _log?.Information("Loaded installed mod: {ModId} v{Version}", manifest.Id, manifest.Version);
                     }
