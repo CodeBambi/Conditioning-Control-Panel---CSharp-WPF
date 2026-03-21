@@ -23,7 +23,7 @@ public class LocalAiService : IAiService
         DailyRequestsRemaining = -1;
         _bambiSprite = new BambiSprite();
         AiService = new OllamaApiClient(_localUri);
-        AiService.SelectedModel = "bambi-model-v6";
+        AiService.SelectedModel = "bambi-model-techdom-v1";
         _chat = new Chat(AiService);
     }
     
@@ -86,18 +86,25 @@ public class LocalAiService : IAiService
     private bool _isWorkingOnResponse;
     private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt)
     {
-        var currentTime = DateTime.Now.ToString("yy-MMM-dd dddd h:mm:ss tt");
-        var timeAwareInput = $"{userInput} <time>{currentTime}</time>";
         if (_isWorkingOnResponse) return null;
-        string response = "";
-        _isWorkingOnResponse = false;
-        await foreach (var answerToken in _chat.SendAsync(timeAwareInput))
-            response += answerToken;
-        _isWorkingOnResponse = false;
-        if (string.IsNullOrEmpty(response))
-            return GetFallbackResponse();
-        response = ParseJson(response);
-        return SanitizeResponse(response);
+        _isWorkingOnResponse = true;
+
+        try
+        {
+            var currentTime = DateTime.Now.ToString("yy-MMM-dd dddd h:mm:ss tt");
+            var timeAwareInput = $"{userInput} <time>{currentTime}</time>";
+            string response = "";
+            await foreach (var answerToken in _chat.SendAsync(timeAwareInput))
+                response += answerToken;
+            if (string.IsNullOrEmpty(response))
+                return GetFallbackResponse();
+            response = ParseJson(response);
+            return SanitizeResponse(response);
+        }
+        finally
+        {
+            _isWorkingOnResponse = false;
+        }
     }
     
     /// <summary>
@@ -218,11 +225,35 @@ public class LocalAiService : IAiService
                 break;
             case AICommandType.audio:
             case AICommandType.video:
-                App.Video.PlaySpecificVideo((command.Data as Media)?.Path ?? string.Empty, false);
+                var media = command.Data as Media;
+                if (media == null || App.Video.IsPlaying) break;
+                if (media.Random)
+                {
+                    if (command.Command == AICommandType.video)
+                        App.Video.TriggerVideo();
+                    // AudioService doesn't seem to have a TriggerAudio (random) method equivalent to Video
+                }
+                else if (!string.IsNullOrEmpty(media.Path))
+                {
+                    if (command.Command == AICommandType.video)
+                        App.Video.PlaySpecificVideo(media.Path, false);
+                    else
+                        App.Audio.PlaySound(media.Path, 100);
+                }
                 break;
             case AICommandType.getbacktome:
                 var getbacktome = command.Data as GetBackToMe;
-                Task.Delay(getbacktome!.Delay * 1000).ContinueWith(_ => SendTokenMessage(getbacktome.Token, getbacktome.JsonOnly));
+                Task.Delay(getbacktome!.Delay * 1000).ContinueWith(_ =>
+                {
+                    SendTokenMessage(getbacktome.Token, getbacktome.JsonOnly);
+                    if (getbacktome.Commands != null)
+                    {
+                        foreach (var subCommand in getbacktome.Commands)
+                        {
+                            TriggerCommand(subCommand);
+                        }
+                    }
+                });
                 break;
             case AICommandType.pink:
                 if ((command.Data as SpiralPinkFiler)?.On ?? false)

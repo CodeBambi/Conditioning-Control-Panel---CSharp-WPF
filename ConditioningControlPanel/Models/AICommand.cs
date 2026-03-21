@@ -34,6 +34,17 @@ public class AICommandConverter : JsonConverter<AICommand>
 {
     public override AICommand? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var stringTypeStr = reader.GetString();
+            if (Enum.TryParse<AICommandType>(stringTypeStr, true, out var stringCommandType))
+            {
+                return new AICommand { Command = stringCommandType };
+            }
+
+            return new AICommand { Command = AICommandType.none };
+        }
+
         using var doc = JsonDocument.ParseValue(ref reader);
         var root = doc.RootElement;
 

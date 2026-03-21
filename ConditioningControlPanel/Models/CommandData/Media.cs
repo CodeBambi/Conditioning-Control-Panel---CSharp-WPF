@@ -2,5 +2,6 @@ namespace ConditioningControlPanel.Models.CommandData;
 
 public record Media(
     string Title,
-    string Path
+    string Path,
+    bool Random = false
 ) : AICommandData;
