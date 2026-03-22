@@ -171,6 +171,10 @@ public class AchievementProgress
         }
         else
         {
+            var daysMissed = (today - lastDate).Days;
+            App.Logger?.Information("Login streak gap detected: {Days} day(s) missed (last launch: {LastDate}, today: {Today}, streak was: {Streak})",
+                daysMissed, lastDate.ToString("yyyy-MM-dd"), today.ToString("yyyy-MM-dd"), ConsecutiveDays);
+
             // Streak would break - try streak shield first
             if (App.SkillTree?.UseStreakShield() == true)
             {
@@ -198,6 +202,8 @@ public class AchievementProgress
             else
             {
                 // Streak broken, reset to 1
+                App.Logger?.Warning("Login streak RESET from {OldStreak} to 1 — gap of {Days} day(s), no shield/insurance available (last launch: {LastDate})",
+                    ConsecutiveDays, daysMissed, lastDate.ToString("yyyy-MM-dd"));
                 ConsecutiveDays = 1;
             }
         }
