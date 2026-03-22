@@ -1082,20 +1082,22 @@ namespace ConditioningControlPanel.Services
                                 // Trim to last 90 days (supports long streaks)
                                 var cutoff = DateTime.Today.AddDays(-90);
                                 questProgress.DailyQuestCompletionDates.RemoveAll(d => d.Date < cutoff);
-                                App.Logger?.Debug("Quest sync: Merged completion dates from cloud");
+                                App.Logger?.Debug("Quest sync: Merged completion dates from cloud ({Count} total dates)",
+                                    questProgress.DailyQuestCompletionDates.Count);
                                 needsSave = true;
 
-                                // Recompute streak from the merged calendar to fix LastDailyQuestDate desync
+                                // Recompute streak from the merged calendar
+                                // RecalculateStreak now never decreases the streak, so this is safe
                                 App.Quests?.RecalculateStreak();
 
-                                // RecalculateStreak may compute a lower value if completion dates
-                                // were trimmed or incomplete. Restore the cloud streak if higher.
+                                // Also take cloud streak if it's higher (server may know about
+                                // dates we don't have locally, e.g. from another device)
                                 if (cloudProfile.Stats.TryGetValue("daily_quest_streak", out var cloudStreakAfter))
                                 {
                                     var csAfter = Convert.ToInt32(cloudStreakAfter);
                                     if (csAfter > settings.DailyQuestStreak)
                                     {
-                                        App.Logger?.Debug("Quest sync: Restoring cloud streak {Cloud} (recalculated was {Recalc})", csAfter, settings.DailyQuestStreak);
+                                        App.Logger?.Debug("Quest sync: Adopting cloud streak {Cloud} (local was {Local})", csAfter, settings.DailyQuestStreak);
                                         settings.DailyQuestStreak = csAfter;
                                     }
                                 }

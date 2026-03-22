@@ -789,8 +789,8 @@ public class QuestService : IDisposable
                 Progress.DailyQuestCompletionDates.Add(today);
             }
 
-            // Trim entries older than 30 days
-            var cutoff = today.AddDays(-30);
+            // Trim entries older than 90 days (matches cloud sync window)
+            var cutoff = today.AddDays(-90);
             Progress.DailyQuestCompletionDates.RemoveAll(d => d.Date < cutoff);
 
             // Apply streak shield if yesterday is missing (would break streak)
@@ -897,6 +897,13 @@ public class QuestService : IDisposable
         var completedDates = new HashSet<DateTime>(
             Progress.DailyQuestCompletionDates.Select(d => d.Date));
 
+        // Also include streak-shielded dates as "completed" for streak calculation
+        if (settings.StreakShieldUsedDates != null)
+        {
+            foreach (var shieldDate in settings.StreakShieldUsedDates)
+                completedDates.Add(shieldDate.Date);
+        }
+
         int streak = 0;
         var checkDate = DateTime.Today;
 
@@ -910,7 +917,17 @@ public class QuestService : IDisposable
             checkDate = checkDate.AddDays(-1);
         }
 
-        settings.DailyQuestStreak = streak;
+        // Never decrease the streak from recalculation — dates may have been
+        // trimmed or lost during sync. The streak was earned, keep it.
+        if (streak < settings.DailyQuestStreak)
+        {
+            App.Logger?.Debug("RecalculateStreak: calendar shows {Calculated} but current streak is {Current} — keeping higher value",
+                streak, settings.DailyQuestStreak);
+        }
+        else
+        {
+            settings.DailyQuestStreak = streak;
+        }
 
         // Keep LastDailyQuestDate in sync with the calendar
         if (completedDates.Count > 0)
