@@ -12,7 +12,7 @@ public class LocalAiService : IAiService
     public int DailyRequestsRemaining { get; }
     private OllamaApiClient AiService { get; }
     private readonly BambiSprite _bambiSprite;
-    private readonly Uri _localUri = new Uri("http://localhost:5259/");
+    private readonly Uri _localUri = new Uri("http://localhost:5000/");
     private Chat _chat;
     private List<AICommand> CurrentCommands { get; set; } = [];
     public MainWindow? MainWindowRef { get; set; }
