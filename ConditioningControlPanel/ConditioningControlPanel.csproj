@@ -16,7 +16,7 @@
     <Copyright>Copyright © 2024-2026 CodeBambi</Copyright>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <PublishSingleFile>false</PublishSingleFile>
+    <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
@@ -244,10 +244,12 @@
       <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" />
       <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
       <SpiralFiles Include="$(ProjectDir)Spirals\**\*" />
+      <AssetFiles Include="$(ProjectDir)assets\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(SoundFiles)" DestinationFolder="$(PublishDir)Resources\sounds\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SubAudioFiles)" DestinationFolder="$(PublishDir)Resources\sub_audio\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SpiralFiles)" DestinationFolder="$(PublishDir)Spirals\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(AssetFiles)" DestinationFolder="$(PublishDir)assets\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Message Importance="High" Text="Copied content files to publish folder" />
   </Target>
 
@@ -259,8 +261,8 @@
     <ItemGroup>
       <LibVLCFiles Include="$(LibVLCPath)**\*" />
     </ItemGroup>
-    <Copy SourceFiles="@(LibVLCFiles)" DestinationFolder="$(PublishDir)libvlc\%(RecursiveDir)" SkipUnchangedFiles="true" />
-    <Message Importance="High" Text="Copied LibVLC files from $(LibVLCPath) to $(PublishDir)libvlc\" />
+    <Copy SourceFiles="@(LibVLCFiles)" DestinationFolder="$(PublishDir)libvlc\win-x64\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Message Importance="High" Text="Copied LibVLC files from $(LibVLCPath) to $(PublishDir)libvlc\win-x64\" />
   </Target>
 
 </Project>
