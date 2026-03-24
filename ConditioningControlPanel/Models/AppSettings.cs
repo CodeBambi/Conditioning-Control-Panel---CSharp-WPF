@@ -29,6 +29,17 @@ namespace ConditioningControlPanel.Models
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
 
+        #region Language
+
+        private string _language = "en";
+        public string Language
+        {
+            get => _language;
+            set { _language = value ?? "en"; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Presets
 
         private string _currentPresetName = "Custom";

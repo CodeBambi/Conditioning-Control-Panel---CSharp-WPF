@@ -1,8 +1,9 @@
 <Window x:Class="ConditioningControlPanel.SessionEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         xmlns:local="clr-namespace:ConditioningControlPanel"
-        Title="Session Editor"
+        Title="{loc:Str label_session_editor}"
         Height="765" Width="765"
         MinHeight="680" MinWidth="680"
         WindowStartupLocation="CenterScreen"
@@ -38,13 +39,13 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock Text="Session Editor" Foreground="#E0E0E0" FontSize="12"
+                    <TextBlock Text="{loc:Str label_session_editor}" Foreground="#E0E0E0" FontSize="12"
                                VerticalAlignment="Center" Margin="12,8"/>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,4,8,4">
                         <Button x:Name="BtnHelp" Content="?" Click="BtnHelp_Click" Width="24" Height="24"
                                 Background="{DynamicResource PinkBrush}" Foreground="White" FontSize="12" FontWeight="Bold"
-                                BorderThickness="0" Cursor="Hand" ToolTip="How to use the Session Editor">
+                                BorderThickness="0" Cursor="Hand" ToolTip="{loc:Str tooltip_how_to_use_the_session_editor}">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border Background="{TemplateBinding Background}" CornerRadius="12" Width="24" Height="24">
@@ -76,20 +77,20 @@
                         <!-- Session Name + Stats -->
                         <StackPanel Grid.Row="0" Margin="20,12,20,8">
                             <!-- Session Name (editable) -->
-                            <TextBox x:Name="TxtSessionName" Text="My New Session"
+                            <TextBox x:Name="TxtSessionName" Text="{loc:Str label_my_new_session}"
                                      FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
                                      Background="Transparent" BorderThickness="0"
                                      HorizontalAlignment="Center" TextAlignment="Center"
                                      CaretBrush="{DynamicResource PinkBrush}" SelectionBrush="{DynamicResource PinkBrush}"
-                                     ToolTip="Click to edit session name"/>
+                                     ToolTip="{loc:Str tooltip_click_to_edit_session_name}"/>
 
                             <!-- Auto-calculated stats -->
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,6,0,0">
-                                <TextBlock x:Name="TxtDifficulty" Text="⭐ Easy"
+                                <TextBlock x:Name="TxtDifficulty" Text="{loc:Str label_easy}"
                                            Foreground="#90EE90" FontSize="11" FontWeight="SemiBold" Margin="0,0,15,0"/>
-                                <TextBlock x:Name="TxtXP" Text="+300 XP"
+                                <TextBlock x:Name="TxtXP" Text="{loc:Str label_300_xp}"
                                            Foreground="#FFD700" FontSize="11" FontWeight="SemiBold" Margin="0,0,15,0"/>
-                                <TextBlock x:Name="TxtDuration" Text="30 min"
+                                <TextBlock x:Name="TxtDuration" Text="{loc:Str label_30_min_2}"
                                            Foreground="#E0E0E0" FontSize="11" Margin="0,0,0,0"/>
                             </StackPanel>
                         </StackPanel>
@@ -102,7 +103,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <TextBlock Text="Duration" Foreground="#B0B0B0" FontSize="11"
+                            <TextBlock Text="{loc:Str setting_duration}" Foreground="#B0B0B0" FontSize="11"
                                        VerticalAlignment="Center" Margin="0,0,10,0"/>
 
                             <Slider x:Name="SliderDuration" Grid.Column="1"
@@ -110,7 +111,7 @@
                                     TickFrequency="5" IsSnapToTickEnabled="True"
                                     ValueChanged="SliderDuration_ValueChanged"/>
 
-                            <TextBlock x:Name="TxtDurationValue" Grid.Column="2" Text="30 min"
+                            <TextBlock x:Name="TxtDurationValue" Grid.Column="2" Text="{loc:Str label_30_min_2}"
                                        Foreground="#E0E0E0" FontSize="11" FontWeight="SemiBold"
                                        VerticalAlignment="Center" Margin="10,0,0,0" Width="45"/>
                         </Grid>
@@ -136,7 +137,7 @@
                                         Drop="Timeline_Drop">
                                         <Canvas x:Name="CanvasTimeline" ClipToBounds="True" MinHeight="40" Background="Transparent">
                                             <!-- Timeline events will be added here dynamically -->
-                                            <TextBlock Text="Drag features here to add them to the timeline"
+                                            <TextBlock Text="{loc:Str label_drag_features_here_to_add_them_to_the_timelin}"
                                                    Foreground="#555" FontSize="10" FontStyle="Italic"
                                                    Canvas.Left="8" Canvas.Top="12"
                                                    x:Name="TxtTimelineHint"/>
@@ -159,35 +160,35 @@
 
                                 <!-- AUDIO Category -->
                                 <StackPanel Grid.Column="0" Margin="3,0">
-                                    <TextBlock Text="AUDIO" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
+                                    <TextBlock Text="{loc:Str label_audio}" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" Margin="0,3,0,5"/>
                                     <StackPanel x:Name="AudioFeatures" HorizontalAlignment="Center"/>
                                 </StackPanel>
 
                                 <!-- VIDEO Category -->
                                 <StackPanel Grid.Column="1" Margin="3,0">
-                                    <TextBlock Text="VIDEO" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
+                                    <TextBlock Text="{loc:Str label_video}" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" Margin="0,3,0,5"/>
                                     <StackPanel x:Name="VideoFeatures" HorizontalAlignment="Center"/>
                                 </StackPanel>
 
                                 <!-- OVERLAYS Category -->
                                 <StackPanel Grid.Column="2" Margin="3,0">
-                                    <TextBlock Text="OVERLAYS" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
+                                    <TextBlock Text="{loc:Str label_overlays_2}" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" Margin="0,3,0,5"/>
                                     <StackPanel x:Name="OverlayFeatures" HorizontalAlignment="Center"/>
                                 </StackPanel>
 
                                 <!-- INTERACTIVE Category -->
                                 <StackPanel Grid.Column="3" Margin="3,0">
-                                    <TextBlock Text="INTERACTIVE" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
+                                    <TextBlock Text="{loc:Str label_interactive}" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" Margin="0,3,0,5"/>
                                     <StackPanel x:Name="InteractiveFeatures" HorizontalAlignment="Center"/>
                                 </StackPanel>
 
                                 <!-- EXTRAS Category -->
                                 <StackPanel Grid.Column="4" Margin="3,0">
-                                    <TextBlock Text="EXTRAS" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
+                                    <TextBlock Text="{loc:Str label_extras_2}" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" Margin="0,3,0,5"/>
                                     <StackPanel x:Name="ExtrasFeatures" HorizontalAlignment="Center"/>
                                 </StackPanel>
@@ -211,14 +212,14 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Button Content="Import" Style="{StaticResource SecondaryButton}"
+                                <Button Content="{loc:Str btn_import}" Style="{StaticResource SecondaryButton}"
                                         Click="BtnImport_Click" Margin="0,0,8,0" FontSize="11" Padding="12,6"/>
-                                <Button Grid.Column="1" Content="Export" Style="{StaticResource SecondaryButton}"
+                                <Button Grid.Column="1" Content="{loc:Str btn_export}" Style="{StaticResource SecondaryButton}"
                                         Click="BtnExport_Click" FontSize="11" Padding="12,6"/>
 
-                                <Button Grid.Column="3" Content="Cancel" Style="{StaticResource SecondaryButton}"
+                                <Button Grid.Column="3" Content="{loc:Str btn_cancel}" Style="{StaticResource SecondaryButton}"
                                         Click="BtnCancel_Click" Margin="0,0,8,0" FontSize="11" Padding="12,6"/>
-                                <Button Grid.Column="4" Content="Save Session" Style="{StaticResource PinkButton}"
+                                <Button Grid.Column="4" Content="{loc:Str btn_save_session}" Style="{StaticResource PinkButton}"
                                         Click="BtnSave_Click" FontSize="11" Padding="12,6"/>
                             </Grid>
 
@@ -229,13 +230,13 @@
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
-                                <TextBlock Text="Vibe Description" Foreground="#888" FontSize="10" Margin="0,0,0,4"/>
+                                <TextBlock Text="{loc:Str label_vibe_description}" Foreground="#888" FontSize="10" Margin="0,0,0,4"/>
                                 <TextBox x:Name="TxtDescription" Grid.Row="1"
                                          Height="55" TextWrapping="Wrap" AcceptsReturn="True"
                                          Background="{DynamicResource PanelBgBrush}" Foreground="#E0E0E0"
                                          BorderBrush="#353555" BorderThickness="1"
                                          Padding="8" FontSize="11" VerticalScrollBarVisibility="Auto"
-                                         ToolTip="Enter a description for your session"/>
+                                         ToolTip="{loc:Str tooltip_enter_a_description_for_your_session}"/>
                             </Grid>
                         </Grid>
                     </Grid>
@@ -273,7 +274,7 @@
                         <!-- Header -->
                         <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="10,10,0,0" Padding="20,15">
                             <Grid>
-                                <TextBlock Text="📖 How to Use the Session Editor"
+                                <TextBlock Text="{loc:Str label_how_to_use_the_session_editor}"
                                            Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
                                            HorizontalAlignment="Center"/>
                                 <Button Content="✕" Click="TutorialOverlay_Close"
@@ -294,10 +295,10 @@
                                                 <TextBlock Text="1" Foreground="White" FontWeight="Bold"
                                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
-                                            <TextBlock Text="Hover to See Description" Foreground="#E0E0E0" FontSize="14" FontWeight="SemiBold"
+                                            <TextBlock Text="{loc:Str label_hover_to_see_description}" Foreground="#E0E0E0" FontSize="14" FontWeight="SemiBold"
                                                        VerticalAlignment="Center"/>
                                         </StackPanel>
-                                        <TextBlock Text="Hover over any feature icon to see its name and a brief description of what it does."
+                                        <TextBlock Text="{loc:Str label_hover_over_any_feature_icon_to_see_its_name_a}"
                                                    Foreground="#B0B0B0" FontSize="13" TextWrapping="Wrap" Margin="34,0,0,0"/>
                                     </StackPanel>
                                 </Border>
@@ -310,10 +311,10 @@
                                                 <TextBlock Text="2" Foreground="White" FontWeight="Bold"
                                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
-                                            <TextBlock Text="Drag to Create Segments" Foreground="#E0E0E0" FontSize="14" FontWeight="SemiBold"
+                                            <TextBlock Text="{loc:Str label_drag_to_create_segments}" Foreground="#E0E0E0" FontSize="14" FontWeight="SemiBold"
                                                        VerticalAlignment="Center"/>
                                         </StackPanel>
-                                        <TextBlock Text="Drag a feature icon onto the timeline to create a colored segment. Each segment shows when the effect starts and ends."
+                                        <TextBlock Text="{loc:Str label_drag_a_feature_icon_onto_the_timeline_to_crea}"
                                                    Foreground="#B0B0B0" FontSize="13" TextWrapping="Wrap" Margin="34,0,0,0"/>
                                     </StackPanel>
                                 </Border>
@@ -326,10 +327,10 @@
                                                 <TextBlock Text="3" Foreground="White" FontWeight="Bold"
                                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
-                                            <TextBlock Text="Resize &amp; Move Segments" Foreground="#E0E0E0" FontSize="14" FontWeight="SemiBold"
+                                            <TextBlock Text="{loc:Str label_resize_move_segments}" Foreground="#E0E0E0" FontSize="14" FontWeight="SemiBold"
                                                        VerticalAlignment="Center"/>
                                         </StackPanel>
-                                        <TextBlock Text="Drag the left or right edge handles to resize the segment. Drag the colored bar itself to move the entire segment."
+                                        <TextBlock Text="{loc:Str label_drag_the_left_or_right_edge_handles_to_resize}"
                                                    Foreground="#B0B0B0" FontSize="13" TextWrapping="Wrap" Margin="34,0,0,0"/>
                                     </StackPanel>
                                 </Border>
@@ -342,10 +343,10 @@
                                                 <TextBlock Text="4" Foreground="White" FontWeight="Bold"
                                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
-                                            <TextBlock Text="Right-Click to Edit Settings" Foreground="#E0E0E0" FontSize="14" FontWeight="SemiBold"
+                                            <TextBlock Text="{loc:Str label_right_click_to_edit_settings}" Foreground="#E0E0E0" FontSize="14" FontWeight="SemiBold"
                                                        VerticalAlignment="Center"/>
                                         </StackPanel>
-                                        <TextBlock Text="Right-click any segment on the timeline to open its settings popup. Adjust parameters like intensity, frequency, and more."
+                                        <TextBlock Text="{loc:Str label_right_click_any_segment_on_the_timeline_to_op}"
                                                    Foreground="#B0B0B0" FontSize="13" TextWrapping="Wrap" Margin="34,0,0,0"/>
                                     </StackPanel>
                                 </Border>
@@ -358,10 +359,10 @@
                                                 <TextBlock Text="*" Foreground="White" FontWeight="Bold" FontSize="14"
                                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Border>
-                                            <TextBlock Text="Full Session Coverage" Foreground="#4CAF50" FontSize="14" FontWeight="SemiBold"
+                                            <TextBlock Text="{loc:Str label_full_session_coverage}" Foreground="#4CAF50" FontSize="14" FontWeight="SemiBold"
                                                        VerticalAlignment="Center"/>
                                         </StackPanel>
-                                        <TextBlock Text="To make an effect last the entire session, simply drag its right edge all the way to the end of the timeline."
+                                        <TextBlock Text="{loc:Str label_to_make_an_effect_last_the_entire_session_sim}"
                                                    Foreground="#A5D6A7" FontSize="13" TextWrapping="Wrap" Margin="34,0,0,0"/>
                                     </StackPanel>
                                 </Border>
@@ -370,7 +371,7 @@
 
                         <!-- Footer -->
                         <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,10,10" Padding="20,15">
-                            <Button Content="Got it!" Style="{StaticResource PinkButton}"
+                            <Button Content="{loc:Str btn_got_it}" Style="{StaticResource PinkButton}"
                                     HorizontalAlignment="Center" Click="TutorialOverlay_Close"
                                     Padding="40,10"/>
                         </Border>

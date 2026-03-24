@@ -13,6 +13,7 @@ using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Microsoft.Win32;
 using Newtonsoft.Json;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -1050,7 +1051,7 @@ namespace ConditioningControlPanel
             _audioSlots[key] = null;
             if (_audioFileLabels.TryGetValue(key, out var label))
             {
-                label.Text = "No file";
+                label.Text = Loc.Get("label_no_file");
                 label.FontStyle = FontStyles.Italic;
                 label.Foreground = new SolidColorBrush(Color.FromRgb(96, 96, 128));
             }
@@ -2200,14 +2201,14 @@ namespace ConditioningControlPanel
             var author = GetTextBoxValue(_txtAuthor);
             if (string.IsNullOrWhiteSpace(name))
             {
-                MessageBox.Show("Mod Name is required.", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_mod_name_is_required"), "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 NavigateToSection("info");
                 _txtModName?.Focus();
                 return;
             }
             if (string.IsNullOrWhiteSpace(author))
             {
-                MessageBox.Show("Author is required.", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_author_is_required"), "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 NavigateToSection("info");
                 _txtAuthor?.Focus();
                 return;
@@ -2310,7 +2311,7 @@ namespace ConditioningControlPanel
                 var manifestPath = Path.Combine(_loadedTempDir, "mod.json");
                 if (!File.Exists(manifestPath))
                 {
-                    MessageBox.Show("Invalid mod package: mod.json not found.", "Load Error",
+                    MessageBox.Show(Loc.Get("msg_invalid_mod_package_mod_json_not_found"), "Load Error",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     CleanupTempDir();
                     return;
@@ -2320,7 +2321,7 @@ namespace ConditioningControlPanel
                 var manifest = JsonConvert.DeserializeObject<ModManifest>(json);
                 if (manifest == null)
                 {
-                    MessageBox.Show("Failed to parse mod.json.", "Load Error",
+                    MessageBox.Show(Loc.Get("msg_failed_to_parse_mod_json"), "Load Error",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     CleanupTempDir();
                     return;
@@ -2358,7 +2359,7 @@ namespace ConditioningControlPanel
         // ─── Reset ───────────────────────────────────────────────
         private void BtnReset_Click(object sender, RoutedEventArgs e)
         {
-            var result = MessageBox.Show("Reset all fields to defaults? This cannot be undone.",
+            var result = MessageBox.Show(Loc.Get("msg_reset_all_fields_to_defaults_this_cannot_be_u"),
                 "Confirm Reset", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result != MessageBoxResult.Yes) return;
 
@@ -2416,7 +2417,7 @@ namespace ConditioningControlPanel
 
             NavigateToSection("info");
             UpdateStatusBar();
-            TxtStatus.Text = "Reset to defaults";
+            TxtStatus.Text = Loc.Get("label_reset_to_defaults");
         }
 
         // ─── Status Bar ──────────────────────────────────────────

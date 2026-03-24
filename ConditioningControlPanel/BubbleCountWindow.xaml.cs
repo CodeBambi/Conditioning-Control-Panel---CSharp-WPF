@@ -14,6 +14,7 @@ using NAudio.Wave;
 using LibVLCSharp.Shared;
 using LibVLCSharp.WPF;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Localization;
 using Screen = System.Windows.Forms.Screen;
 
 namespace ConditioningControlPanel

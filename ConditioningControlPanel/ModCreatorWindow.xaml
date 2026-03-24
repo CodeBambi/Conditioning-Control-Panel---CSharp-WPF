@@ -1,7 +1,8 @@
 <Window x:Class="ConditioningControlPanel.ModCreatorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Mod Creator"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_mod_creator}"
         Height="750" Width="1100"
         MinHeight="600" MinWidth="900"
         WindowStartupLocation="CenterOwner"
@@ -133,14 +134,14 @@
             <Border Grid.Row="0" Background="#252542" CornerRadius="12,12,0,0" Padding="20,10"
                     MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid>
-                    <TextBlock Text="Mod Creator" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
+                    <TextBlock Text="{loc:Str dialog_mod_creator}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
                                VerticalAlignment="Center"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <Button Content="?" Click="BtnHelp_Click"
                                 Background="Transparent" Foreground="{DynamicResource PinkBrush}" FontSize="16" FontWeight="Bold"
                                 BorderThickness="0" Cursor="Hand" Padding="8,2" Width="30" Height="30"
-                                ToolTip="Mod Creator Tutorial"/>
-                        <Button Content="&#x2014;" Click="BtnMinimize_Click"
+                                ToolTip="{loc:Str tooltip_mod_creator_tutorial}"/>
+                        <Button Content="{loc:Str btn_text}" Click="BtnMinimize_Click"
                                 Background="Transparent" Foreground="#B0B0B0" FontSize="14"
                                 BorderThickness="0" Cursor="Hand" Padding="8,2" Width="30" Height="30"/>
                         <Button Content="X" Click="BtnClose_Click"
@@ -177,11 +178,11 @@
                     <TextBlock x:Name="TxtStatus" Foreground="#808080" FontSize="12"
                                VerticalAlignment="Center" HorizontalAlignment="Left"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="Load .ccpmod" Style="{StaticResource SecondaryButton}"
+                        <Button Content="{loc:Str btn_load_ccpmod}" Style="{StaticResource SecondaryButton}"
                                 Click="BtnLoad_Click" Margin="0,0,8,0"/>
-                        <Button Content="Reset All" Style="{StaticResource DangerButton}"
+                        <Button Content="{loc:Str btn_reset_all}" Style="{StaticResource DangerButton}"
                                 Click="BtnReset_Click" Margin="0,0,8,0"/>
-                        <Button Content="Export as .ccpmod" Style="{StaticResource ActionButton}"
+                        <Button Content="{loc:Str btn_export_as_ccpmod}" Style="{StaticResource ActionButton}"
                                 Click="BtnExport_Click"/>
                     </StackPanel>
                 </Grid>

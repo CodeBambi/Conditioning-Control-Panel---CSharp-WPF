@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using ConditioningControlPanel.Models;
 using Microsoft.Win32;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {

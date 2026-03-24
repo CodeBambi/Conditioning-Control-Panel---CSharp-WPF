@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using IOPath = System.IO.Path;
 using ConditioningControlPanel.Services;
 using NAudio.Wave;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {

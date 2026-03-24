@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -40,7 +41,7 @@ namespace ConditioningControlPanel
 
             if (existing != null)
             {
-                TxtTitle.Text = "EDIT CUSTOM CATEGORY";
+                TxtTitle.Text = Loc.Get("label_edit_custom_category");
                 TxtName.Text = existing.Name;
                 TxtDescription.Text = existing.Description;
                 TxtPrompt.Text = existing.SystemPromptTemplate;
@@ -305,7 +306,7 @@ Do NOT include any other text before or after the question format. Just the ques
             }
 
             _isPreviewRunning = true;
-            TxtPreviewHint.Text = "  — generating...";
+            TxtPreviewHint.Text = Loc.Get("label_generating");
 
             try
             {
@@ -341,7 +342,7 @@ Do NOT include any other text before or after the question format. Just the ques
             finally
             {
                 _isPreviewRunning = false;
-                TxtPreviewHint.Text = "  — generate a sample question";
+                TxtPreviewHint.Text = Loc.Get("label_generate_a_sample_question");
             }
         }
 
@@ -358,7 +359,7 @@ Do NOT include any other text before or after the question format. Just the ques
             var name = TxtName.Text?.Trim() ?? "";
             if (string.IsNullOrWhiteSpace(name))
             {
-                MessageBox.Show("Please enter a category name.", "Missing Name",
+                MessageBox.Show(Loc.Get("msg_please_enter_a_category_name"), "Missing Name",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -368,7 +369,7 @@ Do NOT include any other text before or after the question format. Just the ques
             var prompt = TxtPrompt.Text?.Trim() ?? "";
             if (string.IsNullOrWhiteSpace(prompt))
             {
-                MessageBox.Show("Please enter a system prompt for the AI.", "Missing Prompt",
+                MessageBox.Show(Loc.Get("msg_please_enter_a_system_prompt_for_the_ai"), "Missing Prompt",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -376,7 +377,7 @@ Do NOT include any other text before or after the question format. Just the ques
             var archetypes = CollectArchetypes();
             if (archetypes.Count < 2)
             {
-                MessageBox.Show("Please define at least 2 archetypes.", "Need Archetypes",
+                MessageBox.Show(Loc.Get("msg_please_define_at_least_2_archetypes"), "Need Archetypes",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -385,7 +386,7 @@ Do NOT include any other text before or after the question format. Just the ques
             var builtInNames = QuizService.GetBuiltInCategories().Select(c => c.Name.ToLowerInvariant());
             if (builtInNames.Contains(name.ToLowerInvariant()) && _existing?.Name.ToLowerInvariant() != name.ToLowerInvariant())
             {
-                MessageBox.Show("This name conflicts with a built-in category. Please choose a different name.",
+                MessageBox.Show(Loc.Get("msg_this_name_conflicts_with_a_built_in_category"),
                     "Name Conflict", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }

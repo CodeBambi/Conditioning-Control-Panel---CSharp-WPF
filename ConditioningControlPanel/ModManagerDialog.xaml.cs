@@ -7,6 +7,7 @@ using System.Windows.Media;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Microsoft.Win32;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {

@@ -1,7 +1,8 @@
 <Window x:Class="ConditioningControlPanel.RoadmapDiaryDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Transformation Diary"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_transformation_diary}"
         Width="500" Height="700"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
@@ -24,9 +25,9 @@
             <!-- Header with Close Button -->
             <Grid Grid.Row="0" Margin="0,0,0,15">
                 <StackPanel>
-                    <TextBlock x:Name="TxtStepNumber" Text="Step 1"
+                    <TextBlock x:Name="TxtStepNumber" Text="{loc:Str label_step_1_2}"
                                Foreground="#888888" FontSize="12"/>
-                    <TextBlock x:Name="TxtStepTitle" Text="The Blank Slate"
+                    <TextBlock x:Name="TxtStepTitle" Text="{loc:Str label_the_blank_slate}"
                                Foreground="{StaticResource PinkBrush}" FontSize="20" FontWeight="Bold"/>
                 </StackPanel>
                 <Button Content="X" HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -52,7 +53,7 @@
                 <Grid>
                     <Image x:Name="ImgFullPhoto" Stretch="Uniform"
                            RenderOptions.BitmapScalingMode="HighQuality"/>
-                    <TextBlock x:Name="TxtNoPhoto" Text="No photo available"
+                    <TextBlock x:Name="TxtNoPhoto" Text="{loc:Str label_no_photo_available}"
                                Foreground="#666666" FontSize="14"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                Visibility="Collapsed"/>
@@ -63,7 +64,7 @@
             <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="10"
                     Padding="15" Margin="0,0,0,15">
                 <StackPanel>
-                    <TextBlock Text="Objective" Foreground="#888888" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBlock Text="{loc:Str label_objective}" Foreground="#888888" FontSize="11" Margin="0,0,0,4"/>
                     <TextBlock x:Name="TxtObjective" Text="" Foreground="White"
                                FontSize="13" TextWrapping="Wrap"/>
                 </StackPanel>
@@ -79,20 +80,20 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                        <TextBlock Text="Completed" Foreground="#888888"
+                        <TextBlock Text="{loc:Str label_completed}" Foreground="#888888"
                                    FontSize="11" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="TxtCompletedDate" Text="Jan 15, 2024"
+                        <TextBlock x:Name="TxtCompletedDate" Text="{loc:Str label_jan_15_2024}"
                                    Foreground="White" FontSize="14" FontWeight="Bold"
                                    HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                        <TextBlock x:Name="TxtCompletedTime" Text="3:45 PM"
+                        <TextBlock x:Name="TxtCompletedTime" Text="{loc:Str label_3_45_pm}"
                                    Foreground="#888888" FontSize="11"
                                    HorizontalAlignment="Center"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                        <TextBlock Text="Time Taken" Foreground="#888888"
+                        <TextBlock Text="{loc:Str label_time_taken}" Foreground="#888888"
                                    FontSize="11" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="TxtTimeTaken" Text="45 minutes"
+                        <TextBlock x:Name="TxtTimeTaken" Text="{loc:Str label_45_minutes}"
                                    Foreground="White" FontSize="14" FontWeight="Bold"
                                    HorizontalAlignment="Center" Margin="0,4,0,0"/>
                     </StackPanel>
@@ -107,7 +108,7 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="Personal Note" Foreground="#888888"
+                    <TextBlock Grid.Row="0" Text="{loc:Str label_personal_note}" Foreground="#888888"
                                FontSize="11" Margin="0,0,0,8"/>
                     <TextBox x:Name="TxtUserNote" Grid.Row="1"
                              Background="Transparent" Foreground="White"
@@ -121,7 +122,7 @@
             <!-- Buttons -->
             <StackPanel Grid.Row="5" Orientation="Horizontal"
                         HorizontalAlignment="Center" Margin="0,15,0,0">
-                <Button Content="Save Note" Background="{StaticResource PinkBrush}"
+                <Button Content="{loc:Str btn_save_note}" Background="{StaticResource PinkBrush}"
                         Foreground="White" Padding="20,10"
                         BorderThickness="0" Cursor="Hand" Margin="0,0,10,0"
                         FontWeight="Bold"
@@ -136,7 +137,7 @@
                         </Style>
                     </Button.Style>
                 </Button>
-                <Button Content="Close" Background="{DynamicResource PanelAccentBrush}"
+                <Button Content="{loc:Str btn_close}" Background="{DynamicResource PanelAccentBrush}"
                         Foreground="White" Padding="20,10"
                         BorderThickness="0" Cursor="Hand"
                         Click="BtnClose_Click">

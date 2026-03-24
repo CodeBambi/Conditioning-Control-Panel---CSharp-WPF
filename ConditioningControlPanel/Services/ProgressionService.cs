@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Services
 {
@@ -91,7 +92,6 @@ namespace ConditioningControlPanel.Services
 
                 xpNeeded = GetXPForLevel(settings.PlayerLevel);
                 LevelUp?.Invoke(this, settings.PlayerLevel);
-                _ = App.Haptics?.LevelUpPatternAsync();
                 _ = App.Haptics?.LevelUpPatternAsync();
                 App.Logger.Information("Level up! Now level {Level}", settings.PlayerLevel);
 
@@ -232,12 +232,12 @@ namespace ConditioningControlPanel.Services
         {
             return level switch
             {
-                < 5 => "Beginner Bimbo",
-                < 10 => "Training Bimbo",
-                < 20 => "Eager Bimbo",
-                < 30 => "Devoted Bimbo",
-                < 50 => "Advanced Bimbo",
-                _ => "Perfect Bimbo"
+                < 5 => Loc.Get("rank_beginner_bimbo"),
+                < 10 => Loc.Get("rank_training_bimbo"),
+                < 20 => Loc.Get("rank_eager_bimbo"),
+                < 30 => Loc.Get("rank_devoted_bimbo"),
+                < 50 => Loc.Get("rank_advanced_bimbo"),
+                _ => Loc.Get("rank_perfect_bimbo")
             };
         }
 

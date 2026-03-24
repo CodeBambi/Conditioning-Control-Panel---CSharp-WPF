@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -70,12 +71,12 @@ namespace ConditioningControlPanel
             // Handle strict mode
             if (_strictMode)
             {
-                TxtStrict.Text = "🔒 STRICT";
+                TxtStrict.Text = Loc.Get("label_strict");
                 TxtEscHint.Visibility = Visibility.Collapsed;
             }
             else
             {
-                TxtEscHint.Text = "Press ESC to close";
+                TxtEscHint.Text = Loc.Get("label_press_esc_to_close");
             }
             
             // Position on screen
@@ -94,7 +95,7 @@ namespace ConditioningControlPanel
             {
                 TxtInput.IsReadOnly = true;
                 TxtInput.Focusable = false;
-                TxtHint.Text = "Input synced from primary monitor";
+                TxtHint.Text = Loc.Get("label_input_synced_from_primary_monitor");
             }
             
             // Apply custom colors from settings

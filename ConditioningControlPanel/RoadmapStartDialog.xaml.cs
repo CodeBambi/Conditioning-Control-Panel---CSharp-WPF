@@ -1,5 +1,6 @@
 using System.Windows;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel;
 

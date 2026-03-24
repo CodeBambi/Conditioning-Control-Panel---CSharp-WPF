@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using ConditioningControlPanel.Models;
 using Microsoft.Win32;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {

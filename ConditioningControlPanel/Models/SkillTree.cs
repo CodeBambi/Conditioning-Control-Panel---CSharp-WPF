@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Models;
 
@@ -27,6 +28,13 @@ public class SkillDefinition
     /// Numeric value for the effect (e.g., 0.10 for 10% XP boost)
     /// </summary>
     public double EffectValue { get; set; }
+
+    /// <summary>Localized skill name (falls back to hardcoded Name)</summary>
+    public string LocalizedName => Loc.Get($"skill_{Id}_name");
+    /// <summary>Localized skill description (falls back to hardcoded Description)</summary>
+    public string LocalizedDescription => Loc.Get($"skill_{Id}_desc");
+    /// <summary>Localized skill flavor text (falls back to hardcoded FlavorText)</summary>
+    public string LocalizedFlavorText => Loc.Get($"skill_{Id}_flavor");
 
     /// <summary>
     /// All skill definitions in the bimbo enhancement tree

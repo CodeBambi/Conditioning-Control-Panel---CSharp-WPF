@@ -1,7 +1,8 @@
 <Window x:Class="ConditioningControlPanel.PopQuizWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Pop Quiz"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str label_pop_quiz}"
         Width="500" Height="420"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
@@ -107,7 +108,7 @@
                 </StackPanel>
 
                 <!-- ESC hint -->
-                <TextBlock Text="ESC to skip" Foreground="#303050" FontSize="11"
+                <TextBlock Text="{loc:Str label_esc_to_skip}" Foreground="#303050" FontSize="11"
                            HorizontalAlignment="Center" Margin="0,8,0,0"/>
             </StackPanel>
 
@@ -120,7 +121,7 @@
                         <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
                     </TextBlock.Effect>
                 </TextBlock>
-                <TextBlock Text="+25 XP" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"
+                <TextBlock Text="{loc:Str label_25_xp}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"
                            HorizontalAlignment="Center" Margin="0,10,0,0"/>
             </StackPanel>
         </Grid>

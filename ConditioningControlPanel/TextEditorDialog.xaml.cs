@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -64,7 +65,7 @@ namespace ConditioningControlPanel
             // Check for duplicates
             if (_items.Any(x => x.Text.Equals(text, StringComparison.OrdinalIgnoreCase)))
             {
-                MessageBox.Show("This item already exists!", "Duplicate", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_this_item_already_exists"), "Duplicate", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             
@@ -142,7 +143,7 @@ namespace ConditioningControlPanel
             
             if (selected.Count == 0)
             {
-                MessageBox.Show("No items selected.\n\nClick on items to select them for removal.", 
+                MessageBox.Show(Loc.Get("msg_no_items_selected_n_nclick_on_items_to_select"), 
                     "No Selection", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -164,7 +165,7 @@ namespace ConditioningControlPanel
         {
             if (_hasChanges)
             {
-                var result = MessageBox.Show("Discard changes?", "Unsaved Changes", 
+                var result = MessageBox.Show(Loc.Get("msg_discard_changes"), "Unsaved Changes", 
                     MessageBoxButton.YesNo, MessageBoxImage.Question);
                 
                 if (result != MessageBoxResult.Yes)
@@ -189,7 +190,7 @@ namespace ConditioningControlPanel
             // If closing via X button and there are changes
             if (DialogResult == null && _hasChanges)
             {
-                var result = MessageBox.Show("Save changes before closing?", "Unsaved Changes", 
+                var result = MessageBox.Show(Loc.Get("msg_save_changes_before_closing"), "Unsaved Changes", 
                     MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
                 
                 if (result == MessageBoxResult.Yes)
