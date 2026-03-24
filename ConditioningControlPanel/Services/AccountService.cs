@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
+using ConditioningControlPanel.Localization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using static ConditioningControlPanel.Services.V2AuthService;
@@ -99,11 +100,8 @@ public static class AccountService
                     // Show error and logout this provider - we don't allow conflicting accounts
                     MessageBox.Show(
                         owner,
-                        $"This {provider} account is already linked to a different profile (\"{lookupResult.DisplayName}\").\n\n" +
-                        $"You are currently logged in as \"{existingDisplayName}\" via {otherProvider}.\n\n" +
-                        $"You cannot link a {provider} account that belongs to someone else.\n\n" +
-                        $"If you want to use \"{lookupResult.DisplayName}\" instead, please logout of {otherProvider} first.",
-                        "Cannot Link Account",
+                        Loc.GetF("account_conflict_different_profile", provider, lookupResult.DisplayName, existingDisplayName, otherProvider),
+                        Loc.Get("account_cannot_link_title"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
 
@@ -298,7 +296,7 @@ public static class AccountService
                     if (!authResponse.Success)
                     {
                         App.Logger?.Warning("AccountService: V2 registration failed: {Error}", authResponse.Error);
-                        MessageBox.Show(owner, authResponse.Error ?? "Registration failed", "Error",
+                        MessageBox.Show(owner, authResponse.Error ?? Loc.Get("account_registration_failed"), Loc.Get("account_error_title"),
                             MessageBoxButton.OK, MessageBoxImage.Warning);
                         return new V2AuthResult { Success = false, Error = authResponse.Error };
                     }
@@ -335,11 +333,8 @@ public static class AccountService
                         App.Settings?.Current?.UserDisplayName, currentUnifiedId, otherProvider);
 
                     MessageBox.Show(owner,
-                        $"This {provider} account is already linked to a different profile (\"{authResponse.User.DisplayName}\").\n\n" +
-                        $"You are currently logged in as \"{App.Settings?.Current?.UserDisplayName}\" via {otherProvider}.\n\n" +
-                        $"If you want to switch to \"{authResponse.User.DisplayName}\", please logout of {otherProvider} first.\n\n" +
-                        $"If you want to link this {provider} to your current account, use the 'Link {provider}' button in Settings instead.",
-                        "Account Conflict",
+                        Loc.GetF("account_conflict_v2", provider, authResponse.User.DisplayName, App.Settings?.Current?.UserDisplayName, otherProvider),
+                        Loc.Get("account_conflict_title"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
 
@@ -408,8 +403,8 @@ public static class AccountService
             if (string.IsNullOrEmpty(unifiedId))
             {
                 App.Logger?.Warning("AccountService: Cannot link provider - no unified ID");
-                MessageBox.Show(owner, "Please log in first before linking another account.",
-                    "Not Logged In", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(owner, Loc.Get("account_login_first"),
+                    Loc.Get("account_not_logged_in_title"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return false;
             }
 
@@ -449,15 +444,15 @@ public static class AccountService
 
                 App.Settings?.Save();
 
-                MessageBox.Show(owner, $"Successfully linked your {provider} account!",
-                    "Account Linked", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(owner, Loc.GetF("account_linked_success", provider),
+                    Loc.Get("account_linked_title"), MessageBoxButton.OK, MessageBoxImage.Information);
                 return true;
             }
             else
             {
                 App.Logger?.Warning("AccountService: Failed to link {Provider}: {Error}", provider, result.Error);
-                MessageBox.Show(owner, result.Error ?? $"Failed to link {provider} account.",
-                    "Link Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(owner, result.Error ?? Loc.GetF("account_link_failed_generic", provider),
+                    Loc.Get("account_link_failed_title"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return false;
             }
         }
@@ -701,10 +696,8 @@ public static class AccountService
                     // Name belongs to another provider account - offer to claim/link
                     var claimResult = MessageBox.Show(
                         owner,
-                        $"The name \"{trimmedName}\" belongs to an existing account.\n\n" +
-                        "If this is your account from another login method, click Yes to link them.\n\n" +
-                        "This will merge your progress and allow you to login with either method.",
-                        "Link Existing Account?",
+                        Loc.GetF("account_claim_prompt", trimmedName),
+                        Loc.Get("account_claim_title"),
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Question);
 
@@ -732,7 +725,7 @@ public static class AccountService
 
                             nameSet = true;
 
-                            MessageBox.Show(owner, "Accounts linked successfully!", "Success",
+                            MessageBox.Show(owner, Loc.Get("account_accounts_linked"), Loc.Get("account_success_title"),
                                 MessageBoxButton.OK, MessageBoxImage.Information);
 
                             await App.ProfileSync?.LoadProfileAsync();
@@ -741,8 +734,8 @@ public static class AccountService
                         else
                         {
                             MessageBox.Show(owner,
-                                claimResponse.Error ?? "Failed to link accounts.\n\nMake sure you're using the same email on both platforms.",
-                                "Link Failed",
+                                claimResponse.Error ?? Loc.Get("account_link_failed_email_hint"),
+                                Loc.Get("account_link_failed_title"),
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Warning);
                         }
@@ -752,8 +745,8 @@ public static class AccountService
                 {
                     // Name is taken by someone else
                     MessageBox.Show(owner,
-                        result.Error ?? "This name is already taken. Please choose another.",
-                        "Name Unavailable",
+                        result.Error ?? Loc.Get("account_name_taken"),
+                        Loc.Get("account_name_unavailable_title"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
                 }

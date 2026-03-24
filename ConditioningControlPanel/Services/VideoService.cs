@@ -15,6 +15,7 @@ using System.Windows.Forms;
 using NAudio.Wave;
 using LibVLCSharp.Shared;
 using LibVLCSharp.WPF;
+using ConditioningControlPanel.Localization;
 using Application = System.Windows.Application;
 using Screen = System.Windows.Forms.Screen;
 
@@ -409,21 +410,21 @@ namespace ConditioningControlPanel.Services
                 // Build helpful error message
                 var activePackCount = App.ContentPacks?.GetActivePackIds()?.Count ?? 0;
                 var installedPackCount = App.ContentPacks?.InstalledPacks?.Count ?? 0;
-                var message = $"No videos found in:\n{_videosPath}\n\n";
+                var message = Loc.GetF("video_no_videos_found", _videosPath) + "\n\n";
 
                 if (installedPackCount > 0 && activePackCount == 0)
                 {
-                    message += $"You have {installedPackCount} content pack(s) installed but none are active.\n";
-                    message += "Go to Assets tab and enable your content packs, or select an Asset Preset.\n\n";
+                    message += Loc.GetF("video_packs_installed_none_active", installedPackCount) + "\n";
+                    message += Loc.Get("video_enable_packs_hint") + "\n\n";
                 }
                 else if (activePackCount > 0)
                 {
-                    message += $"You have {activePackCount} active pack(s) but none contain videos.\n\n";
+                    message += Loc.GetF("video_active_packs_no_videos", activePackCount) + "\n\n";
                 }
 
-                message += "Please add .mp4, .mov, .avi, .wmv, .mkv, or .webm files to your assets folder.";
+                message += Loc.Get("video_add_files_hint");
 
-                System.Windows.MessageBox.Show(message, "No Videos");
+                System.Windows.MessageBox.Show(message, Loc.Get("video_no_videos_title"));
                 return;
             }
 
@@ -1258,14 +1259,8 @@ namespace ConditioningControlPanel.Services
                         Application.Current.Dispatcher.BeginInvoke(() =>
                         {
                             System.Windows.MessageBox.Show(
-                                "Video playback requires Windows Media components.\n\n" +
-                                "If you're on Windows N/KN edition, please install the Media Feature Pack:\n\n" +
-                                "1. Open Settings > Apps > Optional features\n" +
-                                "2. Click 'Add a feature'\n" +
-                                "3. Search for 'Media Feature Pack'\n" +
-                                "4. Install and restart your PC\n\n" +
-                                "Alternatively, install K-Lite Codec Pack from codecguide.com",
-                                "Video Codec Required",
+                                Loc.Get("video_codec_required_body"),
+                                Loc.Get("video_codec_required_title"),
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Warning);
                         });

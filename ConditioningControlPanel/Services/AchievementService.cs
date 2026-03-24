@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services;
@@ -327,8 +328,8 @@ public class AchievementService : IDisposable
             var fakeAchievement = new Achievement
             {
                 Id = "bubble_milestone",
-                Name = $"{totalBubbles} Bubbles Popped!",
-                FlavorText = "+1 Sparkle Point earned!",
+                Name = Loc.GetF("achievement_bubble_milestone_name", totalBubbles),
+                FlavorText = Loc.Get("achievement_bubble_milestone_flavor"),
                 ImageName = "bubble_pop.png",
                 Category = AchievementCategory.Minigames
             };
@@ -338,7 +339,7 @@ public class AchievementService : IDisposable
             {
                 try
                 {
-                    var popup = new AchievementPopup(fakeAchievement, "✨", "Bubble Milestone!");
+                    var popup = new AchievementPopup(fakeAchievement, "✨", Loc.Get("achievement_bubble_milestone_header"));
                     popup.Show();
                 }
                 catch (Exception ex)
