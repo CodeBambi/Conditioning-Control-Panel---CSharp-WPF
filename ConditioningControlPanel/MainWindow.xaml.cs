@@ -762,9 +762,9 @@ namespace ConditioningControlPanel
                 TxtTakeoverHeader.Text = $"🤖 {takeoverLabel}";
                 TxtTakeoverLocked.Text = $"🤖 {takeoverLabel}";
                 TxtTakeoverUnlocked.Text = $"🤖 {takeoverLabel}";
-                BtnAutonomyStartStop.ToolTip = $"Start/Stop {takeoverLabel}";
-                ImgTakeover.ToolTip = $"{takeoverLabel} - Let her take control~";
-                RunPatreonFeatures.Text = $"AI Chat, Window Awareness, Slut Mode, {takeoverLabel}";
+                BtnAutonomyStartStop.ToolTip = Loc.GetF("tooltip_start_stop_takeover", takeoverLabel);
+                ImgTakeover.ToolTip = Loc.GetF("tooltip_takeover_let_her_take_control", takeoverLabel);
+                RunPatreonFeatures.Text = Loc.GetF("label_patreon_features", takeoverLabel);
             }
             catch (Exception ex)
             {
@@ -2137,8 +2137,8 @@ namespace ConditioningControlPanel
 
             // Prompt for optional note
             string? note = null;
-            var noteDialog = new InputDialog("Add Note (Optional)",
-                "Add a personal note about this step:", "");
+            var noteDialog = new InputDialog(Loc.Get("title_add_note"),
+                Loc.Get("msg_add_note_prompt"), "");
             if (noteDialog.ShowDialog() == true && !string.IsNullOrEmpty(noteDialog.ResultText))
             {
                 note = noteDialog.ResultText;
@@ -4870,15 +4870,15 @@ namespace ConditioningControlPanel
                         App.Logger?.Information("Assigned prompt '{Prompt}' to companion {Companion}",
                             prompt.Name, def.Name);
 
-                        ShowStyledDialog("Personality Assigned",
-                            $"{def.Name} will now use \"{prompt.Name}\" personality.\n\nThis will activate automatically when you switch to this companion.",
-                            "OK", "");
+                        ShowStyledDialog(Loc.Get("title_personality_assigned"),
+                            Loc.GetF("msg_personality_assigned", def.Name, prompt.Name),
+                            Loc.Get("btn_ok"), "");
                     }
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "Failed to assign prompt to companion");
-                    ShowStyledDialog("Error", $"Failed to import prompt: {ex.Message}", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_error"), Loc.GetF("msg_failed_to_import_prompt", ex.Message), Loc.Get("btn_ok"), "");
                 }
             }
         }
@@ -4895,7 +4895,7 @@ namespace ConditioningControlPanel
                 var promptName = Services.CompanionService.GetAssignedPromptName((Models.CompanionId)i);
                 var displayName = App.Mods?.MakeModAware(promptName ?? "") ?? promptName ?? "";
                 promptTexts[i].Text = displayName;
-                promptTexts[i].ToolTip = string.IsNullOrEmpty(displayName) ? null : $"AI Personality: {displayName}";
+                promptTexts[i].ToolTip = string.IsNullOrEmpty(displayName) ? null : Loc.GetF("tooltip_ai_personality", displayName);
             }
         }
 
@@ -4935,7 +4935,7 @@ namespace ConditioningControlPanel
                 var available = await App.CommunityPrompts?.GetAvailablePromptsAsync();
                 if (available == null || available.Count == 0)
                 {
-                    ShowStyledDialog("Community Prompts", "No community prompts available yet.\n\nCreate and export your own to share!", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_community_prompts"), Loc.Get("msg_no_community_prompts"), Loc.Get("btn_ok"), "");
                     return;
                 }
 
@@ -4945,12 +4945,12 @@ namespace ConditioningControlPanel
 
                 if (notInstalled.Count == 0)
                 {
-                    ShowStyledDialog("Community Prompts", "You've installed all available prompts!", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_community_prompts"), Loc.Get("msg_all_prompts_installed"), Loc.Get("btn_ok"), "");
                     return;
                 }
 
                 // Show simple selection (first 5)
-                var message = "Available prompts:\n\n";
+                var message = Loc.Get("label_available_prompts");
                 for (int i = 0; i < Math.Min(5, notInstalled.Count); i++)
                 {
                     var p = notInstalled[i];
@@ -4958,17 +4958,17 @@ namespace ConditioningControlPanel
                 }
 
                 if (notInstalled.Count > 5)
-                    message += $"...and {notInstalled.Count - 5} more\n\n";
+                    message += Loc.GetF("label_and_more_prompts", notInstalled.Count - 5);
 
-                message += "Install the first one?";
+                message += Loc.Get("label_install_first_one");
 
-                var result = ShowStyledDialog("Browse Community Prompts", message, "Install", "Cancel");
+                var result = ShowStyledDialog(Loc.Get("title_browse_community_prompts"), message, Loc.Get("btn_install"), Loc.Get("btn_cancel"));
                 if (result && notInstalled.Count > 0)
                 {
                     var prompt = await App.CommunityPrompts?.InstallPromptAsync(notInstalled[0].Id);
                     if (prompt != null)
                     {
-                        ShowStyledDialog("Installed!", $"'{prompt.Name}' has been installed.\n\nUse the 'Use' button to activate it.", "OK", "");
+                        ShowStyledDialog(Loc.Get("title_installed"), Loc.GetF("msg_prompt_installed", prompt.Name), Loc.Get("btn_ok"), "");
                         UpdateCommunityPromptsUI();
                     }
                 }
@@ -4976,7 +4976,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Error browsing prompts");
-                ShowStyledDialog("Error", $"Failed to browse prompts:\n{ex.Message}", "OK", "");
+                ShowStyledDialog(Loc.Get("title_error"), Loc.GetF("msg_failed_to_browse_prompts", ex.Message), Loc.Get("btn_ok"), "");
             }
         }
 
@@ -4987,7 +4987,7 @@ namespace ConditioningControlPanel
                 var dialog = new Microsoft.Win32.OpenFileDialog
                 {
                     Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
-                    Title = "Import Community Prompt"
+                    Title = Loc.Get("title_import_community_prompt")
                 };
 
                 if (dialog.ShowDialog() == true)
@@ -4995,19 +4995,19 @@ namespace ConditioningControlPanel
                     var prompt = App.CommunityPrompts?.ImportFromFile(dialog.FileName);
                     if (prompt != null)
                     {
-                        ShowStyledDialog("Imported!", $"'{prompt.Name}' by {prompt.Author} has been imported.", "OK", "");
+                        ShowStyledDialog(Loc.Get("title_imported"), Loc.GetF("msg_prompt_imported", prompt.Name, prompt.Author), Loc.Get("btn_ok"), "");
                         UpdateCommunityPromptsUI();
                     }
                     else
                     {
-                        ShowStyledDialog("Error", "Failed to import prompt. The file may be invalid.", "OK", "");
+                        ShowStyledDialog(Loc.Get("title_error"), Loc.Get("msg_failed_to_import_prompt_invalid"), Loc.Get("btn_ok"), "");
                     }
                 }
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Error importing prompt");
-                ShowStyledDialog("Error", $"Failed to import prompt:\n{ex.Message}", "OK", "");
+                ShowStyledDialog(Loc.Get("title_error"), Loc.GetF("msg_failed_to_import_prompt_error", ex.Message), Loc.Get("btn_ok"), "");
             }
         }
 
@@ -5022,27 +5022,27 @@ namespace ConditioningControlPanel
                 var prompt = App.CommunityPrompts?.ExportCurrentSettings(name, author, "A custom AI personality.");
                 if (prompt == null)
                 {
-                    ShowStyledDialog("Error", "Failed to export current settings.", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_error"), Loc.Get("msg_failed_to_export_settings"), Loc.Get("btn_ok"), "");
                     return;
                 }
 
                 var dialog = new Microsoft.Win32.SaveFileDialog
                 {
                     Filter = "JSON files (*.json)|*.json",
-                    Title = "Export Community Prompt",
+                    Title = Loc.Get("title_export_community_prompt"),
                     FileName = $"{name.Replace(" ", "_")}.json"
                 };
 
                 if (dialog.ShowDialog() == true)
                 {
                     await App.CommunityPrompts?.SavePromptToFileAsync(prompt, dialog.FileName);
-                    ShowStyledDialog("Exported!", $"Prompt exported to:\n{dialog.FileName}\n\nShare this file with others!", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_exported"), Loc.GetF("msg_prompt_exported", dialog.FileName), Loc.Get("btn_ok"), "");
                 }
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Error exporting prompt");
-                ShowStyledDialog("Error", $"Failed to export prompt:\n{ex.Message}", "OK", "");
+                ShowStyledDialog(Loc.Get("title_error"), Loc.GetF("msg_failed_to_export_prompt", ex.Message), Loc.Get("btn_ok"), "");
             }
         }
 
@@ -6751,7 +6751,7 @@ namespace ConditioningControlPanel
             var dlg = new Microsoft.Win32.OpenFileDialog
             {
                 Filter = "Audio Files|*.mp3;*.wav;*.ogg|All Files|*.*",
-                Title = "Select Trigger Audio File"
+                Title = Loc.Get("title_select_trigger_audio")
             };
 
             if (dlg.ShowDialog() == true)
@@ -7053,7 +7053,7 @@ namespace ConditioningControlPanel
                     _isLoading = true;
                     ChkRemoteControlEnabled.IsChecked = false;
                     _isLoading = false;
-                    ShowStyledDialog("Login Required", "You need to log in and sync your profile before using Remote Control.\n\nLog in via Patreon or Discord in the Settings tab.", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_login_required"), Loc.Get("msg_login_required_remote"), Loc.Get("btn_ok"), "");
                     return;
                 }
 
@@ -7077,7 +7077,7 @@ namespace ConditioningControlPanel
                     ChkRemoteControlEnabled.IsChecked = false;
                     _isLoading = false;
                     RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
-                    ShowStyledDialog("Connection Error", "Could not start remote control session. The server may be temporarily unavailable.\n\nPlease check your internet connection and try again.", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_connection_error"), Loc.Get("msg_remote_connection_error"), Loc.Get("btn_ok"), "");
                     return;
                 }
 
@@ -7847,7 +7847,7 @@ namespace ConditioningControlPanel
             {
                 var dialog = new Window
                 {
-                    Title = "Welcome Back!",
+                    Title = Loc.Get("title_welcome_back"),
                     Owner = this,
                     WindowStartupLocation = WindowStartupLocation.CenterOwner,
                     SizeToContent = SizeToContent.WidthAndHeight,
@@ -10248,7 +10248,7 @@ namespace ConditioningControlPanel
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                Title = "Select Corner GIF",
+                Title = Loc.Get("title_select_corner_gif"),
                 Filter = "GIF files (*.gif)|*.gif|All files (*.*)|*.*",
                 InitialDirectory = System.IO.Path.Combine(App.EffectiveAssetsPath, "images")
             };
@@ -10542,7 +10542,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Failed to start session");
-                ShowStyledDialog("Error", $"Failed to start session:\n{ex.Message}", "OK", "");
+                ShowStyledDialog(Loc.Get("title_error"), Loc.GetF("msg_failed_to_start_session", ex.Message), Loc.Get("btn_ok"), "");
             }
         }
         
@@ -13610,7 +13610,7 @@ namespace ConditioningControlPanel
                 // Create popup window
                 _browserPopoutWindow = new Window
                 {
-                    Title = "Conditioning Control Panel - Browser",
+                    Title = Loc.Get("title_browser_window"),
                     Width = 1024,
                     Height = 768,
                     MinWidth = 400,
@@ -17540,7 +17540,7 @@ namespace ConditioningControlPanel
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                Title = "Select Startup Video",
+                Title = Loc.Get("title_select_startup_video"),
                 Filter = "Video Files|*.mp4;*.mov;*.avi;*.wmv;*.mkv;*.webm|All Files|*.*",
                 InitialDirectory = System.IO.Path.Combine(App.EffectiveAssetsPath, "videos")
             };
@@ -17673,7 +17673,7 @@ namespace ConditioningControlPanel
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
                 Filter = "GIF Files (*.gif)|*.gif|All Image Files|*.gif;*.png;*.jpg;*.jpeg",
-                Title = "Select Spiral GIF"
+                Title = Loc.Get("title_select_spiral_gif")
             };
             
             // Start in last used directory if available
@@ -19115,7 +19115,7 @@ namespace ConditioningControlPanel
             // Simple input dialog using WPF
             var dialog = new System.Windows.Window
             {
-                Title = "Save Asset Preset",
+                Title = Loc.Get("title_save_asset_preset"),
                 Width = 350,
                 Height = 150,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
@@ -19345,7 +19345,7 @@ namespace ConditioningControlPanel
 
             var dialog = new System.Windows.Window
             {
-                Title = "Save Phrase Preset",
+                Title = Loc.Get("title_save_phrase_preset"),
                 Width = 350,
                 Height = 150,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,

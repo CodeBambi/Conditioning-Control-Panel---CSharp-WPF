@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using ConditioningControlPanel.Localization;
 using NAudio.Wave;
 using Serilog;
 
@@ -554,9 +555,9 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Warning("MindWipe: No audio files available in assets/mindwipe/");
                 System.Windows.MessageBox.Show(
-                    "No audio files found!\n\nPlace .mp3, .wav, or .ogg files in:\nassets/mindwipe/", 
-                    "Mind Wipe", 
-                    System.Windows.MessageBoxButton.OK, 
+                    Loc.Get("mindwipe_no_audio_files"),
+                    Loc.Get("mindwipe_title"),
+                    System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Warning);
                 return;
             }

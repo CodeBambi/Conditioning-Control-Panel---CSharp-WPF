@@ -273,7 +273,7 @@ public class SkillTreeService : IDisposable
         if (HasSkill("streak_power") && settings.CurrentStreak > 0)
         {
             var streakBonus = Math.Min(settings.CurrentStreak * 0.005, 0.15);
-            breakdown.Add(($"Streak Power ({settings.CurrentStreak} days)", streakBonus));
+            breakdown.Add((Loc.GetF("skill_mult_streak_power_days", settings.CurrentStreak), streakBonus));
         }
 
         var hour = DateTime.Now.Hour;
@@ -507,8 +507,8 @@ public class SkillTreeService : IDisposable
             var fakeAchievement = new Models.Achievement
             {
                 Id = "daily_streak_bonus",
-                Name = $"Day {streakDays} Streak Bonus!",
-                FlavorText = $"Welcome back! +{xpAwarded} XP for your {streakDays}-day streak~",
+                Name = Loc.GetF("skill_streak_bonus_name", streakDays),
+                FlavorText = Loc.GetF("skill_streak_bonus_flavor", xpAwarded, streakDays),
                 ImageName = "../skills/milestone_rewards.png",
                 Category = Models.AchievementCategory.TimeSessions
             };
@@ -518,7 +518,7 @@ public class SkillTreeService : IDisposable
             {
                 try
                 {
-                    var popup = new AchievementPopup(fakeAchievement, headerIcon: "🎁", headerText: "DAILY STREAK BONUS!");
+                    var popup = new AchievementPopup(fakeAchievement, headerIcon: "🎁", headerText: Loc.Get("skill_daily_streak_bonus_header"));
                     popup.Show();
                 }
                 catch (Exception ex)
@@ -592,8 +592,8 @@ public class SkillTreeService : IDisposable
             var fakeAchievement = new Models.Achievement
             {
                 Id = "perfect_week_bonus",
-                Name = $"Perfect Princess Streak! 🎀",
-                FlavorText = $"{streak} days in a row! You've earned {xpAwarded:N0} bonus XP! ✨",
+                Name = Loc.Get("skill_perfect_week_name_popup"),
+                FlavorText = Loc.GetF("skill_perfect_week_flavor_popup", streak, xpAwarded),
                 ImageName = "../skills/perfect_bimbo_week.png",
                 Category = Models.AchievementCategory.TimeSessions
             };
@@ -737,7 +737,7 @@ public class SkillTreeService : IDisposable
     public string GetFormattedConditioningTime()
     {
         var settings = App.Settings?.Current;
-        if (settings == null) return "0h 0m";
+        if (settings == null) return Loc.Get("skill_time_zero");
 
         var totalMinutes = settings.TotalConditioningMinutes;
         var hours = (int)(totalMinutes / 60);
@@ -747,10 +747,10 @@ public class SkillTreeService : IDisposable
         {
             var days = hours / 24;
             hours = hours % 24;
-            return $"{days}d {hours}h {minutes}m";
+            return Loc.GetF("skill_time_dhm", days, hours, minutes);
         }
 
-        return $"{hours}h {minutes}m";
+        return Loc.GetF("skill_time_hm", hours, minutes);
     }
 
     #endregion

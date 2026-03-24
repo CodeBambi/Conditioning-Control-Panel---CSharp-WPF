@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Models
 {
@@ -11,7 +12,7 @@ namespace ConditioningControlPanel.Models
         Hard,
         Extreme
     }
-    
+
     /// <summary>
     /// Defines a timed conditioning session with specific settings
     /// </summary>
@@ -19,7 +20,7 @@ namespace ConditioningControlPanel.Models
     {
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
-        public string Icon { get; set; } = "🎯";
+        public string Icon { get; set; } = "\U0001f3af";
         public int DurationMinutes { get; set; } = 30;
         public bool IsAvailable { get; set; } = false;
         public SessionDifficulty Difficulty { get; set; } = SessionDifficulty.Easy;
@@ -28,18 +29,23 @@ namespace ConditioningControlPanel.Models
         // Source tracking for import/export
         public SessionSource Source { get; set; } = SessionSource.BuiltIn;
         public string SourceFilePath { get; set; } = "";
-        
+
         // Spoiler-free description (shown by default)
         public string Description { get; set; } = "";
-        
+
+        // Localized accessors (fall back to raw property if key missing)
+        public string LocalizedName => Loc.Get($"session_{Id}_name");
+        public string LocalizedDescription => Loc.Get($"session_{Id}_desc");
+        public string LocalizedCornerGifDescription => Loc.Get($"session_{Id}_corner_gif_desc");
+
         // Special options
         public bool HasCornerGifOption { get; set; } = false;
         public string CornerGifDescription { get; set; } = "";
-        
+
         // Detailed settings (hidden until revealed)
         public SessionSettings Settings { get; set; } = new();
         public List<SessionPhase> Phases { get; set; } = new();
-        
+
         /// <summary>
         /// Gets XP bonus based on difficulty
         /// </summary>
@@ -54,7 +60,7 @@ namespace ConditioningControlPanel.Models
                 _ => 400
             };
         }
-        
+
         /// <summary>
         /// Gets difficulty display text
         /// </summary>
@@ -62,14 +68,14 @@ namespace ConditioningControlPanel.Models
         {
             return Difficulty switch
             {
-                SessionDifficulty.Easy => "⭐ Easy",
-                SessionDifficulty.Medium => "⭐⭐ Medium",
-                SessionDifficulty.Hard => "⭐⭐⭐ Hard",
-                SessionDifficulty.Extreme => "💀 Extreme",
-                _ => "⭐ Easy"
+                SessionDifficulty.Easy => Loc.Get("session_difficulty_easy"),
+                SessionDifficulty.Medium => Loc.Get("session_difficulty_medium"),
+                SessionDifficulty.Hard => Loc.Get("session_difficulty_hard"),
+                SessionDifficulty.Extreme => Loc.Get("session_difficulty_extreme"),
+                _ => Loc.Get("session_difficulty_easy")
             };
         }
-        
+
         /// <summary>
         /// Returns the session name adjusted for the current content mode.
         /// </summary>
@@ -124,7 +130,7 @@ namespace ConditioningControlPanel.Models
         {
             Id = "morning_drift",
             Name = "Morning Drift",
-            Icon = "🌅",
+            Icon = "\U0001f305",
             DurationMinutes = 30,
             IsAvailable = true,
             Difficulty = SessionDifficulty.Easy,
@@ -135,7 +141,7 @@ This session is designed for your morning routine - while you work, browse, or p
 
 Features gentle subliminals like 'Good Girl', 'Bambi Sleep', and 'Giggletime' to help you start your day in a blissful, obedient haze.
 
-You don't need to do anything special. Just... let it happen. 💗",
+You don't need to do anything special. Just... let it happen. \U0001f497",
 
             Settings = new SessionSettings
             {
@@ -162,12 +168,12 @@ You don't need to do anything special. Just... let it happen. 💗",
                     "PRIMPED AND PAMPERED",
                     "GIGGLETIME"
                 },
-                
+
                 // Audio Whispers
                 AudioWhispersEnabled = true,
                 WhisperVolume = 12,
                 AudioDuckLevel = 40, // 40% ducking for morning session
-                
+
                 // Bouncing Text - smaller and subtler for morning
                 BouncingTextEnabled = true,
                 BouncingTextSpeed = 2,
@@ -180,27 +186,27 @@ You don't need to do anything special. Just... let it happen. 💗",
                 PinkFilterStartMinute = 10,
                 PinkFilterStartOpacity = 0,
                 PinkFilterEndOpacity = 15,
-                
+
                 // Bubbles (ramping)
                 BubblesEnabled = true,
                 BubblesIntermittent = false,
                 BubblesClickable = true,
                 BubblesStartMinute = 5,
                 BubblesFrequency = 1,
-                
+
                 // Disabled features
                 MandatoryVideosEnabled = false,
                 SpiralEnabled = false,
                 LockCardEnabled = false,
                 BubbleCountEnabled = false,
                 MiniGameEnabled = false,
-                
+
                 // Mind Wipe (Easy = base 1, escalates every 5 min)
                 MindWipeEnabled = true,
                 MindWipeBaseMultiplier = 1,
                 MindWipeVolume = 40
             },
-            
+
             Phases = new List<SessionPhase>
             {
                 new() { StartMinute = 0, Name = "Settling In", Description = "Gentle start with bouncing text and soft subliminals" },
@@ -210,7 +216,7 @@ You don't need to do anything special. Just... let it happen. 💗",
                 new() { StartMinute = 30, Name = "Complete", Description = "Session ends with congratulations" }
             }
         };
-        
+
         /// <summary>
         /// Gets the Gamer Girl session - conditioning while gaming
         /// </summary>
@@ -218,7 +224,7 @@ You don't need to do anything special. Just... let it happen. 💗",
         {
             Id = "gamer_girl",
             Name = "Gamer Girl",
-            Icon = "🎮",
+            Icon = "\U0001f3ae",
             DurationMinutes = 45,
             IsAvailable = true,
             BonusXP = 800,
@@ -232,10 +238,10 @@ Includes subtle 'Good Girl' and focus-based subliminals that won't break your co
 
 Just play your game. Let everything else happen on its own.
 
-⚠ Set your game to Borderless Windowed mode for the full experience!
+\u26a0 Set your game to Borderless Windowed mode for the full experience!
 
-💗 Good luck, Gamer Girl...",
-            
+\U0001f497 Good luck, Gamer Girl...",
+
             Settings = new SessionSettings
             {
                 // Flash Images - very subtle, small, infrequent
@@ -248,7 +254,7 @@ Just play your game. Let everything else happen on its own.
                 FlashClickable = false, // Ghost mode - click through
                 FlashAudioEnabled = false,
                 FlashSmallSize = true, // New: smaller images for gaming
-                
+
                 // Subliminals - gaming-friendly, focus-based phrases
                 SubliminalEnabled = true,
                 SubliminalPerMin = 2,
@@ -279,13 +285,13 @@ Just play your game. Let everything else happen on its own.
                 PinkFilterStartMinute = 15,
                 PinkFilterStartOpacity = 0,
                 PinkFilterEndOpacity = 20,
-                
+
                 // Spiral (delayed start at 20min)
                 SpiralEnabled = true,
                 SpiralStartMinute = 20,
                 SpiralOpacity = 1,
                 SpiralOpacityEnd = 10,
-                
+
                 // Bubbles - clickable bursts (reduced for performance)
                 BubblesEnabled = true,
                 BubblesIntermittent = true,
@@ -294,7 +300,7 @@ Just play your game. Let everything else happen on its own.
                 BubblesPerBurst = 2, // Reduced from 5 for performance
                 BubblesGapMin = 6,
                 BubblesGapMax = 10,
-                
+
                 // Corner GIF option (user configurable)
                 CornerGifEnabled = false,
                 CornerGifOpacity = 18,
@@ -305,13 +311,13 @@ Just play your game. Let everything else happen on its own.
                 LockCardEnabled = false,
                 BubbleCountEnabled = false,
                 MiniGameEnabled = false,
-                
+
                 // Mind Wipe (Medium = base 2, escalates every 5 min)
                 MindWipeEnabled = true,
                 MindWipeBaseMultiplier = 2,
                 MindWipeVolume = 45
             },
-            
+
             Phases = new List<SessionPhase>
             {
                 new() { StartMinute = 0, Name = "Game Start", Description = "Subtle flashes and subliminals begin" },
@@ -330,7 +336,7 @@ Just play your game. Let everything else happen on its own.
         {
             Id = "distant_doll",
             Name = "The Distant Doll",
-            Icon = "🛋️",
+            Icon = "\U0001f6cb\ufe0f",
             DurationMinutes = 45,
             IsAvailable = true,
             Difficulty = SessionDifficulty.Easy,
@@ -366,24 +372,24 @@ Everything is designed to be viewed from a distance while your mind drifts away.
                     "BIMBO DOLL",
                     "PRIMPED AND PAMPERED"
                 },
-                
+
                 // Audio Whispers - Low volume background
                 AudioWhispersEnabled = true,
                 WhisperVolume = 15,
                 AudioDuckLevel = 0, // NO audio ducking - video volume stays normal
-                
+
                 // Pink Filter - Delayed start, ramps to 35%
                 PinkFilterEnabled = true,
                 PinkFilterStartMinute = 7, // Random ±3 will make it 5-10
                 PinkFilterStartOpacity = 5,
                 PinkFilterEndOpacity = 35,
-                
+
                 // Spiral - Delayed start, subtle
                 SpiralEnabled = true,
                 SpiralStartMinute = 12, // Random ±3 will make it 10-15
                 SpiralOpacity = 5,
                 SpiralOpacityEnd = 15,
-                
+
                 // Bubbles - Rare clickable bursts (reduced for performance)
                 BubblesEnabled = true,
                 BubblesIntermittent = true,
@@ -392,12 +398,12 @@ Everything is designed to be viewed from a distance while your mind drifts away.
                 BubblesPerBurst = 1, // Reduced from 3 for performance
                 BubblesGapMin = 7,
                 BubblesGapMax = 12,
-                
+
                 // Mind Wipe - Low volume, escalating
                 MindWipeEnabled = true,
                 MindWipeBaseMultiplier = 1, // Easy start
                 MindWipeVolume = 12,
-                
+
                 // All interactions DISABLED
                 MandatoryVideosEnabled = false,
                 LockCardEnabled = false,
@@ -406,7 +412,7 @@ Everything is designed to be viewed from a distance while your mind drifts away.
                 BouncingTextEnabled = true,
                 BouncingTextPhrases = new List<string> { "So Pretty", "Empty and Beautiful", "Just a Doll", "Relax and Obey" }
             },
-            
+
             Phases = new List<SessionPhase>
             {
                 new() { StartMinute = 0, Name = "Settling In", Description = "Get comfortable on the couch..." },
@@ -414,7 +420,7 @@ Everything is designed to be viewed from a distance while your mind drifts away.
                 new() { StartMinute = 12, Name = "Spiral Dreams", Description = "Gentle spirals join the view" },
                 new() { StartMinute = 25, Name = "Deep Drift", Description = "Mind wipes increasing, drifting deeper" },
                 new() { StartMinute = 40, Name = "Empty Doll", Description = "Completely passive, completely pretty" },
-                new() { StartMinute = 45, Name = "Complete", Description = "Such a good doll 💗" }
+                new() { StartMinute = 45, Name = "Complete", Description = "Such a good doll \U0001f497" }
             }
         };
 
@@ -426,7 +432,7 @@ Everything is designed to be viewed from a distance while your mind drifts away.
         {
             Id = "good_girls_dont_cum",
             Name = "Good Girls Don't Cum",
-            Icon = "🔒",
+            Icon = "\U0001f512",
             DurationMinutes = 60,
             IsAvailable = true,
             Difficulty = SessionDifficulty.Hard,
@@ -468,24 +474,24 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                     "SNAP AND FORGET",
                     "BAMBI DOES AS SHE'S TOLD"
                 },
-                
+
                 // Audio Whispers
                 AudioWhispersEnabled = true,
                 WhisperVolume = 15,
                 AudioDuckLevel = 50, // 50% ducking - video gets quieter
-                
+
                 // Pink Filter - Heavy, from start
                 PinkFilterEnabled = true,
                 PinkFilterStartMinute = 0, // Immediate
                 PinkFilterStartOpacity = 10,
                 PinkFilterEndOpacity = 50, // Very heavy pink
-                
+
                 // Spiral - Delayed, ramps high
                 SpiralEnabled = true,
                 SpiralStartMinute = 5,
                 SpiralOpacity = 5,
                 SpiralOpacityEnd = 30, // Strong spiral
-                
+
                 // Bouncing Text - Denial phrases
                 BouncingTextEnabled = true,
                 BouncingTextSpeed = 4,
@@ -515,7 +521,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                 BubblesClickable = true,
                 BubblesStartMinute = 5,
                 BubblesFrequency = 1,
-                
+
                 // Interactive Events
                 MandatoryVideosEnabled = true,
                 VideosPerHour = 2,
@@ -524,7 +530,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                 BubbleCountEnabled = true,
                 BubbleCountFrequency = 2
             },
-            
+
             Phases = new List<SessionPhase>
             {
                 new() { StartMinute = 0, Name = "Denial Begins", Description = "Hands off. Eyes forward. Mind empty." },
@@ -533,7 +539,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                 new() { StartMinute = 30, Name = "Half Way", Description = "You're doing so well. Don't touch." },
                 new() { StartMinute = 45, Name = "Overwhelming", Description = "Images blocking view, mind melting" },
                 new() { StartMinute = 55, Name = "Final Push", Description = "Maximum intensity. Stay denied." },
-                new() { StartMinute = 60, Name = "Complete", Description = "Good girl. You didn't cum. 🔒" }
+                new() { StartMinute = 60, Name = "Complete", Description = "Good girl. You didn't cum. \U0001f512" }
             }
         };
 
@@ -553,7 +559,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                 {
                     Id = "deep_dive",
                     Name = "Deep Dive",
-                    Icon = "🌙",
+                    Icon = "\U0001f319",
                     DurationMinutes = 60,
                     IsAvailable = false,
                     Difficulty = SessionDifficulty.Hard,
@@ -564,7 +570,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                 {
                     Id = "bambi_time",
                     Name = "Bambi Time",
-                    Icon = "💗",
+                    Icon = "\U0001f497",
                     DurationMinutes = 45,
                     IsAvailable = false,
                     Difficulty = SessionDifficulty.Extreme,
@@ -575,7 +581,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                 {
                     Id = "random_drop",
                     Name = "Random Drop",
-                    Icon = "🎲",
+                    Icon = "\U0001f3b2",
                     DurationMinutes = 20,
                     IsAvailable = false,
                     Difficulty = SessionDifficulty.Medium,
@@ -584,7 +590,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                 }
             };
         }
-        
+
         /// <summary>
         /// Generates a description automatically from the session's features and timeline
         /// </summary>
@@ -598,17 +604,17 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
             {
                 var freq = Settings.FlashPerHour == Settings.FlashPerHourEnd
                     ? $"{Settings.FlashPerHour}/hr"
-                    : $"{Settings.FlashPerHour}→{Settings.FlashPerHourEnd}/hr";
-                var ramp = Settings.FlashOpacity != Settings.FlashOpacityEnd ? " (ramping)" : "";
-                visualFeatures.Add($"⚡ Flash Images ({freq}{ramp})");
+                    : $"{Settings.FlashPerHour}\u2192{Settings.FlashPerHourEnd}/hr";
+                var ramp = Settings.FlashOpacity != Settings.FlashOpacityEnd ? Loc.Get("session_feature_ramping_suffix") : "";
+                visualFeatures.Add(Loc.GetF("session_feature_flash_images", freq, ramp));
             }
             if (Settings.SubliminalEnabled)
-                visualFeatures.Add($"💭 Subliminals ({Settings.SubliminalPerMin}/min)");
+                visualFeatures.Add(Loc.GetF("session_feature_subliminals", Settings.SubliminalPerMin));
             if (Settings.BouncingTextEnabled)
-                visualFeatures.Add("📝 Bouncing Text");
+                visualFeatures.Add(Loc.Get("session_feature_bouncing_text"));
 
             if (visualFeatures.Count > 0)
-                lines.Add("Visual: " + string.Join(", ", visualFeatures));
+                lines.Add(Loc.Get("session_feature_label_visual") + string.Join(", ", visualFeatures));
 
             // Overlay features section
             var overlayFeatures = new List<string>();
@@ -616,62 +622,62 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
             {
                 var timing = Settings.PinkFilterStartMinute > 0 ? $" @{Settings.PinkFilterStartMinute}min" : "";
                 var ramp = Settings.PinkFilterStartOpacity != Settings.PinkFilterEndOpacity
-                    ? $" ({Settings.PinkFilterStartOpacity}→{Settings.PinkFilterEndOpacity}%)" : "";
-                overlayFeatures.Add($"💗 Pink Filter{timing}{ramp}");
+                    ? $" ({Settings.PinkFilterStartOpacity}\u2192{Settings.PinkFilterEndOpacity}%)" : "";
+                overlayFeatures.Add(Loc.GetF("session_feature_pink_filter", timing, ramp));
             }
             if (Settings.SpiralEnabled)
             {
                 var timing = Settings.SpiralStartMinute > 0 ? $" @{Settings.SpiralStartMinute}min" : "";
                 var ramp = Settings.SpiralOpacity != Settings.SpiralOpacityEnd
-                    ? $" ({Settings.SpiralOpacity}→{Settings.SpiralOpacityEnd}%)" : "";
-                overlayFeatures.Add($"🌀 Spiral{timing}{ramp}");
+                    ? $" ({Settings.SpiralOpacity}\u2192{Settings.SpiralOpacityEnd}%)" : "";
+                overlayFeatures.Add(Loc.GetF("session_feature_spiral", timing, ramp));
             }
             if (Settings.BrainDrainEnabled)
             {
                 var timing = Settings.BrainDrainStartMinute > 0 ? $" @{Settings.BrainDrainStartMinute}min" : "";
-                overlayFeatures.Add($"😵 Brain Drain{timing}");
+                overlayFeatures.Add(Loc.GetF("session_feature_brain_drain", timing));
             }
 
             if (overlayFeatures.Count > 0)
-                lines.Add("Overlays: " + string.Join(", ", overlayFeatures));
+                lines.Add(Loc.Get("session_feature_label_overlays") + string.Join(", ", overlayFeatures));
 
             // Audio features section
             var audioFeatures = new List<string>();
             if (Settings.AudioWhispersEnabled)
-                audioFeatures.Add($"🔊 Whispers ({Settings.WhisperVolume}% vol)");
+                audioFeatures.Add(Loc.GetF("session_feature_whispers", Settings.WhisperVolume));
             if (Settings.MindWipeEnabled)
-                audioFeatures.Add("🧠 Mind Wipe");
+                audioFeatures.Add(Loc.Get("session_feature_mind_wipe"));
 
             if (audioFeatures.Count > 0)
-                lines.Add("Audio: " + string.Join(", ", audioFeatures));
+                lines.Add(Loc.Get("session_feature_label_audio") + string.Join(", ", audioFeatures));
 
             // Interactive features section
             var interactiveFeatures = new List<string>();
             if (Settings.BubblesEnabled)
             {
-                var mode = Settings.BubblesIntermittent ? "bursts" : "continuous";
-                interactiveFeatures.Add($"🫧 Bubbles ({mode})");
+                var mode = Settings.BubblesIntermittent ? Loc.Get("session_feature_bubbles_bursts") : Loc.Get("session_feature_bubbles_continuous");
+                interactiveFeatures.Add(Loc.GetF("session_feature_bubbles", mode));
             }
             if (Settings.MandatoryVideosEnabled)
-                interactiveFeatures.Add($"🎬 Videos ({Settings.VideosPerHour}/hr)");
+                interactiveFeatures.Add(Loc.GetF("session_feature_videos", Settings.VideosPerHour));
             if (Settings.LockCardEnabled)
-                interactiveFeatures.Add($"🔒 Lock Cards ({Settings.LockCardFrequency}/hr)");
+                interactiveFeatures.Add(Loc.GetF("session_feature_lock_cards", Settings.LockCardFrequency));
             if (Settings.BubbleCountEnabled)
-                interactiveFeatures.Add($"🔢 Bubble Count ({Settings.BubbleCountFrequency}/hr)");
+                interactiveFeatures.Add(Loc.GetF("session_feature_bubble_count", Settings.BubbleCountFrequency));
 
             if (interactiveFeatures.Count > 0)
-                lines.Add("Interactive: " + string.Join(", ", interactiveFeatures));
+                lines.Add(Loc.Get("session_feature_label_interactive") + string.Join(", ", interactiveFeatures));
 
             // Timeline section
             if (Phases != null && Phases.Count > 1)
             {
                 var timelineSteps = Phases.Select(p => $"{p.StartMinute}min: {p.Name}");
                 lines.Add("");
-                lines.Add("Timeline: " + string.Join(" → ", timelineSteps));
+                lines.Add(Loc.Get("session_feature_label_timeline") + string.Join(" \u2192 ", timelineSteps));
             }
 
             if (lines.Count == 0)
-                return "No features configured.";
+                return Loc.Get("session_feature_no_features");
 
             return string.Join("\n", lines);
         }
@@ -681,31 +687,31 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         /// </summary>
         public string GetSpoilerFlash()
         {
-            if (!Settings.FlashEnabled) return "■ Flashes: Disabled";
-            var frequency = Settings.FlashPerHour == Settings.FlashPerHourEnd 
-                ? $"~{Settings.FlashPerHour}/hr" 
-                : $"~{Settings.FlashPerHour}→{Settings.FlashPerHourEnd}/hr";
-            var opacity = Settings.FlashOpacity == Settings.FlashOpacityEnd 
-                ? $"{Settings.FlashOpacity}%" 
-                : $"{Settings.FlashOpacity}% → {Settings.FlashOpacityEnd}%";
-            var scale = Settings.FlashScale == 100 ? "" : $" ({Settings.FlashScale}% size)";
-            var audio = Settings.FlashAudioEnabled ? " audio-linked" : " silent";
-            var clickable = Settings.FlashClickable ? "" : " ghost";
-            return $"■ Flashes: {frequency}, {Settings.FlashImages} images, {opacity}{scale}{audio}{clickable}";
+            if (!Settings.FlashEnabled) return Loc.Get("session_spoiler_flashes_disabled");
+            var frequency = Settings.FlashPerHour == Settings.FlashPerHourEnd
+                ? $"~{Settings.FlashPerHour}/hr"
+                : $"~{Settings.FlashPerHour}\u2192{Settings.FlashPerHourEnd}/hr";
+            var opacity = Settings.FlashOpacity == Settings.FlashOpacityEnd
+                ? $"{Settings.FlashOpacity}%"
+                : $"{Settings.FlashOpacity}% \u2192 {Settings.FlashOpacityEnd}%";
+            var scale = Settings.FlashScale == 100 ? "" : Loc.GetF("session_spoiler_flash_size", Settings.FlashScale);
+            var audio = Settings.FlashAudioEnabled ? Loc.Get("session_spoiler_flash_audio_linked") : Loc.Get("session_spoiler_flash_silent");
+            var clickable = Settings.FlashClickable ? "" : Loc.Get("session_spoiler_flash_ghost");
+            return Loc.GetF("session_spoiler_flashes", frequency, Settings.FlashImages, opacity, scale, audio, clickable);
         }
-        
+
         public string GetSpoilerSubliminal()
         {
-            if (!Settings.SubliminalEnabled) return "■ Text Subliminals: Disabled";
-            return $"■ Text Subliminals: {Settings.SubliminalPerMin}/min, {Settings.SubliminalFrames} frames, {Settings.SubliminalOpacity}% opacity. Uses global phrase pool.";
+            if (!Settings.SubliminalEnabled) return Loc.Get("session_spoiler_subliminals_disabled");
+            return Loc.GetF("session_spoiler_subliminals", Settings.SubliminalPerMin, Settings.SubliminalFrames, Settings.SubliminalOpacity);
         }
-        
+
         public string GetSpoilerAudio()
         {
-            if (!Settings.AudioWhispersEnabled) return "■ Audio Whispers: Disabled";
-            return $"■ Audio Whispers: {Settings.WhisperVolume}% volume. Uses global audio pool.";
+            if (!Settings.AudioWhispersEnabled) return Loc.Get("session_spoiler_audio_disabled");
+            return Loc.GetF("session_spoiler_audio", Settings.WhisperVolume);
         }
-        
+
         public string GetSpoilerOverlays()
         {
             var parts = new List<string>();
@@ -713,37 +719,37 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
             {
                 var ramp = Settings.PinkFilterStartOpacity == Settings.PinkFilterEndOpacity
                     ? $"{Settings.PinkFilterStartOpacity}%"
-                    : $"{Settings.PinkFilterStartOpacity}% → {Settings.PinkFilterEndOpacity}%";
-                var timing = Settings.PinkFilterStartMinute > 0 ? $" (starts at ~{Settings.PinkFilterStartMinute} min)" : "";
-                parts.Add($"■ Pink Filter: {ramp}{timing}");
+                    : $"{Settings.PinkFilterStartOpacity}% \u2192 {Settings.PinkFilterEndOpacity}%";
+                var timing = Settings.PinkFilterStartMinute > 0 ? Loc.GetF("session_spoiler_starts_at", Settings.PinkFilterStartMinute) : "";
+                parts.Add(Loc.GetF("session_spoiler_pink_filter", ramp, timing));
             }
             if (Settings.SpiralEnabled)
             {
                 var ramp = Settings.SpiralOpacity == Settings.SpiralOpacityEnd
                     ? $"{Settings.SpiralOpacity}%"
-                    : $"{Settings.SpiralOpacity}% → {Settings.SpiralOpacityEnd}%";
-                var timing = Settings.SpiralStartMinute > 0 ? $" (starts at ~{Settings.SpiralStartMinute} min)" : "";
-                parts.Add($"■ Spiral Overlay: {ramp}{timing}");
+                    : $"{Settings.SpiralOpacity}% \u2192 {Settings.SpiralOpacityEnd}%";
+                var timing = Settings.SpiralStartMinute > 0 ? Loc.GetF("session_spoiler_starts_at", Settings.SpiralStartMinute) : "";
+                parts.Add(Loc.GetF("session_spoiler_spiral_overlay", ramp, timing));
             }
             if (HasCornerGifOption)
             {
-                var status = Settings.CornerGifEnabled ? "Enabled" : "Optional";
-                parts.Add($"■ Corner GIF: {status} at {Settings.CornerGifOpacity}% opacity");
+                var status = Settings.CornerGifEnabled ? Loc.Get("session_spoiler_corner_gif_enabled") : Loc.Get("session_spoiler_corner_gif_optional");
+                parts.Add(Loc.GetF("session_spoiler_corner_gif", status, Settings.CornerGifOpacity));
             }
-            if (parts.Count == 0) return "■ Overlays: None";
+            if (parts.Count == 0) return Loc.Get("session_spoiler_overlays_none");
             return string.Join("\n", parts);
         }
-        
+
         public string GetSpoilerInteractive()
         {
             var parts = new List<string>();
             if (Settings.BouncingTextEnabled)
             {
-                var speed = Settings.BouncingTextSpeed <= 3 ? "slow" : Settings.BouncingTextSpeed <= 6 ? "medium" : "fast";
-                var phrases = Settings.BouncingTextPhrases.Any() 
-                    ? $"Using phrases: \"{string.Join("\", \"", Settings.BouncingTextPhrases)}\"" 
-                    : "Uses global phrase pool";
-                parts.Add($"■ Bouncing Text: {speed} speed. {phrases}.");
+                var speed = Settings.BouncingTextSpeed <= 3 ? Loc.Get("session_spoiler_speed_slow") : Settings.BouncingTextSpeed <= 6 ? Loc.Get("session_spoiler_speed_medium") : Loc.Get("session_spoiler_speed_fast");
+                var phrases = Settings.BouncingTextPhrases.Any()
+                    ? Loc.GetF("session_spoiler_using_phrases", string.Join("\", \"", Settings.BouncingTextPhrases))
+                    : Loc.Get("session_spoiler_uses_global_phrase_pool");
+                parts.Add(Loc.GetF("session_spoiler_bouncing_text", speed, phrases));
             }
 
             if (Settings.BubblesEnabled)
@@ -751,41 +757,41 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
                 string bubbleDesc;
                 if (Settings.BubblesIntermittent)
                 {
-                    var clickInfo = Settings.BubblesClickable ? "pop to dismiss" : "float-through";
-                    bubbleDesc = $"Intermittent bursts (~{Settings.BubblesBurstCount} total), {clickInfo}.";
+                    var clickInfo = Settings.BubblesClickable ? Loc.Get("session_spoiler_pop_to_dismiss") : Loc.Get("session_spoiler_float_through");
+                    bubbleDesc = Loc.GetF("session_spoiler_bubbles_intermittent", Settings.BubblesBurstCount, clickInfo);
                 }
                 else
                 {
                     var freq = Settings.BubblesFrequency;
-                    var timing = Settings.BubblesStartMinute > 0 ? $"starts at {Settings.BubblesStartMinute} min, ramps up from {freq}/min" : $"~{freq}/min";
-                    bubbleDesc = $"Continuous at {timing}.";
+                    var timing = Settings.BubblesStartMinute > 0 ? Loc.GetF("session_spoiler_bubbles_starts_at", Settings.BubblesStartMinute, freq) : Loc.GetF("session_spoiler_bubbles_per_min", freq);
+                    bubbleDesc = Loc.GetF("session_spoiler_bubbles_continuous", timing);
                 }
-                parts.Add($"■ Bubbles: {bubbleDesc}");
+                parts.Add(Loc.GetF("session_spoiler_bubbles", bubbleDesc));
             }
-    
+
             if (Settings.MandatoryVideosEnabled)
             {
-                parts.Add($"■ Mandatory Videos: ~{Settings.VideosPerHour}/hour. Uses global video pool.");
+                parts.Add(Loc.GetF("session_spoiler_mandatory_videos", Settings.VideosPerHour));
             }
-    
+
             if (Settings.LockCardEnabled)
             {
                 var phrases = App.Settings?.Current.LockCardPhrases.Where(p => p.Value).Select(p => p.Key);
-                var phraseString = phrases != null && phrases.Any() 
-                    ? $"Uses phrases: \"{string.Join("\", \"", phrases)}\"" 
-                    : "Uses global phrase pool";
-                parts.Add($"■ Lock Cards: ~{Settings.LockCardFrequency}/hour. {phraseString}.");
+                var phraseString = phrases != null && phrases.Any()
+                    ? Loc.GetF("session_spoiler_using_phrases", string.Join("\", \"", phrases))
+                    : Loc.Get("session_spoiler_uses_global_phrase_pool");
+                parts.Add(Loc.GetF("session_spoiler_lock_cards", Settings.LockCardFrequency, phraseString));
             }
 
             if (Settings.BubbleCountEnabled)
             {
-                parts.Add($"■ Bubble Count Game: ~{Settings.BubbleCountFrequency}/hour.");
+                parts.Add(Loc.GetF("session_spoiler_bubble_count_game", Settings.BubbleCountFrequency));
             }
 
-            if (parts.Count == 0) return "■ Interactive Events: None";
+            if (parts.Count == 0) return Loc.Get("session_spoiler_interactive_none");
             return string.Join("\n", parts);
         }
-        
+
         public string GetSpoilerTimeline()
         {
             var lines = new List<string>();
@@ -798,7 +804,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
 
         public string SpoilerInteractive { get; set; } = "";
     }
-    
+
     /// <summary>
     /// Settings for a session
     /// </summary>
@@ -843,7 +849,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         public int BouncingTextSize { get; set; } = 100; // Default 100% size
         public int BouncingTextOpacity { get; set; } = 100; // Default 100% when bypassing level requirement
         public List<string> BouncingTextPhrases { get; set; } = new();
-        
+
         // Pink Filter
         public bool PinkFilterEnabled { get; set; }
         public int PinkFilterStartMinute { get; set; } = 0;
@@ -869,7 +875,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         public int BubblesPerBurst { get; set; } = 3; // Bubbles per burst (max 3 on screen)
         public int BubblesGapMin { get; set; } = 5;
         public int BubblesGapMax { get; set; } = 8;
-        
+
         // Corner GIF (for Gamer Girl session)
         public bool CornerGifEnabled { get; set; }
         public int CornerGifStartMinute { get; set; } = 0;
@@ -915,7 +921,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         public int BrainDrainStartIntensity { get; set; } = 5; // Starting intensity
         public int BrainDrainEndIntensity { get; set; } = 5; // Ending intensity (for ramping)
     }
-    
+
     public enum CornerPosition
     {
         TopLeft,
@@ -923,7 +929,7 @@ Your only purpose is to sit prettily and let the pink fog consume you. And remem
         BottomLeft,
         BottomRight
     }
-    
+
     /// <summary>
     /// A phase within a session timeline
     /// </summary>
