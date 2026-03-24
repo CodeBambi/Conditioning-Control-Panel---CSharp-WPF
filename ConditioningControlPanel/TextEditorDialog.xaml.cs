@@ -28,7 +28,7 @@ namespace ConditioningControlPanel
             InitializeComponent();
             
             TxtTitle.Text = $"📝 {title}";
-            Title = $"{title} Manager";
+            Title = Loc.GetF("title_manager", title);
             
             // Make a copy of the data
             _originalData = new Dictionary<string, bool>(data);
@@ -65,7 +65,7 @@ namespace ConditioningControlPanel
             // Check for duplicates
             if (_items.Any(x => x.Text.Equals(text, StringComparison.OrdinalIgnoreCase)))
             {
-                MessageBox.Show(Loc.Get("msg_this_item_already_exists"), "Duplicate", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_this_item_already_exists"), Loc.Get("title_duplicate"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             
@@ -126,7 +126,7 @@ namespace ConditioningControlPanel
             
             if (sender is FrameworkElement fe && fe.DataContext is TextItem item)
             {
-                var result = MessageBox.Show($"Remove \"{item.Text}\"?", "Confirm", 
+                var result = MessageBox.Show(Loc.GetF("msg_confirm_remove_item", item.Text), Loc.Get("title_confirm"),
                     MessageBoxButton.YesNo, MessageBoxImage.Question);
                 
                 if (result == MessageBoxResult.Yes)
@@ -143,12 +143,12 @@ namespace ConditioningControlPanel
             
             if (selected.Count == 0)
             {
-                MessageBox.Show(Loc.Get("msg_no_items_selected_n_nclick_on_items_to_select"), 
-                    "No Selection", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Loc.Get("msg_no_items_selected_n_nclick_on_items_to_select"),
+                    Loc.Get("title_no_selection"), MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
             
-            var result = MessageBox.Show($"Remove {selected.Count} selected item(s)?", "Confirm", 
+            var result = MessageBox.Show(Loc.GetF("msg_confirm_remove_selected", selected.Count), Loc.Get("title_confirm"),
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             
             if (result == MessageBoxResult.Yes)
@@ -165,7 +165,7 @@ namespace ConditioningControlPanel
         {
             if (_hasChanges)
             {
-                var result = MessageBox.Show(Loc.Get("msg_discard_changes"), "Unsaved Changes", 
+                var result = MessageBox.Show(Loc.Get("msg_discard_changes"), Loc.Get("title_unsaved_changes"),
                     MessageBoxButton.YesNo, MessageBoxImage.Question);
                 
                 if (result != MessageBoxResult.Yes)
@@ -190,7 +190,7 @@ namespace ConditioningControlPanel
             // If closing via X button and there are changes
             if (DialogResult == null && _hasChanges)
             {
-                var result = MessageBox.Show(Loc.Get("msg_save_changes_before_closing"), "Unsaved Changes", 
+                var result = MessageBox.Show(Loc.Get("msg_save_changes_before_closing"), Loc.Get("title_unsaved_changes"),
                     MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
                 
                 if (result == MessageBoxResult.Yes)

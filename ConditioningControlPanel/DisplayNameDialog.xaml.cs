@@ -83,7 +83,7 @@ namespace ConditioningControlPanel
                 else
                 {
                     var length = TxtDisplayName.Text.Trim().Length;
-                    TxtCharCount.Text = $"{length}/20 characters";
+                    TxtCharCount.Text = Loc.GetF("label_char_count_of_max", length, 20);
                     BtnConfirm.IsEnabled = length >= 2 && length <= 20;
                 }
             };
@@ -129,8 +129,8 @@ namespace ConditioningControlPanel
             if (name.Length < 2 || name.Length > 20)
             {
                 MessageBox.Show(
-                    "Please enter a name with 2-20 characters.",
-                    "Invalid Name",
+                    Loc.Get("msg_enter_name_2_20_chars"),
+                    Loc.Get("title_invalid_name"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return;

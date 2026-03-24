@@ -95,7 +95,7 @@ namespace ConditioningControlPanel
 
         private async Task TryLoginWithProviderAsync(string provider)
         {
-            ShowLoading($"Connecting to {provider}...");
+            ShowLoading(Loc.GetF("login_connecting_to_provider", provider));
 
             try
             {
@@ -105,7 +105,7 @@ namespace ConditioningControlPanel
                 {
                     if (App.Discord == null)
                     {
-                        ShowError("Discord service not available");
+                        ShowError(Loc.Get("login_discord_service_not_available"));
                         return;
                     }
                     await App.Discord.StartOAuthFlowAsync();
@@ -115,7 +115,7 @@ namespace ConditioningControlPanel
                 {
                     if (App.Patreon == null)
                     {
-                        ShowError("Patreon service not available");
+                        ShowError(Loc.Get("login_patreon_service_not_available"));
                         return;
                     }
                     await App.Patreon.StartOAuthFlowAsync();
@@ -128,7 +128,7 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                ShowLoading("Checking account...");
+                ShowLoading(Loc.Get("login_checking_account"));
 
                 // Try V2 authentication
                 var v2Auth = new V2AuthService();
@@ -181,7 +181,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Login failed for {Provider}", provider);
-                ShowError("Login failed. Please try again.");
+                ShowError(Loc.Get("login_failed_please_try_again"));
             }
         }
 
@@ -213,23 +213,23 @@ namespace ConditioningControlPanel
 
             if (string.IsNullOrWhiteSpace(name))
             {
-                SetAvailabilityStatus("Enter a unique name (3-30 characters)", Brushes.Gray, false);
+                SetAvailabilityStatus(Loc.Get("login_enter_unique_name"), Brushes.Gray, false);
                 return;
             }
 
             if (name.Length < 3)
             {
-                SetAvailabilityStatus("Name must be at least 3 characters", Brushes.Orange, false);
+                SetAvailabilityStatus(Loc.Get("login_name_min_3_chars"), Brushes.Orange, false);
                 return;
             }
 
             if (name.Length > 30)
             {
-                SetAvailabilityStatus("Name must be 30 characters or less", Brushes.Orange, false);
+                SetAvailabilityStatus(Loc.Get("login_name_max_30_chars"), Brushes.Orange, false);
                 return;
             }
 
-            SetAvailabilityStatus("Checking...", Brushes.Gray, false);
+            SetAvailabilityStatus(Loc.Get("login_checking"), Brushes.Gray, false);
 
             try
             {
@@ -242,17 +242,17 @@ namespace ConditioningControlPanel
 
                 if (available)
                 {
-                    SetAvailabilityStatus($"\"{name}\" is available!", Brushes.LightGreen, true);
+                    SetAvailabilityStatus(Loc.GetF("login_name_available", name), Brushes.LightGreen, true);
                 }
                 else
                 {
-                    SetAvailabilityStatus($"\"{name}\" is already taken", Brushes.Orange, false);
+                    SetAvailabilityStatus(Loc.GetF("login_name_already_taken", name), Brushes.Orange, false);
                 }
             }
             catch (TaskCanceledException) { }
             catch (Exception ex)
             {
-                SetAvailabilityStatus("Error checking name", Brushes.Orange, false);
+                SetAvailabilityStatus(Loc.Get("login_error_checking_name"), Brushes.Orange, false);
                 App.Logger?.Warning(ex, "Name availability check failed");
             }
         }
@@ -316,7 +316,7 @@ namespace ConditioningControlPanel
 
             // Disable button during async (audit C2)
             BtnConfirmUsername.IsEnabled = false;
-            ShowLoading("Creating your account...");
+            ShowLoading(Loc.Get("login_creating_account"));
 
             try
             {
@@ -328,7 +328,7 @@ namespace ConditioningControlPanel
                     if (string.IsNullOrEmpty(_pendingInviteCode) || string.IsNullOrEmpty(_pendingPassword))
                     {
                         ClearSensitiveData();
-                        ShowError("Session expired. Please try again.");
+                        ShowError(Loc.Get("login_session_expired"));
                         return;
                     }
                     authResponse = await v2Auth.RegisterAsync(_pendingInviteCode, displayName, _pendingPassword);
@@ -370,7 +370,7 @@ namespace ConditioningControlPanel
             {
                 ClearSensitiveData();
                 App.Logger?.Error(ex, "Failed to create account");
-                ShowError("Failed to create account. Please try again.");
+                ShowError(Loc.Get("login_failed_to_create_account"));
             }
         }
 
@@ -410,8 +410,8 @@ namespace ConditioningControlPanel
                 TxtPasswordConfirm.Visibility = Visibility.Visible;
 
                 TxtAccountToggle.Inlines.Clear();
-                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run("Already have an account? ") { Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0)) });
-                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run("Login") { Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)), TextDecorations = TextDecorations.Underline });
+                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run(Loc.Get("login_already_have_account") + " ") { Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0)) });
+                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run(Loc.Get("btn_login")) { Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)), TextDecorations = TextDecorations.Underline });
 
                 TxtInviteCode.Focus();
             }
@@ -430,8 +430,8 @@ namespace ConditioningControlPanel
                 TxtPasswordConfirm.Visibility = Visibility.Collapsed;
 
                 TxtAccountToggle.Inlines.Clear();
-                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run("Don't have an account? ") { Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0)) });
-                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run("Create one") { Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)), TextDecorations = TextDecorations.Underline });
+                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run(Loc.Get("login_dont_have_account") + " ") { Foreground = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0)) });
+                TxtAccountToggle.Inlines.Add(new System.Windows.Documents.Run(Loc.Get("btn_create_account")) { Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4)), TextDecorations = TextDecorations.Underline });
 
                 TxtLoginDisplayName.Focus();
             }
@@ -507,7 +507,7 @@ namespace ConditioningControlPanel
 
         private async Task TryAccountLoginAsync(string displayName, string password)
         {
-            ShowLoading("Logging in...");
+            ShowLoading(Loc.Get("login_logging_in"));
 
             try
             {
@@ -585,7 +585,7 @@ namespace ConditioningControlPanel
 
         private void ShowError(string message)
         {
-            MessageBox.Show(this, message, "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, message, Loc.Get("title_error"), MessageBoxButton.OK, MessageBoxImage.Warning);
             ShowProviderSelection();
         }
 

@@ -327,7 +327,7 @@ namespace ConditioningControlPanel
                     // Check if we still have room
                     if (startMinute >= _session.DurationMinutes)
                     {
-                        MessageBox.Show(Loc.Get("msg_no_more_room_in_the_timeline_for_this_effect"), "Timeline Full", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        MessageBox.Show(Loc.Get("msg_no_more_room_in_the_timeline_for_this_effect"), Loc.Get("title_timeline_full"), MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
 
@@ -999,10 +999,10 @@ namespace ConditioningControlPanel
             var difficultyText = _session.GetDifficultyText();
             var difficultyColor = _session.GetDifficultyColor();
 
-            TxtXP.Text = $"+{xp} XP";
+            TxtXP.Text = Loc.GetF("session_xp_amount", xp);
             TxtDifficulty.Text = difficultyText;
             TxtDifficulty.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(difficultyColor));
-            TxtDuration.Text = $"{_session.DurationMinutes} min";
+            TxtDuration.Text = Loc.GetF("session_duration_min", _session.DurationMinutes);
         }
 
         private void SliderDuration_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -1010,7 +1010,7 @@ namespace ConditioningControlPanel
             if (_session == null) return;
 
             _session.DurationMinutes = (int)e.NewValue;
-            TxtDurationValue.Text = $"{_session.DurationMinutes} min";
+            TxtDurationValue.Text = Loc.GetF("session_duration_min", _session.DurationMinutes);
 
             // Clamp any events that exceed the new duration
             foreach (var evt in _session.Events.Where(ev => ev.Minute > _session.DurationMinutes).ToList())
@@ -1047,21 +1047,21 @@ namespace ConditioningControlPanel
             var dialog = new OpenFileDialog
             {
                 Filter = "Session Files (*.session.json)|*.session.json|All Files (*.*)|*.*",
-                Title = "Import Session"
+                Title = Loc.Get("title_import_session")
             };
 
             if (dialog.ShowDialog() == true)
             {
                 if (!_fileService.ValidateSessionFile(dialog.FileName, out var error))
                 {
-                    MessageBox.Show($"Invalid session file: {error}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(Loc.GetF("msg_invalid_session_file", error), Loc.Get("title_import_error"), MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
                 var definition = _fileService.ImportSession(dialog.FileName);
                 if (definition == null)
                 {
-                    MessageBox.Show(Loc.Get("msg_failed_to_import_session"), "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(Loc.Get("msg_failed_to_import_session"), Loc.Get("title_import_error"), MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
@@ -1088,7 +1088,7 @@ namespace ConditioningControlPanel
                 RefreshTimeline();
                 RefreshStats();
 
-                MessageBox.Show($"Imported: {_session.Name}", "Import Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Loc.GetF("msg_imported_session", _session.Name), Loc.Get("title_import_successful"), MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 
@@ -1101,7 +1101,7 @@ namespace ConditioningControlPanel
             var dialog = new SaveFileDialog
             {
                 Filter = "Session Files (*.session.json)|*.session.json",
-                Title = "Export Session",
+                Title = Loc.Get("title_export_session"),
                 FileName = SessionFileService.GetExportFileName(_session.ToSession())
             };
 
@@ -1109,7 +1109,7 @@ namespace ConditioningControlPanel
             {
                 var session = _session.ToSession();
                 _fileService.ExportSession(session, dialog.FileName);
-                MessageBox.Show($"Session exported to:\n{dialog.FileName}", "Export Successful", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Loc.GetF("msg_session_exported_to", dialog.FileName), Loc.Get("title_export_successful"), MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
 
@@ -1128,7 +1128,7 @@ namespace ConditioningControlPanel
 
             if (string.IsNullOrWhiteSpace(_session.Name))
             {
-                MessageBox.Show(Loc.Get("msg_please_enter_a_session_name"), "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_please_enter_a_session_name"), Loc.Get("title_validation_error"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 

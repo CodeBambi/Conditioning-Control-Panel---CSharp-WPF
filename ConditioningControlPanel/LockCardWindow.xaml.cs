@@ -374,7 +374,7 @@ namespace ConditioningControlPanel
 
         private void UpdateProgress()
         {
-            TxtProgress.Text = $"{_completedRepeats} / {_requiredRepeats}";
+            TxtProgress.Text = Loc.GetF("lockcard_progress", _completedRepeats, _requiredRepeats);
 
             // Update progress bar width based on actual container width
             var progressPercent = (double)_completedRepeats / _requiredRepeats;
@@ -405,11 +405,11 @@ namespace ConditioningControlPanel
             var remaining = _requiredRepeats - _completedRepeats;
             var messages = new[]
             {
-                $"Good! {remaining} more to go...",
-                $"That's it! {remaining} left...",
-                $"Keep going! {remaining} more...",
-                $"Perfect! {remaining} remaining...",
-                $"Yes! Only {remaining} more..."
+                Loc.GetF("lockcard_encourage_1", remaining),
+                Loc.GetF("lockcard_encourage_2", remaining),
+                Loc.GetF("lockcard_encourage_3", remaining),
+                Loc.GetF("lockcard_encourage_4", remaining),
+                Loc.GetF("lockcard_encourage_5", remaining)
             };
             
             return messages[_completedRepeats % messages.Length];
