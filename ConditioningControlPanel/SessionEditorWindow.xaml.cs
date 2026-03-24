@@ -9,6 +9,7 @@ using System.Windows.Shapes;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Microsoft.Win32;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -326,7 +327,7 @@ namespace ConditioningControlPanel
                     // Check if we still have room
                     if (startMinute >= _session.DurationMinutes)
                     {
-                        MessageBox.Show("No more room in the timeline for this effect.", "Timeline Full", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        MessageBox.Show(Loc.Get("msg_no_more_room_in_the_timeline_for_this_effect"), "Timeline Full", MessageBoxButton.OK, MessageBoxImage.Warning);
                         return;
                     }
 
@@ -1060,7 +1061,7 @@ namespace ConditioningControlPanel
                 var definition = _fileService.ImportSession(dialog.FileName);
                 if (definition == null)
                 {
-                    MessageBox.Show("Failed to import session", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(Loc.Get("msg_failed_to_import_session"), "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
@@ -1127,7 +1128,7 @@ namespace ConditioningControlPanel
 
             if (string.IsNullOrWhiteSpace(_session.Name))
             {
-                MessageBox.Show("Please enter a session name", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_please_enter_a_session_name"), "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 

@@ -8,6 +8,7 @@ using System.Windows.Media;
 using Newtonsoft.Json.Linq;
 using ConditioningControlPanel.Services;
 using static ConditioningControlPanel.Services.V2AuthService;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -195,9 +196,10 @@ namespace ConditioningControlPanel
             UsernamePanel.Visibility = Visibility.Visible;
             AccountPanel.Visibility = Visibility.Collapsed;
 
-            TxtUsernameTitle.Text = "Choose your display name";
-            TxtUsernameSubtitle.Text = "This will be shown on the leaderboard";
+            TxtUsernameTitle.Text = Loc.Get("label_choose_your_display_name");
+            TxtUsernameSubtitle.Text = Loc.Get("label_this_will_be_shown_on_the_leaderboard");
 
+            BtnConfirmUsername.IsEnabled = true;
             TxtUsername.Focus();
         }
 
@@ -395,8 +397,8 @@ namespace ConditioningControlPanel
 
             if (isRegister)
             {
-                TxtAccountTitle.Text = "Create Account";
-                BtnAccountSubmit.Content = "Next";
+                TxtAccountTitle.Text = Loc.Get("label_create_account");
+                BtnAccountSubmit.Content = Loc.Get("btn_next");
 
                 // Show invite code + password + confirm; hide display name
                 LblInviteCodeHint.Visibility = Visibility.Visible;
@@ -415,8 +417,8 @@ namespace ConditioningControlPanel
             }
             else
             {
-                TxtAccountTitle.Text = "Login";
-                BtnAccountSubmit.Content = "Login";
+                TxtAccountTitle.Text = Loc.Get("btn_login");
+                BtnAccountSubmit.Content = Loc.Get("btn_login");
 
                 // Show display name + password; hide invite code + confirm
                 LblInviteCodeHint.Visibility = Visibility.Collapsed;
@@ -453,7 +455,7 @@ namespace ConditioningControlPanel
             // Validate password (shared for both modes)
             if (password.Length < 8)
             {
-                TxtAccountError.Text = "Password must be at least 8 characters";
+                TxtAccountError.Text = Loc.Get("label_password_must_be_at_least_8_characters");
                 return;
             }
 
@@ -467,7 +469,7 @@ namespace ConditioningControlPanel
                 // Validate invite code
                 if (string.IsNullOrWhiteSpace(inviteCode))
                 {
-                    TxtAccountError.Text = "Please enter your invite code";
+                    TxtAccountError.Text = Loc.Get("label_please_enter_your_invite_code");
                     BtnAccountSubmit.IsEnabled = true;
                     return;
                 }
@@ -475,7 +477,7 @@ namespace ConditioningControlPanel
                 // Validate confirm password
                 if (TxtPasswordConfirm.Password != password)
                 {
-                    TxtAccountError.Text = "Passwords do not match";
+                    TxtAccountError.Text = Loc.Get("label_passwords_do_not_match");
                     BtnAccountSubmit.IsEnabled = true;
                     return;
                 }
@@ -493,7 +495,7 @@ namespace ConditioningControlPanel
                 // Validate display name
                 if (string.IsNullOrWhiteSpace(displayName))
                 {
-                    TxtAccountError.Text = "Please enter your display name";
+                    TxtAccountError.Text = Loc.Get("label_please_enter_your_display_name");
                     BtnAccountSubmit.IsEnabled = true;
                     return;
                 }
@@ -545,7 +547,7 @@ namespace ConditioningControlPanel
                 {
                     ShowAccountPanel(_isAccountRegisterMode);
                     TxtLoginDisplayName.Text = displayName;
-                    TxtAccountError.Text = "Unexpected response from server";
+                    TxtAccountError.Text = Loc.Get("label_unexpected_response_from_server");
                 }
             }
             catch (Exception ex)
@@ -554,7 +556,7 @@ namespace ConditioningControlPanel
                 App.Logger?.Error(ex, "Account login failed");
                 ShowAccountPanel(_isAccountRegisterMode);
                 TxtLoginDisplayName.Text = displayName;
-                TxtAccountError.Text = "Login failed. Please try again.";
+                TxtAccountError.Text = Loc.Get("label_login_failed_please_try_again");
             }
         }
 

@@ -1,7 +1,8 @@
 <Window x:Class="ConditioningControlPanel.LockCardColorDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Lock Card Colors" 
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_lock_card_colors}" 
         Height="700" Width="600"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource DarkerBgBrush}"
@@ -20,7 +21,7 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <TextBlock Grid.Row="0" Text="🎨 Lock Card Colors" 
+        <TextBlock Grid.Row="0" Text="{loc:Str label_lock_card_colors}" 
                    Foreground="{StaticResource PinkBrush}" 
                    FontSize="18" FontWeight="Bold" Margin="0,0,0,20"/>
 
@@ -33,10 +34,10 @@
                     <ColumnDefinition Width="150"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Background" Foreground="{StaticResource TextLightBrush}" 
+                <TextBlock Text="{loc:Str label_background}" Foreground="{StaticResource TextLightBrush}" 
                            FontSize="14" VerticalAlignment="Center"/>
                 <Button x:Name="BtnBgColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
-                        Click="BtnBgColor_Click" ToolTip="Click to change background color"/>
+                        Click="BtnBgColor_Click" ToolTip="{loc:Str tooltip_click_to_change_background_color}"/>
             </Grid>
 
             <!-- Text Color (Phrase) -->
@@ -45,10 +46,10 @@
                     <ColumnDefinition Width="150"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Phrase Text" Foreground="{StaticResource TextLightBrush}" 
+                <TextBlock Text="{loc:Str label_phrase_text}" Foreground="{StaticResource TextLightBrush}" 
                            FontSize="14" VerticalAlignment="Center"/>
                 <Button x:Name="BtnTextColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
-                        Click="BtnTextColor_Click" ToolTip="Click to change phrase text color"/>
+                        Click="BtnTextColor_Click" ToolTip="{loc:Str tooltip_click_to_change_phrase_text_color}"/>
             </Grid>
 
             <!-- Input Background Color -->
@@ -57,10 +58,10 @@
                     <ColumnDefinition Width="150"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Input Background" Foreground="{StaticResource TextLightBrush}" 
+                <TextBlock Text="{loc:Str label_input_background}" Foreground="{StaticResource TextLightBrush}" 
                            FontSize="14" VerticalAlignment="Center"/>
                 <Button x:Name="BtnInputBgColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
-                        Click="BtnInputBgColor_Click" ToolTip="Click to change input field background"/>
+                        Click="BtnInputBgColor_Click" ToolTip="{loc:Str tooltip_click_to_change_input_field_background}"/>
             </Grid>
 
             <!-- Input Text Color -->
@@ -69,10 +70,10 @@
                     <ColumnDefinition Width="150"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Input Text" Foreground="{StaticResource TextLightBrush}" 
+                <TextBlock Text="{loc:Str label_input_text}" Foreground="{StaticResource TextLightBrush}" 
                            FontSize="14" VerticalAlignment="Center"/>
                 <Button x:Name="BtnInputTextColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
-                        Click="BtnInputTextColor_Click" ToolTip="Click to change input text color"/>
+                        Click="BtnInputTextColor_Click" ToolTip="{loc:Str tooltip_click_to_change_input_text_color}"/>
             </Grid>
 
             <!-- Accent Color -->
@@ -81,10 +82,10 @@
                     <ColumnDefinition Width="150"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Accent / Progress" Foreground="{StaticResource TextLightBrush}" 
+                <TextBlock Text="{loc:Str label_accent_progress}" Foreground="{StaticResource TextLightBrush}" 
                            FontSize="14" VerticalAlignment="Center"/>
                 <Button x:Name="BtnAccentColor" Grid.Column="1" Style="{StaticResource ColorButtonLarge}"
-                        Click="BtnAccentColor_Click" ToolTip="Click to change accent color (progress bar, borders)"/>
+                        Click="BtnAccentColor_Click" ToolTip="{loc:Str tooltip_click_to_change_accent_color_progress_bar_bor}"/>
             </Grid>
         </StackPanel>
 
@@ -93,18 +94,18 @@
                 Padding="20" Margin="0,0,0,20">
             <StackPanel VerticalAlignment="Center">
                 <!-- Title -->
-                <TextBlock Text="📐 Type to Unlock" Foreground="{DynamicResource PinkBrush}" FontSize="14" 
+                <TextBlock Text="{loc:Str label_type_to_unlock}" Foreground="{DynamicResource PinkBrush}" FontSize="14" 
                            HorizontalAlignment="Center" Margin="0,0,0,15"/>
                 
                 <!-- Phrase to type -->
-                <TextBlock x:Name="PreviewPhrase" Text="Good girls obey" 
+                <TextBlock x:Name="PreviewPhrase" Text="{loc:Str label_good_girls_obey}" 
                            FontSize="22" FontWeight="Bold"
                            HorizontalAlignment="Center" Margin="0,0,0,15"/>
                 
                 <!-- Input field preview -->
                 <Border x:Name="PreviewInputBorder" Background="{DynamicResource PanelBgBrush}" CornerRadius="6" 
                         Padding="15,10" Margin="0,0,0,15" BorderThickness="2">
-                    <TextBlock x:Name="PreviewInputText" Text="Good girls ob|" 
+                    <TextBlock x:Name="PreviewInputText" Text="{loc:Str label_good_girls_ob}" 
                                FontSize="16" HorizontalAlignment="Center"/>
                 </Border>
                 
@@ -126,9 +127,9 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Button Grid.Column="1" Content="Cancel" Style="{StaticResource SecondaryButton}" 
+            <Button Grid.Column="1" Content="{loc:Str btn_cancel}" Style="{StaticResource SecondaryButton}" 
                     Margin="0,0,10,0" Click="BtnCancel_Click"/>
-            <Button Grid.Column="2" Content="Save" Style="{StaticResource ActionButton}" 
+            <Button Grid.Column="2" Content="{loc:Str btn_save}" Style="{StaticResource ActionButton}" 
                     Click="BtnSave_Click"/>
         </Grid>
     </Grid>

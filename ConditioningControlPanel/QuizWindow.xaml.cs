@@ -14,6 +14,7 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using NAudio.Wave;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -412,7 +413,7 @@ namespace ConditioningControlPanel
         private void ShowLoading(string? flavorText = null)
         {
             _loadingDotCount = 0;
-            TxtLoadingDots.Text = "Generating";
+            TxtLoadingDots.Text = Loc.Get("label_generating_3");
             TxtLoadingFlavor.Text = flavorText ?? LoadingFlavors[_random.Next(LoadingFlavors.Length)];
             _loadingDotsTimer.Start();
             ShowPanel(LoadingPanel);
@@ -618,7 +619,7 @@ namespace ConditioningControlPanel
                 try
                 {
                     fileService.ExportSession(_generatedSession, dialog.FileName);
-                    TxtTrySessionLabel.Text = "Session saved!";
+                    TxtTrySessionLabel.Text = Loc.Get("label_session_saved");
                     BtnTrySession.IsHitTestVisible = false;
                 }
                 catch (Exception ex)
@@ -1074,7 +1075,7 @@ namespace ConditioningControlPanel
         private void LoadingDotsTimer_Tick(object? sender, EventArgs e)
         {
             _loadingDotCount = (_loadingDotCount + 1) % 4;
-            TxtLoadingDots.Text = "Generating" + new string('.', _loadingDotCount);
+            TxtLoadingDots.Text = Loc.Get("label_generating_3") + new string('.', _loadingDotCount);
         }
 
         // ============ AUDIO ============
@@ -1250,7 +1251,7 @@ namespace ConditioningControlPanel
             if (_bgStop2 != null) _bgStop2.Color = Color.FromRgb(0x0A, 0x00, 0x00);
 
             // Set ominous question text
-            TxtQuestion.Text = "Do you surrender completely?";
+            TxtQuestion.Text = Loc.Get("label_do_you_surrender_completely");
             TxtQuestion.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x20, 0x20));
 
             // Hide answers B, C, D
@@ -1264,7 +1265,7 @@ namespace ConditioningControlPanel
             {
                 letterLabel.Visibility = Visibility.Collapsed;
             }
-            TxtAnswerA.Text = "YES";
+            TxtAnswerA.Text = Loc.Get("label_yes");
             TxtAnswerA.FontSize = 42;
             TxtAnswerA.FontWeight = FontWeights.ExtraBold;
             TxtAnswerA.Foreground = new SolidColorBrush(Colors.White);

@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {

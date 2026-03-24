@@ -1,7 +1,8 @@
 <Window x:Class="ConditioningControlPanel.LoginDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Login" Height="560" Width="420"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str btn_login}" Height="560" Width="420"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Background="{DynamicResource DarkerBgBrush}" WindowStyle="None" AllowsTransparency="True"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
@@ -17,10 +18,10 @@
 
             <!-- Title -->
             <StackPanel Grid.Row="0" Margin="0,0,0,20">
-                <TextBlock Text="Welcome!"
+                <TextBlock Text="{loc:Str login_welcome}"
                            FontSize="28" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
                            HorizontalAlignment="Center"/>
-                <TextBlock Text="Choose how you'd like to login"
+                <TextBlock Text="{loc:Str login_choose_method}"
                            FontSize="13" Foreground="#B0B0B0"
                            HorizontalAlignment="Center" Margin="0,5,0,0"/>
             </StackPanel>
@@ -33,8 +34,8 @@
                         BorderThickness="0" FontWeight="Bold" FontSize="16"
                         Cursor="Hand" Click="BtnLoginDiscord_Click">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x1F3AE;" FontSize="20" Margin="0,0,10,0"/>
-                        <TextBlock Text="Login with Discord" VerticalAlignment="Center"/>
+                        <TextBlock Text="{loc:Str label_text_6}" FontSize="20" Margin="0,0,10,0"/>
+                        <TextBlock Text="{loc:Str login_discord}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
 
@@ -44,8 +45,8 @@
                         BorderThickness="0" FontWeight="Bold" FontSize="16"
                         Cursor="Hand" Click="BtnLoginPatreon_Click">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x2B50;" FontSize="20" Margin="0,0,10,0"/>
-                        <TextBlock Text="Login with Patreon" VerticalAlignment="Center"/>
+                        <TextBlock Text="{loc:Str label_text_7}" FontSize="20" Margin="0,0,10,0"/>
+                        <TextBlock Text="{loc:Str login_patreon}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
 
@@ -55,8 +56,8 @@
                         BorderThickness="0" FontWeight="Bold" FontSize="16"
                         Cursor="Hand" Click="BtnLoginAccount_Click">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x1F512;" FontSize="20" Margin="0,0,10,0"/>
-                        <TextBlock Text="Anonymous Login" VerticalAlignment="Center"/>
+                        <TextBlock Text="{loc:Str label_text_3}" FontSize="20" Margin="0,0,10,0"/>
+                        <TextBlock Text="{loc:Str login_anonymous}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
 
@@ -64,17 +65,17 @@
 
             <!-- Account Login/Register Panel -->
             <StackPanel x:Name="AccountPanel" Grid.Row="2" Visibility="Collapsed" VerticalAlignment="Center">
-                <TextBlock x:Name="TxtAccountTitle" Text="Login"
+                <TextBlock x:Name="TxtAccountTitle" Text="{loc:Str btn_login}"
                            FontSize="16" FontWeight="Bold" Foreground="White"
                            HorizontalAlignment="Center" Margin="0,0,0,15"/>
 
                 <!-- Invite code field (register mode only) -->
                 <TextBlock x:Name="LblInviteCodeHint"
-                           Text="For an invite code please ask a discord mod/admin or CodeBambi directly :3"
+                           Text="{loc:Str label_for_an_invite_code_please_ask_a_discord_mod_a}"
                            FontSize="11" Foreground="#808080" TextWrapping="Wrap"
                            HorizontalAlignment="Center" Margin="0,0,0,8"
                            Visibility="Collapsed"/>
-                <TextBlock x:Name="LblInviteCode" Text="Invite Code"
+                <TextBlock x:Name="LblInviteCode" Text="{loc:Str login_invite_code}"
                            FontSize="12" Foreground="#B0B0B0" Margin="0,0,0,4"
                            Visibility="Collapsed"/>
                 <TextBox x:Name="TxtInviteCode" FontSize="14" Padding="10,8"
@@ -83,7 +84,7 @@
                          CharacterCasing="Upper"/>
 
                 <!-- Display name field (login mode only) -->
-                <TextBlock x:Name="LblDisplayName" Text="Display Name"
+                <TextBlock x:Name="LblDisplayName" Text="{loc:Str login_display_name}"
                            FontSize="12" Foreground="#B0B0B0" Margin="0,0,0,4"
                            Visibility="Collapsed"/>
                 <TextBox x:Name="TxtLoginDisplayName" FontSize="14" Padding="10,8"
@@ -91,14 +92,14 @@
                          MaxLength="30" HorizontalAlignment="Stretch" Visibility="Collapsed"/>
 
                 <!-- Password -->
-                <TextBlock x:Name="LblPassword" Text="Password"
+                <TextBlock x:Name="LblPassword" Text="{loc:Str login_password}"
                            FontSize="12" Foreground="#B0B0B0" Margin="0,10,0,4"/>
                 <PasswordBox x:Name="TxtPassword" FontSize="14" Padding="10,8"
                              Background="{DynamicResource PanelBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}"
                              MaxLength="128"/>
 
                 <!-- Confirm password (register mode only) -->
-                <TextBlock x:Name="LblPasswordConfirm" Text="Confirm Password"
+                <TextBlock x:Name="LblPasswordConfirm" Text="{loc:Str login_confirm_password}"
                            FontSize="12" Foreground="#B0B0B0" Margin="0,10,0,4"
                            Visibility="Collapsed"/>
                 <PasswordBox x:Name="TxtPasswordConfirm" FontSize="14" Padding="10,8"
@@ -110,7 +111,7 @@
                            HorizontalAlignment="Center"/>
 
                 <Button x:Name="BtnAccountSubmit"
-                        Content="Login"
+                        Content="{loc:Str btn_login}"
                         Padding="30,12" Margin="0,15,0,0"
                         Background="{DynamicResource PinkBrush}" Foreground="White"
                         BorderThickness="0" FontWeight="Bold" FontSize="14"
@@ -121,11 +122,11 @@
                            FontSize="12" Foreground="#B0B0B0"
                            HorizontalAlignment="Center" Cursor="Hand"
                            MouseLeftButtonDown="TxtAccountToggle_Click">
-                    <Run Text="Don't have an account? "/>
-                    <Run Text="Create one" Foreground="{DynamicResource PinkBrush}" TextDecorations="Underline"/>
+                    <Run Text="{loc:Str label_don_t_have_an_account}"/>
+                    <Run Text="{loc:Str btn_create_account}" Foreground="{DynamicResource PinkBrush}" TextDecorations="Underline"/>
                 </TextBlock>
 
-                <TextBlock Text="Back" Margin="0,10,0,0"
+                <TextBlock Text="{loc:Str btn_back}" Margin="0,10,0,0"
                            FontSize="12" Foreground="#808080"
                            HorizontalAlignment="Center" Cursor="Hand"
                            MouseLeftButtonDown="BtnAccountBack_Click"/>
@@ -133,10 +134,10 @@
 
             <!-- Username Entry Panel (for new accounts) -->
             <StackPanel x:Name="UsernamePanel" Grid.Row="2" Visibility="Collapsed" VerticalAlignment="Center">
-                <TextBlock x:Name="TxtUsernameTitle" Text="Choose your display name"
+                <TextBlock x:Name="TxtUsernameTitle" Text="{loc:Str label_choose_your_display_name}"
                            FontSize="16" FontWeight="Bold" Foreground="White"
                            HorizontalAlignment="Center" Margin="0,0,0,5"/>
-                <TextBlock x:Name="TxtUsernameSubtitle" Text="This will be shown on the leaderboard"
+                <TextBlock x:Name="TxtUsernameSubtitle" Text="{loc:Str label_this_will_be_shown_on_the_leaderboard}"
                            FontSize="12" Foreground="#B0B0B0"
                            HorizontalAlignment="Center" Margin="0,0,0,15"/>
 
@@ -146,11 +147,11 @@
                          HorizontalAlignment="Stretch"/>
 
                 <TextBlock x:Name="TxtAvailability" FontSize="11" Margin="0,8,0,0"
-                           Foreground="#B0B0B0" Text="Enter a unique name (3-30 characters)"
+                           Foreground="#B0B0B0" Text="{loc:Str label_enter_a_unique_name_3_30_characters}"
                            HorizontalAlignment="Center"/>
 
                 <Button x:Name="BtnConfirmUsername"
-                        Content="Confirm"
+                        Content="{loc:Str btn_confirm}"
                         Padding="30,12" Margin="0,20,0,0"
                         Background="{DynamicResource PinkBrush}" Foreground="White"
                         BorderThickness="0" FontWeight="Bold" FontSize="14"
@@ -162,14 +163,14 @@
             <!-- Loading Panel -->
             <StackPanel x:Name="LoadingPanel" Grid.Row="2" Visibility="Collapsed"
                         VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock x:Name="TxtLoadingMessage" Text="Connecting..."
+                <TextBlock x:Name="TxtLoadingMessage" Text="{loc:Str login_connecting}"
                            FontSize="16" Foreground="White" HorizontalAlignment="Center"/>
                 <ProgressBar IsIndeterminate="True" Width="200" Height="4" Margin="0,15,0,0"
                              Foreground="{DynamicResource PinkBrush}" Background="{DynamicResource AccentTintedBgBrush}"/>
             </StackPanel>
 
             <!-- Cancel Button -->
-            <Button x:Name="BtnCancel" Grid.Row="3" Content="Cancel"
+            <Button x:Name="BtnCancel" Grid.Row="3" Content="{loc:Str btn_cancel}"
                     Padding="20,8" HorizontalAlignment="Right"
                     Background="Transparent" Foreground="#808080"
                     BorderThickness="0" Cursor="Hand"

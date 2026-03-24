@@ -11,6 +11,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using Serilog;
@@ -576,6 +577,9 @@ namespace ConditioningControlPanel
 
             // Clean up stale temp files from previous sessions (crash recovery, leaked files)
             CleanupStaleTempFiles();
+
+            // Initialize localization (must be after settings, before UI)
+            LocalizationManager.Instance.Initialize(Settings?.Current?.Language ?? "en");
 
             // Initialize mod system (must be after settings, before services that use content config)
             Mods = new ModService();

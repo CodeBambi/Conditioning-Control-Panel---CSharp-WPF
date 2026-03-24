@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using NAudio.Wave;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -29,11 +30,11 @@ namespace ConditioningControlPanel
             // Set custom message based on session
             if (session.Id == "gamer_girl")
             {
-                TxtMainMessage.Text = "GG, Good Girl!";
+                TxtMainMessage.Text = Loc.Get("label_gg_good_girl");
             }
             else
             {
-                TxtMainMessage.Text = "Good Girl!";
+                TxtMainMessage.Text = Loc.Get("label_good_girl_3");
             }
 
             TxtSubMessage.Text = $"{session.Icon} {session.Name} Complete";

@@ -20,6 +20,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Rectangle = System.Windows.Shapes.Rectangle;
 using NAudio.Wave;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 
@@ -131,6 +132,7 @@ namespace ConditioningControlPanel
         /// </summary>
         public event EventHandler? EngineStopped;
         private DateTime _lastPanicTime = DateTime.MinValue;
+        private string? _lastKnownUnifiedId;
 
         /// <summary>
         /// Gets the browser WebView2 control for external access (e.g., avatar audio controls)
@@ -382,6 +384,7 @@ namespace ConditioningControlPanel
 
             Task.Delay(TimeSpan.FromSeconds(schedulerGracePeriodSeconds)).ContinueWith(_ =>
             {
+                if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                 Dispatcher.BeginInvoke(() =>
                 {
                     if (Application.Current == null) return;
@@ -681,7 +684,7 @@ namespace ConditioningControlPanel
                 {
                     // Update pause button to show resume icon
                     if (TxtPauseIcon != null) TxtPauseIcon.Text = "▶";
-                    if (BtnPauseSession != null) BtnPauseSession.ToolTip = "Resume session";
+                    if (BtnPauseSession != null) BtnPauseSession.ToolTip = Loc.Get("tooltip_resume_session");
                 }
             }
             else if (_panicPressCount >= 2)
@@ -1271,6 +1274,9 @@ namespace ConditioningControlPanel
             ApplyModFeatureNames();
             if (App.Mods != null)
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
+
+            // Initialize language selector
+            InitializeLanguageSelector();
 
             // Initialize quick login UI
             UpdateQuickLoginUI();
@@ -2093,7 +2099,7 @@ namespace ConditioningControlPanel
             // If not active (locked), show message
             if (App.Roadmap?.IsStepActive(stepId) != true)
             {
-                MessageBox.Show("Complete the previous steps first!", "Step Locked",
+                MessageBox.Show(Loc.Get("msg_complete_the_previous_steps_first"), "Step Locked",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -2306,7 +2312,7 @@ namespace ConditioningControlPanel
                 {
                     DailyCompletedOverlay.Visibility = Visibility.Visible;
                     BtnRerollDaily.IsEnabled = false;
-                    BtnRerollDaily.Content = "✅ Completed";
+                    BtnRerollDaily.Content = Loc.Get("btn_completed");
                 }
                 else
                 {
@@ -2377,7 +2383,7 @@ namespace ConditioningControlPanel
                 {
                     WeeklyCompletedOverlay.Visibility = Visibility.Visible;
                     BtnRerollWeekly.IsEnabled = false;
-                    BtnRerollWeekly.Content = "✅ Completed";
+                    BtnRerollWeekly.Content = Loc.Get("btn_completed");
                 }
                 else
                 {
@@ -2588,21 +2594,21 @@ namespace ConditioningControlPanel
 
                 if (_isStreakFixMode)
                 {
-                    BtnFixStreak.Content = "✖ Cancel";
+                    BtnFixStreak.Content = Loc.Get("btn_cancel_2");
                 }
                 else
                 {
-                    BtnFixStreak.Content = "🔧 Fix Day";
+                    BtnFixStreak.Content = Loc.Get("btn_fix_day");
                 }
 
                 if (alreadyUsed)
-                    BtnFixStreak.ToolTip = "Already used this season";
+                    BtnFixStreak.ToolTip = Loc.Get("tooltip_already_used_this_season");
                 else if (!hasEnoughXP)
-                    BtnFixStreak.ToolTip = "Requires 500 XP";
+                    BtnFixStreak.ToolTip = Loc.Get("tooltip_requires_500_xp");
                 else if (!hasMissedDays)
-                    BtnFixStreak.ToolTip = "No missed days — your streak is perfect!";
+                    BtnFixStreak.ToolTip = Loc.Get("tooltip_no_missed_days_your_streak_is_perfect");
                 else
-                    BtnFixStreak.ToolTip = "Use Oopsie Insurance to fix a missed day (500 XP)";
+                    BtnFixStreak.ToolTip = Loc.Get("tooltip_use_oopsie_insurance_to_fix_a_missed_day_500");
             }
             else
             {
@@ -2630,7 +2636,7 @@ namespace ConditioningControlPanel
 
             if (settings.SeasonalStreakRecoveryUsed)
             {
-                TxtFixStreakStatus.Text = "Already used Oopsie Insurance this season!";
+                TxtFixStreakStatus.Text = Loc.Get("label_already_used_oopsie_insurance_this_season");
                 TxtFixStreakStatus.Visibility = Visibility.Visible;
                 return;
             }
@@ -2647,21 +2653,21 @@ namespace ConditioningControlPanel
 
             if (!hasMissedDays)
             {
-                TxtFixStreakStatus.Text = "No broken streak — you're doing great sweetie!";
+                TxtFixStreakStatus.Text = Loc.Get("label_no_broken_streak_you_re_doing_great_sweetie");
                 TxtFixStreakStatus.Visibility = Visibility.Visible;
                 return;
             }
 
             if (settings.PlayerXP < 500)
             {
-                TxtFixStreakStatus.Text = "Not enough XP! You need 500 XP to fix a day.";
+                TxtFixStreakStatus.Text = Loc.Get("label_not_enough_xp_you_need_500_xp_to_fix_a_day");
                 TxtFixStreakStatus.Visibility = Visibility.Visible;
                 return;
             }
 
             // Enter fix mode
             _isStreakFixMode = true;
-            TxtFixStreakStatus.Text = "Click a missed day to fix it (costs 500 XP, once per season)";
+            TxtFixStreakStatus.Text = Loc.Get("label_click_a_missed_day_to_fix_it_costs_500_xp_onc");
             TxtFixStreakStatus.Visibility = Visibility.Visible;
             RefreshStreakCalendar();
         }
@@ -2695,7 +2701,7 @@ namespace ConditioningControlPanel
             var fixDateStr = fixDate.ToString("yyyy-MM-dd");
             if (App.ProfileSync != null && !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId))
             {
-                TxtFixStreakStatus.Text = "Processing...";
+                TxtFixStreakStatus.Text = Loc.Get("label_processing");
                 TxtFixStreakStatus.Visibility = Visibility.Visible;
 
                 var (success, error, newXp) = await App.ProfileSync.UseOopsieInsuranceAsync(fixDateStr);
@@ -2724,7 +2730,7 @@ namespace ConditioningControlPanel
             else
             {
                 // No cloud account
-                TxtFixStreakStatus.Text = "❌ Oopsie Insurance requires a cloud account. Please log in first.";
+                TxtFixStreakStatus.Text = Loc.Get("label_oopsie_insurance_requires_a_cloud_account_ple");
                 TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF5252"));
                 TxtFixStreakStatus.Visibility = Visibility.Visible;
                 return;
@@ -2805,7 +2811,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void OpenUnifiedLoginDialog()
         {
-            var previousUnifiedId = App.UnifiedUserId;
+            var previousUnifiedId = App.UnifiedUserId ?? _lastKnownUnifiedId;
 
             var loginDialog = new LoginDialog
             {
@@ -3007,8 +3013,23 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Logs out from all providers
         /// </summary>
-        private void BtnQuickLogout_Click(object sender, RoutedEventArgs e)
+        private async void BtnQuickLogout_Click(object sender, RoutedEventArgs e)
         {
+            // Push latest state to server before clearing local data
+            // (prevents streak/progression loss when heartbeat hasn't synced yet)
+            try
+            {
+                if (App.ProfileSync != null && !string.IsNullOrEmpty(App.UnifiedUserId))
+                    await App.ProfileSync.SyncProfileAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to sync before logout");
+            }
+
+            // Remember which account was logged in (for same-account detection on re-login)
+            _lastKnownUnifiedId = App.UnifiedUserId;
+
             // Stop heartbeat
             App.ProfileSync?.StopHeartbeat();
 
@@ -3244,7 +3265,7 @@ namespace ConditioningControlPanel
                 ChkQuickDiscordRichPresence.IsChecked = false;
                 if (ChkDiscordTabRichPresence != null) ChkDiscordTabRichPresence.IsChecked = false;
                 _isLoading = false;
-                MessageBox.Show("Discord Rich Presence requires a linked Discord account.\n\nLink your Discord in the Profile tab first.",
+                MessageBox.Show(Loc.Get("msg_discord_rich_presence_requires_a_linked_disco"),
                     "Discord Not Linked", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -3313,10 +3334,55 @@ namespace ConditioningControlPanel
 
         #endregion
 
+        private void InitializeLanguageSelector()
+        {
+            if (CmbLanguagePill == null) return;
+
+            CmbLanguagePill.Items.Clear();
+            int selectedIndex = 0;
+            var currentLang = App.Settings?.Current?.Language ?? "en";
+
+            for (int i = 0; i < LocalizationManager.AvailableLanguages.Length; i++)
+            {
+                var (code, displayName, shortName) = LocalizationManager.AvailableLanguages[i];
+                CmbLanguagePill.Items.Add(new ComboBoxItem
+                {
+                    Content = $"🌐 {shortName}",
+                    Tag = code,
+                    ToolTip = displayName
+                });
+                if (code == currentLang)
+                    selectedIndex = i;
+            }
+
+            CmbLanguagePill.SelectedIndex = selectedIndex;
+        }
+
+        private void CmbLanguagePill_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CmbLanguagePill?.SelectedItem is not ComboBoxItem selected) return;
+            var langCode = selected.Tag as string ?? "en";
+
+            if (App.Settings?.Current != null && App.Settings.Current.Language != langCode)
+            {
+                App.Settings.Current.Language = langCode;
+                LocalizationManager.Instance.SetLanguage(langCode);
+                App.Settings.Save();
+
+                // XAML bindings update live; code-behind strings need a restart
+                if (TxtBannerSecondary != null)
+                {
+                    TxtBannerSecondary.Text = Loc.Get("msg_restart_to_apply");
+                    TxtBannerSecondary.Opacity = 1;
+                    TxtBannerSecondary.IsHitTestVisible = true;
+                }
+            }
+        }
+
         private async void BtnCheckUpdates_Click(object sender, RoutedEventArgs e)
         {
             BtnCheckUpdates.IsEnabled = false;
-            BtnCheckUpdates.Content = "Checking...";
+            BtnCheckUpdates.Content = Loc.Get("btn_checking");
 
             try
             {
@@ -3325,7 +3391,7 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnCheckUpdates.IsEnabled = true;
-                BtnCheckUpdates.Content = "Check for Updates";
+                BtnCheckUpdates.Content = Loc.Get("btn_check_updates");
             }
         }
 
@@ -3566,7 +3632,7 @@ namespace ConditioningControlPanel
 
             if (App.Ai == null || !App.Ai.IsAvailable)
             {
-                MessageBox.Show("You need to be logged in to use the AI quiz.", "Login Required",
+                MessageBox.Show(Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"), "Login Required",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -3720,13 +3786,13 @@ namespace ConditioningControlPanel
                     {
                         ChkStrictLock.IsEnabled = false;
                         ChkStrictLock.Opacity = 0.4;
-                        ChkStrictLock.ToolTip = "YOU ARE IN LOCKDOWN MODE, THERE IS NO ESCAPE!";
+                        ChkStrictLock.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
                     }
                     if (ChkNoPanic != null)
                     {
                         ChkNoPanic.IsEnabled = false;
                         ChkNoPanic.Opacity = 0.4;
-                        ChkNoPanic.ToolTip = "YOU ARE IN LOCKDOWN MODE, THERE IS NO ESCAPE!";
+                        ChkNoPanic.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
                     }
 
                     // Swap UI panels
@@ -4035,7 +4101,7 @@ namespace ConditioningControlPanel
                 else if (headerText == "Name")
                 {
                     // Client-side alphabetical sort
-                    TxtLeaderboardStatus.Text = "Sorting by name...";
+                    TxtLeaderboardStatus.Text = Loc.Get("label_sorting_by_name");
                     var sorted = App.Leaderboard.Entries.OrderBy(x => x.DisplayName).ToList();
                     LstLeaderboard.ItemsSource = sorted;
                     TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users • Sorted by Name";
@@ -4043,7 +4109,7 @@ namespace ConditioningControlPanel
                 else if (headerText == "Online")
                 {
                     // Client-side: online first, then by level descending
-                    TxtLeaderboardStatus.Text = "Sorting by online status...";
+                    TxtLeaderboardStatus.Text = Loc.Get("label_sorting_by_online_status");
                     var sorted = App.Leaderboard.Entries
                         .OrderByDescending(x => x.IsOnline)
                         .ThenByDescending(x => x.Level)
@@ -4054,7 +4120,7 @@ namespace ConditioningControlPanel
                 else if (headerText == "Achievements")
                 {
                     // Client-side: by achievement count descending
-                    TxtLeaderboardStatus.Text = "Sorting by achievements...";
+                    TxtLeaderboardStatus.Text = Loc.Get("label_sorting_by_achievements");
                     var sorted = App.Leaderboard.Entries
                         .OrderByDescending(x => x.AchievementsCount)
                         .ToList();
@@ -4245,7 +4311,7 @@ namespace ConditioningControlPanel
         {
             if (App.Leaderboard == null || TxtLeaderboardStatus == null || BtnRefreshLeaderboard == null) return;
 
-            TxtLeaderboardStatus.Text = "Syncing...";
+            TxtLeaderboardStatus.Text = Loc.Get("label_syncing");
             BtnRefreshLeaderboard.IsEnabled = false;
 
             try
@@ -4266,7 +4332,7 @@ namespace ConditioningControlPanel
                     App.Logger?.Information("Profile sync completed");
                 }
 
-                TxtLeaderboardStatus.Text = "Loading...";
+                TxtLeaderboardStatus.Text = Loc.Get("label_loading_2");
                 var success = await App.Leaderboard.RefreshAsync(sortBy, _leaderboardMode);
 
                 if (success)
@@ -4278,9 +4344,9 @@ namespace ConditioningControlPanel
                     // Update season flavour text based on mode
                     if (_leaderboardMode == "all-time")
                     {
-                        TxtLeaderboardSeason.Text = "all-time ~ legends never die~";
+                        TxtLeaderboardSeason.Text = Loc.Get("label_all_time_legends_never_die");
                         if (TxtLeaderboardSubtitle != null)
-                            TxtLeaderboardSubtitle.Text = "cumulative XP across all seasons~";
+                            TxtLeaderboardSubtitle.Text = Loc.Get("label_cumulative_xp_across_all_seasons");
                     }
                     else
                     {
@@ -4288,7 +4354,7 @@ namespace ConditioningControlPanel
                         if (!string.IsNullOrEmpty(seasonTitle))
                             TxtLeaderboardSeason.Text = $"{seasonTitle} ~ prove your devotion~";
                         if (TxtLeaderboardSubtitle != null)
-                            TxtLeaderboardSubtitle.Text = "resets monthly — your rank is everything~";
+                            TxtLeaderboardSubtitle.Text = Loc.Get("label_resets_monthly_your_rank_is_everything");
                     }
 
                     // Show/hide Trophy Case columns based on skill unlock
@@ -4304,7 +4370,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Error refreshing leaderboard");
-                TxtLeaderboardStatus.Text = "Error loading leaderboard";
+                TxtLeaderboardStatus.Text = Loc.Get("label_error_loading_leaderboard");
             }
             finally
             {
@@ -4548,11 +4614,11 @@ namespace ConditioningControlPanel
             {
                 if (App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
                 {
-                    TxtActivePromptName.Text = "Custom (Edited)";
+                    TxtActivePromptName.Text = Loc.Get("label_custom_edited");
                 }
                 else
                 {
-                    TxtActivePromptName.Text = "Default (Built-in)";
+                    TxtActivePromptName.Text = Loc.Get("label_default_built_in");
                 }
                 BtnDeactivatePrompt.Visibility = Visibility.Collapsed;
             }
@@ -4848,7 +4914,7 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnRefreshPrompts.IsEnabled = true;
-                BtnRefreshPrompts.Content = "Refresh";
+                BtnRefreshPrompts.Content = Loc.Get("btn_refresh");
             }
         }
 
@@ -5006,15 +5072,15 @@ namespace ConditioningControlPanel
                     _ when isWhitelisted => "Whitelisted - All features unlocked!",
                     _ => isActivePatron ? "Patron - Thank you for your support!" : "Connected - Subscribe to unlock features"
                 };
-                BtnPatreonLogin.Content = "Logout";
+                BtnPatreonLogin.Content = Loc.Get("btn_logout");
             }
             else
             {
                 // Check if user is logged in with another provider (has unified_id)
                 var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                TxtPatreonStatus.Text = "Not Connected";
-                TxtPatreonTier.Text = "Login to unlock exclusive features";
+                TxtPatreonStatus.Text = Loc.Get("label_not_connected");
+                TxtPatreonTier.Text = Loc.Get("label_login_to_unlock_exclusive_features");
 
                 // Show "Link Patreon" if logged in via Discord, otherwise "Login"
                 BtnPatreonLogin.Content = hasUnifiedId ? "Link Patreon" : "Login";
@@ -5057,7 +5123,7 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    TxtAiStatus.Text = "AI initializing...";
+                    TxtAiStatus.Text = Loc.Get("label_ai_initializing");
                 }
             }
 
@@ -5115,7 +5181,7 @@ namespace ConditioningControlPanel
                 {
                     // Link Patreon to existing account
                     BtnPatreonLogin.IsEnabled = false;
-                    BtnPatreonLogin.Content = "Connecting...";
+                    BtnPatreonLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -5185,7 +5251,7 @@ namespace ConditioningControlPanel
                 {
                     // Link Discord to existing account
                     BtnDiscordLogin.IsEnabled = false;
-                    BtnDiscordLogin.Content = "Connecting...";
+                    BtnDiscordLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -5233,15 +5299,15 @@ namespace ConditioningControlPanel
                 var discordDisplayName = App.Settings?.Current?.UserDisplayName ?? App.Discord.DisplayName;
                 TxtDiscordStatus.Text = $"Connected as {discordDisplayName}";
                 TxtDiscordInfo.Text = $"@{App.Discord.Username}";
-                BtnDiscordLogin.Content = "Logout";
+                BtnDiscordLogin.Content = Loc.Get("btn_logout");
             }
             else
             {
                 // Check if user is logged in with another provider (has unified_id)
                 var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                TxtDiscordStatus.Text = "Not Connected";
-                TxtDiscordInfo.Text = "Link Discord for community features";
+                TxtDiscordStatus.Text = Loc.Get("label_not_connected");
+                TxtDiscordInfo.Text = Loc.Get("label_link_discord_for_community_features");
 
                 // Show "Link Discord" if logged in via Patreon, otherwise "Login"
                 BtnDiscordLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
@@ -5286,7 +5352,7 @@ namespace ConditioningControlPanel
             if (App.Patreon == null) return;
 
             BtnLinkPatreon.IsEnabled = false;
-            BtnLinkPatreon.Content = "Connecting...";
+            BtnLinkPatreon.Content = Loc.Get("login_connecting");
 
             try
             {
@@ -5316,7 +5382,7 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnLinkPatreon.IsEnabled = true;
-                BtnLinkPatreon.Content = "⭐ Link Patreon";
+                BtnLinkPatreon.Content = Loc.Get("btn_link_patreon");
             }
         }
 
@@ -5328,7 +5394,7 @@ namespace ConditioningControlPanel
             if (App.Discord == null) return;
 
             BtnLinkDiscord.IsEnabled = false;
-            BtnLinkDiscord.Content = "Connecting...";
+            BtnLinkDiscord.Content = Loc.Get("login_connecting");
 
             try
             {
@@ -5358,7 +5424,7 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnLinkDiscord.IsEnabled = true;
-                BtnLinkDiscord.Content = "🎮 Link Discord";
+                BtnLinkDiscord.Content = Loc.Get("btn_link_discord");
             }
         }
 
@@ -5369,7 +5435,7 @@ namespace ConditioningControlPanel
             if (App.ProfileSync == null) return;
 
             BtnBackupSettingsNow.IsEnabled = false;
-            BtnBackupSettingsNow.Content = "Backing up...";
+            BtnBackupSettingsNow.Content = Loc.Get("btn_backing_up");
 
             try
             {
@@ -5406,7 +5472,7 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnBackupSettingsNow.IsEnabled = true;
-                BtnBackupSettingsNow.Content = "☁ Backup Now";
+                BtnBackupSettingsNow.Content = Loc.Get("btn_backup_now");
             }
         }
 
@@ -5425,7 +5491,7 @@ namespace ConditioningControlPanel
             if (confirm != MessageBoxResult.Yes) return;
 
             BtnRestoreSettings.IsEnabled = false;
-            BtnRestoreSettings.Content = "Restoring...";
+            BtnRestoreSettings.Content = Loc.Get("btn_restoring");
 
             try
             {
@@ -5485,7 +5551,7 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnRestoreSettings.IsEnabled = true;
-                BtnRestoreSettings.Content = "Restore from Cloud";
+                BtnRestoreSettings.Content = Loc.Get("btn_restore_from_cloud");
             }
         }
 
@@ -5494,7 +5560,7 @@ namespace ConditioningControlPanel
             if (App.ProfileSync == null) return;
 
             BtnExportData.IsEnabled = false;
-            BtnExportData.Content = "Exporting...";
+            BtnExportData.Content = Loc.Get("btn_exporting");
 
             try
             {
@@ -5539,7 +5605,7 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnExportData.IsEnabled = true;
-                BtnExportData.Content = "Export My Data";
+                BtnExportData.Content = Loc.Get("btn_export_my_data");
             }
         }
 
@@ -5574,13 +5640,13 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    TxtCloudBackupStatus.Text = "No cloud backup found. Back up your settings to protect them.";
+                    TxtCloudBackupStatus.Text = Loc.Get("label_no_cloud_backup_found_back_up_your_settings_t");
                 }
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("Failed to update backup status: {Error}", ex.Message);
-                TxtCloudBackupStatus.Text = "Could not check backup status.";
+                TxtCloudBackupStatus.Text = Loc.Get("label_could_not_check_backup_status");
             }
         }
 
@@ -5788,13 +5854,13 @@ namespace ConditioningControlPanel
             // Update button and status text
             if (_avatarTubeWindow.IsDetached)
             {
-                BtnDetachCompanionTab.Content = "Attach";
-                TxtDetachStatusCompanion.Text = "Floating freely - drag to reposition";
+                BtnDetachCompanionTab.Content = Loc.Get("btn_attach");
+                TxtDetachStatusCompanion.Text = Loc.Get("label_floating_freely_drag_to_reposition");
             }
             else
             {
-                BtnDetachCompanionTab.Content = "Detach";
-                TxtDetachStatusCompanion.Text = "Anchored to window";
+                BtnDetachCompanionTab.Content = Loc.Get("btn_detach");
+                TxtDetachStatusCompanion.Text = Loc.Get("label_anchored_to_window");
             }
         }
 
@@ -5957,12 +6023,12 @@ namespace ConditioningControlPanel
             if (TxtPrivacyDetails.Visibility == Visibility.Collapsed)
             {
                 TxtPrivacyDetails.Visibility = Visibility.Visible;
-                BtnPrivacySpoiler.Content = "▼ Hide";
+                BtnPrivacySpoiler.Content = Loc.Get("btn_hide");
             }
             else
             {
                 TxtPrivacyDetails.Visibility = Visibility.Collapsed;
-                BtnPrivacySpoiler.Content = "▶ Click to reveal";
+                BtnPrivacySpoiler.Content = Loc.Get("btn_click_to_reveal");
             }
         }
 
@@ -6166,15 +6232,15 @@ namespace ConditioningControlPanel
             if (App.Haptics.IsConnected)
             {
                 await App.Haptics.DisconnectAsync();
-                BtnHapticConnect.Content = "Connect";
-                TxtHapticStatus.Text = "Disconnected";
+                BtnHapticConnect.Content = Loc.Get("btn_connect");
+                TxtHapticStatus.Text = Loc.Get("label_disconnected");
                 TxtHapticStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(0xFF, 0x6B, 0x6B));
-                TxtHapticDevices.Text = "No devices";
+                TxtHapticDevices.Text = Loc.Get("label_no_devices");
             }
             else
             {
-                BtnHapticConnect.Content = "Connecting...";
+                BtnHapticConnect.Content = Loc.Get("login_connecting");
                 BtnHapticConnect.IsEnabled = false;
 
                 try
@@ -6183,8 +6249,8 @@ namespace ConditioningControlPanel
 
                     if (success)
                     {
-                        BtnHapticConnect.Content = "Disconnect";
-                        TxtHapticStatus.Text = "Connected";
+                        BtnHapticConnect.Content = Loc.Get("btn_disconnect");
+                        TxtHapticStatus.Text = Loc.Get("label_connected");
                         TxtHapticStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                             System.Windows.Media.Color.FromRgb(0x00, 0xE6, 0x76));
 
@@ -6195,16 +6261,16 @@ namespace ConditioningControlPanel
                     }
                     else
                     {
-                        BtnHapticConnect.Content = "Connect";
-                        TxtHapticStatus.Text = "Failed";
+                        BtnHapticConnect.Content = Loc.Get("btn_connect");
+                        TxtHapticStatus.Text = Loc.Get("label_failed");
                         TxtHapticStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                             System.Windows.Media.Color.FromRgb(0xFF, 0x6B, 0x6B));
                     }
                 }
                 catch (Exception ex)
                 {
-                    BtnHapticConnect.Content = "Connect";
-                    TxtHapticStatus.Text = "Error";
+                    BtnHapticConnect.Content = Loc.Get("btn_connect");
+                    TxtHapticStatus.Text = Loc.Get("label_error");
                     TxtHapticDevices.Text = ex.Message;
                 }
                 finally
@@ -6248,7 +6314,7 @@ namespace ConditioningControlPanel
 
             if (!App.Haptics.IsConnected)
             {
-                MessageBox.Show("Connect to a device first.", "Not Connected", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Loc.Get("msg_connect_to_a_device_first"), "Not Connected", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -6605,7 +6671,7 @@ namespace ConditioningControlPanel
             var imported = App.KeywordTriggers?.ImportFromCustomTriggers();
             if (imported == null || imported.Count == 0)
             {
-                MessageBox.Show("No new triggers to import. All existing trigger phrases are already in your keyword triggers list.",
+                MessageBox.Show(Loc.Get("msg_no_new_triggers_to_import_all_existing_trigge"),
                     "Import Complete", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -7135,15 +7201,15 @@ namespace ConditioningControlPanel
                     var pin = App.RemoteControl?.ConnectPin;
                     var copyText = !string.IsNullOrEmpty(pin) ? $"{code} (PIN: {pin})" : code;
                     System.Windows.Clipboard.SetText(copyText);
-                    BtnCopyRemoteCode.Content = "Copied!";
+                    BtnCopyRemoteCode.Content = Loc.Get("btn_copied");
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "Failed to copy remote code to clipboard");
-                    BtnCopyRemoteCode.Content = "Failed";
+                    BtnCopyRemoteCode.Content = Loc.Get("label_failed");
                 }
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-                timer.Tick += (s, _) => { BtnCopyRemoteCode.Content = "Copy"; timer.Stop(); };
+                timer.Tick += (s, _) => { BtnCopyRemoteCode.Content = Loc.Get("btn_copy"); timer.Stop(); };
                 timer.Start();
             }
         }
@@ -7157,15 +7223,15 @@ namespace ConditioningControlPanel
             try
             {
                 System.Windows.Clipboard.SetText(url);
-                BtnCopyRemoteLink.Content = "Copied!";
+                BtnCopyRemoteLink.Content = Loc.Get("btn_copied");
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to copy remote link to clipboard");
-                BtnCopyRemoteLink.Content = "Failed";
+                BtnCopyRemoteLink.Content = Loc.Get("label_failed");
             }
             var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-            timer.Tick += (s, _) => { BtnCopyRemoteLink.Content = "Copy Link"; timer.Stop(); };
+            timer.Tick += (s, _) => { BtnCopyRemoteLink.Content = Loc.Get("btn_copy_link"); timer.Stop(); };
             timer.Start();
         }
 
@@ -7247,7 +7313,7 @@ namespace ConditioningControlPanel
             {
                 RemoteStatusDot.Fill = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(0x00, 0xFF, 0x88));
-                TxtRemoteStatus.Text = "Controller connected";
+                TxtRemoteStatus.Text = Loc.Get("label_controller_connected");
                 TxtRemoteStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(0x00, 0xFF, 0x88));
             }
@@ -7255,7 +7321,7 @@ namespace ConditioningControlPanel
             {
                 RemoteStatusDot.Fill = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(0xFF, 0xA5, 0x00));
-                TxtRemoteStatus.Text = "Waiting for controller...";
+                TxtRemoteStatus.Text = Loc.Get("label_waiting_for_controller");
                 TxtRemoteStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(0xA0, 0xA0, 0xA0));
             }
@@ -7767,7 +7833,7 @@ namespace ConditioningControlPanel
             else
             {
                 // Not logged in - show generic welcome
-                TxtBannerSecondary.Text = "Welcome! Consider logging in with Patreon for extra features.";
+                TxtBannerSecondary.Text = Loc.Get("label_welcome_consider_logging_in_with_patreon_for");
             }
         }
 
@@ -10230,7 +10296,7 @@ namespace ConditioningControlPanel
             {
                 // Hide spoilers
                 SessionSpoilerPanel.Visibility = Visibility.Collapsed;
-                BtnRevealSpoilers.Content = "👁 Reveal Details";
+                BtnRevealSpoilers.Content = Loc.Get("btn_reveal_details");
                 return;
             }
             
@@ -10265,7 +10331,7 @@ namespace ConditioningControlPanel
             if (warning3)
             {
                 SessionSpoilerPanel.Visibility = Visibility.Visible;
-                BtnRevealSpoilers.Content = "😎 Hide Details";
+                BtnRevealSpoilers.Content = Loc.Get("btn_hide_details");
             }
         }
         
@@ -10534,7 +10600,7 @@ namespace ConditioningControlPanel
             App.IsSessionRunning = true;
             Dispatcher.Invoke(() =>
             {
-                BtnStartSession.Content = "STOP SESSION";
+                BtnStartSession.Content = Loc.Get("btn_stop_session_2");
                 BtnStartSession.Click -= BtnStartSession_Click;
                 BtnStartSession.Click += BtnStopSession_Click;
 
@@ -10570,13 +10636,13 @@ namespace ConditioningControlPanel
                 // Stop the engine when session stops
                 StopEngine();
 
-                BtnStartSession.Content = "▶ Start Session";
+                BtnStartSession.Content = Loc.Get("btn_start_session");
                 BtnStartSession.Click -= BtnStopSession_Click;
                 BtnStartSession.Click += BtnStartSession_Click;
 
                 // Reset Start button to normal state
                 TxtStartIcon.Text = "▶";
-                TxtStartLabel.Text = "START";
+                TxtStartLabel.Text = Loc.Get("label_start");
 
                 // Restore pink color
                 BtnStart.ClearValue(System.Windows.Controls.Control.BackgroundProperty);
@@ -10592,7 +10658,7 @@ namespace ConditioningControlPanel
 
             if (App.Lockdown?.IsActive == true)
             {
-                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nYou cannot end a session during lockdown!", "LOCKDOWN",
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_end_a_se"), "LOCKDOWN",
                     MessageBoxButton.OK, MessageBoxImage.Stop);
                 return;
             }
@@ -10632,7 +10698,7 @@ namespace ConditioningControlPanel
 
             if (App.Lockdown?.IsActive == true)
             {
-                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nYou cannot pause during lockdown!", "LOCKDOWN",
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_pause_du"), "LOCKDOWN",
                     MessageBoxButton.OK, MessageBoxImage.Stop);
                 return;
             }
@@ -10659,7 +10725,7 @@ namespace ConditioningControlPanel
                 {
                     _sessionEngine.PauseSession();
                     if (TxtPauseIcon != null) TxtPauseIcon.Text = "▶";
-                    BtnPauseSession.ToolTip = "Resume session";
+                    BtnPauseSession.ToolTip = Loc.Get("tooltip_resume_session");
                 }
             }
         }
@@ -10861,7 +10927,7 @@ namespace ConditioningControlPanel
                 // Check if name already exists
                 if (_allPresets.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
                 {
-                    MessageBox.Show("A preset with this name already exists.", "Name Taken", 
+                    MessageBox.Show(Loc.Get("msg_a_preset_with_this_name_already_exists"), "Name Taken", 
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
@@ -11219,7 +11285,7 @@ namespace ConditioningControlPanel
             SessionDetailScroller.Visibility = Visibility.Visible;
             SessionButtonsPanel.Visibility = Visibility.Visible;
             SessionSpoilerPanel.Visibility = Visibility.Collapsed;
-            BtnRevealSpoilers.Content = "👁 Reveal Details";
+            BtnRevealSpoilers.Content = Loc.Get("btn_reveal_details");
 
             TxtDetailTitle.Text = $"{session.Icon} {session.GetModeAwareName()}";
             TxtDetailSubtitle.Text = GenerateSessionTimelineDescription(session);
@@ -11485,13 +11551,13 @@ namespace ConditioningControlPanel
             {
                 case DropType.Session:
                     DropOverlayIcon.Text = "📋";
-                    DropOverlayTitle.Text = "Drop to Import Session";
+                    DropOverlayTitle.Text = Loc.Get("label_drop_to_import_session");
                     DropOverlaySubtitle.Text = Path.GetFileName(files[0]);
                     break;
 
                 case DropType.Zip:
                     DropOverlayIcon.Text = "📦";
-                    DropOverlayTitle.Text = "Drop to Extract Assets";
+                    DropOverlayTitle.Text = Loc.Get("label_drop_to_extract_assets");
                     var zipCount = files.Count(f => Path.GetExtension(f).Equals(".zip", StringComparison.OrdinalIgnoreCase));
                     DropOverlaySubtitle.Text = zipCount == 1
                         ? Path.GetFileName(files.First(f => f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
@@ -11500,13 +11566,13 @@ namespace ConditioningControlPanel
 
                 case DropType.Folder:
                     DropOverlayIcon.Text = "📁";
-                    DropOverlayTitle.Text = "Drop to Import Folder";
+                    DropOverlayTitle.Text = Loc.Get("label_drop_to_import_folder");
                     DropOverlaySubtitle.Text = $"Scan for images & videos";
                     break;
 
                 case DropType.Assets:
                     DropOverlayIcon.Text = "🖼️";
-                    DropOverlayTitle.Text = "Drop to Import Assets";
+                    DropOverlayTitle.Text = Loc.Get("label_drop_to_import_assets");
                     DropOverlaySubtitle.Text = files.Length == 1
                         ? Path.GetFileName(files[0])
                         : $"{files.Length} files";
@@ -11633,7 +11699,7 @@ namespace ConditioningControlPanel
                         if (dialog.ShowDialog() == true)
                         {
                             _sessionManager.AddNewSession(editedSession, dialog.FileName);
-                            MessageBox.Show("Built-in session saved as a new custom session!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                            MessageBox.Show(Loc.Get("msg_built_in_session_saved_as_a_new_custom_sessio"), "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                         }
                     }
                     else // Custom session
@@ -11687,8 +11753,8 @@ namespace ConditioningControlPanel
                     if (_selectedSession?.Id == sessionId)
                     {
                         _selectedSession = null;
-                        TxtDetailTitle.Text = "Select a Session";
-                        TxtDetailSubtitle.Text = "Click on a session to see details";
+                        TxtDetailTitle.Text = Loc.Get("label_select_a_session");
+                        TxtDetailSubtitle.Text = Loc.Get("label_click_on_a_session_to_see_details");
                     }
                 }
             }
@@ -11813,7 +11879,7 @@ namespace ConditioningControlPanel
                     _sessionManager.AddNewSession(session, dialog.FileName);
 
                     // The OnSessionAdded event will handle UI updates
-                    MessageBox.Show("New session saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(Loc.Get("msg_new_session_saved"), "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                     App.Logger?.Information("Session created: {Name} at {Path}", session.Name, dialog.FileName);
                 }
             }
@@ -11873,9 +11939,9 @@ namespace ConditioningControlPanel
 
             try
             {
-                TxtBrowserStatus.Text = "● Loading...";
+                TxtBrowserStatus.Text = Loc.Get("label_loading");
                 TxtBrowserStatus.Foreground = FindResource("PinkBrush") as SolidColorBrush;
-                BrowserLoadingText.Text = "🌐 Initializing WebView2...";
+                BrowserLoadingText.Text = Loc.Get("label_initializing_webview2");
                 
                 _browser = new BrowserService();
                 
@@ -11883,7 +11949,7 @@ namespace ConditioningControlPanel
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        TxtBrowserStatus.Text = "● Connected";
+                        TxtBrowserStatus.Text = Loc.Get("label_connected_2");
                         TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(0, 230, 118)); // Green
 
                         // Now that CoreWebView2 is ready, attach message handler for video end notifications
@@ -11899,7 +11965,7 @@ namespace ConditioningControlPanel
                 {
                     Dispatcher.Invoke(async () =>
                     {
-                        TxtBrowserStatus.Text = "● Connected";
+                        TxtBrowserStatus.Text = Loc.Get("label_connected_2");
                         TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(0, 230, 118)); // Green
 
                         // Inject audio sync script when navigating to video sites
@@ -11923,7 +11989,7 @@ namespace ConditioningControlPanel
                     Dispatcher.Invoke(() => HandleBrowserFullscreenChanged(isFullscreen));
                 };
 
-                BrowserLoadingText.Text = "🌐 Creating browser...";
+                BrowserLoadingText.Text = Loc.Get("label_creating_browser");
 
                 // Navigate to mode-appropriate site
                 var startUrl = App.Mods?.GetDefaultBrowserUrl() ?? "https://bambicloud.com/";
@@ -11944,7 +12010,7 @@ namespace ConditioningControlPanel
                 {
                     var errorMsg = "WebView2 returned null - unknown error";
                     BrowserLoadingText.Text = $"❌ {errorMsg}\n\nInstall WebView2 Runtime:\ngo.microsoft.com/fwlink/p/?LinkId=2124703";
-                    TxtBrowserStatus.Text = "● Error";
+                    TxtBrowserStatus.Text = Loc.Get("label_error_2");
                     TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
                     MessageBox.Show(errorMsg, "Browser Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
@@ -11952,7 +12018,7 @@ namespace ConditioningControlPanel
             catch (InvalidOperationException invEx)
             {
                 BrowserLoadingText.Text = $"❌ {invEx.Message}";
-                TxtBrowserStatus.Text = "● Not Installed";
+                TxtBrowserStatus.Text = Loc.Get("label_not_installed");
                 TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
                 MessageBox.Show(invEx.Message, "WebView2 Not Installed", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
@@ -11960,7 +12026,7 @@ namespace ConditioningControlPanel
             {
                 var errorMsg = $"WebView2 COM Error:\n{comEx.Message}\n\nError Code: {comEx.HResult}";
                 BrowserLoadingText.Text = $"❌ COM Error\n\nInstall WebView2:\ngo.microsoft.com/fwlink/p/?LinkId=2124703";
-                TxtBrowserStatus.Text = "● COM Error";
+                TxtBrowserStatus.Text = Loc.Get("label_com_error");
                 TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
                 MessageBox.Show(errorMsg, "WebView2 Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -11968,7 +12034,7 @@ namespace ConditioningControlPanel
             {
                 var errorMsg = $"WebView2 DLL not found:\n{dllEx.Message}";
                 BrowserLoadingText.Text = $"❌ Missing DLL\n\nInstall WebView2:\ngo.microsoft.com/fwlink/p/?LinkId=2124703";
-                TxtBrowserStatus.Text = "● Missing DLL";
+                TxtBrowserStatus.Text = Loc.Get("label_missing_dll");
                 TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
                 MessageBox.Show(errorMsg, "Missing DLL", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -11977,7 +12043,7 @@ namespace ConditioningControlPanel
                 var stack = ex.StackTrace;
                 var errorMsg = $"Browser Error:\n\nType: {ex.GetType().Name}\n\nMessage: {ex.Message}\n\nStack: {(stack != null ? stack.Substring(0, Math.Min(500, stack.Length)) : "(none)")}";
                 BrowserLoadingText.Text = $"❌ {ex.GetType().Name}\n{ex.Message}";
-                TxtBrowserStatus.Text = "● Error";
+                TxtBrowserStatus.Text = Loc.Get("label_error_2");
                 TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
                 MessageBox.Show(errorMsg, "Browser Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -12467,7 +12533,7 @@ namespace ConditioningControlPanel
                 {
                     // Link Discord to existing account
                     BtnDiscordTabLogin.IsEnabled = false;
-                    BtnDiscordTabLogin.Content = "Connecting...";
+                    BtnDiscordTabLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -12521,16 +12587,16 @@ namespace ConditioningControlPanel
                 if (isLoggedIn)
                 {
                     TxtDiscordTabStatus.Text = $"Connected as {App.Discord.Username}";
-                    TxtDiscordTabInfo.Text = "Discord account linked";
-                    BtnDiscordTabLogin.Content = "Logout";
+                    TxtDiscordTabInfo.Text = Loc.Get("label_discord_account_linked");
+                    BtnDiscordTabLogin.Content = Loc.Get("btn_logout");
                 }
                 else
                 {
                     // Check if user is logged in with another provider (has unified_id)
                     var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                    TxtDiscordTabStatus.Text = "Not Connected";
-                    TxtDiscordTabInfo.Text = "Link Discord for community features";
+                    TxtDiscordTabStatus.Text = Loc.Get("label_not_connected");
+                    TxtDiscordTabInfo.Text = Loc.Get("label_link_discord_for_community_features");
 
                     // Show "Link Discord" if logged in via Patreon, otherwise "Login"
                     BtnDiscordTabLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
@@ -12637,9 +12703,10 @@ namespace ConditioningControlPanel
                     System.Windows.Clipboard.SetText(discordId);
                     // Show brief feedback
                     var originalText = TxtProfileDiscordId.Text;
-                    TxtProfileDiscordId.Text = "Copied!";
+                    TxtProfileDiscordId.Text = Loc.Get("btn_copied");
                     Task.Delay(1000).ContinueWith(_ =>
                     {
+                        if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                         Dispatcher.Invoke(() =>
                         {
                             if (TxtProfileDiscordId != null)
@@ -12690,9 +12757,10 @@ namespace ConditioningControlPanel
                         if (TxtProfileDiscordId != null)
                         {
                             var originalText = TxtProfileDiscordId.Text;
-                            TxtProfileDiscordId.Text = "ID Copied!";
+                            TxtProfileDiscordId.Text = Loc.Get("label_id_copied");
                             Task.Delay(1500).ContinueWith(_ =>
                             {
+                                if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                                 Dispatcher.Invoke(() =>
                                 {
                                     if (TxtProfileDiscordId != null)
@@ -12995,7 +13063,7 @@ namespace ConditioningControlPanel
             // Online status
             if (TxtProfileViewerOnline != null)
             {
-                TxtProfileViewerOnline.Text = "Online";
+                TxtProfileViewerOnline.Text = Loc.Get("label_online");
                 TxtProfileViewerOnline.Foreground = new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#43B581"));
             }
@@ -13140,7 +13208,7 @@ namespace ConditioningControlPanel
                 if (ProfileAchievementGrid != null) ProfileAchievementGrid.ItemsSource = null;
                 if (TxtNoAchievements != null)
                 {
-                    TxtNoAchievements.Text = "No achievements yet";
+                    TxtNoAchievements.Text = Loc.Get("label_no_achievements_yet");
                     TxtNoAchievements.Visibility = Visibility.Visible;
                 }
             }
@@ -13536,7 +13604,7 @@ namespace ConditioningControlPanel
                 }
 
                 // Show placeholder in the embedded container
-                BrowserLoadingText.Text = "🌐 Browser popped out\nClick ⧉ to focus window";
+                BrowserLoadingText.Text = Loc.Get("label_browser_popped_out_nclick_to_focus_window");
                 BrowserLoadingText.Visibility = Visibility.Visible;
 
                 // Create popup window
@@ -13585,13 +13653,13 @@ namespace ConditioningControlPanel
                         BrowserLoadingText.Visibility = Visibility.Collapsed;
                     }
                     _browserPopoutWindow = null;
-                    BtnPopOutBrowser.Content = "⧉ Pop Out";
-                    BtnPopOutBrowser.ToolTip = "Pop out browser to resizable window";
+                    BtnPopOutBrowser.Content = Loc.Get("btn_pop_out");
+                    BtnPopOutBrowser.ToolTip = Loc.Get("tooltip_pop_out_browser_to_resizable_window");
                 };
 
                 // Update button to show it's popped out
-                BtnPopOutBrowser.Content = "◱ Focus";
-                BtnPopOutBrowser.ToolTip = "Browser is popped out - click to focus";
+                BtnPopOutBrowser.Content = Loc.Get("btn_focus");
+                BtnPopOutBrowser.ToolTip = Loc.Get("tooltip_browser_is_popped_out_click_to_focus");
 
                 _browserPopoutWindow.Show();
                 App.Logger?.Information("Browser popped out to separate window");
@@ -13846,7 +13914,7 @@ namespace ConditioningControlPanel
 
             if (_isRunning && App.Lockdown?.IsActive == true)
             {
-                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nYou cannot stop during lockdown!", "LOCKDOWN",
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"), "LOCKDOWN",
                     MessageBoxButton.OK, MessageBoxImage.Stop);
                 return;
             }
@@ -14497,7 +14565,7 @@ namespace ConditioningControlPanel
                 // Also update Presets tab button using direct reference
                 if (TxtPresetsStatus != null)
                 {
-                    TxtPresetsStatus.Text = "Running...";
+                    TxtPresetsStatus.Text = Loc.Get("label_running");
                 }
             }
             else
@@ -14668,7 +14736,7 @@ namespace ConditioningControlPanel
             }
             else
             {
-                TxtStartupVideo.Text = "(Random)";
+                TxtStartupVideo.Text = Loc.Get("label_random");
             }
 
             // Audio
@@ -15074,7 +15142,7 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    MessageBox.Show("Settings saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(Loc.Get("msg_settings_saved"), "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
             else
@@ -15114,7 +15182,7 @@ namespace ConditioningControlPanel
                 else
                 {
                     // Cancel - just show settings saved message
-                    MessageBox.Show("Settings saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(Loc.Get("msg_settings_saved"), "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
         }
@@ -15123,14 +15191,14 @@ namespace ConditioningControlPanel
         {
             if (App.Lockdown?.IsActive == true)
             {
-                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nTHERE IS NO ESCAPE!", "LOCKDOWN",
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"), "LOCKDOWN",
                     MessageBoxButton.OK, MessageBoxImage.Stop);
                 return;
             }
 
             if (_isRunning)
             {
-                var result = MessageBox.Show("Engine is running. Stop and exit?", "Confirm Exit",
+                var result = MessageBox.Show(Loc.Get("msg_engine_is_running_stop_and_exit"), "Confirm Exit",
                     MessageBoxButton.YesNo, MessageBoxImage.Question);
                 if (result != MessageBoxResult.Yes)
                     return;
@@ -15515,12 +15583,12 @@ namespace ConditioningControlPanel
                     else if (App.Leaderboard?.Entries?.Count > 0)
                     {
                         // Leaderboard loaded but player not found - might be unranked or need to sync
-                        TxtPillRankPercentile.Text = "Unranked";
+                        TxtPillRankPercentile.Text = Loc.Get("label_unranked");
                     }
                     else
                     {
                         // Leaderboard not loaded yet
-                        TxtPillRankPercentile.Text = "Loading...";
+                        TxtPillRankPercentile.Text = Loc.Get("label_loading_2");
                     }
                 }
             }
@@ -15866,8 +15934,8 @@ namespace ConditioningControlPanel
                 // Update lock message
                 if (TxtAutonomyLockStatus != null && TxtAutonomyLockMessage != null)
                 {
-                    TxtAutonomyLockStatus.Text = "🔒 Patreon Only";
-                    TxtAutonomyLockMessage.Text = "Support on Patreon to unlock";
+                    TxtAutonomyLockStatus.Text = Loc.Get("label_patreon_only");
+                    TxtAutonomyLockMessage.Text = Loc.Get("label_support_on_patreon_to_unlock");
                 }
 
                 App.Logger?.Debug("UpdateUnlockablesVisibility: Completed successfully.");
@@ -15992,12 +16060,12 @@ namespace ConditioningControlPanel
                 SliderFlashDuration.IsEnabled = true;
                 SliderFlashDuration.Opacity = 1.0;
                 TxtAudioWarning.Visibility = Visibility.Visible;
-                TxtAudioWarning.Text = "⚠ Audio off >60/h";
+                TxtAudioWarning.Text = Loc.Get("label_audio_off_60_h");
             }
             else
             {
                 ChkFlashAudio.IsEnabled = true;
-                TxtAudioWarning.Text = "⚠ Max 60/h";
+                TxtAudioWarning.Text = Loc.Get("label_max_60_h");
                 TxtAudioWarning.Visibility = (ChkFlashAudio.IsChecked ?? true) ? Visibility.Collapsed : Visibility.Visible;
             }
         }
@@ -16821,12 +16889,12 @@ namespace ConditioningControlPanel
 
             if (isEnabled)
             {
-                BtnAutonomyStartStop.Content = "■ Stop";
+                BtnAutonomyStartStop.Content = Loc.Get("btn_stop_2");
                 BtnAutonomyStartStop.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")); // Pink
             }
             else
             {
-                BtnAutonomyStartStop.Content = "▶ Start";
+                BtnAutonomyStartStop.Content = Loc.Get("btn_start_2");
                 BtnAutonomyStartStop.Foreground = new SolidColorBrush(Color.FromRgb(144, 238, 144)); // Light green
             }
         }
@@ -17055,19 +17123,31 @@ namespace ConditioningControlPanel
                 // Fetch from server on startup (with short delay)
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    _ = Task.Delay(3000).ContinueWith(_ => Dispatcher.Invoke(RefreshMarqueeFromSettings));
+                    _ = Task.Delay(3000).ContinueWith(_ =>
+                    {
+                        if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
+                        Dispatcher.Invoke(RefreshMarqueeFromSettings);
+                    });
                 }));
 
                 // Check for server-controlled update banner (fallback for when auto-update fails)
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    _ = Task.Delay(5000).ContinueWith(_ => Dispatcher.Invoke(CheckServerUpdateBanner));
+                    _ = Task.Delay(5000).ContinueWith(_ =>
+                    {
+                        if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
+                        Dispatcher.Invoke(CheckServerUpdateBanner);
+                    });
                 }));
 
                 // Check for server-triggered announcement popup
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    _ = Task.Delay(7000).ContinueWith(_ => Dispatcher.Invoke(CheckServerAnnouncement));
+                    _ = Task.Delay(7000).ContinueWith(_ =>
+                    {
+                        if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
+                        Dispatcher.Invoke(CheckServerAnnouncement);
+                    });
                 }));
 
                 // Start 5-minute refresh timer to check for server-side message updates
@@ -17475,7 +17555,7 @@ namespace ConditioningControlPanel
         private void BtnClearStartupVideo_Click(object sender, RoutedEventArgs e)
         {
             App.Settings.Current.StartupVideoPath = null;
-            TxtStartupVideo.Text = "(Random)";
+            TxtStartupVideo.Text = Loc.Get("label_random");
             App.Settings.Save();
             App.Logger?.Information("Startup video cleared - will use random");
         }
@@ -17540,7 +17620,7 @@ namespace ConditioningControlPanel
             
             if (enabledPhrases.Count == 0)
             {
-                MessageBox.Show("No phrases enabled! Add some phrases first.", "No Phrases", 
+                MessageBox.Show(Loc.Get("msg_no_phrases_enabled_add_some_phrases_first"), "No Phrases", 
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -17647,7 +17727,7 @@ namespace ConditioningControlPanel
             var installedIds = App.Settings?.Current?.InstalledPackIds;
             if (installedIds == null || installedIds.Count == 0)
             {
-                MessageBox.Show("No downloaded packs to delete.", "Delete Packs", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Loc.Get("msg_no_downloaded_packs_to_delete"), "Delete Packs", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -17666,7 +17746,7 @@ namespace ConditioningControlPanel
             App.Flash?.LoadAssets();
             App.Video?.ReloadAssets();
             App.BubbleCount?.ReloadAssets();
-            MessageBox.Show("All downloaded packs have been deleted.\nYour local files were not affected.", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(Loc.Get("msg_all_downloaded_packs_have_been_deleted_nyour"), "Done", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private async Task RefreshPacksAsync()
@@ -18196,7 +18276,7 @@ namespace ConditioningControlPanel
                 {
                     // Parent pack folder or root - show empty
                     _currentFolderFiles.Clear();
-                    TxtThumbnailsEmpty.Text = "Select a subfolder to view files";
+                    TxtThumbnailsEmpty.Text = Loc.Get("label_select_a_subfolder_to_view_files");
                     TxtThumbnailsEmpty.Visibility = Visibility.Visible;
                     ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
                 }
@@ -18268,7 +18348,7 @@ namespace ConditioningControlPanel
             var packFiles = App.ContentPacks?.GetPackFiles(packId, fileType);
             if (packFiles == null || packFiles.Count == 0)
             {
-                TxtThumbnailsEmpty.Text = "No files in this pack folder";
+                TxtThumbnailsEmpty.Text = Loc.Get("label_no_files_in_this_pack_folder");
                 TxtThumbnailsEmpty.Visibility = Visibility.Visible;
                 ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
                 return;
@@ -18415,7 +18495,7 @@ namespace ConditioningControlPanel
 
             if (!Directory.Exists(folderPath))
             {
-                TxtThumbnailsEmpty.Text = "Folder does not exist";
+                TxtThumbnailsEmpty.Text = Loc.Get("label_folder_does_not_exist");
                 TxtThumbnailsEmpty.Visibility = Visibility.Visible;
                 ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
                 return;
@@ -18429,7 +18509,7 @@ namespace ConditioningControlPanel
 
             if (files.Count == 0)
             {
-                TxtThumbnailsEmpty.Text = "No media files in this folder";
+                TxtThumbnailsEmpty.Text = Loc.Get("label_no_media_files_in_this_folder");
                 TxtThumbnailsEmpty.Visibility = Visibility.Visible;
                 return;
             }
@@ -19131,13 +19211,13 @@ namespace ConditioningControlPanel
         {
             if (CmbAssetPresets.SelectedItem is not Models.AssetPreset preset)
             {
-                MessageBox.Show("Please select a preset to update.", "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_please_select_a_preset_to_update"), "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             if (preset.IsDefault)
             {
-                MessageBox.Show("Cannot update the default 'All Assets' preset.\nUse 'Save As' to create a new preset.", "Cannot Update Default", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_cannot_update_the_default_all_assets_preset_n"), "Cannot Update Default", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -19173,13 +19253,13 @@ namespace ConditioningControlPanel
         {
             if (CmbAssetPresets.SelectedItem is not Models.AssetPreset preset)
             {
-                MessageBox.Show("Please select a preset to delete.", "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_please_select_a_preset_to_delete"), "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             if (preset.IsDefault)
             {
-                MessageBox.Show("Cannot delete the default 'All Assets' preset.", "Cannot Delete Default", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_cannot_delete_the_default_all_assets_preset"), "Cannot Delete Default", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -19354,7 +19434,7 @@ namespace ConditioningControlPanel
         {
             if (CmbPhrasePresets.SelectedItem is not Models.PhrasePreset preset)
             {
-                MessageBox.Show("Please select a preset to delete.", "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_please_select_a_preset_to_delete"), "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -19844,7 +19924,7 @@ namespace ConditioningControlPanel
         private void BtnRefreshAssets_Click(object sender, RoutedEventArgs e)
         {
             App.Flash.LoadAssets();
-            MessageBox.Show("Assets refreshed!", "Success");
+            MessageBox.Show(Loc.Get("msg_assets_refreshed"), "Success");
         }
 
         private void BtnViewLog_Click(object sender, RoutedEventArgs e)
@@ -19856,7 +19936,7 @@ namespace ConditioningControlPanel
             }
             else
             {
-                MessageBox.Show("No logs found.", "Info");
+                MessageBox.Show(Loc.Get("msg_no_logs_found"), "Info");
             }
         }
 
@@ -19864,7 +19944,7 @@ namespace ConditioningControlPanel
         {
             _isCapturingPanicKey = true;
             UpdatePanicKeyButton();
-            MessageBox.Show("Press any key to set as the new panic key...", "Change Panic Key", 
+            MessageBox.Show(Loc.Get("msg_press_any_key_to_set_as_the_new_panic_key"), "Change Panic Key", 
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
@@ -20007,7 +20087,7 @@ namespace ConditioningControlPanel
                     BtnPatreonLogin.IsEnabled = !isOffline;
                     BtnPatreonLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        BtnPatreonLogin.ToolTip = "Disabled in offline mode";
+                        BtnPatreonLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                     else
                         BtnPatreonLogin.ToolTip = null;
                 }
@@ -20018,7 +20098,7 @@ namespace ConditioningControlPanel
                     BtnDiscordLogin.IsEnabled = !isOffline;
                     BtnDiscordLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        BtnDiscordLogin.ToolTip = "Disabled in offline mode";
+                        BtnDiscordLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                     else
                         BtnDiscordLogin.ToolTip = null;
                 }
@@ -20029,7 +20109,7 @@ namespace ConditioningControlPanel
                     BtnUnifiedLogin.IsEnabled = !isOffline;
                     BtnUnifiedLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        BtnUnifiedLogin.ToolTip = "Disabled in offline mode";
+                        BtnUnifiedLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                 }
 
                 // Discord tab login button (in Profile/Discord tab)
@@ -20038,7 +20118,7 @@ namespace ConditioningControlPanel
                     BtnDiscordTabLogin.IsEnabled = !isOffline;
                     BtnDiscordTabLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        BtnDiscordTabLogin.ToolTip = "Disabled in offline mode";
+                        BtnDiscordTabLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                 }
 
                 // === BROWSER SECTION ===
@@ -20087,7 +20167,7 @@ namespace ConditioningControlPanel
                     if (BrowserLoadingText != null)
                     {
                         BrowserLoadingText.Visibility = Visibility.Visible;
-                        BrowserLoadingText.Text = "🔌 Browser disabled in Offline Mode";
+                        BrowserLoadingText.Text = Loc.Get("label_browser_disabled_in_offline_mode");
                     }
                     if (BrowserContainer != null)
                     {

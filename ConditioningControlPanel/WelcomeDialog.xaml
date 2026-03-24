@@ -1,7 +1,8 @@
 <Window x:Class="ConditioningControlPanel.WelcomeDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Welcome" 
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_welcome}" 
         Height="670" Width="520"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
@@ -22,43 +23,43 @@
             <Border Grid.Row="0" Background="{DynamicResource PinkBrush}" CornerRadius="8" Margin="-10,-10,-10,20" Padding="20,15">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                     <TextBlock Text="💖" FontSize="28" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    <TextBlock Text="Conditioning Control Panel" Foreground="White" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str app_title}" Foreground="White" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
             
             <!-- Welcome Message -->
-            <TextBlock Grid.Row="1" Text="Welcome, Good Girl!" 
+            <TextBlock Grid.Row="1" Text="{loc:Str label_welcome_good_girl}" 
                        Foreground="{DynamicResource PinkBrush}" FontSize="26" FontWeight="Bold" 
                        HorizontalAlignment="Center" Margin="0,10,0,20"/>
             
             <!-- Description -->
             <StackPanel Grid.Row="2" Margin="0,0,0,20">
                 <TextBlock Foreground="#E0E0E0" FontSize="14" TextWrapping="Wrap" LineHeight="24" TextAlignment="Center">
-                    <Run Text="This application is designed to enhance your conditioning experience."/>
+                    <Run Text="{loc:Str label_this_application_is_designed_to_enhance_your}"/>
                 </TextBlock>
                 
                 <TextBlock Foreground="#E0E0E0" FontSize="14" TextWrapping="Wrap" LineHeight="24" TextAlignment="Center" Margin="0,15,0,0">
-                    <Run Text="Features unlock as you level up through use. Start the engine and let the conditioning begin!"/>
+                    <Run Text="{loc:Str label_features_unlock_as_you_level_up_through_use_s}"/>
                 </TextBlock>
                 
                 <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="15" Margin="0,20,0,0">
                     <StackPanel>
                         <TextBlock Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center">
-                            <Run Text="💡 Tips"/>
+                            <Run Text="{loc:Str label_tips}"/>
                         </TextBlock>
                         <TextBlock Foreground="{DynamicResource PinkBrush}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0" FontWeight="SemiBold">
-                            <Run Text="• Click the"/>
+                            <Run Text="{loc:Str label_click_the}"/>
                             <Run Text=" ? " FontWeight="Bold" Foreground="White" Background="{DynamicResource PinkBrush}"/>
-                            <Run Text="button in the top bar for a full tutorial"/>
+                            <Run Text="{loc:Str label_button_in_the_top_bar_for_a_full_tutorial}"/>
                         </TextBlock>
                         <TextBlock Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
-                            <Run Text="• Hover over any setting to see what it does"/>
+                            <Run Text="{loc:Str label_hover_over_any_setting_to_see_what_it_does}"/>
                         </TextBlock>
                         <TextBlock Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
-                            <Run Text="• Add videos to 'assets/videos' and images to 'assets/images'"/>
+                            <Run Text="{loc:Str label_add_videos_to_assets_videos_and_images_to_ass}"/>
                         </TextBlock>
                         <TextBlock Foreground="#B0B0B0" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,0">
-                            <Run Text="• For gaming: Use 'Borderless Windowed' mode for overlays"/>
+                            <Run Text="{loc:Str label_for_gaming_use_borderless_windowed_mode_for_o}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>
@@ -66,19 +67,19 @@
                 <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="8" Padding="15" Margin="0,20,0,0">
                     <StackPanel>
                         <TextBlock Foreground="#FFB347" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center">
-                            <Run Text="⚠️ Performance Warning"/>
+                            <Run Text="{loc:Str label_performance_warning}"/>
                         </TextBlock>
                         <TextBlock Foreground="#FFB347" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0">
-                            <Run Text="Running many features, especially with high frequencies or large media, can be resource-intensive."/>
+                            <Run Text="{loc:Str label_running_many_features_especially_with_high_fr}"/>
                             <LineBreak/>
-                            <Run Text="If you experience performance issues on low-end PCs, consider reducing active features."/>
+                            <Run Text="{loc:Str label_if_you_experience_performance_issues_on_low_e}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>
             </StackPanel>
             
             <!-- Button -->
-            <Button Grid.Row="3" Content="💜 Let's Begin!" Click="BtnBegin_Click" Cursor="Hand">
+            <Button Grid.Row="3" Content="{loc:Str btn_let_s_begin}" Click="BtnBegin_Click" Cursor="Hand">
                 <Button.Style>
                     <Style TargetType="Button">
                         <Setter Property="Background" Value="{StaticResource PinkBrush}"/>

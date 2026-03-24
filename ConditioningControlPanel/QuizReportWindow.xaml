@@ -1,7 +1,8 @@
 <Window x:Class="ConditioningControlPanel.QuizReportWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Quiz Report"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_quiz_report}"
         Width="700" Height="750"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
@@ -39,7 +40,7 @@
 
             <!-- Header -->
             <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,16">
-                <TextBlock Text="QUIZ REPORT" FontSize="28" FontWeight="Bold" Foreground="White"
+                <TextBlock Text="{loc:Str label_quiz_report}" FontSize="28" FontWeight="Bold" Foreground="White"
                            HorizontalAlignment="Center" Margin="0,0,0,4">
                     <TextBlock.Effect>
                         <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="25" ShadowDepth="0" Opacity="0.5"/>
@@ -61,7 +62,7 @@
             </ScrollViewer>
 
             <!-- Close button -->
-            <Button Grid.Row="2" Content="Close" Cursor="Hand" HorizontalAlignment="Center"
+            <Button Grid.Row="2" Content="{loc:Str btn_close}" Cursor="Hand" HorizontalAlignment="Center"
                     Background="#20FFFFFF" Foreground="#B0B0C8" FontWeight="Bold" FontSize="14"
                     BorderThickness="1" Padding="28,10" Click="BtnClose_Click">
                 <Button.BorderBrush>

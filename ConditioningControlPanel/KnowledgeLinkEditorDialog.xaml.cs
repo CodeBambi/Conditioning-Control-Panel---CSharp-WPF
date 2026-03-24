@@ -1,5 +1,6 @@
 using System.Windows;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -25,7 +26,7 @@ namespace ConditioningControlPanel
             var url = TxtUrl.Text?.Trim();
             if (string.IsNullOrWhiteSpace(url))
             {
-                MessageBox.Show("Please enter a URL.", "Validation Error",
+                MessageBox.Show(Loc.Get("msg_enter_url"), "Validation Error",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 TxtUrl.Focus();
                 return;
@@ -35,7 +36,7 @@ namespace ConditioningControlPanel
             var title = TxtTitle.Text?.Trim();
             if (string.IsNullOrWhiteSpace(title))
             {
-                MessageBox.Show("Please enter a title.", "Validation Error",
+                MessageBox.Show(Loc.Get("msg_enter_title"), "Validation Error",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 TxtTitle.Focus();
                 return;

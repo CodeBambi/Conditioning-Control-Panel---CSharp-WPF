@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -35,7 +36,7 @@ namespace ConditioningControlPanel
         {
             OgWelcomePanel.Visibility = Visibility.Collapsed;
             SuggestionPanel.Visibility = Visibility.Collapsed;
-            TxtSubtitle.Text = "This name will be shown on the leaderboard and to other users.";
+            TxtSubtitle.Text = Loc.Get("label_this_name_will_be_shown_on_the_leaderboard_an");
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

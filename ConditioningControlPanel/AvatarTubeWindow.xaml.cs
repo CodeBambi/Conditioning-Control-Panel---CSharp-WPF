@@ -17,6 +17,7 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using XamlAnimatedGif;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -2842,6 +2843,7 @@ namespace ConditioningControlPanel
             {
                 System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ =>
                 {
+                    if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                     Dispatcher.Invoke(() => OnTriggerTick(null, EventArgs.Empty));
                 });
             }));
@@ -2934,6 +2936,7 @@ namespace ConditioningControlPanel
             // Spawn a bubble near the avatar after 1 second (speech bubble appears first)
             Task.Delay(1000).ContinueWith(_ =>
             {
+                if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                 Dispatcher.Invoke(() =>
                 {
                     try
@@ -4827,7 +4830,7 @@ namespace ConditioningControlPanel
             if (customPromptActive)
             {
                 // Show custom prompt indicator
-                MenuItemPersonality.Header = "Personality: Custom Prompt";
+                MenuItemPersonality.Header = Loc.Get("label_personality_custom_prompt");
                 MenuItemPersonality.Foreground = new SolidColorBrush(Color.FromRgb(255, 165, 0)); // Orange for custom
 
                 // Add info item
@@ -5067,7 +5070,7 @@ namespace ConditioningControlPanel
             {
                 var lockedBrush = new SolidColorBrush(Color.FromRgb(0x60, 0x60, 0x70));
                 MenuItemEngine.IsEnabled = false;
-                MenuItemEngine.Header = "🔒 Start Engine";
+                MenuItemEngine.Header = Loc.Get("label_start_engine");
                 MenuItemEngine.Foreground = lockedBrush;
                 MenuItemTriggerMode.IsEnabled = false;
                 MenuItemTriggerMode.Foreground = lockedBrush;

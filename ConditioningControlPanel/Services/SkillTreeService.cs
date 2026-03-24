@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services;
@@ -112,18 +113,18 @@ public class SkillTreeService : IDisposable
     /// </summary>
     public async Task<(bool Success, string? Error)> PurchaseSkillAsync(string skillId)
     {
-        if (!CanPurchaseSkill(skillId)) return (false, "Cannot purchase this skill");
+        if (!CanPurchaseSkill(skillId)) return (false, Loc.Get("skill_err_cannot_purchase"));
 
         var settings = App.Settings?.Current;
-        if (settings == null) return (false, "Settings unavailable");
+        if (settings == null) return (false, Loc.Get("skill_err_settings_unavailable"));
 
         var skill = SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
-        if (skill == null) return (false, "Unknown skill");
+        if (skill == null) return (false, Loc.Get("skill_err_unknown"));
 
         // Require login — purchases are server-authoritative
         var unifiedId = settings.UnifiedId;
         if (string.IsNullOrEmpty(unifiedId) || App.ProfileSync == null)
-            return (false, "Please log in to purchase enhancements.");
+            return (false, Loc.Get("skill_err_login_required"));
 
         var (success, error) = await App.ProfileSync.PurchaseSkillAsync(skillId);
         if (!success)
@@ -260,14 +261,14 @@ public class SkillTreeService : IDisposable
         var settings = App.Settings?.Current;
         if (settings == null) return breakdown;
 
-        breakdown.Add(("Base", 1.0));
+        breakdown.Add((Loc.Get("skill_mult_base"), 1.0));
 
         if (HasSkill("sparkle_boost_1"))
-            breakdown.Add(("Sparkle Boost", 0.10));
+            breakdown.Add((Loc.Get("skill_mult_sparkle_boost"), 0.10));
         if (HasSkill("sparkle_boost_2"))
-            breakdown.Add(("Extra Sparkly", 0.15));
+            breakdown.Add((Loc.Get("skill_mult_extra_sparkly"), 0.15));
         if (HasSkill("sparkle_boost_3"))
-            breakdown.Add(("Maximum Sparkle", 0.20));
+            breakdown.Add((Loc.Get("skill_mult_maximum_sparkle"), 0.20));
 
         if (HasSkill("streak_power") && settings.CurrentStreak > 0)
         {
@@ -277,12 +278,12 @@ public class SkillTreeService : IDisposable
 
         var hour = DateTime.Now.Hour;
         if (HasSkill("night_shift") && (hour >= 23 || hour < 5))
-            breakdown.Add(("Night Shift", 0.50));
+            breakdown.Add((Loc.Get("skill_mult_night_shift"), 0.50));
         if (HasSkill("early_bird_bimbo") && hour >= 5 && hour < 8)
-            breakdown.Add(("Early Bird Bimbo", 0.50));
+            breakdown.Add((Loc.Get("skill_mult_early_bird"), 0.50));
 
         if (settings.PinkRushActive && HasSkill("pink_rush"))
-            breakdown.Add(("PINK RUSH ACTIVE!", 2.0)); // Shows as +200% (3x total)
+            breakdown.Add((Loc.Get("skill_mult_pink_rush_active"), 2.0)); // Shows as +200% (3x total)
 
         return breakdown;
     }
@@ -301,7 +302,7 @@ public class SkillTreeService : IDisposable
 
         if (_random.NextDouble() < 0.05)
         {
-            LuckyProc?.Invoke(this, new LuckyProcEventArgs(App.Mods?.GetLuckyFlashLabel() ?? "Lucky Flash", 10));
+            LuckyProc?.Invoke(this, new LuckyProcEventArgs(App.Mods?.GetLuckyFlashLabel() ?? Loc.Get("skill_lucky_flash"), 10));
             return 10;
         }
         return 1;
@@ -317,7 +318,7 @@ public class SkillTreeService : IDisposable
 
         if (_random.NextDouble() < 0.05)
         {
-            LuckyProc?.Invoke(this, new LuckyProcEventArgs(App.Mods?.GetLuckyBubbleLabel() ?? "Lucky Bubble", 20));
+            LuckyProc?.Invoke(this, new LuckyProcEventArgs(App.Mods?.GetLuckyBubbleLabel() ?? Loc.Get("skill_lucky_bubble"), 20));
             return 20;
         }
         return 1;

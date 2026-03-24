@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel.Models;
 
@@ -14,6 +15,13 @@ public class Achievement
     public string FlavorText { get; set; } = "";
     public string ImageName { get; set; } = "";
     public AchievementCategory Category { get; set; }
+
+    /// <summary>Localized achievement name (falls back to hardcoded Name)</summary>
+    public string LocalizedName => Loc.Get($"achievement_{Id}_name");
+    /// <summary>Localized achievement requirement text (falls back to hardcoded Requirement)</summary>
+    public string LocalizedRequirement => Loc.Get($"achievement_{Id}_req");
+    /// <summary>Localized achievement flavor text (falls back to hardcoded FlavorText)</summary>
+    public string LocalizedFlavorText => Loc.Get($"achievement_{Id}_flavor");
     
     /// <summary>
     /// All achievements in the game
