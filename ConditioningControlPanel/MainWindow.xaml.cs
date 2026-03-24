@@ -98,26 +98,26 @@ namespace ConditioningControlPanel
 
         private static readonly Dictionary<string, string> CommandLabels = new()
         {
-            ["show_pink_filter"] = "Pink Filter enabled",
-            ["stop_pink_filter"] = "Pink Filter disabled",
-            ["show_spiral"] = "Spiral enabled",
-            ["stop_spiral"] = "Spiral disabled",
-            ["start_bubbles"] = "Bubbles started",
-            ["stop_bubbles"] = "Bubbles stopped",
-            ["trigger_video"] = "Video triggered",
-            ["trigger_haptic"] = "Haptic triggered",
-            ["trigger_bubble_count"] = "Bubble Count triggered",
-            ["start_autonomy"] = "Autonomy enabled",
-            ["stop_autonomy"] = "Autonomy disabled",
-            ["start_session"] = "Session started",
-            ["pause_session"] = "Session paused",
-            ["resume_session"] = "Session resumed",
-            ["stop_session"] = "Session stopped",
-            ["enable_strict_lock"] = "Strict Lock enabled",
-            ["disable_strict_lock"] = "Strict Lock disabled",
-            ["disable_panic"] = "Panic key disabled",
-            ["enable_panic"] = "Panic key enabled",
-            ["trigger_panic"] = "All effects stopped",
+            ["show_pink_filter"] = "cmd_pink_filter_enabled",
+            ["stop_pink_filter"] = "cmd_pink_filter_disabled",
+            ["show_spiral"] = "cmd_spiral_enabled",
+            ["stop_spiral"] = "cmd_spiral_disabled",
+            ["start_bubbles"] = "cmd_bubbles_started",
+            ["stop_bubbles"] = "cmd_bubbles_stopped",
+            ["trigger_video"] = "cmd_video_triggered",
+            ["trigger_haptic"] = "cmd_haptic_triggered",
+            ["trigger_bubble_count"] = "cmd_bubble_count_triggered",
+            ["start_autonomy"] = "cmd_autonomy_enabled",
+            ["stop_autonomy"] = "cmd_autonomy_disabled",
+            ["start_session"] = "cmd_session_started",
+            ["pause_session"] = "cmd_session_paused",
+            ["resume_session"] = "cmd_session_resumed",
+            ["stop_session"] = "cmd_session_stopped",
+            ["enable_strict_lock"] = "cmd_strict_lock_enabled",
+            ["disable_strict_lock"] = "cmd_strict_lock_disabled",
+            ["disable_panic"] = "cmd_panic_key_disabled",
+            ["enable_panic"] = "cmd_panic_key_enabled",
+            ["trigger_panic"] = "cmd_all_effects_stopped",
         };
 
         private static readonly HashSet<string> SuppressedCommands = new()
@@ -1274,6 +1274,9 @@ namespace ConditioningControlPanel
             ApplyModFeatureNames();
             if (App.Mods != null)
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
+
+            // Re-apply code-behind strings when language changes (section headers, feature names, etc.)
+            LocalizationManager.Instance.LanguageChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
 
             // Initialize language selector
             InitializeLanguageSelector();
@@ -4104,7 +4107,7 @@ namespace ConditioningControlPanel
                     TxtLeaderboardStatus.Text = Loc.Get("label_sorting_by_name");
                     var sorted = App.Leaderboard.Entries.OrderBy(x => x.DisplayName).ToList();
                     LstLeaderboard.ItemsSource = sorted;
-                    TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users • Sorted by Name";
+                    TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users_sorted_by_name", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
                 }
                 else if (headerText == "Online")
                 {
@@ -4115,7 +4118,7 @@ namespace ConditioningControlPanel
                         .ThenByDescending(x => x.Level)
                         .ToList();
                     LstLeaderboard.ItemsSource = sorted;
-                    TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users • Online first";
+                    TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users_online_first", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
                 }
                 else if (headerText == "Achievements")
                 {
@@ -4125,7 +4128,7 @@ namespace ConditioningControlPanel
                         .OrderByDescending(x => x.AchievementsCount)
                         .ToList();
                     LstLeaderboard.ItemsSource = sorted;
-                    TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users • Sorted by Achievements";
+                    TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users_sorted_by_achievements", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
                 }
             }
         }
@@ -4339,7 +4342,7 @@ namespace ConditioningControlPanel
                 {
                     // Apply client-side sort (server always returns XP order from sorted set)
                     ApplyLeaderboardSort(sortBy ?? App.Leaderboard.CurrentSortBy);
-                    TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users";
+                    TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
 
                     // Update season flavour text based on mode
                     if (_leaderboardMode == "all-time")
@@ -4352,7 +4355,7 @@ namespace ConditioningControlPanel
                     {
                         var seasonTitle = App.QuestDefinitions?.SeasonTitle;
                         if (!string.IsNullOrEmpty(seasonTitle))
-                            TxtLeaderboardSeason.Text = $"{seasonTitle} ~ prove your devotion~";
+                            TxtLeaderboardSeason.Text = Loc.GetF("label_0_prove_your_devotion", seasonTitle);
                         if (TxtLeaderboardSubtitle != null)
                             TxtLeaderboardSubtitle.Text = Loc.Get("label_resets_monthly_your_rank_is_everything");
                     }
@@ -4364,7 +4367,7 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    TxtLeaderboardStatus.Text = App.Leaderboard.LastRefreshError ?? "Failed to load";
+                    TxtLeaderboardStatus.Text = App.Leaderboard.LastRefreshError ?? Loc.Get("label_failed_to_load");
                 }
             }
             catch (Exception ex)
@@ -4457,7 +4460,7 @@ namespace ConditioningControlPanel
             {
                 var unlocked = App.Achievements.GetUnlockedCount();
                 var total = App.Achievements.GetTotalCount();
-                TxtAchievementCount.Text = $"{unlocked} / {total} Achievements Unlocked";
+                TxtAchievementCount.Text = Loc.GetF("label_0_1_achievements_unlocked", unlocked, total);
             }
         }
 
@@ -4777,8 +4780,8 @@ namespace ConditioningControlPanel
             if (!(App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false))
             {
                 System.Windows.MessageBox.Show(
-                    $"{def.Name} unlocks at Level {def.RequiredLevel}.\n\nYou're currently Level {playerLevel}. Keep training to unlock!",
-                    "Level Required",
+                    Loc.GetF("msg_companion_level_required", def.Name, def.RequiredLevel, playerLevel),
+                    Loc.Get("dialog_level_required"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return;
@@ -4826,7 +4829,7 @@ namespace ConditioningControlPanel
             if (!isUnlocked)
             {
                 App.Logger?.Warning("{Companion} is locked", def.Name);
-                ShowStyledDialog("Locked", $"{def.Name} is not unlocked yet.\nUnlock it first to assign a personality.", "OK", "");
+                ShowStyledDialog(Loc.Get("dialog_locked"), Loc.GetF("msg_companion_locked", def.Name), "OK", "");
                 return;
             }
 
@@ -7487,7 +7490,7 @@ namespace ConditioningControlPanel
 
         private void ShowCommandNotification(string action)
         {
-            var label = CommandLabels.TryGetValue(action, out var l) ? l : action.Replace("_", " ");
+            var label = CommandLabels.TryGetValue(action, out var l) ? Loc.Get(l) : action.Replace("_", " ");
             TxtRemoteCommand.Text = label;
 
             var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200));
@@ -7818,7 +7821,7 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current?.OfflineMode == true &&
                 !string.IsNullOrWhiteSpace(App.Settings?.Current?.OfflineUsername))
             {
-                TxtBannerSecondary.Text = $"Welcome back, {App.Settings.Current.OfflineUsername}! (Offline Mode)";
+                TxtBannerSecondary.Text = Loc.GetF("label_welcome_back_0_offline_mode", App.Settings.Current.OfflineUsername);
                 return;
             }
 
@@ -7828,7 +7831,7 @@ namespace ConditioningControlPanel
                            ?? App.Discord?.DisplayName;
             if (!string.IsNullOrEmpty(displayName))
             {
-                TxtBannerSecondary.Text = $"Welcome back, {displayName}!";
+                TxtBannerSecondary.Text = Loc.GetF("label_welcome_back_0", displayName);
             }
             else
             {
@@ -8372,14 +8375,14 @@ namespace ConditioningControlPanel
             var titleStack = new StackPanel { Margin = new Thickness(0, 0, 0, 15) };
             titleStack.Children.Add(new TextBlock
             {
-                Text = "✨ " + (App.Mods?.GetEnhancementTreeTitle() ?? "Bimbo Enhancement Tree"),
+                Text = "✨ " + (App.Mods?.GetEnhancementTreeTitle() ?? Loc.Get("label_enhancement_tree_title")),
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 FontSize = 22,
                 FontWeight = FontWeights.Bold
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.GetEnhancementTreeSubtitle() ?? "you earn sparkle points from leveling up + every 100 bubbles popped~",
+                Text = App.Mods?.GetEnhancementTreeSubtitle() ?? Loc.Get("label_enhancement_tree_subtitle"),
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 11,
                 FontStyle = FontStyles.Italic,
@@ -8387,7 +8390,7 @@ namespace ConditioningControlPanel
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.GetEnhancementTreeWarning() ?? "once you pick a path, there's no going back~",
+                Text = App.Mods?.GetEnhancementTreeWarning() ?? Loc.Get("label_enhancement_tree_warning"),
                 Foreground = new SolidColorBrush(Color.FromRgb(136, 170, 204)),
                 FontSize = 10,
                 FontStyle = FontStyles.Italic,
@@ -8418,7 +8421,7 @@ namespace ConditioningControlPanel
             var pointsInfoStack = new StackPanel();
             pointsInfoStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.GetPointsLabel() ?? "Sparkle Points",
+                Text = App.Mods?.GetPointsLabel() ?? Loc.Get("label_sparkle_points"),
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 10
             });
@@ -8461,7 +8464,7 @@ namespace ConditioningControlPanel
             });
             ditzyButtonStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.GetStatsTitle() ?? "Ditzy Data Stats",
+                Text = App.Mods?.GetStatsTitle() ?? Loc.Get("label_ditzy_data_stats"),
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                 FontSize = 11,
                 FontWeight = FontWeights.Bold,
@@ -8534,55 +8537,55 @@ namespace ConditioningControlPanel
 
                 // Row 1: Session stats
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Sessions Started", achievements.TotalSessionsStarted.ToString("N0"), 0);
-                AddStatRow("Sessions Completed", achievements.CompletedSessions.Count.ToString("N0"), 1);
-                AddStatRow("Sessions Abandoned", achievements.TotalSessionsAbandoned.ToString("N0"), 2);
+                AddStatRow(Loc.Get("label_sessions_started"), achievements.TotalSessionsStarted.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_sessions_completed"), achievements.CompletedSessions.Count.ToString("N0"), 1);
+                AddStatRow(Loc.Get("label_sessions_abandoned"), achievements.TotalSessionsAbandoned.ToString("N0"), 2);
                 row++;
 
                 // Row 2: XP & Skill Points
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Total XP Earned", achievements.TotalXPEarned.ToString("N0"), 0);
-                AddStatRow("Skill Points Earned", achievements.TotalSkillPointsEarned.ToString("N0"), 1);
-                AddStatRow("Longest Session", $"{achievements.LongestSessionMinutes:F1} min", 2);
+                AddStatRow(Loc.Get("label_total_xp_earned_stat"), achievements.TotalXPEarned.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_skill_points_earned"), achievements.TotalSkillPointsEarned.ToString("N0"), 1);
+                AddStatRow(Loc.Get("label_longest_session"), $"{achievements.LongestSessionMinutes:F1} {Loc.Get("label_min_abbrev")}", 2);
                 row++;
 
                 // Row 3: Attention checks
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Attention Passes", achievements.TotalAttentionChecksPassed.ToString("N0"), 0);
-                AddStatRow("Video Att. Passed", achievements.VideoAttentionChecksPassed.ToString("N0"), 1);
-                AddStatRow("Video Att. Failed", achievements.VideoAttentionChecksFailed.ToString("N0"), 2);
+                AddStatRow(Loc.Get("label_attention_passes"), achievements.TotalAttentionChecksPassed.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_video_att_passed"), achievements.VideoAttentionChecksPassed.ToString("N0"), 1);
+                AddStatRow(Loc.Get("label_video_att_failed"), achievements.VideoAttentionChecksFailed.ToString("N0"), 2);
                 row++;
 
                 // Row 4: Bubble count
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Bubble Count Games", achievements.TotalBubbleCountGames.ToString("N0"), 0);
-                AddStatRow("BC Correct", achievements.TotalBubbleCountCorrect.ToString("N0"), 1);
-                AddStatRow("BC Best Streak", achievements.BubbleCountBestStreak.ToString("N0"), 2);
+                AddStatRow(Loc.Get("label_bubble_count_games"), achievements.TotalBubbleCountGames.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_bc_correct"), achievements.TotalBubbleCountCorrect.ToString("N0"), 1);
+                AddStatRow(Loc.Get("label_bc_best_streak"), achievements.BubbleCountBestStreak.ToString("N0"), 2);
                 row++;
 
                 // Row 5: Content consumption
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Total Flashes", achievements.TotalFlashImages.ToString("N0"), 0);
-                AddStatRow("Bubbles Popped", achievements.TotalBubblesPopped.ToString("N0"), 1);
-                AddStatRow("Lock Cards Done", achievements.TotalLockCardsCompleted.ToString("N0"), 2);
+                AddStatRow(Loc.Get("label_total_flashes_stat"), achievements.TotalFlashImages.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_bubbles_popped_stat"), achievements.TotalBubblesPopped.ToString("N0"), 1);
+                AddStatRow(Loc.Get("label_lock_cards_done"), achievements.TotalLockCardsCompleted.ToString("N0"), 2);
                 row++;
 
                 // Row 6: Time stats
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 var videoMin = achievements.TotalVideoMinutes;
-                var videoTimeStr = videoMin >= 60 ? $"{videoMin / 60:F1} hrs" : $"{videoMin:F1} min";
-                AddStatRow("Video Time", videoTimeStr, 0);
+                var videoTimeStr = videoMin >= 60 ? $"{videoMin / 60:F1} {Loc.Get("label_hrs")}" : $"{videoMin:F1} {Loc.Get("label_min_abbrev")}";
+                AddStatRow(Loc.Get("label_video_time"), videoTimeStr, 0);
                 var pinkMin = achievements.TotalPinkFilterMinutes;
-                var pinkTimeStr = pinkMin >= 60 ? $"{pinkMin / 60:F1} hrs" : $"{pinkMin:F1} min";
-                AddStatRow("Pink Filter Time", pinkTimeStr, 1);
+                var pinkTimeStr = pinkMin >= 60 ? $"{pinkMin / 60:F1} {Loc.Get("label_hrs")}" : $"{pinkMin:F1} {Loc.Get("label_min_abbrev")}";
+                AddStatRow(Loc.Get("label_pink_filter_time"), pinkTimeStr, 1);
                 var spiralMin = achievements.TotalSpiralMinutes;
-                var spiralTimeStr = spiralMin >= 60 ? $"{spiralMin / 60:F1} hrs" : $"{spiralMin:F1} min";
-                AddStatRow("Spiral Time", spiralTimeStr, 2);
+                var spiralTimeStr = spiralMin >= 60 ? $"{spiralMin / 60:F1} {Loc.Get("label_hrs")}" : $"{spiralMin:F1} {Loc.Get("label_min_abbrev")}";
+                AddStatRow(Loc.Get("label_spiral_time"), spiralTimeStr, 2);
                 row++;
 
                 // Row 7: Misc stats
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Consecutive Days", achievements.ConsecutiveDays.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_consecutive_days"), achievements.ConsecutiveDays.ToString("N0"), 0);
 
                 detailedStatsStack.Children.Add(statsGrid);
             }
@@ -8609,7 +8612,7 @@ namespace ConditioningControlPanel
             };
             xpStack.Children.Add(new TextBlock
             {
-                Text = "XP Mult: ",
+                Text = Loc.Get("label_xp_mult"),
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 12,
                 VerticalAlignment = VerticalAlignment.Center
@@ -8626,7 +8629,7 @@ namespace ConditioningControlPanel
             {
                 xpStack.Children.Add(new TextBlock
                 {
-                    Text = " 🔥 RUSH!",
+                    Text = " " + Loc.Get("label_xp_rush"),
                     Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentDarkColorHex() ?? "#FF1493")),
                     FontSize = 12,
                     FontWeight = FontWeights.Bold,
@@ -9027,7 +9030,7 @@ namespace ConditioningControlPanel
             var tooltipStack = new StackPanel { MaxWidth = 280 };
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText,
+                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.LocalizedFlavorText,
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                 FontStyle = FontStyles.Italic,
                 TextWrapping = TextWrapping.Wrap,
@@ -9035,7 +9038,7 @@ namespace ConditioningControlPanel
             });
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.Description,
+                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.LocalizedDescription,
                 Foreground = Brushes.White,
                 TextWrapping = TextWrapping.Wrap
             });
@@ -9044,7 +9047,7 @@ namespace ConditioningControlPanel
                 var prereqSkill = Models.SkillDefinition.All.FirstOrDefault(s => s.Id == skill.PrerequisiteId);
                 tooltipStack.Children.Add(new TextBlock
                 {
-                    Text = $"🔒 Requires: {prereqSkill?.Name ?? skill.PrerequisiteId}",
+                    Text = Loc.GetF("label_skill_requires", prereqSkill?.LocalizedName ?? skill.PrerequisiteId),
                     Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 100)),
                     Margin = new Thickness(0, 6, 0, 0)
                 });
@@ -9120,7 +9123,7 @@ namespace ConditioningControlPanel
                 Background = new SolidColorBrush(Color.FromRgb(30, 28, 45)),
                 Child = new TextBlock
                 {
-                    Text = App.Mods?.MakeModAware(skill.Name) ?? skill.Name,
+                    Text = App.Mods?.MakeModAware(skill.Name) ?? skill.LocalizedName,
                     Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 210)),
                     FontSize = 9.5,
                     FontWeight = FontWeights.SemiBold,
@@ -9137,7 +9140,7 @@ namespace ConditioningControlPanel
                           canPurchase ? (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4") :
                           Color.FromRgb(40, 35, 50);
 
-            var buttonText = isUnlocked ? $"💎{skill.Cost} ✓ OWNED" :
+            var buttonText = isUnlocked ? $"💎{skill.Cost} {Loc.Get("label_skill_owned")}" :
                             canPurchase ? $"💎 {skill.Cost}" :
                             $"🔒 {skill.Cost}";
 
@@ -9419,7 +9422,7 @@ namespace ConditioningControlPanel
             var tooltipStack = new StackPanel { MaxWidth = 280 };
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText,
+                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.LocalizedFlavorText,
                 Foreground = new SolidColorBrush(Color.FromRgb(200, 150, 255)),
                 FontStyle = FontStyles.Italic,
                 TextWrapping = TextWrapping.Wrap,
@@ -9427,7 +9430,7 @@ namespace ConditioningControlPanel
             });
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.Description,
+                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.LocalizedDescription,
                 Foreground = Brushes.White,
                 TextWrapping = TextWrapping.Wrap
             });
@@ -9453,7 +9456,7 @@ namespace ConditioningControlPanel
 
             stack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.MakeModAware(skill.Name) ?? skill.Name,
+                Text = App.Mods?.MakeModAware(skill.Name) ?? skill.LocalizedName,
                 Foreground = new SolidColorBrush(isUnlocked ? Color.FromRgb(180, 130, 255) : Color.FromRgb(153, 50, 204)),
                 FontSize = 10,
                 FontWeight = FontWeights.Bold,
@@ -9504,9 +9507,13 @@ namespace ConditioningControlPanel
                 if (skill == null) return;
 
                 // Show confirmation dialog
+                var skillName = App.Mods?.MakeModAware(skill.Name) ?? skill.LocalizedName;
+                var pointsLabel = (App.Mods?.GetPointsLabel() ?? Loc.Get("label_sparkle_points")).ToLower();
+                var flavorText = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.LocalizedFlavorText;
+                var descText = App.Mods?.MakeModAware(skill.Description) ?? skill.LocalizedDescription;
                 var result = MessageBox.Show(
-                    $"Purchase '{App.Mods?.MakeModAware(skill.Name) ?? skill.Name}' for {skill.Cost} {(App.Mods?.GetPointsLabel() ?? "sparkle points").ToLower()}?\n\n{App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText}\n\n{App.Mods?.MakeModAware(skill.Description) ?? skill.Description}",
-                    "Purchase Enhancement",
+                    Loc.GetF("msg_purchase_skill", skillName, skill.Cost, pointsLabel, flavorText, descText),
+                    Loc.Get("dialog_purchase_enhancement"),
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
 
@@ -9534,7 +9541,7 @@ namespace ConditioningControlPanel
                         }
                         else if (!string.IsNullOrEmpty(error))
                         {
-                            MessageBox.Show(error, "Purchase Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            MessageBox.Show(error, Loc.Get("dialog_purchase_failed"), MessageBoxButton.OK, MessageBoxImage.Warning);
                         }
                     }
                     finally
@@ -10574,15 +10581,15 @@ namespace ConditioningControlPanel
                     var session = _sessionEngine.CurrentSession;
 
                     // Update session button with remaining time
-                    BtnStartSession.Content = $"STOP SESSION ({((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2})";
+                    BtnStartSession.Content = Loc.GetF("btn_stop_session_0_1", $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}");
 
                     // Update Start button label with session name + timer
                     var mName = session.GetModeAwareName();
                     var name = mName.Length > 14
                         ? mName.Substring(0, 11) + "..."
                         : mName;
-                    var pauseIndicator = _sessionEngine.IsPaused ? " [PAUSED]" : "";
-                    TxtStartLabel.Text = $"{name} {((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2}{pauseIndicator}";
+                    var pauseIndicator = _sessionEngine.IsPaused ? $" [{Loc.Get("label_paused")}]" : "";
+                    TxtStartLabel.Text = Loc.GetF("label_0_1_2_3", name, $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}", pauseIndicator);
                 }
             });
         }
@@ -15421,63 +15428,65 @@ namespace ConditioningControlPanel
         /// </summary>
         private void ApplyModFeatureNames()
         {
-            string M(string text) => App.Mods?.MakeModAware(text) ?? text;
+            // If a mod is active, use mod-aware text; otherwise use localized text
+            string ML(string englishText, string locKey) => App.Mods?.MakeModAware(englishText) is string modText && modText != englishText
+                ? modText : Loc.Get(locKey);
 
             // Main section headers
-            if (TxtFeatureFlash != null) TxtFeatureFlash.Text = M("⚡ Flash Images");
-            if (TxtFeatureVideo != null) TxtFeatureVideo.Text = M("🎬 Mandatory Video");
-            if (TxtFeatureSubliminal != null) TxtFeatureSubliminal.Text = M("💭 Subliminals");
-            if (TxtFeatureWhispers != null) TxtFeatureWhispers.Text = M("📊 Audio Whispers");
+            if (TxtFeatureFlash != null) TxtFeatureFlash.Text = ML("⚡ Flash Images", "section_flash_images");
+            if (TxtFeatureVideo != null) TxtFeatureVideo.Text = ML("🎬 Mandatory Video", "section_mandatory_video");
+            if (TxtFeatureSubliminal != null) TxtFeatureSubliminal.Text = ML("💭 Subliminals", "section_subliminals");
+            if (TxtFeatureWhispers != null) TxtFeatureWhispers.Text = ML("📊 Audio Whispers", "label_audio_whispers");
 
             // Enhancement locked/unlocked pairs
-            if (TxtFeatureSpiralLocked != null) TxtFeatureSpiralLocked.Text = M("🌀 Spiral Overlay");
-            if (TxtFeatureSpiral != null) TxtFeatureSpiral.Text = M("🌀 Spiral Overlay");
-            if (TxtFeaturePinkFilterLocked != null) TxtFeaturePinkFilterLocked.Text = M("💗 Pink Filter");
-            if (TxtFeaturePinkFilter != null) TxtFeaturePinkFilter.Text = M("💗 Pink Filter");
-            if (TxtFeatureBubblePopLocked != null) TxtFeatureBubblePopLocked.Text = M("🫧 Bubble Pop");
-            if (TxtFeatureBubblePop != null) TxtFeatureBubblePop.Text = M("🫧 Bubble Pop");
-            if (TxtFeatureLockCardLocked != null) TxtFeatureLockCardLocked.Text = M("📐 Lock Card");
-            if (TxtFeatureLockCard != null) TxtFeatureLockCard.Text = M("📐 Lock Card");
-            if (TxtFeatureBubbleCountLocked != null) TxtFeatureBubbleCountLocked.Text = M("🫧 Bubble Count");
-            if (TxtFeatureBubbleCount != null) TxtFeatureBubbleCount.Text = M("🫧 Bubble Count");
-            if (TxtFeatureBouncingLocked != null) TxtFeatureBouncingLocked.Text = M("📺 Bouncing Text");
-            if (TxtFeatureBouncing != null) TxtFeatureBouncing.Text = M("📺 Bouncing Text");
-            if (TxtFeatureBrainDrain != null) TxtFeatureBrainDrain.Text = M("💧 Brain Drain");
-            if (TxtFeatureMindWipeLocked != null) TxtFeatureMindWipeLocked.Text = M("🧠 Mind Wipe");
-            if (TxtFeatureMindWipe != null) TxtFeatureMindWipe.Text = M("🧠 Mind Wipe");
-            if (TxtFeatureCornerGif != null) TxtFeatureCornerGif.Text = M("🖼 Corner GIF");
+            if (TxtFeatureSpiralLocked != null) TxtFeatureSpiralLocked.Text = ML("🌀 Spiral Overlay", "label_spiral_overlay");
+            if (TxtFeatureSpiral != null) TxtFeatureSpiral.Text = ML("🌀 Spiral Overlay", "label_spiral_overlay");
+            if (TxtFeaturePinkFilterLocked != null) TxtFeaturePinkFilterLocked.Text = ML("💗 Pink Filter", "label_pink_filter");
+            if (TxtFeaturePinkFilter != null) TxtFeaturePinkFilter.Text = ML("💗 Pink Filter", "label_pink_filter");
+            if (TxtFeatureBubblePopLocked != null) TxtFeatureBubblePopLocked.Text = ML("🫧 Bubble Pop", "label_bubble_pop");
+            if (TxtFeatureBubblePop != null) TxtFeatureBubblePop.Text = ML("🫧 Bubble Pop", "label_bubble_pop");
+            if (TxtFeatureLockCardLocked != null) TxtFeatureLockCardLocked.Text = ML("📐 Lock Card", "label_lock_card");
+            if (TxtFeatureLockCard != null) TxtFeatureLockCard.Text = ML("📐 Lock Card", "label_lock_card");
+            if (TxtFeatureBubbleCountLocked != null) TxtFeatureBubbleCountLocked.Text = ML("🫧 Bubble Count", "label_bubble_count");
+            if (TxtFeatureBubbleCount != null) TxtFeatureBubbleCount.Text = ML("🫧 Bubble Count", "label_bubble_count");
+            if (TxtFeatureBouncingLocked != null) TxtFeatureBouncingLocked.Text = ML("📺 Bouncing Text", "label_bouncing_text");
+            if (TxtFeatureBouncing != null) TxtFeatureBouncing.Text = ML("📺 Bouncing Text", "label_bouncing_text");
+            if (TxtFeatureBrainDrain != null) TxtFeatureBrainDrain.Text = ML("💧 Brain Drain", "label_brain_drain");
+            if (TxtFeatureMindWipeLocked != null) TxtFeatureMindWipeLocked.Text = ML("🧠 Mind Wipe", "label_mind_wipe");
+            if (TxtFeatureMindWipe != null) TxtFeatureMindWipe.Text = ML("🧠 Mind Wipe", "label_mind_wipe");
+            if (TxtFeatureCornerGif != null) TxtFeatureCornerGif.Text = ML("🖼 Corner GIF", "label_corner_gif");
 
             // Preset/session detail labels
-            if (TxtDetailFlashLabel != null) TxtDetailFlashLabel.Text = M("⚡ Flash Images");
-            if (TxtDetailVideoLabel != null) TxtDetailVideoLabel.Text = M("🎬 Mandatory Videos");
-            if (TxtDetailSubLabel != null) TxtDetailSubLabel.Text = M("💭 Subliminals");
-            if (TxtSessionFlashLabel != null) TxtSessionFlashLabel.Text = M("⚡ Flash Images");
-            if (TxtSessionSubLabel != null) TxtSessionSubLabel.Text = M("💭 Subliminals");
+            if (TxtDetailFlashLabel != null) TxtDetailFlashLabel.Text = ML("⚡ Flash Images", "section_flash_images");
+            if (TxtDetailVideoLabel != null) TxtDetailVideoLabel.Text = ML("🎬 Mandatory Videos", "label_mandatory_videos");
+            if (TxtDetailSubLabel != null) TxtDetailSubLabel.Text = ML("💭 Subliminals", "section_subliminals");
+            if (TxtSessionFlashLabel != null) TxtSessionFlashLabel.Text = ML("⚡ Flash Images", "section_flash_images");
+            if (TxtSessionSubLabel != null) TxtSessionSubLabel.Text = ML("💭 Subliminals", "section_subliminals");
 
             // Autonomy toggle labels
-            if (TxtAutoFlash != null) TxtAutoFlash.Text = M("Flashes");
-            if (TxtAutoVideo != null) TxtAutoVideo.Text = M("Videos");
-            if (TxtAutoSubliminal != null) TxtAutoSubliminal.Text = M("Subliminals");
-            if (TxtAutoBubbles != null) TxtAutoBubbles.Text = M("Bubbles");
-            if (TxtAutoPinkFilter != null) TxtAutoPinkFilter.Text = M("Pink Filter");
-            if (TxtAutoLockCards != null) TxtAutoLockCards.Text = M("Lock Cards");
-            if (TxtAutoBouncing != null) TxtAutoBouncing.Text = M("Bouncing");
-            if (TxtAutoMindwipe != null) TxtAutoMindwipe.Text = M("Mindwipe");
+            if (TxtAutoFlash != null) TxtAutoFlash.Text = ML("Flashes", "tab_flashes");
+            if (TxtAutoVideo != null) TxtAutoVideo.Text = ML("Videos", "tab_videos");
+            if (TxtAutoSubliminal != null) TxtAutoSubliminal.Text = ML("Subliminals", "tab_subliminals");
+            if (TxtAutoBubbles != null) TxtAutoBubbles.Text = ML("Bubbles", "label_haptic_bubbles");
+            if (TxtAutoPinkFilter != null) TxtAutoPinkFilter.Text = ML("Pink Filter", "label_pink_filter");
+            if (TxtAutoLockCards != null) TxtAutoLockCards.Text = ML("Lock Cards", "label_lock_card");
+            if (TxtAutoBouncing != null) TxtAutoBouncing.Text = ML("Bouncing", "label_bouncing_text");
+            if (TxtAutoMindwipe != null) TxtAutoMindwipe.Text = ML("Mindwipe", "label_mind_wipe");
 
             // Enhancement tab tooltip
             if (BtnEnhancements != null)
-                BtnEnhancements.ToolTip = App.Mods?.GetTabTooltip() ?? "Bimbo Enhancement Tree";
+                BtnEnhancements.ToolTip = App.Mods?.GetTabTooltip() ?? Loc.Get("tooltip_enhancement_tree");
 
             // Stat pill tooltips
             if (PillConditioningTime != null)
                 PillConditioningTime.ToolTip = App.Mods?.GetStatPillTooltip("pink_hours")
-                    ?? M("Total conditioning time (Pink Hours skill)");
+                    ?? ML("Total conditioning time (Pink Hours skill)", "tooltip_total_conditioning_time_pink_hours_skill");
             if (PillOnlineUsers != null)
                 PillOnlineUsers.ToolTip = App.Mods?.GetStatPillTooltip("hive_mind")
-                    ?? M("Bimbos online now (Hive Mind skill)");
+                    ?? ML("Bimbos online now (Hive Mind skill)", "tooltip_bimbos_online_now_hive_mind_skill");
             if (PillRankPercentile != null)
                 PillRankPercentile.ToolTip = App.Mods?.GetStatPillTooltip("popular_girl")
-                    ?? M("Your rank percentile (Popular Girl skill)");
+                    ?? ML("Your rank percentile (Popular Girl skill)", "tooltip_your_rank_percentile_popular_girl_skill");
 
             // Refresh bonus chips with updated names
             RefreshXPBarBonuses();
