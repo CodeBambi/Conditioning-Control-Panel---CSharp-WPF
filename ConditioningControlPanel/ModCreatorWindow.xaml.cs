@@ -1526,7 +1526,7 @@ namespace ConditioningControlPanel
         private void UpdatePhraseHeader(string category, Expander expander)
         {
             if (expander.Header is TextBlock tb)
-                tb.Text = $"{FormatCategoryName(category)} ({_phraseData[category].Count} phrases)";
+                tb.Text = Loc.GetF("mod_phrase_header", FormatCategoryName(category), _phraseData[category].Count);
         }
 
         private void UpdatePhraseHeaderByCategory(string category)
@@ -1910,7 +1910,7 @@ namespace ConditioningControlPanel
                     LoadAudioFromResources(resourcesDir);
                 }
 
-                TxtStatus.Text = $"Loaded active mod: {manifest.Name}";
+                TxtStatus.Text = Loc.GetF("mod_loaded_active", manifest.Name);
             }
             catch (Exception ex)
             {
@@ -2201,14 +2201,14 @@ namespace ConditioningControlPanel
             var author = GetTextBoxValue(_txtAuthor);
             if (string.IsNullOrWhiteSpace(name))
             {
-                MessageBox.Show(Loc.Get("msg_mod_name_is_required"), "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_mod_name_is_required"), Loc.Get("title_validation_error"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 NavigateToSection("info");
                 _txtModName?.Focus();
                 return;
             }
             if (string.IsNullOrWhiteSpace(author))
             {
-                MessageBox.Show(Loc.Get("msg_author_is_required"), "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_author_is_required"), Loc.Get("title_validation_error"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 NavigateToSection("info");
                 _txtAuthor?.Focus();
                 return;
@@ -2280,13 +2280,13 @@ namespace ConditioningControlPanel
                 // Cleanup temp
                 try { Directory.Delete(tempDir, recursive: true); } catch { }
 
-                TxtStatus.Text = $"Exported: {Path.GetFileName(sfd.FileName)}";
-                MessageBox.Show($"Mod exported successfully!\n{sfd.FileName}", "Export Complete",
+                TxtStatus.Text = Loc.GetF("mod_exported_filename", Path.GetFileName(sfd.FileName));
+                MessageBox.Show(Loc.GetF("msg_mod_exported_successfully", sfd.FileName), Loc.Get("title_export_complete"),
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Export failed: {ex.Message}", "Export Error",
+                MessageBox.Show(Loc.GetF("msg_export_failed", ex.Message), Loc.Get("title_export_error"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
@@ -2311,7 +2311,7 @@ namespace ConditioningControlPanel
                 var manifestPath = Path.Combine(_loadedTempDir, "mod.json");
                 if (!File.Exists(manifestPath))
                 {
-                    MessageBox.Show(Loc.Get("msg_invalid_mod_package_mod_json_not_found"), "Load Error",
+                    MessageBox.Show(Loc.Get("msg_invalid_mod_package_mod_json_not_found"), Loc.Get("title_load_error"),
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     CleanupTempDir();
                     return;
@@ -2321,7 +2321,7 @@ namespace ConditioningControlPanel
                 var manifest = JsonConvert.DeserializeObject<ModManifest>(json);
                 if (manifest == null)
                 {
-                    MessageBox.Show(Loc.Get("msg_failed_to_parse_mod_json"), "Load Error",
+                    MessageBox.Show(Loc.Get("msg_failed_to_parse_mod_json"), Loc.Get("title_load_error"),
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     CleanupTempDir();
                     return;
@@ -2347,11 +2347,11 @@ namespace ConditioningControlPanel
                 }
 
                 NavigateToSection("info");
-                TxtStatus.Text = $"Loaded: {manifest.Name}";
+                TxtStatus.Text = Loc.GetF("mod_loaded", manifest.Name);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Load failed: {ex.Message}", "Load Error",
+                MessageBox.Show(Loc.GetF("msg_load_failed", ex.Message), Loc.Get("title_load_error"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
@@ -2360,7 +2360,7 @@ namespace ConditioningControlPanel
         private void BtnReset_Click(object sender, RoutedEventArgs e)
         {
             var result = MessageBox.Show(Loc.Get("msg_reset_all_fields_to_defaults_this_cannot_be_u"),
-                "Confirm Reset", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                Loc.Get("title_confirm_reset"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result != MessageBoxResult.Yes) return;
 
             // Clear all fields
@@ -2427,7 +2427,7 @@ namespace ConditioningControlPanel
             var total = _imageSlots.Count;
             var audioFilled = _audioSlots.Count(kv => kv.Value != null);
             var phraseCount = _phraseData.Values.Sum(l => l.Count(p => !string.IsNullOrWhiteSpace(p)));
-            TxtStatus.Text = $"Images: {filled}/{total}  |  Audio: {audioFilled}/14  |  Voice Lines: {_voiceLines.Count}  |  Phrases: {phraseCount}  |  Replacements: {_textReplacements.Count}";
+            TxtStatus.Text = Loc.GetF("mod_status_bar", filled, total, audioFilled, _voiceLines.Count, phraseCount, _textReplacements.Count);
         }
 
         // ─── Helpers ─────────────────────────────────────────────

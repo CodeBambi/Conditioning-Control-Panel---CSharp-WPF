@@ -81,8 +81,8 @@ namespace ConditioningControlPanel
             DetailsPanel.Visibility = Visibility.Visible;
 
             TxtModName.Text = mod.Name;
-            TxtModAuthor.Text = $"by {mod.Manifest.Author}";
-            TxtModVersion.Text = $"v{mod.Manifest.Version}";
+            TxtModAuthor.Text = Loc.GetF("label_by_author", mod.Manifest.Author);
+            TxtModVersion.Text = Loc.GetF("label_version_prefix", mod.Manifest.Version);
             TxtModDescription.Text = mod.Manifest.Description ?? "";
 
             // Theme color
@@ -130,8 +130,8 @@ namespace ConditioningControlPanel
             if (_selectedMod.IsBuiltIn) return;
 
             var result = MessageBox.Show(
-                $"Uninstall \"{_selectedMod.Name}\"? This cannot be undone.",
-                "Confirm Uninstall",
+                Loc.GetF("msg_confirm_uninstall_mod", _selectedMod.Name),
+                Loc.Get("title_confirm_uninstall"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
 
@@ -157,7 +157,7 @@ namespace ConditioningControlPanel
         {
             var ofd = new OpenFileDialog
             {
-                Title = "Install Mod",
+                Title = Loc.Get("title_install_mod"),
                 Filter = "CCP Mod Files (*.ccpmod)|*.ccpmod|All Files (*.*)|*.*",
                 Multiselect = false
             };
@@ -171,12 +171,12 @@ namespace ConditioningControlPanel
                     if (installResult.Success)
                     {
                         RefreshModList();
-                        MessageBox.Show($"Mod installed successfully!", "Success",
+                        MessageBox.Show(Loc.Get("msg_mod_installed_successfully"), Loc.Get("title_success"),
                             MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     else
                     {
-                        MessageBox.Show(installResult.ErrorMessage ?? "Failed to install mod.", "Install Failed",
+                        MessageBox.Show(installResult.ErrorMessage ?? Loc.Get("msg_failed_to_install_mod"), Loc.Get("title_install_failed"),
                             MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
                 }
@@ -193,7 +193,7 @@ namespace ConditioningControlPanel
 
             var sfd = new SaveFileDialog
             {
-                Title = "Export Current Configuration as Mod",
+                Title = Loc.Get("title_export_config_as_mod"),
                 Filter = "CCP Mod Files (*.ccpmod)|*.ccpmod",
                 FileName = $"{App.Mods.ActiveMod.Name.Replace(" ", "-").ToLowerInvariant()}-export.ccpmod"
             };
@@ -208,12 +208,12 @@ namespace ConditioningControlPanel
                         App.Mods.ActiveMod.Name + " Export",
                         App.Mods.ActiveMod.Manifest.Author);
 
-                    MessageBox.Show($"Mod exported to:\n{sfd.FileName}", "Export Complete",
+                    MessageBox.Show(Loc.GetF("msg_mod_exported_to", sfd.FileName), Loc.Get("title_export_complete"),
                         MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (System.Exception ex)
                 {
-                    MessageBox.Show($"Export failed: {ex.Message}", "Export Error",
+                    MessageBox.Show(Loc.GetF("msg_export_failed", ex.Message), Loc.Get("title_export_error"),
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
                 finally

@@ -35,16 +35,16 @@ namespace ConditioningControlPanel
         private int _maxUnlockedSet = 1; // Highest avatar set unlocked based on level
         private bool _useAnimatedAvatar = false; // Whether to use animated GIF
 
-        // Avatar set titles
-        private static readonly string[] AvatarTitles = new[]
+        // Avatar set titles (localization keys)
+        private static readonly string[] AvatarTitleKeys = new[]
         {
-            "BASIC BIMBO",          // Set 1: Level 1-19
-            "DUMB AIRHEAD",         // Set 2: Level 20-34
-            "SYNTHETIC BLOWDOLL",   // Set 3: Level 35-49
-            "PERFECT FUCKPUPPET",   // Set 4: Level 50-124
-            "BRAINWASHED SLAVEDOLL",// Set 5: Level 125-149
-            "PLATINUM PUPPET",      // Set 6: Level 150+
-            "BAMBI COW"             // Set 7: Level 75+ (companion-only)
+            "avatar_title_basic_bimbo",          // Set 1: Level 1-19
+            "avatar_title_dumb_airhead",         // Set 2: Level 20-34
+            "avatar_title_synthetic_blowdoll",   // Set 3: Level 35-49
+            "avatar_title_perfect_fuckpuppet",   // Set 4: Level 50-124
+            "avatar_title_brainwashed_slavedoll", // Set 5: Level 125-149
+            "avatar_title_platinum_puppet",      // Set 6: Level 150+
+            "avatar_title_bambi_cow"             // Set 7: Level 75+ (companion-only)
         };
 
         // Companion speech and chat
@@ -723,14 +723,14 @@ namespace ConditioningControlPanel
                 TxtAvatarTitle.Text = displayName.ToUpperInvariant();
                 TxtAvatarLevel.Visibility = Visibility.Visible;
                 TxtAvatarLevel.Text = companionProgress.IsMaxLevel
-                    ? "MAX!"
-                    : $"Lv. {companionProgress.Level}";
+                    ? Loc.Get("avatar_level_max")
+                    : Loc.GetF("avatar_level_format", companionProgress.Level);
             }
             else
             {
                 // For sets 1-3 (pre-level 50), use legacy avatar titles
-                int titleIndex = Math.Clamp(_currentAvatarSet - 1, 0, AvatarTitles.Length - 1);
-                var title = AvatarTitles[titleIndex];
+                int titleIndex = Math.Clamp(_currentAvatarSet - 1, 0, AvatarTitleKeys.Length - 1);
+                var title = Loc.Get(AvatarTitleKeys[titleIndex]);
                 title = App.Mods?.MakeModAware(title) ?? title;
                 TxtAvatarTitle.Text = title;
 
@@ -742,7 +742,7 @@ namespace ConditioningControlPanel
                 else
                 {
                     TxtAvatarLevel.Visibility = Visibility.Visible;
-                    TxtAvatarLevel.Text = $"Lv. {level}";
+                    TxtAvatarLevel.Text = Loc.GetF("avatar_level_format", level);
                 }
             }
         }
@@ -4520,8 +4520,8 @@ namespace ConditioningControlPanel
 
             // Show current scale percentage
             int scalePercent = (int)(_currentScale * 100);
-            MenuItemShrink.Header = _currentScale > MinScale ? "－ Shrink" : "－ Shrink (min)";
-            MenuItemGrow.Header = _currentScale < MaxScale ? "＋ Grow" : "＋ Grow (max)";
+            MenuItemShrink.Header = _currentScale > MinScale ? Loc.Get("menu_shrink") : Loc.Get("menu_shrink_min");
+            MenuItemGrow.Header = _currentScale < MaxScale ? Loc.Get("menu_grow") : Loc.Get("menu_grow_max");
 
             // Gray out disabled items
             MenuItemShrink.Foreground = MenuItemShrink.IsEnabled
@@ -4836,7 +4836,7 @@ namespace ConditioningControlPanel
                 // Add info item
                 var infoItem = new MenuItem
                 {
-                    Header = "Custom Prompt Active",
+                    Header = Loc.Get("menu_custom_prompt_active"),
                     Foreground = new SolidColorBrush(Color.FromRgb(255, 165, 0)),
                     Background = darkBg,
                     IsEnabled = false
@@ -4849,7 +4849,7 @@ namespace ConditioningControlPanel
                 // Add option to disable custom prompt
                 var disableItem = new MenuItem
                 {
-                    Header = "Disable Custom Prompt",
+                    Header = Loc.Get("menu_disable_custom_prompt"),
                     Foreground = new SolidColorBrush(Colors.White),
                     Background = darkBg
                 };
@@ -4860,7 +4860,7 @@ namespace ConditioningControlPanel
                         App.Settings.Current.CompanionPrompt.UseCustomPrompt = false;
                         App.Settings.Save();
                         UpdateQuickMenuState();
-                        Giggle("Back to presets~ *giggles*");
+                        Giggle(Loc.Get("avatar_back_to_presets"));
                     }
                 };
                 MenuItemPersonality.Items.Add(disableItem);
@@ -4893,7 +4893,7 @@ namespace ConditioningControlPanel
             // Update parent menu header with mode-aware name
             var activePreset = App.Personality?.GetActivePreset();
             var displayName = App.Mods?.GetPersonalityDisplayName(activePreset?.Name ?? "BambiSprite") ?? activePreset?.Name ?? "BambiSprite";
-            MenuItemPersonality.Header = $"Personality: {displayName}";
+            MenuItemPersonality.Header = Loc.GetF("avatar_personality_format", displayName);
         }
 
         private string GetPersonalityMenuHeader(PersonalityPreset preset, string activeId)
@@ -5012,40 +5012,40 @@ namespace ConditioningControlPanel
         public void UpdateQuickMenuState()
         {
             // Talk to companion - mode-aware label
-            var talkToLabel = App.Mods?.GetTalkToLabel() ?? "Talk to Bambi";
+            var talkToLabel = App.Mods?.GetTalkToLabel() ?? Loc.Get("menu_talk_to_bambi");
             var chatAvailable = App.Ai?.IsAvailable == true;
             MenuItemTalkToBambi.IsEnabled = chatAvailable;
             if (chatAvailable)
             {
-                MenuItemTalkToBambi.Header = $"💬 {talkToLabel}";
+                MenuItemTalkToBambi.Header = Loc.GetF("menu_talk_to_format", talkToLabel);
                 MenuItemTalkToBambi.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")); // Pink
             }
             else
             {
-                MenuItemTalkToBambi.Header = $"🔒 {talkToLabel}";
+                MenuItemTalkToBambi.Header = Loc.GetF("menu_talk_to_locked_format", talkToLabel);
                 MenuItemTalkToBambi.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
             }
 
             // Engine state (use Flash.IsRunning as proxy)
             var engineRunning = App.Flash?.IsRunning == true;
-            MenuItemEngine.Header = engineRunning ? "■ Stop Engine" : "▶ Start Engine";
+            MenuItemEngine.Header = engineRunning ? Loc.Get("menu_stop_engine") : Loc.Get("menu_start_engine");
             MenuItemEngine.Foreground = engineRunning ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Color.FromRgb(144, 238, 144));
 
             // Trigger mode
             var triggerOn = App.Settings?.Current?.TriggerModeEnabled == true;
-            MenuItemTriggerMode.Header = triggerOn ? "☑ Trigger Mode" : "☐ Trigger Mode";
+            MenuItemTriggerMode.Header = triggerOn ? Loc.Get("menu_trigger_mode_on") : Loc.Get("menu_trigger_mode_off");
             MenuItemTriggerMode.Foreground = triggerOn ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
 
             // Takeover (Patreon only) - mode-aware name
             var takeoverAvailable = App.Patreon?.HasPremiumAccess == true;
             var takeoverOn = App.Settings?.Current?.AutonomyModeEnabled == true;
-            var takeoverName = App.Mods?.GetTakeoverLabel() ?? "Bambi Takeover";
-            MenuItemBambiTakeover.Header = takeoverOn ? $"☑ {takeoverName}" : $"☐ {takeoverName}";
+            var takeoverName = App.Mods?.GetTakeoverLabel() ?? Loc.Get("menu_bambi_takeover");
+            MenuItemBambiTakeover.Header = takeoverOn ? Loc.GetF("menu_takeover_on_format", takeoverName) : Loc.GetF("menu_takeover_off_format", takeoverName);
             MenuItemBambiTakeover.Foreground = takeoverOn ? new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")) : new SolidColorBrush(Colors.White);
             MenuItemBambiTakeover.IsEnabled = takeoverAvailable;
             if (!takeoverAvailable)
             {
-                MenuItemBambiTakeover.Header = $"🔒 {takeoverName} (Patreon)";
+                MenuItemBambiTakeover.Header = Loc.GetF("menu_takeover_locked_format", takeoverName);
                 MenuItemBambiTakeover.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
             }
 
@@ -5053,16 +5053,16 @@ namespace ConditioningControlPanel
             PopulatePersonalityMenu();
 
             // Mute avatar
-            MenuItemMute.Header = _isMuted ? "☑ Mute Avatar" : "☐ Mute Avatar";
+            MenuItemMute.Header = _isMuted ? Loc.Get("menu_mute_avatar_on") : Loc.Get("menu_mute_avatar_off");
             MenuItemMute.Foreground = _isMuted ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Colors.White);
 
             // Mute whispers (inverted - muted when SubAudioEnabled is false)
             var whispersMuted = App.Settings?.Current?.SubAudioEnabled != true;
-            MenuItemMuteWhispers.Header = whispersMuted ? "☑ Mute Whispers" : "☐ Mute Whispers";
+            MenuItemMuteWhispers.Header = whispersMuted ? Loc.Get("menu_mute_whispers_on") : Loc.Get("menu_mute_whispers_off");
             MenuItemMuteWhispers.Foreground = whispersMuted ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Colors.White);
 
             // Pause browser
-            MenuItemPauseBrowser.Header = _isBrowserPaused ? "▶ Resume Browser" : "⏸ Pause Browser";
+            MenuItemPauseBrowser.Header = _isBrowserPaused ? Loc.Get("menu_resume_browser") : Loc.Get("menu_pause_browser");
             MenuItemPauseBrowser.Foreground = _isBrowserPaused ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
 
             // Lock most options when remote controlled (keep talk, attach/detach, resize)
