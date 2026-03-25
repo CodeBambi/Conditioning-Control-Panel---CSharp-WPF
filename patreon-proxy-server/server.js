@@ -242,6 +242,7 @@ function filterUserForAdmin(user) {
         quest_stats: user.quest_stats,
         companion_progress: user.companion_progress,
         total_conditioning_minutes: user.total_conditioning_minutes,
+        total_xp_earned: user.total_xp_earned,
         unlocks: user.unlocks,
         anti_cheat_flags: user.anti_cheat_flags,
         auth_method: user.auth_method,
@@ -9932,14 +9933,20 @@ app.post('/v2/user/sync', async (req, res) => {
 
         const user = typeof userData === 'string' ? JSON.parse(userData) : userData;
 
-        // Auth token validation
-        const authCheck = validateAuthToken(req, user);
-        if (!authCheck.valid) {
-            return res.status(401).json({ error: 'Invalid or missing auth token' });
+        // Soft auth for sync: require valid token if user has auth set up,
+        // but allow truly legacy users (no auth_token_hash) through so they can still sync.
+        const token = req.headers['x-auth-token'];
+        if (user.auth_token_hash) {
+            // User has auth — require valid token
+            if (!token) {
+                return res.status(401).json({ error: 'Auth token required' });
+            }
+            const hash = crypto.createHash('sha256').update(token).digest('hex');
+            if (!timingSafeCompare(hash, user.auth_token_hash)) {
+                return res.status(401).json({ error: 'Invalid auth token' });
+            }
         }
-        if (authCheck.legacy) {
-            console.log(`[AUTH] ${authCheck.missing ? 'Old client (token not sent)' : 'Legacy user (no token hash)'} for ${unified_id} on ${req.path}`);
-        }
+        // Legacy users (no auth_token_hash) pass through — they'll get a token on next login
 
         // --- Anti-cheat: Sync cooldown (minimum 30s between syncs) ---
         const SYNC_COOLDOWN_SECONDS = 30;
@@ -11335,6 +11342,14 @@ app.post('/admin/update-user', async (req, res) => {
                 user.stats[key] = val;
             }
             changes.stats = statChanges;
+        }
+
+        // Update total_xp_earned (bounded 0-MAX_SAFE_INTEGER for data integrity)
+        if (typeof updates.total_xp_earned === 'number') {
+            const boundedTotalXp = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(updates.total_xp_earned)));
+            if (isNaN(boundedTotalXp)) return res.status(400).json({ error: 'Invalid total_xp_earned value' });
+            changes.total_xp_earned = { from: user.total_xp_earned || 0, to: boundedTotalXp };
+            user.total_xp_earned = boundedTotalXp;
         }
 
         // Clear anti-cheat flags
