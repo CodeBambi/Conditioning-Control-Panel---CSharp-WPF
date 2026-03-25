@@ -43,6 +43,7 @@ namespace ConditioningControlPanel.Services
 
         static V2AuthService()
         {
+            _http.Timeout = TimeSpan.FromSeconds(30);
             _http.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
             _http.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
         }
