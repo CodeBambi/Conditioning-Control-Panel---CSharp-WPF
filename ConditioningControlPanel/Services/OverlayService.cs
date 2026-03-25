@@ -729,15 +729,28 @@ public class OverlayService : IDisposable
                 var dimension = new FrameDimension(gif.FrameDimensionsList[0]);
                 var frameCount = gif.GetFrameCount(dimension);
 
-                // Get frame delay from metadata
+                // Get frame delay from metadata — use median of all frames for accuracy
                 var frameDelayMs = 50; // Default 50ms (20 FPS)
                 try
                 {
                     var propertyItem = gif.GetPropertyItem(0x5100); // FrameDelay property
                     if (propertyItem?.Value != null && propertyItem.Value.Length >= 4)
                     {
-                        frameDelayMs = BitConverter.ToInt32(propertyItem.Value, 0) * 10; // Convert to ms
-                        if (frameDelayMs < 20) frameDelayMs = 50; // Sanity check - too fast
+                        // Read all per-frame delays and take the median (some GIFs have
+                        // a different delay on frame 0 which skews the result)
+                        var delayCount = propertyItem.Value.Length / 4;
+                        var delays = new List<int>(delayCount);
+                        for (int d = 0; d < delayCount; d++)
+                        {
+                            var val = BitConverter.ToInt32(propertyItem.Value, d * 4) * 10; // centiseconds → ms
+                            if (val > 0) delays.Add(val);
+                        }
+                        if (delays.Count > 0)
+                        {
+                            delays.Sort();
+                            frameDelayMs = delays[delays.Count / 2]; // median
+                        }
+                        if (frameDelayMs < 33) frameDelayMs = 50; // Floor at ~30 FPS — spirals look wrong faster
                         if (frameDelayMs > 500) frameDelayMs = 50; // Sanity check - too slow
                     }
                 }
