@@ -114,9 +114,11 @@ public class QuestService : IDisposable
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
         _refreshTimer.Tick += (s, e) =>
         {
-            if (Progress.IsDailyExpired() || Progress.IsWeeklyExpired())
+            var dailyExpired = Progress.IsDailyExpired();
+            var weeklyExpired = Progress.IsWeeklyExpired();
+            if (dailyExpired || weeklyExpired)
             {
-                App.Logger?.Information("Quest day/week rollover detected, refreshing quests");
+                App.Logger?.Information("Quest rollover detected (daily={Daily}, weekly={Weekly})", dailyExpired, weeklyExpired);
                 CheckAndGenerateQuests();
                 QuestsRefreshed?.Invoke(this, EventArgs.Empty);
             }
@@ -792,6 +794,7 @@ public class QuestService : IDisposable
             // Trim entries older than 90 days (matches cloud sync window)
             var cutoff = today.AddDays(-90);
             Progress.DailyQuestCompletionDates.RemoveAll(d => d.Date < cutoff);
+            App.Settings?.Current?.StreakShieldUsedDates?.RemoveAll(d => d.Date < cutoff);
 
             // Apply streak shield if yesterday is missing (would break streak)
             var yesterday = today.AddDays(-1);
@@ -929,9 +932,9 @@ public class QuestService : IDisposable
             settings.DailyQuestStreak = streak;
         }
 
-        // Keep LastDailyQuestDate in sync with the calendar
-        if (completedDates.Count > 0)
-            settings.LastDailyQuestDate = completedDates.Max();
+        // Keep LastDailyQuestDate in sync with actual quest completions (not shield fills)
+        if (Progress.DailyQuestCompletionDates.Count > 0)
+            settings.LastDailyQuestDate = Progress.DailyQuestCompletionDates.Max();
     }
 
     /// <summary>
