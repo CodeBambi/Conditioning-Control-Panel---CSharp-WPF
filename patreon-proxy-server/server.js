@@ -3523,29 +3523,20 @@ app.post('/user/heartbeat', async (req, res) => {
             console.log(`Heartbeat created new profile for user ${userId}`);
         }
 
-        // Also update unified profile if one exists (for migrated users on older clients)
+        // Track online status for unified profile (if exists) — but do NOT write the full user: record.
+        // Writing the entire record here caused a race condition: if V2 sync completed between
+        // our read and write, we'd overwrite all sync changes (XP, level, stats) with stale values.
         try {
             const unifiedId = await redis.get(`${PATREON_USER_INDEX}${userId}`);
             if (unifiedId) {
                 const unifiedData = await redis.get(`${UNIFIED_USER_PREFIX}${unifiedId}`);
                 if (unifiedData) {
                     const unifiedUser = typeof unifiedData === 'string' ? JSON.parse(unifiedData) : unifiedData;
-                    unifiedUser.last_seen = new Date().toISOString();
-                    unifiedUser.updated_at = unifiedUser.last_seen;
-                    unifiedUser.last_heartbeat = {
-                        at: unifiedUser.last_seen,
-                        is_active: true,
-                        in_session: null,
-                        app_version: null
-                    };
-                    await redis.set(`${UNIFIED_USER_PREFIX}${unifiedId}`, JSON.stringify(unifiedUser));
-                    // Track in online_users sorted set for accurate online count
                     await trackUserOnline(unifiedId, unifiedUser.show_online_status);
                 }
             }
         } catch (e) {
-            // Non-critical — don't fail the heartbeat
-            console.error('Legacy heartbeat unified cross-update error:', e.message);
+            console.error('Legacy heartbeat online tracking error:', e.message);
         }
 
         res.json({ success: true });
@@ -4834,22 +4825,48 @@ app.post('/admin/set-level', async (req, res) => {
             foundProfile.xp = newXp;
         }
 
-        // For V2 user:* records, also update leaderboard and set level_reset flag
+        // For V2 user:* records, acquire write lock and update leaderboard + set level_reset flag
+        let setLevelLockKey = null;
         if (foundKey.startsWith('user:')) {
-            foundProfile.highest_level_ever = Math.max(foundProfile.highest_level_ever || 0, level);
-            foundProfile.level_reset_at = new Date().toISOString(); // Prevent client from pushing old cached level back
-            delete foundProfile.level_reset; // Clean up old boolean flag
-            foundProfile.unlocks = calculateUnlocks(level);
+            const setLevelUnifiedId = foundKey.replace('user:', '');
+            setLevelLockKey = `user_write_lock:${setLevelUnifiedId}`;
+            const lockAcquired = await redis.set(setLevelLockKey, 'admin-set-level', { nx: true, ex: 10 });
+            if (!lockAcquired) {
+                return res.status(429).json({ error: 'User record locked, try again', retry_after: 3 });
+            }
 
-            // Update leaderboard
-            const season = getCurrentSeason();
-            const leaderboardXp = fix_xp ? newXp : (foundProfile.xp || 0);
-            const setLevelMemberId = foundKey.replace('user:', '');
-            await redis.zadd(`leaderboard:${season}`, { score: safeLeaderboardScore(leaderboardXp), member: setLevelMemberId });
-            try { await redis.zadd('leaderboard:all-time', { score: safeLeaderboardScore(foundProfile.total_xp_earned || 0), member: setLevelMemberId }); } catch (e) { console.log(`[WARN] All-time leaderboard update failed:`, e.message); }
         }
 
-        await redis.set(foundKey, JSON.stringify(foundProfile));
+        try {
+            if (foundKey.startsWith('user:')) {
+                // Re-read user record under lock to avoid stale data
+                const freshData = await redis.get(foundKey);
+                if (freshData) {
+                    foundProfile = typeof freshData === 'string' ? JSON.parse(freshData) : freshData;
+                }
+
+                foundProfile.highest_level_ever = Math.max(foundProfile.highest_level_ever || 0, level);
+                foundProfile.level_reset_at = new Date().toISOString(); // Prevent client from pushing old cached level back
+                delete foundProfile.level_reset; // Clean up old boolean flag
+                foundProfile.unlocks = calculateUnlocks(level);
+
+                // Update leaderboard
+                const season = getCurrentSeason();
+                const setLevelUnifiedId = foundKey.replace('user:', '');
+                const leaderboardXp = fix_xp ? newXp : (foundProfile.xp || 0);
+                await redis.zadd(`leaderboard:${season}`, { score: safeLeaderboardScore(leaderboardXp), member: setLevelUnifiedId });
+                try { await redis.zadd('leaderboard:all-time', { score: safeLeaderboardScore(foundProfile.total_xp_earned || 0), member: setLevelUnifiedId }); } catch (e) { console.log(`[WARN] All-time leaderboard update failed:`, e.message); }
+            }
+
+            foundProfile.level = level;
+            foundProfile.updated_at = new Date().toISOString();
+            if (fix_xp) {
+                foundProfile.xp = newXp;
+            }
+            await redis.set(foundKey, JSON.stringify(foundProfile));
+        } finally {
+            if (setLevelLockKey) await redis.del(setLevelLockKey).catch(() => {});
+        }
 
         console.log(`[ADMIN] Set level for "${display_name}" (${foundKey}): ${oldLevel} -> ${level}${fix_xp ? `, XP: ${oldXp} -> ${newXp}` : ''}`);
 
@@ -5292,31 +5309,47 @@ app.post('/admin/fix-patreon-tier', async (req, res) => {
             return res.status(404).json({ error: 'User data not found' });
         }
 
-        const user = typeof userData === 'string' ? JSON.parse(userData) : userData;
-        const oldTier = user.patreon_tier || 0;
+        // Acquire write lock to prevent race with sync/heartbeat
+        const fixTierLockKey = `user_write_lock:${unifiedId}`;
+        const lockAcquired = await redis.set(fixTierLockKey, 'admin-fix-tier', { nx: true, ex: 10 });
+        if (!lockAcquired) {
+            return res.status(429).json({ error: 'User record locked, try again', retry_after: 3 });
+        }
 
-        // Check if user is whitelisted
-        const isWhitelistedUser = isWhitelisted(null, null, user.display_name);
+        try {
+            // Re-read under lock to avoid stale data
+            const freshData = await redis.get(`user:${unifiedId}`);
+            if (!freshData) {
+                return res.status(404).json({ error: 'User data not found' });
+            }
+            const user = typeof freshData === 'string' ? JSON.parse(freshData) : freshData;
+            const oldTier = user.patreon_tier || 0;
 
-        // Set tier: use provided tier, or 2 if whitelisted, or keep existing
-        const newTier = tier !== undefined ? tier : (isWhitelistedUser ? Math.max(oldTier, 2) : oldTier);
+            // Check if user is whitelisted
+            const isWhitelistedUser = isWhitelisted(null, null, user.display_name);
 
-        user.patreon_tier = newTier;
-        user.patreon_is_whitelisted = isWhitelistedUser || user.patreon_is_whitelisted;
-        user.updated_at = new Date().toISOString();
+            // Set tier: use provided tier, or 2 if whitelisted, or keep existing
+            const newTier = tier !== undefined ? tier : (isWhitelistedUser ? Math.max(oldTier, 2) : oldTier);
 
-        await redis.set(`user:${unifiedId}`, JSON.stringify(user));
+            user.patreon_tier = newTier;
+            user.patreon_is_whitelisted = isWhitelistedUser || user.patreon_is_whitelisted;
+            user.updated_at = new Date().toISOString();
 
-        console.log(`[ADMIN] Fixed patreon_tier for "${display_name}": ${oldTier} -> ${newTier}, whitelisted=${isWhitelistedUser}`);
+            await redis.set(`user:${unifiedId}`, JSON.stringify(user));
 
-        res.json({
-            success: true,
-            display_name: user.display_name,
-            unified_id: unifiedId,
-            old_tier: oldTier,
-            new_tier: newTier,
-            is_whitelisted: isWhitelistedUser || user.patreon_is_whitelisted
-        });
+            console.log(`[ADMIN] Fixed patreon_tier for "${display_name}": ${oldTier} -> ${newTier}, whitelisted=${isWhitelistedUser}`);
+
+            res.json({
+                success: true,
+                display_name: user.display_name,
+                unified_id: unifiedId,
+                old_tier: oldTier,
+                new_tier: newTier,
+                is_whitelisted: isWhitelistedUser || user.patreon_is_whitelisted
+            });
+        } finally {
+            await redis.del(fixTierLockKey).catch(() => {});
+        }
     } catch (error) {
         console.error('Admin fix-patreon-tier error:', error.message);
         res.status(500).json({ error: 'Failed to fix patreon tier' });
@@ -5352,29 +5385,40 @@ app.post('/admin/set-og', async (req, res) => {
             return res.status(404).json({ error: `User "${display_name}" not found` });
         }
 
-        const userData = await redis.get(`user:${unifiedId}`);
-        if (!userData) {
-            return res.status(404).json({ error: 'User data not found' });
+        // Acquire write lock to prevent race with sync/heartbeat
+        const setOgLockKey = `user_write_lock:${unifiedId}`;
+        const lockAcquired = await redis.set(setOgLockKey, 'admin-set-og', { nx: true, ex: 10 });
+        if (!lockAcquired) {
+            return res.status(429).json({ error: 'User record locked, try again', retry_after: 3 });
         }
 
-        const user = typeof userData === 'string' ? JSON.parse(userData) : userData;
-        const oldOg = user.is_season0_og || false;
-        const newOg = og !== undefined ? og : true;
+        try {
+            const userData = await redis.get(`user:${unifiedId}`);
+            if (!userData) {
+                return res.status(404).json({ error: 'User data not found' });
+            }
 
-        user.is_season0_og = newOg;
-        user.updated_at = new Date().toISOString();
+            const user = typeof userData === 'string' ? JSON.parse(userData) : userData;
+            const oldOg = user.is_season0_og || false;
+            const newOg = og !== undefined ? og : true;
 
-        await redis.set(`user:${unifiedId}`, JSON.stringify(user));
+            user.is_season0_og = newOg;
+            user.updated_at = new Date().toISOString();
 
-        console.log(`[ADMIN] Set OG for "${display_name}" (${unifiedId}): ${oldOg} -> ${newOg}`);
+            await redis.set(`user:${unifiedId}`, JSON.stringify(user));
 
-        res.json({
-            success: true,
-            display_name: user.display_name,
-            unified_id: unifiedId,
-            old_og: oldOg,
-            new_og: newOg
-        });
+            console.log(`[ADMIN] Set OG for "${display_name}" (${unifiedId}): ${oldOg} -> ${newOg}`);
+
+            res.json({
+                success: true,
+                display_name: user.display_name,
+                unified_id: unifiedId,
+                old_og: oldOg,
+                new_og: newOg
+            });
+        } finally {
+            await redis.del(setOgLockKey).catch(() => {});
+        }
     } catch (error) {
         console.error('Admin set-og error:', error.message);
         res.status(500).json({ error: 'Failed to set OG status' });
@@ -8672,23 +8716,43 @@ app.post('/admin/set-achievements', async (req, res) => {
             return res.status(404).json({ error: `User not found: ${display_name}` });
         }
 
-        // Update achievements
-        const oldAchievements = foundData.achievements || [];
-        foundData.achievements = achievements;
-        foundData.updated_at = new Date().toISOString();
+        // Acquire write lock for user: records to prevent race with sync/heartbeat
+        let setAchLockKey = null;
+        if (foundKey.startsWith('user:')) {
+            const achUnifiedId = foundKey.replace('user:', '');
+            setAchLockKey = `user_write_lock:${achUnifiedId}`;
+            const lockAcquired = await redis.set(setAchLockKey, 'admin-set-achievements', { nx: true, ex: 10 });
+            if (!lockAcquired) {
+                return res.status(429).json({ error: 'User record locked, try again', retry_after: 3 });
+            }
+            // Re-read under lock
+            const freshData = await redis.get(foundKey);
+            if (freshData) {
+                foundData = typeof freshData === 'string' ? JSON.parse(freshData) : freshData;
+            }
+        }
 
-        await redis.set(foundKey, JSON.stringify(foundData));
+        try {
+            // Update achievements
+            const oldAchievements = foundData.achievements || [];
+            foundData.achievements = achievements;
+            foundData.updated_at = new Date().toISOString();
 
-        console.log(`[ADMIN] Set achievements for ${display_name}: ${oldAchievements.length} -> ${achievements.length}`);
+            await redis.set(foundKey, JSON.stringify(foundData));
 
-        res.json({
-            success: true,
-            display_name,
-            key: foundKey,
-            old_count: oldAchievements.length,
-            new_count: achievements.length,
-            achievements
-        });
+            console.log(`[ADMIN] Set achievements for ${display_name}: ${oldAchievements.length} -> ${achievements.length}`);
+
+            res.json({
+                success: true,
+                display_name,
+                key: foundKey,
+                old_count: oldAchievements.length,
+                new_count: achievements.length,
+                achievements
+            });
+        } finally {
+            if (setAchLockKey) await redis.del(setAchLockKey).catch(() => {});
+        }
     } catch (error) {
         console.error('Admin set-achievements error:', error.message);
         res.status(500).json({ error: 'Internal server error' });
@@ -9883,6 +9947,7 @@ app.post('/admin/reset-all-levels', async (req, res) => {
  * Body: { unified_id: string, xp: number, level: number, achievements: string[], stats: object }
  */
 app.post('/v2/user/sync', async (req, res) => {
+    let syncWriteLockKey = null;
     try {
         const { unified_id, xp, level, achievements, stats, unlocked_skills, skill_points, allow_discord_dm, show_online_status, share_profile_picture, reset_weekly_quest, reset_daily_quest, force_streak_override: clientForceStreakOverride, force_skills_reset: clientForceSkillsReset, total_conditioning_minutes, companion_progress } = req.body;
 
@@ -9962,6 +10027,13 @@ app.post('/v2/user/sync', async (req, res) => {
                     cooldown_seconds: SYNC_COOLDOWN_SECONDS
                 });
             }
+        }
+
+        // Acquire write lock to prevent race with heartbeat or admin endpoints
+        syncWriteLockKey = `user_write_lock:${unified_id}`;
+        const syncLockAcquired = await redis.set(syncWriteLockKey, 'sync', { nx: true, ex: 30 });
+        if (!syncLockAcquired) {
+            return res.status(429).json({ error: 'User record locked', retry_after: 3 });
         }
 
         // Check if user needs season reset (current_season doesn't match)
@@ -10421,8 +10493,10 @@ app.post('/v2/user/sync', async (req, res) => {
                 xp: user.xp,
                 achievements: user.achievements,
                 highest_level_ever: user.highest_level_ever,
-                unlocks: user.unlocks
+                unlocks: user.unlocks,
+                stats: user.stats || {}
             },
+            total_xp_earned: user.total_xp_earned || 0,
             total_conditioning_minutes: user.total_conditioning_minutes || 0,
             companion_progress: user.companion_progress || {},
             merged: oldXp !== newXp || oldLevel !== newLevel,
@@ -10463,6 +10537,8 @@ app.post('/v2/user/sync', async (req, res) => {
     } catch (error) {
         console.error('V2 sync error:', error.message);
         res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        if (syncWriteLockKey) await redis.del(syncWriteLockKey).catch(() => {});
     }
 });
 
@@ -10510,22 +10586,35 @@ app.post('/v2/user/heartbeat', async (req, res) => {
             return res.status(429).json({ error: 'Heartbeat cooldown active', retry_after: 30 });
         }
 
-        user.last_seen = new Date().toISOString();
+        // Acquire write lock to prevent race with V2 sync or admin endpoints.
+        // If lock is held (sync in progress), just track online status — sync will update last_seen anyway.
+        const writeLockKey = `user_write_lock:${unified_id}`;
+        const lockAcquired = await redis.set(writeLockKey, 'heartbeat', { nx: true, ex: 5 });
+        if (!lockAcquired) {
+            await trackUserOnline(unified_id, true);
+            return res.json({ success: true, last_seen: new Date().toISOString() });
+        }
 
-        // Store enriched heartbeat data for anti-cheat cross-referencing
-        user.last_heartbeat = {
-            at: user.last_seen,
-            is_active: is_active === true || is_active === false ? is_active : null,
-            in_session: in_session === true || in_session === false ? in_session : null,
-            app_version: (typeof app_version === 'string' ? app_version.slice(0, 50) : null)
-        };
+        try {
+            user.last_seen = new Date().toISOString();
 
-        await redis.set(`user:${unified_id}`, JSON.stringify(user));
+            // Store enriched heartbeat data for anti-cheat cross-referencing
+            user.last_heartbeat = {
+                at: user.last_seen,
+                is_active: is_active === true || is_active === false ? is_active : null,
+                in_session: in_session === true || in_session === false ? in_session : null,
+                app_version: (typeof app_version === 'string' ? app_version.slice(0, 50) : null)
+            };
 
-        // Track in online_users sorted set for accurate online count
-        await trackUserOnline(unified_id, user.show_online_status);
+            await redis.set(`user:${unified_id}`, JSON.stringify(user));
 
-        res.json({ success: true, last_seen: user.last_seen });
+            // Track in online_users sorted set for accurate online count
+            await trackUserOnline(unified_id, user.show_online_status);
+
+            res.json({ success: true, last_seen: user.last_seen });
+        } finally {
+            await redis.del(writeLockKey).catch(() => {});
+        }
     } catch (error) {
         console.error('V2 heartbeat error:', error.message);
         res.status(500).json({ error: 'Internal server error' });
@@ -11226,6 +11315,15 @@ app.post('/admin/update-user', async (req, res) => {
         }
 
         const userKey = `user:${unifiedId}`;
+
+        // Acquire write lock to prevent race with sync/heartbeat
+        const updateUserLockKey = `user_write_lock:${unifiedId}`;
+        const lockAcquired = await redis.set(updateUserLockKey, 'admin-update-user', { nx: true, ex: 15 });
+        if (!lockAcquired) {
+            return res.status(429).json({ error: 'User record locked, try again', retry_after: 3 });
+        }
+
+        try {
         const userData = await redis.get(userKey);
 
         if (!userData) {
@@ -11382,6 +11480,9 @@ app.post('/admin/update-user', async (req, res) => {
         console.log(`[ADMIN] Updated user "${user.display_name}" (${unifiedId}):`, changes);
 
         res.json({ success: true, unified_id: unifiedId, changes });
+        } finally {
+            await redis.del(updateUserLockKey).catch(() => {});
+        }
     } catch (error) {
         console.error('Admin update-user error:', error.message);
         res.status(500).json({ error: 'Failed to update user' });
@@ -12492,65 +12593,85 @@ app.post('/admin/set-streak', async (req, res) => {
             return res.status(404).json({ error: `User "${display_name}" not found` });
         }
 
-        // Ensure stats object exists
-        foundUser.stats = foundUser.stats || {};
-
-        const changes = [];
-
-        // Apply streak changes (force-set, no Math.max)
-        if (typeof daily_quest_streak === 'number') {
-            foundUser.stats.daily_quest_streak = daily_quest_streak;
-            changes.push(`daily_quest_streak=${daily_quest_streak}`);
-        }
-        if (typeof last_daily_quest_date === 'string') {
-            foundUser.stats.last_daily_quest_date = last_daily_quest_date;
-            changes.push(`last_daily_quest_date=${last_daily_quest_date}`);
-        }
-        if (Array.isArray(quest_completion_dates)) {
-            const filteredDates = quest_completion_dates.filter(d => typeof d === 'string' && d.length <= 20).slice(-100);
-            foundUser.stats.quest_completion_dates = filteredDates;
-            changes.push(`quest_completion_dates=[${filteredDates.length} dates]`);
-        }
-        if (typeof total_daily_quests_completed === 'number') {
-            foundUser.stats.total_daily_quests_completed = total_daily_quests_completed;
-            changes.push(`total_daily_quests_completed=${total_daily_quests_completed}`);
-        }
-        if (typeof total_weekly_quests_completed === 'number') {
-            foundUser.stats.total_weekly_quests_completed = total_weekly_quests_completed;
-            changes.push(`total_weekly_quests_completed=${total_weekly_quests_completed}`);
-        }
-        if (typeof total_xp_from_quests === 'number') {
-            foundUser.stats.total_xp_from_quests = total_xp_from_quests;
-            changes.push(`total_xp_from_quests=${total_xp_from_quests}`);
-        }
-
-        if (changes.length === 0) {
-            return res.status(400).json({ error: 'No changes specified. Provide at least one field to update.' });
-        }
-
-        // Set force override flag so client adopts these values even if lower
-        foundUser.force_streak_override = true;
-
-        await redis.set(foundKey, JSON.stringify(foundUser));
-
-        console.log(`[Admin] Set streak for "${foundUser.display_name}": ${changes.join(', ')}`);
-
-        res.json({
-            success: true,
-            message: `Streak updated for "${foundUser.display_name}": ${changes.join(', ')}. Will force-override on next client sync.`,
-            user: {
-                display_name: foundUser.display_name,
-                unified_id: foundUser.unified_id,
-                stats: {
-                    daily_quest_streak: foundUser.stats.daily_quest_streak,
-                    last_daily_quest_date: foundUser.stats.last_daily_quest_date,
-                    quest_completion_dates: foundUser.stats.quest_completion_dates,
-                    total_daily_quests_completed: foundUser.stats.total_daily_quests_completed,
-                    total_weekly_quests_completed: foundUser.stats.total_weekly_quests_completed,
-                    total_xp_from_quests: foundUser.stats.total_xp_from_quests
-                }
+        // Acquire write lock for user: records to prevent race with sync/heartbeat
+        let setStreakLockKey = null;
+        if (foundKey.startsWith('user:')) {
+            const streakUnifiedId = foundKey.replace('user:', '');
+            setStreakLockKey = `user_write_lock:${streakUnifiedId}`;
+            const lockAcquired = await redis.set(setStreakLockKey, 'admin-set-streak', { nx: true, ex: 10 });
+            if (!lockAcquired) {
+                return res.status(429).json({ error: 'User record locked, try again', retry_after: 3 });
             }
-        });
+            // Re-read under lock
+            const freshData = await redis.get(foundKey);
+            if (freshData) {
+                foundUser = typeof freshData === 'string' ? JSON.parse(freshData) : freshData;
+            }
+        }
+
+        try {
+            // Ensure stats object exists
+            foundUser.stats = foundUser.stats || {};
+
+            const changes = [];
+
+            // Apply streak changes (force-set, no Math.max)
+            if (typeof daily_quest_streak === 'number') {
+                foundUser.stats.daily_quest_streak = daily_quest_streak;
+                changes.push(`daily_quest_streak=${daily_quest_streak}`);
+            }
+            if (typeof last_daily_quest_date === 'string') {
+                foundUser.stats.last_daily_quest_date = last_daily_quest_date;
+                changes.push(`last_daily_quest_date=${last_daily_quest_date}`);
+            }
+            if (Array.isArray(quest_completion_dates)) {
+                const filteredDates = quest_completion_dates.filter(d => typeof d === 'string' && d.length <= 20).slice(-100);
+                foundUser.stats.quest_completion_dates = filteredDates;
+                changes.push(`quest_completion_dates=[${filteredDates.length} dates]`);
+            }
+            if (typeof total_daily_quests_completed === 'number') {
+                foundUser.stats.total_daily_quests_completed = total_daily_quests_completed;
+                changes.push(`total_daily_quests_completed=${total_daily_quests_completed}`);
+            }
+            if (typeof total_weekly_quests_completed === 'number') {
+                foundUser.stats.total_weekly_quests_completed = total_weekly_quests_completed;
+                changes.push(`total_weekly_quests_completed=${total_weekly_quests_completed}`);
+            }
+            if (typeof total_xp_from_quests === 'number') {
+                foundUser.stats.total_xp_from_quests = total_xp_from_quests;
+                changes.push(`total_xp_from_quests=${total_xp_from_quests}`);
+            }
+
+            if (changes.length === 0) {
+                return res.status(400).json({ error: 'No changes specified. Provide at least one field to update.' });
+            }
+
+            // Set force override flag so client adopts these values even if lower
+            foundUser.force_streak_override = true;
+
+            await redis.set(foundKey, JSON.stringify(foundUser));
+
+            console.log(`[Admin] Set streak for "${foundUser.display_name}": ${changes.join(', ')}`);
+
+            res.json({
+                success: true,
+                message: `Streak updated for "${foundUser.display_name}": ${changes.join(', ')}. Will force-override on next client sync.`,
+                user: {
+                    display_name: foundUser.display_name,
+                    unified_id: foundUser.unified_id,
+                    stats: {
+                        daily_quest_streak: foundUser.stats.daily_quest_streak,
+                        last_daily_quest_date: foundUser.stats.last_daily_quest_date,
+                        quest_completion_dates: foundUser.stats.quest_completion_dates,
+                        total_daily_quests_completed: foundUser.stats.total_daily_quests_completed,
+                        total_weekly_quests_completed: foundUser.stats.total_weekly_quests_completed,
+                        total_xp_from_quests: foundUser.stats.total_xp_from_quests
+                    }
+                }
+            });
+        } finally {
+            if (setStreakLockKey) await redis.del(setStreakLockKey).catch(() => {});
+        }
     } catch (error) {
         console.error('Error setting streak:', error.message);
         res.status(500).json({ error: 'Failed to set streak' });
@@ -12619,6 +12740,23 @@ app.post('/admin/reset-skills', async (req, res) => {
             return res.status(404).json({ error: `User "${display_name}" not found` });
         }
 
+        // Acquire write lock for user: records to prevent race with sync/heartbeat
+        let resetSkillsLockKey = null;
+        if (foundKey.startsWith('user:')) {
+            const skillsUnifiedId = foundKey.replace('user:', '');
+            resetSkillsLockKey = `user_write_lock:${skillsUnifiedId}`;
+            const lockAcquired = await redis.set(resetSkillsLockKey, 'admin-reset-skills', { nx: true, ex: 10 });
+            if (!lockAcquired) {
+                return res.status(429).json({ error: 'User record locked, try again', retry_after: 3 });
+            }
+            // Re-read under lock
+            const freshData = await redis.get(foundKey);
+            if (freshData) {
+                foundUser = typeof freshData === 'string' ? JSON.parse(freshData) : freshData;
+            }
+        }
+
+        try {
         const oldSkillPoints = foundUser.skill_points || 0;
         const oldSkills = foundUser.unlocked_skills || [];
         const POINTS_PER_LEVEL = 1;
@@ -12643,6 +12781,9 @@ app.post('/admin/reset-skills', async (req, res) => {
                 cleared_skills: oldSkills
             }
         });
+        } finally {
+            if (resetSkillsLockKey) await redis.del(resetSkillsLockKey).catch(() => {});
+        }
     } catch (error) {
         console.error('Error resetting skills:', error.message);
         res.status(500).json({ error: 'Failed to reset skills' });
