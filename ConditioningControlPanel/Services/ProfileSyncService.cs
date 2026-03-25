@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -29,6 +30,8 @@ namespace ConditioningControlPanel.Services
         private bool _disposed;
         private bool _syncEnabled = true;
         private bool _pendingQuestResetClear;
+        private bool _authRecoveryAttempted;
+        private readonly SemaphoreSlim _syncGate = new(1, 1);
 
         /// <summary>
         /// Whether using Patreon auth (vs Discord)
@@ -59,6 +62,17 @@ namespace ConditioningControlPanel.Services
         /// Last sync error (if any)
         /// </summary>
         public string? LastSyncError { get; private set; }
+
+        /// <summary>
+        /// Number of consecutive sync failures. Reset to 0 on success.
+        /// </summary>
+        public int ConsecutiveSyncFailures { get; private set; }
+
+        /// <summary>
+        /// Raised when sync health changes (failure count goes up or resets to 0).
+        /// Parameter is the current failure count.
+        /// </summary>
+        public event EventHandler<int>? SyncHealthChanged;
 
         /// <summary>
         /// Event raised when cloud profile is loaded and merged with local data.
@@ -116,6 +130,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private async Task SendHeartbeatAsync()
         {
+            if (_disposed) return;
+
             // Skip if offline mode is enabled
             if (App.Settings?.Current?.OfflineMode == true) return;
 
@@ -123,18 +139,14 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var accessToken = GetAccessToken();
-                if (string.IsNullOrEmpty(accessToken)) return;
-
-                // Use V2 heartbeat if user has unified_id (new v5.5 system)
+                // V2 heartbeat — uses auth token, NOT OAuth
                 var unifiedId = App.Settings?.Current?.UnifiedId;
                 if (!string.IsNullOrEmpty(unifiedId))
                 {
-                    // V2 heartbeat - uses unified_id with enriched activity data
                     var v2Request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/heartbeat");
                     AddAuthHeader(v2Request);
                     v2Request.Content = new StringContent(
-                        Newtonsoft.Json.JsonConvert.SerializeObject(new
+                        JsonConvert.SerializeObject(new
                         {
                             unified_id = unifiedId,
                             is_active = App.ActivityTracker?.IsIdle != true,
@@ -144,12 +156,23 @@ namespace ConditioningControlPanel.Services
                         Encoding.UTF8, "application/json");
 
                     var v2Response = await _httpClient.SendAsync(v2Request);
-                    HandleUnauthorized(v2Response);
+                    if (await HandleUnauthorizedAsync(v2Response))
+                    {
+                        // Recovery failed — stop heartbeat to avoid spamming 401s
+                        if (string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
+                        {
+                            App.Logger?.Warning("[Auth] Heartbeat: auth recovery failed, stopping heartbeat");
+                            StopHeartbeat();
+                        }
+                    }
                     App.Logger?.Debug("V2 Heartbeat: {Status}", v2Response.StatusCode);
                     return;
                 }
 
-                // Legacy heartbeat - use appropriate endpoint based on auth type
+                // Legacy heartbeat — requires OAuth
+                var accessToken = GetAccessToken();
+                if (string.IsNullOrEmpty(accessToken)) return;
+
                 var endpoint = IsPatreonAuth ? "/user/heartbeat" : "/user/heartbeat-discord";
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}{endpoint}");
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -196,21 +219,32 @@ namespace ConditioningControlPanel.Services
 
             try
             {
+                // V2-first: if user has a V2 identity, try V2 sync regardless of OAuth state
+                var unifiedId = App.Settings?.Current?.UnifiedId;
+                if (!string.IsNullOrEmpty(unifiedId))
+                {
+                    App.Logger?.Information("V2 user — loading profile via V2 sync path");
+                    var v2Success = await SyncProfileAsync();
+                    if (v2Success)
+                    {
+                        ProfileLoaded?.Invoke(this, EventArgs.Empty);
+                        return true;
+                    }
+                    // V2 failed — fall through to V1 if OAuth is available
+                    App.Logger?.Warning("V2 sync failed, attempting V1 fallback");
+                }
+
                 var accessToken = GetAccessToken();
                 if (string.IsNullOrEmpty(accessToken))
                 {
-                    // For V2 invite-code users: no OAuth token, but we can load via V2 sync
-                    var unifiedId = App.Settings?.Current?.UnifiedId;
                     if (!string.IsNullOrEmpty(unifiedId))
-                    {
-                        App.Logger?.Information("No OAuth token — loading profile via V2 sync for invite-code user");
-                        return await SyncProfileAsync();
-                    }
-                    App.Logger?.Warning("No access token available for profile sync");
+                        App.Logger?.Warning("V2 sync failed and no OAuth token available — sync unavailable");
+                    else
+                        App.Logger?.Warning("No access token available for profile sync");
                     return false;
                 }
 
-                // Use appropriate endpoint based on auth type
+                // V1 fallback — use appropriate endpoint based on auth type
                 var endpoint = IsPatreonAuth ? "/user/profile" : "/user/profile-discord";
                 var request = new HttpRequestMessage(HttpMethod.Get, $"{ProxyBaseUrl}{endpoint}");
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -307,6 +341,16 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
+            // Prevent concurrent sync calls from racing past the cooldown check
+            if (!await _syncGate.WaitAsync(0))
+            {
+                App.Logger?.Debug("Profile sync skipped - another sync in progress");
+                return false;
+            }
+
+            var syncSucceeded = false;
+            try
+            {
             // Client-side sync cooldown to match server-side enforcement
             if (LastSyncTime.HasValue && DateTime.Now - LastSyncTime.Value < SyncCooldown)
             {
@@ -320,8 +364,17 @@ namespace ConditioningControlPanel.Services
                 var accessToken = GetAccessToken();
                 if (string.IsNullOrEmpty(accessToken))
                 {
-                    App.Logger?.Warning("No access token available for profile sync");
-                    return false;
+                    // For V2 users (invite-code or expired OAuth): allow sync if we have unified_id + auth token
+                    var fallbackUnifiedId = App.Settings?.Current?.UnifiedId;
+                    if (!string.IsNullOrEmpty(fallbackUnifiedId) && !string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
+                    {
+                        App.Logger?.Debug("No OAuth token — proceeding with V2 sync for unified user {Id}", fallbackUnifiedId);
+                    }
+                    else
+                    {
+                        App.Logger?.Warning("No access token available for profile sync");
+                        return false;
+                    }
                 }
 
                 // Gather local progression data from Settings
@@ -409,7 +462,7 @@ namespace ConditioningControlPanel.Services
                             App.Logger?.Debug("V2 Profile sync rate-limited by server, will retry later");
                             return false;
                         }
-                        HandleUnauthorized(v2Response);
+                        await HandleUnauthorizedAsync(v2Response);
                         var error = await v2Response.Content.ReadAsStringAsync();
                         App.Logger?.Warning("V2 Profile sync failed: {Status} - {Error}", v2Response.StatusCode, error);
                         LastSyncError = $"Sync failed: {v2Response.StatusCode}";
@@ -655,6 +708,7 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Debug("V2 Sync: Could not parse server flags: {Error}", parseEx.Message);
                     }
 
+                    syncSucceeded = true;
                     return true;
                 }
 
@@ -749,6 +803,7 @@ namespace ConditioningControlPanel.Services
                     MergeCloudProfile(result.Profile);
                 }
 
+                syncSucceeded = true;
                 return true;
             }
             catch (Exception ex)
@@ -756,6 +811,25 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Error(ex, "Failed to sync profile to cloud");
                 LastSyncError = ex.Message;
                 return false;
+            }
+            }
+            finally
+            {
+                // Track sync health — only count actual failures, not skips (cooldown, gate, offline)
+                if (syncSucceeded)
+                {
+                    if (ConsecutiveSyncFailures > 0)
+                    {
+                        ConsecutiveSyncFailures = 0;
+                        SyncHealthChanged?.Invoke(this, 0);
+                    }
+                }
+                else if (LastSyncError != null)
+                {
+                    ConsecutiveSyncFailures++;
+                    SyncHealthChanged?.Invoke(this, ConsecutiveSyncFailures);
+                }
+                _syncGate.Release();
             }
         }
 
@@ -1277,6 +1351,9 @@ namespace ConditioningControlPanel.Services
                 _pendingQuestResetClear = true;
             }
 
+            // Sync CurrentStreak (used by streak power skill) with ConsecutiveDays from cloud
+            achievements?.Progress?.SyncCurrentStreak();
+
             // Save merged data
             if (needsSave)
             {
@@ -1417,7 +1494,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    HandleUnauthorized(response);
+                    await HandleUnauthorizedAsync(response);
                     var errorResult = JsonConvert.DeserializeObject<OopsieErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
                     App.Logger?.Warning("Oopsie insurance failed: {Error}", errorMsg);
@@ -1469,15 +1546,14 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    HandleUnauthorized(response);
+                    await HandleUnauthorizedAsync(response);
                     string errorMsg;
                     try
                     {
                         var errorResult = JsonConvert.DeserializeObject<PurchaseSkillResponse>(json);
                         errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
-                        // Still update local points from server if provided
-                        if (errorResult?.SkillPoints.HasValue == true)
-                            settings.SkillPoints = errorResult.SkillPoints.Value;
+                        // Don't overwrite local points from error responses — server may return 0
+                        // for users whose points weren't properly backfilled. Let sync handle reconciliation.
                     }
                     catch
                     {
@@ -1493,10 +1569,11 @@ namespace ConditioningControlPanel.Services
 
                 if (!result.Success)
                 {
-                    // Update local points to match server's authoritative value
-                    if (result.SkillPoints.HasValue)
-                        settings.SkillPoints = result.SkillPoints.Value;
-                    App.Settings?.Save();
+                    // Don't overwrite local points on failed purchase — server may have stale/missing
+                    // point data for users who leveled before server-authoritative system was deployed.
+                    // Sync endpoint handles proper reconciliation with backfill.
+                    App.Logger?.Warning("Skill purchase rejected: {Error}, server says {Points} points",
+                        result.Error, result.SkillPoints);
                     return (false, result.Error ?? "Purchase failed");
                 }
 
@@ -1552,7 +1629,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    HandleUnauthorized(response);
+                    await HandleUnauthorizedAsync(response);
                     var errorResult = JsonConvert.DeserializeObject<ChangeDisplayNameErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
                     App.Logger?.Warning("Change display name failed: {Error}", errorMsg);
@@ -1598,7 +1675,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    HandleUnauthorized(response);
+                    await HandleUnauthorizedAsync(response);
                     var errorResult = JsonConvert.DeserializeObject<DeleteAccountErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
                     App.Logger?.Warning("Delete account failed: {Error}", errorMsg);
@@ -1644,7 +1721,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    HandleUnauthorized(response);
+                    await HandleUnauthorizedAsync(response);
                     var errorResult = JsonConvert.DeserializeObject<DeleteAccountErrorResponse>(json);
                     var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
                     App.Logger?.Warning("Export data failed: {Error}", errorMsg);
@@ -1676,25 +1753,96 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Handles a 401 Unauthorized response by clearing the stored auth token.
+        /// Handles a 401 Unauthorized response. Attempts token recovery via restore-session
+        /// once per session before clearing the stored auth token.
         /// Returns true if the response was a 401.
         /// </summary>
-        private static bool HandleUnauthorized(HttpResponseMessage response)
+        private async Task<bool> HandleUnauthorizedAsync(HttpResponseMessage response)
         {
-            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            if (response.StatusCode != HttpStatusCode.Unauthorized)
+                return false;
+
+            // Attempt recovery once per session
+            if (!_authRecoveryAttempted)
             {
-                App.Logger?.Warning("[Auth] Received 401 — clearing stored auth token. User will get a new token on next auth.");
-                if (App.Settings?.Current != null)
+                _authRecoveryAttempted = true;
+                App.Logger?.Information("[Auth] 401 received — attempting token recovery via restore-session");
+                var recovered = await TryRecoverAuthTokenAsync();
+                if (recovered)
                 {
-                    App.Settings.Current.AuthToken = null;
-                    // Save to disk but suppress the cloud backup that Save() normally triggers —
-                    // we just cleared the auth token, so any backup attempt would 401 again,
-                    // creating a 401 → Save() → backup → 401 storm loop.
+                    App.Logger?.Information("[Auth] Token recovered successfully");
+                    StartHeartbeat();
+                    return true;
+                }
+            }
+
+            App.Logger?.Warning("[Auth] 401 — clearing stored auth token (recovery failed or already attempted)");
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.AuthToken = null;
+                // Save to disk but suppress the cloud backup that Save() normally triggers —
+                // we just cleared the auth token, so any backup attempt would 401 again,
+                // creating a 401 → Save() → backup → 401 storm loop.
+                App.Settings.Save(suppressCloudBackup: true);
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Attempts to recover the auth token by calling /v2/auth/restore-session.
+        /// Returns true if the token was successfully recovered.
+        /// Must NOT call HandleUnauthorizedAsync on the response (would recurse).
+        /// </summary>
+        private async Task<bool> TryRecoverAuthTokenAsync()
+        {
+            try
+            {
+                var unifiedId = App.Settings?.Current?.UnifiedId;
+                var storedToken = App.Settings?.Current?.AuthToken;
+                if (string.IsNullOrEmpty(unifiedId) || string.IsNullOrEmpty(storedToken))
+                    return false;
+
+                var body = JsonConvert.SerializeObject(new
+                {
+                    unified_id = unifiedId,
+                    client_version = UpdateService.AppVersion
+                });
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/auth/restore-session");
+                request.Headers.Add("X-Auth-Token", storedToken);
+                request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.SendAsync(request);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    App.Logger?.Warning("[Auth] restore-session failed: {Status}", response.StatusCode);
+                    return false;
+                }
+
+                // restore-session succeeded — the token is still valid on the server.
+                // The original 401 was transient. Server does NOT return a new auth_token
+                // (rotation during restore-session causes race conditions), so we keep
+                // the existing token. If the response does include a new token, adopt it.
+                var json = await response.Content.ReadAsStringAsync();
+                var obj = Newtonsoft.Json.Linq.JObject.Parse(json);
+                var newToken = obj["auth_token"]?.ToString();
+                if (!string.IsNullOrEmpty(newToken) && App.Settings?.Current != null)
+                {
+                    App.Settings.Current.AuthToken = newToken;
                     App.Settings.Save(suppressCloudBackup: true);
+                    App.Logger?.Information("[Auth] Auth token refreshed from restore-session");
+                }
+                else
+                {
+                    App.Logger?.Information("[Auth] restore-session confirmed token is still valid (transient 401)");
                 }
                 return true;
             }
-            return false;
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("[Auth] restore-session recovery failed: {Error}", ex.Message);
+                return false;
+            }
         }
 
         /// <summary>
@@ -1849,7 +1997,7 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    HandleUnauthorized(response);
+                    await HandleUnauthorizedAsync(response);
                     var error = await response.Content.ReadAsStringAsync();
                     App.Logger?.Warning("Settings backup failed: {Status} - {Error}", response.StatusCode, error);
                     return false;
@@ -1887,7 +2035,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    HandleUnauthorized(response);
+                    await HandleUnauthorizedAsync(response);
                     return null;
                 }
 
@@ -1933,7 +2081,7 @@ namespace ConditioningControlPanel.Services
                 var response = await _httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    HandleUnauthorized(response);
+                    await HandleUnauthorizedAsync(response);
                     return null;
                 }
 

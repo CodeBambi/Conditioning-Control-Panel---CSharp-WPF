@@ -49,6 +49,7 @@ namespace ConditioningControlPanel
         private static EventWaitHandle? _showSignal;
         private SplashScreen? _splash;
         private static Thread? _showSignalThread;
+        private readonly TaskCompletionSource _patreonInitDone = new();
 
         /// <summary>
         /// User data folder path in LocalAppData - persists across updates
@@ -866,6 +867,10 @@ namespace ConditioningControlPanel
             {
                 Logger?.Error(ex, "Failed to initialize Patreon and sync profile");
             }
+            finally
+            {
+                _patreonInitDone.TrySetResult();
+            }
         }
 
         /// <summary>
@@ -913,6 +918,11 @@ namespace ConditioningControlPanel
                             Logger?.Warning(upgradeEx, "Discord auto-upgrade failed (non-fatal, will retry next launch)");
                         }
                     }
+
+                    // Wait for Patreon init to finish (up to 10s) before deciding whether to load profile
+                    // This prevents a race where Discord init finishes first and calls LoadProfileAsync
+                    // while Patreon is still initializing — causing duplicate profile loads
+                    await Task.WhenAny(_patreonInitDone.Task, Task.Delay(10_000));
 
                     // If not already syncing via Patreon, load cloud profile and start heartbeat for Discord-only users
                     if (Patreon?.IsAuthenticated != true && ProfileSync != null)
