@@ -690,17 +690,23 @@ namespace ConditioningControlPanel.Services
                             App.Settings?.Save();
                         }
                         // Adopt server level/xp if higher than local (e.g. crash lost recent progress)
-                        else if (v2Result?.User != null && v2Result.User.Level > settings.PlayerLevel)
+                        // Compare total XP (not just level) so within-level progress is also recovered
+                        else if (v2Result?.User != null)
                         {
-                            var serverLevel = v2Result.User.Level;
-                            var serverXp = v2Result.User.Xp;
-                            var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverXp) ?? 0;
+                            var serverTotalXp = (double)v2Result.User.Xp;
+                            var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? 0;
 
-                            App.Logger?.Information("V2 Sync: Server level higher than local — adopting Level {ServerLevel} (local was {LocalLevel})",
-                                serverLevel, settings.PlayerLevel);
-                            settings.PlayerLevel = serverLevel;
-                            settings.PlayerXP = serverLevelXp;
-                            App.Settings?.Save();
+                            if (serverTotalXp > localTotalXp)
+                            {
+                                var serverLevel = v2Result.User.Level;
+                                var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverTotalXp) ?? 0;
+
+                                App.Logger?.Information("V2 Sync: Server XP higher than local — adopting Level {ServerLevel} XP {ServerXp} (local total was {LocalXp})",
+                                    serverLevel, serverTotalXp, localTotalXp);
+                                settings.PlayerLevel = serverLevel;
+                                settings.PlayerXP = serverLevelXp;
+                                App.Settings?.Save();
+                            }
                         }
                     }
                     catch (Exception parseEx)
@@ -2347,6 +2353,9 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("level_reset")]
             public bool? LevelReset { get; set; }
 
+            [JsonProperty("total_xp_earned")]
+            public double? TotalXpEarned { get; set; }
+
             [JsonProperty("total_conditioning_minutes")]
             public double? TotalConditioningMinutes { get; set; }
 
@@ -2373,6 +2382,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("achievements")]
             public List<string>? Achievements { get; set; }
+
+            [JsonProperty("stats")]
+            public Dictionary<string, object>? Stats { get; set; }
         }
 
         private class OopsieSuccessResponse
