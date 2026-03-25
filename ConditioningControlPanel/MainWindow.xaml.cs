@@ -284,6 +284,7 @@ namespace ConditioningControlPanel
 
             // Subscribe to cloud profile sync event to refresh UI when profile loads
             App.ProfileSync.ProfileLoaded += OnProfileLoaded;
+            App.ProfileSync.SyncHealthChanged += OnSyncHealthChanged;
 
             LoadSettings();
             InitializePresets();
@@ -428,6 +429,24 @@ namespace ConditioningControlPanel
                         App.Autonomy?.Start();
                         App.Logger?.Information("Started autonomy service after profile loaded");
                     }
+                }
+            });
+        }
+
+        private void OnSyncHealthChanged(object? sender, int failureCount)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (failureCount >= 3)
+                {
+                    App.Logger?.Warning("[SyncHealth] {Count} consecutive sync failures — notifying user", failureCount);
+                    // Show a subtle notification in the title bar area
+                    Title = $"Conditioning Control Panel — Cloud sync issue";
+                }
+                else if (failureCount == 0)
+                {
+                    // Restore normal title
+                    Title = "Conditioning Control Panel";
                 }
             });
         }
@@ -20380,6 +20399,7 @@ namespace ConditioningControlPanel
                 if (App.ProfileSync != null)
                 {
                     App.ProfileSync.ProfileLoaded -= OnProfileLoaded;
+                    App.ProfileSync.SyncHealthChanged -= OnSyncHealthChanged;
                 }
                 if (App.Achievements != null)
                 {
