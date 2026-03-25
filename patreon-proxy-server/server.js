@@ -10308,6 +10308,21 @@ app.post('/v2/user/sync', async (req, res) => {
 
             // Cap skill_points at 9999
             user.skill_points = Math.min(9999, user.skill_points || 0);
+
+            // Backfill: if user's total points (available + spent on skills) < level,
+            // they leveled before server-authoritative system was deployed. Award the difference.
+            const spentPoints = (user.unlocked_skills || []).reduce((sum, sid) => {
+                const def = SKILL_CATALOG[sid];
+                return sum + (def ? def.cost : 0);
+            }, 0);
+            const expectedMinPoints = (user.level || 1) * POINTS_PER_LEVEL;
+            const totalAccountedFor = (user.skill_points || 0) + spentPoints;
+            if (totalAccountedFor < expectedMinPoints) {
+                const backfill = expectedMinPoints - totalAccountedFor;
+                user.skill_points = (user.skill_points || 0) + backfill;
+                user.skill_points = Math.min(9999, user.skill_points);
+                console.log(`[SkillPointBackfill] User ${unified_id} backfilled ${backfill} points (level=${user.level}, had=${totalAccountedFor - backfill}, spent=${spentPoints})`);
+            }
         }
 
         // Merge total conditioning minutes (lifetime value — always take higher)
@@ -10700,7 +10715,8 @@ app.post('/v2/user/purchase-skill', async (req, res) => {
 
             // Check sufficient points
             if ((user.skill_points || 0) < skillDef.cost) {
-                return res.json({ success: false, error: 'Not enough sparkle points. Try syncing first to receive pending points.', skill_points: user.skill_points || 0 });
+                const have = user.skill_points || 0;
+                return res.json({ success: false, error: `Not enough sparkle points (have ${have}, need ${skillDef.cost}). Level up to earn more!`, skill_points: have });
             }
 
             // Purchase: deduct cost and add skill
