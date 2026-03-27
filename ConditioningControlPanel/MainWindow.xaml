@@ -2219,7 +2219,7 @@
                     </Border>
 
                     <!-- Logo (Clickable for Neon Obsession achievement + Easter Egg) -->
-                    <Border Background="#01000000" Padding="0" Height="260" Margin="0,0,0,8"
+                    <Border Background="#01000000" Padding="0" Height="234" Margin="0,0,0,8"
                             Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                             ToolTip="{loc:Str tooltip_click_me_rapidly}">
                         <Border CornerRadius="20" ClipToBounds="True">

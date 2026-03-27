@@ -118,7 +118,7 @@ namespace ConditioningControlPanel
         private const double VerticalOffset = 20;
 
         // Floating animation settings
-        private const double FloatDistance = 8;
+        private const double FloatDistance = 4;
         private const double FloatDuration = 2.0;
 
         // Current scale factor
@@ -824,7 +824,7 @@ namespace ConditioningControlPanel
             {
                 var dx = App.Mods?.GetAvatarOffsetX() ?? 0;
                 var dy = App.Mods?.GetAvatarOffsetY() ?? 0;
-                AvatarBorder.Margin = new Thickness(5, 100, 126 - dx, 205 + dy);
+                AvatarBorder.Margin = new Thickness(5, 100, 126 - dx, 210 + dy);
                 TitleBox.Margin = new Thickness(0, 0, 121 - dx, 180);
                 InputPanel.Margin = new Thickness(0, 0, 126 - dx, 520);
             }
@@ -832,7 +832,7 @@ namespace ConditioningControlPanel
             {
                 var dx = App.Mods?.GetAvatarDetachedOffsetX() ?? 0;
                 var dy = App.Mods?.GetAvatarDetachedOffsetY() ?? 0;
-                AvatarBorder.Margin = new Thickness(5, 100, 426 - dx, 203 + dy);
+                AvatarBorder.Margin = new Thickness(5, 100, 426 - dx, 208 + dy);
                 TitleBox.Margin = new Thickness(0, 0, 416 - dx, 193);
                 InputPanel.Margin = new Thickness(0, 0, 426 - dx, 520);
             }
