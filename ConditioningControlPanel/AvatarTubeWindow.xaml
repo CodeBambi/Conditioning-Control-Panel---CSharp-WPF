@@ -10,7 +10,7 @@
         Background="Transparent"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
-        SizeToContent="{loc:Str btn_widthandheight}"
+        SizeToContent="WidthAndHeight"
         UseLayoutRounding="True"
         FontFamily="Comic Sans MS">
 
@@ -169,7 +169,7 @@
             <Border x:Name="AvatarBorder"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
-                    Margin="5,100,126,205"
+                    Margin="5,100,126,210"
                     Cursor="Hand"
                     MouseLeftButtonDown="ImgAvatar_MouseLeftButtonDown"
                     MouseRightButtonDown="ImgAvatar_MouseRightButtonDown"
