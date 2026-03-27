@@ -248,7 +248,9 @@ namespace ConditioningControlPanel
                 Interval = TimeSpan.FromSeconds(3)
             };
             _poseTimer.Tick += PoseTimer_Tick;
-            
+            if (!_useAnimatedAvatar && _avatarPoses.Length > 1)
+                _poseTimer.Start();
+
             // Subscribe to parent window events
             _parentWindow.LocationChanged += ParentWindow_PositionChanged;
             _parentWindow.SizeChanged += ParentWindow_PositionChanged;
@@ -785,6 +787,8 @@ namespace ConditioningControlPanel
                     _currentPoseIndex = 0;
                     ImgAvatar.Source = _avatarPoses[0];
                 }
+                if (!_useAnimatedAvatar && _avatarPoses.Length > 1)
+                    _poseTimer.Start();
 
                 // Refresh voice lines from new mod
                 _voiceLinesPath = Services.CompanionPhraseService.VoiceLineFolder;

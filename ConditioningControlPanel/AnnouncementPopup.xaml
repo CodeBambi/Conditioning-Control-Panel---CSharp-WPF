@@ -58,8 +58,43 @@
                            LineHeight="22"
                            Margin="0,0,0,16"/>
 
+                <!-- Download Button (only visible when link_url is set) -->
+                <Button x:Name="BtnDownload" Content="▶ Download Mod" Click="BtnDownload_Click"
+                        HorizontalAlignment="Center"
+                        Width="180" Height="38"
+                        Cursor="Hand"
+                        FontSize="14" FontWeight="Bold"
+                        Visibility="Collapsed"
+                        Margin="0,0,0,8">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                CornerRadius="18" Padding="16,6">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="border" Property="Background" Value="{DynamicResource PinkButtonHoveredBrush}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="border" Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
                 <!-- Got it Button -->
-                <Button Content="Got it!" Click="BtnDismiss_Click"
+                <Button x:Name="BtnDismiss" Content="Got it!" Click="BtnDismiss_Click"
                         HorizontalAlignment="Center"
                         Width="120" Height="36"
                         Cursor="Hand"

@@ -17305,6 +17305,8 @@ namespace ConditioningControlPanel
             public string? title { get; set; }
             public string? message { get; set; }
             public string? image_url { get; set; }
+            public string? link_url { get; set; }
+            public string? theme { get; set; }
         }
 
         /// <summary>
@@ -17345,7 +17347,9 @@ namespace ConditioningControlPanel
                                 result.id!,
                                 result.title!,
                                 result.message ?? "",
-                                result.image_url);
+                                result.image_url,
+                                result.link_url,
+                                result.theme);
                             popup.Show();
                         });
                     }
