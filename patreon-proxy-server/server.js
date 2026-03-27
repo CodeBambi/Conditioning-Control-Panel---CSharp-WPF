@@ -11141,7 +11141,9 @@ app.get('/config/announcement', async (req, res) => {
                         id: user.announcement.id,
                         title: user.announcement.title || '',
                         message: user.announcement.message || '',
-                        image_url: user.announcement.image_url || null
+                        image_url: user.announcement.image_url || null,
+                        link_url: user.announcement.link_url || null,
+                        theme: user.announcement.theme || null
                     });
                 }
             }
@@ -11163,7 +11165,9 @@ app.get('/config/announcement', async (req, res) => {
             id: config.id || '',
             title: config.title || '',
             message: config.message || '',
-            image_url: config.image_url || null
+            image_url: config.image_url || null,
+            link_url: config.link_url || null,
+            theme: config.theme || null
         });
     } catch (error) {
         console.error('Get announcement error:', error.message);
@@ -11174,12 +11178,12 @@ app.get('/config/announcement', async (req, res) => {
 /**
  * POST /config/announcement
  * Admin-only: set the global announcement shown to all users.
- * Body: { enabled, id?, title, message, image_url?, admin_token }
+ * Body: { enabled, id?, title, message, image_url?, link_url?, theme?, admin_token }
  * If id is omitted, auto-generates from timestamp.
  */
 app.post('/config/announcement', async (req, res) => {
     try {
-        const { enabled, id, title, message, image_url } = req.body;
+        const { enabled, id, title, message, image_url, link_url, theme } = req.body;
         const admin_token = req.headers['x-admin-token'];
 
         if (!verifyAdminToken(admin_token)) {
@@ -11191,10 +11195,19 @@ app.post('/config/announcement', async (req, res) => {
             return res.status(400).json({ error: 'image_url must be an HTTPS URL' });
         }
 
+        // Validate link_url is HTTPS if provided
+        if (link_url && (typeof link_url !== 'string' || !link_url.startsWith('https://'))) {
+            return res.status(400).json({ error: 'link_url must be an HTTPS URL' });
+        }
+        if (link_url && link_url.length > 500) {
+            return res.status(400).json({ error: 'link_url too long (max 500 chars)' });
+        }
+
         // R11/H5: Length caps on announcement fields
         const safeId = id ? String(id).slice(0, 50) : `ann_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
         const safeTitle = title ? String(title).slice(0, 200) : '';
         const safeMessage = message ? String(message).slice(0, 2000) : '';
+        const safeTheme = theme ? String(theme).slice(0, 50) : null;
         if (image_url && image_url.length > 500) {
             return res.status(400).json({ error: 'image_url too long (max 500 chars)' });
         }
@@ -11204,7 +11217,9 @@ app.post('/config/announcement', async (req, res) => {
             id: safeId,
             title: safeTitle,
             message: safeMessage,
-            image_url: image_url || null
+            image_url: image_url || null,
+            link_url: link_url || null,
+            theme: safeTheme
         };
 
         await redis.set(ANNOUNCEMENT_KEY, JSON.stringify(config));
@@ -11220,12 +11235,12 @@ app.post('/config/announcement', async (req, res) => {
 /**
  * POST /admin/user-announcement
  * Admin-only: set a per-user announcement targeting a specific user by display_name.
- * Body: { display_name, enabled, id?, title, message, image_url?, admin_token }
+ * Body: { display_name, enabled, id?, title, message, image_url?, link_url?, theme?, admin_token }
  * Stores announcement object inside the user's profile in Redis.
  */
 app.post('/admin/user-announcement', async (req, res) => {
     try {
-        const { display_name, enabled, id, title, message, image_url } = req.body;
+        const { display_name, enabled, id, title, message, image_url, link_url, theme } = req.body;
         const admin_token = req.headers['x-admin-token'];
 
         if (!verifyAdminToken(admin_token)) {
@@ -11262,6 +11277,14 @@ app.post('/admin/user-announcement', async (req, res) => {
 
         const user = typeof userData === 'string' ? JSON.parse(userData) : userData;
 
+        // Validate link_url is HTTPS if provided
+        if (link_url && (typeof link_url !== 'string' || !link_url.startsWith('https://'))) {
+            return res.status(400).json({ error: 'link_url must be an HTTPS URL' });
+        }
+        if (link_url && link_url.length > 500) {
+            return res.status(400).json({ error: 'link_url too long (max 500 chars)' });
+        }
+
         // R11/H5: Length caps on announcement fields
         if (image_url && image_url.length > 500) {
             return res.status(400).json({ error: 'image_url too long (max 500 chars)' });
@@ -11271,7 +11294,9 @@ app.post('/admin/user-announcement', async (req, res) => {
             id: id ? String(id).slice(0, 50) : `ann_user_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
             title: title ? String(title).slice(0, 200) : '',
             message: message ? String(message).slice(0, 2000) : '',
-            image_url: image_url || null
+            image_url: image_url || null,
+            link_url: link_url || null,
+            theme: theme ? String(theme).slice(0, 50) : null
         };
 
         await redis.set(userKey, JSON.stringify(user));

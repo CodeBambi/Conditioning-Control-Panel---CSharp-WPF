@@ -28,7 +28,7 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.7.0 - Mod System Update
+        public const string CurrentPatchNotes = @"v5.7.0 — Mod System & Localization Update
 
 🧩 MOD SYSTEM
 • New .ccpmod package format for installable mod bundles
@@ -56,14 +56,36 @@ namespace ConditioningControlPanel.Services
 • 20 curated video links for the companion to suggest
 • Full subliminal pool and lock card phrase set
 
+🌍 LOCALIZATION
+• Full UI localization infrastructure with 9 languages
+• 2,034 translated keys per language
+• Covers all tabs, dialogs, skill tree, sessions, notifications, banners, leaderboard, remote control, and code-behind strings
+• Languages: English, Spanish, French, German, Japanese, Korean, Chinese (Simplified), Portuguese, Russian
+
+📢 ANNOUNCEMENTS
+• Server announcements now support themed popups and download links
+• Matrix green/black theme for special announcements
+
 🛠️ BUG FIXES
-• Fixed bubble count double pop sound and off-screen positioning
+• Fixed race conditions causing XP/level resets — added write locks + crash recovery
 • Fixed quest streak resetting on login by preserving cloud streak value
-• Fixed custom session crashes from unhandled async void exceptions
+• Fixed streak reset bugs: prevent silent resets, unify trim windows, preserve earned streaks
 • Fixed daily quests permanently showing as completed after day rollover
+• Fixed quest streak sync and subliminal thread safety
+• Fixed custom session crashes from unhandled async void exceptions
+• Fixed bubble count double pop sound and off-screen positioning
+• Fixed spiral GIF playing too fast by using median frame delay
+• Fixed spiral GIF stutter by reverting to synchronous loading
+• Fixed avatar tube SizeToContent localization bug, adjusted layout and float animation
+• Fixed avatar pose timer not starting for multi-pose static avatar sets
 • Fixed bubble click-through on transparent windows
 • Fixed avatar head clipping during floating animation
 • Fixed Mod Creator avatar slots not loading from installed mods
+
+🔐 STABILITY & AUTH
+• Hardened auth & sync pipeline: V2-first load, 401 recovery, heartbeat fix, race prevention
+• Server: fix V2 sync rejecting legacy users
+• Server: backfill skill points for pre-deployment users
 
 🔒 SECURITY
 • Path traversal protection in all mod resource resolvers
@@ -71,7 +93,8 @@ namespace ConditioningControlPanel.Services
 • All theme colors validated as hex codes
 • Video links filtered to HTTPS-only at runtime
 • Size caps on all manifest fields (phrases, triggers, pools, tooltips)
-• Duplicate custom avatar set detection";
+• Duplicate custom avatar set detection
+• Announcement link URLs validated as HTTPS on both server and client";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
