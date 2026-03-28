@@ -1154,6 +1154,24 @@ async function refreshAccessToken(refreshToken) {
  * Get user's identity and membership info from Patreon
  */
 async function getPatreonIdentity(accessToken) {
+    // R13/H2: Global rate limit on outbound Patreon API calls to prevent amplification.
+    // V1 endpoints call this on every request — a botnet could exhaust Patreon's rate limit
+    // and break OAuth for all legitimate users. Cap at 60 calls/minute server-wide.
+    if (redis) {
+        try {
+            const patreonApiKey = 'patreon_api_calls';
+            await redis.set(patreonApiKey, 0, { nx: true, ex: 60 });
+            const apiCallCount = await redis.incr(patreonApiKey);
+            if (apiCallCount > 60) {
+                console.warn(`[SECURITY] Patreon API rate limit exceeded: ${apiCallCount} calls/min`);
+                throw new Error('PATREON_API_RATE_LIMITED');
+            }
+        } catch (e) {
+            if (e.message === 'PATREON_API_RATE_LIMITED') throw e;
+            // Redis error — allow through (don't block legitimate users due to Redis hiccup)
+        }
+    }
+
     const fields = [
         'fields[user]=full_name,email',
         'fields[member]=patron_status,currently_entitled_amount_cents,pledge_relationship_start',
@@ -1571,6 +1589,9 @@ app.get('/patreon/validate', async (req, res) => {
         console.error('Validation error:', error.message);
         if (error.message === 'UNAUTHORIZED') {
             return res.status(401).json({ error: 'Token expired or invalid' });
+        }
+        if (error.message === 'PATREON_API_RATE_LIMITED') {
+            return res.status(503).json({ error: 'Service temporarily unavailable', retry_after: 30 });
         }
         res.status(500).json({ error: 'Internal server error' });
     }
@@ -2130,6 +2151,9 @@ app.post('/ai/chat', async (req, res) => {
             if (error.message === 'UNAUTHORIZED') {
                 return res.status(401).json({ error: 'Patreon token expired' });
             }
+            if (error.message === 'PATREON_API_RATE_LIMITED') {
+                return res.status(503).json({ error: 'Service temporarily unavailable', retry_after: 30 });
+            }
             throw error;
         }
 
@@ -2251,6 +2275,9 @@ app.post('/ai/chat', async (req, res) => {
         });
     } catch (error) {
         console.error('AI chat error:', error.message);
+        if (error.message === 'PATREON_API_RATE_LIMITED') {
+            return res.status(503).json({ error: 'Service temporarily unavailable', retry_after: 30 });
+        }
         res.status(500).json({ error: 'AI request failed' });
     }
 });
@@ -3227,6 +3254,9 @@ app.get('/user/profile', async (req, res) => {
         });
     } catch (error) {
         console.error('Profile load error:', error.message);
+        if (error.message === 'PATREON_API_RATE_LIMITED') {
+            return res.status(503).json({ error: 'Service temporarily unavailable', retry_after: 30 });
+        }
         res.status(500).json({ error: 'Failed to load profile' });
     }
 });
@@ -3458,6 +3488,9 @@ app.post('/user/sync', async (req, res) => {
         });
     } catch (error) {
         console.error('Profile sync error:', error.message);
+        if (error.message === 'PATREON_API_RATE_LIMITED') {
+            return res.status(503).json({ error: 'Service temporarily unavailable', retry_after: 30 });
+        }
         res.status(500).json({ error: 'Failed to sync profile' });
     }
 });
@@ -3542,6 +3575,9 @@ app.post('/user/heartbeat', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         console.error('Heartbeat error:', error.message);
+        if (error.message === 'PATREON_API_RATE_LIMITED') {
+            return res.status(503).json({ error: 'Service temporarily unavailable', retry_after: 30 });
+        }
         res.status(500).json({ error: 'Heartbeat failed' });
     }
 });
@@ -3643,6 +3679,9 @@ app.post('/user/set-display-name', async (req, res) => {
         });
     } catch (error) {
         console.error('Set display name error:', error.message);
+        if (error.message === 'PATREON_API_RATE_LIMITED') {
+            return res.status(503).json({ error: 'Service temporarily unavailable', retry_after: 30 });
+        }
         res.status(500).json({ error: 'Failed to set display name' });
     }
 });
@@ -3699,6 +3738,9 @@ app.get('/user/check-display-name', async (req, res) => {
         res.json({ available: true });
     } catch (error) {
         console.error('Check display name error:', error.message);
+        if (error.message === 'PATREON_API_RATE_LIMITED') {
+            return res.status(503).json({ error: 'Service temporarily unavailable', retry_after: 30 });
+        }
         // On error, allow optimistically
         res.json({ available: true });
     }
@@ -4136,7 +4178,7 @@ app.post('/user/sync-discord', async (req, res) => {
             profile.stats = profile.stats || {};
             let newStatKeys = 0;
             for (const [key, value] of Object.entries(stats)) {
-                if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+                if (key === '__proto__' || key === 'constructor' || key === 'prototype' || key === 'toString' || key === 'valueOf' || key === 'hasOwnProperty' || key === 'isPrototypeOf') continue;
                 if (typeof value !== 'number' || !isFinite(value)) continue;
                 // Limit total stat keys
                 if (!(key in profile.stats)) {
@@ -6839,45 +6881,55 @@ app.post('/v2/auth/discord', async (req, res) => {
         // Fallback: if index is missing, scan user:* keys to find orphaned account
         // This prevents data loss when discord_index key is accidentally deleted
         // R12/H1: Global cooldown (30s) prevents abuse of this SCAN on auth-exempt path
+        // R13/H1: Per-provider-ID debounce (1h) prevents repeated scans for the same ID
         if (!existingUnifiedId) {
-            const orphanScanKey = `discord_orphan_scan_cooldown`;
-            const scanAllowed = await redis.set(orphanScanKey, '1', { nx: true, ex: 30 });
-            if (scanAllowed) {
-                console.log(`[V2] discord_index missing for ${discordId}, scanning for orphaned account...`);
-                try {
-                    const scanResult = await Promise.race([
-                        (async () => {
-                            let cursor = 0;
-                            do {
-                                const result = await redis.scan(cursor, { match: 'user:*', count: 100 });
-                                cursor = result[0];
-                                for (const key of result[1]) {
-                                    try {
-                                        const userData = await redis.get(key);
-                                        if (!userData) continue;
-                                        const user = typeof userData === 'string' ? JSON.parse(userData) : userData;
-                                        if (user.discord_id === discordId) {
-                                            return user.unified_id || key.replace('user:', '');
-                                        }
-                                    } catch (e) {
-                                        // Skip malformed records
-                                    }
-                                }
-                            } while (cursor !== 0);
-                            return null;
-                        })(),
-                        new Promise(resolve => setTimeout(() => resolve(null), 3000))
-                    ]);
-                    if (scanResult) {
-                        existingUnifiedId = scanResult;
-                        await redis.set(indexKey, existingUnifiedId);
-                        console.log(`[V2] RECOVERED orphaned account for discord ${discordId}: ${existingUnifiedId}. Repaired discord_index.`);
-                    }
-                } catch (scanErr) {
-                    console.error('[V2] Discord orphan scan error:', scanErr.message);
-                }
+            const perIdKey = `orphan_scan_done:discord:${discordId}`;
+            const alreadyScanned = await redis.get(perIdKey);
+            if (alreadyScanned) {
+                console.log(`[V2] discord orphan scan already done for ${discordId} (debounced)`);
             } else {
-                console.log(`[V2] discord_index missing for ${discordId}, orphan scan on cooldown (skipped)`);
+                const orphanScanKey = `discord_orphan_scan_cooldown`;
+                const scanAllowed = await redis.set(orphanScanKey, '1', { nx: true, ex: 30 });
+                if (scanAllowed) {
+                    console.log(`[V2] discord_index missing for ${discordId}, scanning for orphaned account...`);
+                    try {
+                        const scanResult = await Promise.race([
+                            (async () => {
+                                let cursor = 0;
+                                do {
+                                    const result = await redis.scan(cursor, { match: 'user:*', count: 100 });
+                                    cursor = result[0];
+                                    for (const key of result[1]) {
+                                        try {
+                                            const userData = await redis.get(key);
+                                            if (!userData) continue;
+                                            const user = typeof userData === 'string' ? JSON.parse(userData) : userData;
+                                            if (user.discord_id === discordId) {
+                                                return user.unified_id || key.replace('user:', '');
+                                            }
+                                        } catch (e) {
+                                            // Skip malformed records
+                                        }
+                                    }
+                                } while (cursor !== 0);
+                                return null;
+                            })(),
+                            new Promise(resolve => setTimeout(() => resolve(null), 3000))
+                        ]);
+                        if (scanResult) {
+                            existingUnifiedId = scanResult;
+                            await redis.set(indexKey, existingUnifiedId);
+                            console.log(`[V2] RECOVERED orphaned account for discord ${discordId}: ${existingUnifiedId}. Repaired discord_index.`);
+                        } else {
+                            // R13/H1: Remember "not found" for 1 hour to prevent repeated scans for the same ID
+                            await redis.set(perIdKey, '1', { ex: 3600 }).catch(() => {});
+                        }
+                    } catch (scanErr) {
+                        console.error('[V2] Discord orphan scan error:', scanErr.message);
+                    }
+                } else {
+                    console.log(`[V2] discord_index missing for ${discordId}, orphan scan on cooldown (skipped)`);
+                }
             }
         }
 
@@ -7247,41 +7299,59 @@ app.post('/v2/auth/patreon', async (req, res) => {
         // Fallback: if index is missing, scan user:* keys to find orphaned account
         // This prevents data loss when patreon_index key is accidentally deleted
         // Wrapped in a 3s timeout to prevent Vercel function timeouts on large datasets
+        // R13/C1: Global cooldown (30s) prevents abuse of this SCAN on auth-exempt path
+        // R13/H1: Per-provider-ID debounce (1h) prevents repeated scans for the same ID
         if (!existingUnifiedId) {
-            console.log(`[V2] patreon_index missing for ${patreonId}, scanning for orphaned account...`);
-            try {
-                const scanResult = await Promise.race([
-                    (async () => {
-                        let cursor = 0;
-                        do {
-                            const result = await redis.scan(cursor, { match: 'user:*', count: 100 });
-                            cursor = result[0];
-                            for (const key of result[1]) {
-                                try {
-                                    const userData = await redis.get(key);
-                                    if (!userData) continue;
-                                    const user = typeof userData === 'string' ? JSON.parse(userData) : userData;
-                                    if (user.patreon_id === patreonId) {
-                                        existingUnifiedId = user.unified_id || key.replace('user:', '');
-                                        // Repair the missing index so future lookups are fast
-                                        await redis.set(indexKey, existingUnifiedId);
-                                        console.log(`[V2] RECOVERED orphaned account for patreon ${patreonId}: ${existingUnifiedId} (${user.display_name}). Repaired patreon_index.`);
-                                        return 'found';
+            const perIdKey = `orphan_scan_done:patreon:${patreonId}`;
+            const alreadyScanned = await redis.get(perIdKey);
+            if (alreadyScanned) {
+                console.log(`[V2] patreon orphan scan already done for ${patreonId} (debounced)`);
+            } else {
+                const orphanScanKey = `patreon_orphan_scan_cooldown`;
+                const scanAllowed = await redis.set(orphanScanKey, '1', { nx: true, ex: 30 });
+                if (scanAllowed) {
+                    console.log(`[V2] patreon_index missing for ${patreonId}, scanning for orphaned account...`);
+                    try {
+                        const scanResult = await Promise.race([
+                            (async () => {
+                                let cursor = 0;
+                                do {
+                                    const result = await redis.scan(cursor, { match: 'user:*', count: 100 });
+                                    cursor = result[0];
+                                    for (const key of result[1]) {
+                                        try {
+                                            const userData = await redis.get(key);
+                                            if (!userData) continue;
+                                            const user = typeof userData === 'string' ? JSON.parse(userData) : userData;
+                                            if (user.patreon_id === patreonId) {
+                                                existingUnifiedId = user.unified_id || key.replace('user:', '');
+                                                // Repair the missing index so future lookups are fast
+                                                await redis.set(indexKey, existingUnifiedId);
+                                                console.log(`[V2] RECOVERED orphaned account for patreon ${patreonId}: ${existingUnifiedId} (${user.display_name}). Repaired patreon_index.`);
+                                                return 'found';
+                                            }
+                                        } catch (e) {
+                                            // Skip malformed records
+                                        }
                                     }
-                                } catch (e) {
-                                    // Skip malformed records
-                                }
-                            }
-                        } while (cursor !== 0);
-                        return 'not_found';
-                    })(),
-                    new Promise((resolve) => setTimeout(() => resolve('timeout'), 3000))
-                ]);
-                if (scanResult === 'timeout') {
-                    console.warn(`[V2] Orphan scan timed out for patreon ${patreonId} — continuing as new user`);
+                                } while (cursor !== 0);
+                                return 'not_found';
+                            })(),
+                            new Promise((resolve) => setTimeout(() => resolve('timeout'), 3000))
+                        ]);
+                        if (scanResult === 'timeout') {
+                            console.warn(`[V2] Orphan scan timed out for patreon ${patreonId} — continuing as new user`);
+                        }
+                        // R13/H1: Remember "not found" for 1 hour to prevent repeated scans for the same ID
+                        if (scanResult === 'not_found') {
+                            await redis.set(perIdKey, '1', { ex: 3600 }).catch(() => {});
+                        }
+                    } catch (e) {
+                        console.error(`[V2] Orphan scan error for patreon ${patreonId}:`, e);
+                    }
+                } else {
+                    console.log(`[V2] patreon_index missing for ${patreonId}, orphan scan on cooldown (skipped)`);
                 }
-            } catch (e) {
-                console.error(`[V2] Orphan scan error for patreon ${patreonId}:`, e);
             }
         }
 
@@ -7667,6 +7737,9 @@ app.post('/v2/auth/patreon', async (req, res) => {
         console.error('V2 Patreon auth error:', error.message);
         if (error.message === 'UNAUTHORIZED') {
             return res.status(401).json({ error: 'Patreon token expired or invalid' });
+        }
+        if (error.message === 'PATREON_API_RATE_LIMITED') {
+            return res.status(503).json({ error: 'Service temporarily unavailable', retry_after: 30 });
         }
         res.status(500).json({ error: 'Internal server error' });
     }
@@ -8161,6 +8234,9 @@ app.post('/v2/auth/link', async (req, res) => {
         console.error('V2 auth link error:', error.message);
         if (error.message === 'UNAUTHORIZED') {
             return res.status(401).json({ error: 'Token expired or invalid' });
+        }
+        if (error.message === 'PATREON_API_RATE_LIMITED') {
+            return res.status(503).json({ error: 'Service temporarily unavailable', retry_after: 30 });
         }
         res.status(500).json({ error: 'Internal server error' });
     }
@@ -10089,7 +10165,8 @@ app.post('/v2/user/sync', async (req, res) => {
         const hadLevelReset = seasonResetPerformed || !!user.level_reset_at || user.level_reset === true;
         if (hadLevelReset) {
             // Client is "in agreement" if it's sending values close to server (accepted the reset)
-            const clientAccepted = clientLevel <= oldLevel + 2 && clientXp <= oldXp + 10000;
+            // Must check BOTH directions: client not far above (old check) AND not far below (admin boost case)
+            const clientAccepted = Math.abs(clientLevel - oldLevel) <= 2 && Math.abs(clientXp - oldXp) <= 10000;
 
             if (clientAccepted) {
                 // Client has accepted the reset — clear flag, resume normal merge
@@ -11460,7 +11537,7 @@ app.post('/admin/update-user', async (req, res) => {
             const statChanges = {};
             for (const [key, val] of Object.entries(updates.stats)) {
                 // Prevent prototype pollution
-                if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+                if (key === '__proto__' || key === 'constructor' || key === 'prototype' || key === 'toString' || key === 'valueOf' || key === 'hasOwnProperty' || key === 'isPrototypeOf') continue;
                 statChanges[key] = { from: user.stats[key], to: val };
                 user.stats[key] = val;
             }
