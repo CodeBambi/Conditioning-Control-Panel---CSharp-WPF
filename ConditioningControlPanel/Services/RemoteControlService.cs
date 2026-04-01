@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services
 {
@@ -172,10 +173,7 @@ namespace ConditioningControlPanel.Services
             ControllerIdle = false;
 
             // Stop all effects that were triggered by the remote controller
-            if (System.Windows.Application.Current?.Dispatcher != null)
-            {
-                System.Windows.Application.Current.Dispatcher.Invoke(() => StopAllRemoteEffects());
-            }
+            DispatcherHelper.RunOnUISync(() => StopAllRemoteEffects());
 
             // Reset overlay level bypass when remote session ends
             if (App.Overlay != null)
@@ -420,9 +418,7 @@ namespace ConditioningControlPanel.Services
 
         private void ExecuteCommand(string action, JObject? parameters)
         {
-            if (System.Windows.Application.Current?.Dispatcher == null) return;
-
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 try
                 {

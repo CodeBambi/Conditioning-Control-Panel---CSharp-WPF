@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Windows.Threading;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services;
 
@@ -144,7 +145,7 @@ public class InteractionQueueService
                     next.Type, _queue.Count);
 
                 // Use dispatcher to avoid stack overflow from nested calls
-                System.Windows.Application.Current?.Dispatcher.BeginInvoke(next.Trigger);
+                DispatcherHelper.RunOnUI(next.Trigger);
             }
         }
     }
@@ -208,7 +209,7 @@ public class InteractionQueueService
         try
         {
             var interval = timeout ?? TimeSpan.FromMinutes(DefaultMaxInteractionMinutes);
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 StopStuckDetectionTimer();
 
@@ -230,7 +231,7 @@ public class InteractionQueueService
     {
         try
         {
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 _stuckDetectionTimer?.Stop();
                 _stuckDetectionTimer = null;
@@ -270,7 +271,7 @@ public class InteractionQueueService
                 App.Logger?.Information("InteractionQueue: Auto-recovery starting queued {Type} (remaining: {Count})",
                     next.Type, _queue.Count);
 
-                System.Windows.Application.Current?.Dispatcher.BeginInvoke(next.Trigger);
+                DispatcherHelper.RunOnUI(next.Trigger);
             }
             else
             {

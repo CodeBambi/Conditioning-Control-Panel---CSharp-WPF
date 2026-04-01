@@ -457,6 +457,13 @@ namespace ConditioningControlPanel
 
             base.OnStartup(e);
 
+            // Cap all WPF animations to 30 FPS (default 60) to reduce idle CPU usage.
+            // Decorative animations (glows, shimmers, particles) look identical at 30 FPS.
+            // Feature animations using DispatcherTimers are unaffected.
+            System.Windows.Media.Animation.Timeline.DesiredFrameRateProperty.OverrideMetadata(
+                typeof(System.Windows.Media.Animation.Timeline),
+                new FrameworkPropertyMetadata(30));
+
             splash.SetProgress(0.05, "Initializing logging...");
 
             // Setup logging - use UserDataPath (writable) instead of BaseDirectory (may be in Program Files)

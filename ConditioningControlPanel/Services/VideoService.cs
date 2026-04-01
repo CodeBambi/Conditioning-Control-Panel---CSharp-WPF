@@ -15,6 +15,7 @@ using System.Windows.Forms;
 using NAudio.Wave;
 using LibVLCSharp.Shared;
 using LibVLCSharp.WPF;
+using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
 using Application = System.Windows.Application;
 using Screen = System.Windows.Forms.Screen;
@@ -453,15 +454,8 @@ namespace ConditioningControlPanel.Services
                             return;
                         }
 
-                        if (Application.Current.Dispatcher.HasShutdownStarted)
-                        {
-                            App.Logger?.Warning("VideoService: Dispatcher is shutting down, cannot play video");
-                            _triggerInProgress = false;
-                            return;
-                        }
-
                         App.Logger?.Debug("VideoService: Freeze delay complete, calling PlayVideo on UI thread");
-                        Application.Current.Dispatcher.Invoke(() =>
+                        DispatcherHelper.RunOnUISync(() =>
                         {
                             PlayVideo(path, App.Settings.Current.StrictLockEnabled);
                         });
@@ -541,14 +535,8 @@ namespace ConditioningControlPanel.Services
                             return;
                         }
 
-                        if (Application.Current.Dispatcher.HasShutdownStarted)
-                        {
-                            App.Logger?.Warning("VideoService: Dispatcher is shutting down, cannot play specific video");
-                            return;
-                        }
-
                         App.Logger?.Debug("VideoService: Freeze delay complete, calling PlayVideo for specific video");
-                        Application.Current.Dispatcher.Invoke(() =>
+                        DispatcherHelper.RunOnUISync(() =>
                         {
                             PlayVideo(videoPath, strictMode);
                         });
@@ -603,7 +591,7 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            Application.Current?.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 _videoPlaying = true;
                 _strictActive = false;
@@ -853,7 +841,7 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("VideoService: LibVLC initialized = {Initialized}, LibVLC instance = {HasInstance}",
                     _libVLCInitialized, _libVLC != null);
 
-                Application.Current.Dispatcher.Invoke(() =>
+                DispatcherHelper.RunOnUISync(() =>
                 {
                     try
                     {
@@ -1239,7 +1227,7 @@ namespace ConditioningControlPanel.Services
             };
 
             mediaElement.MediaEnded += (s, e) =>
-                Application.Current.Dispatcher.BeginInvoke(OnEnded);
+                DispatcherHelper.RunOnUI(OnEnded);
 
             mediaElement.MediaFailed += (s, e) =>
             {
@@ -1256,7 +1244,7 @@ namespace ConditioningControlPanel.Services
                     if (!_codecWarningShown)
                     {
                         _codecWarningShown = true;
-                        Application.Current.Dispatcher.BeginInvoke(() =>
+                        DispatcherHelper.RunOnUI(() =>
                         {
                             System.Windows.MessageBox.Show(
                                 Loc.Get("video_codec_required_body"),
@@ -1267,7 +1255,7 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
-                Application.Current.Dispatcher.BeginInvoke(OnEnded);
+                DispatcherHelper.RunOnUI(OnEnded);
             };
 
             var grid = new Grid { Background = Brushes.Black };
@@ -1419,8 +1407,7 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    if (Application.Current?.Dispatcher == null) return;
-                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    DispatcherHelper.RunOnUI(() =>
                     {
                         if (!_videoPlaying) return;
 
@@ -1581,8 +1568,7 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        if (Application.Current?.Dispatcher == null) return;
-                        Application.Current.Dispatcher.BeginInvoke(() =>
+                        DispatcherHelper.RunOnUI(() =>
                         {
                             try
                             {
@@ -1780,8 +1766,7 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    if (Application.Current?.Dispatcher == null) return;
-                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    DispatcherHelper.RunOnUI(() =>
                     {
                         CloseMessageWindows();
                         then();
@@ -2331,8 +2316,7 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    if (Application.Current?.Dispatcher == null) return;
-                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    DispatcherHelper.RunOnUI(() =>
                     {
                         try
                         {

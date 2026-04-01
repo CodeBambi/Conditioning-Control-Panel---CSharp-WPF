@@ -4510,29 +4510,7 @@
                                     <TextBlock.Effect>
                                         <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.6"/>
                                     </TextBlock.Effect>
-                                    <TextBlock.Triggers>
-                                        <EventTrigger RoutedEvent="Loaded">
-                                            <BeginStoryboard>
-                                                <Storyboard RepeatBehavior="Forever">
-                                                    <!-- Shimmer: animate gradient start/end points -->
-                                                    <PointAnimation Storyboard.TargetName="SeasonTitleBrush"
-                                                                    Storyboard.TargetProperty="StartPoint"
-                                                                    From="-1,0.5" To="1,0.5"
-                                                                    Duration="0:0:3"/>
-                                                    <PointAnimation Storyboard.TargetName="SeasonTitleBrush"
-                                                                    Storyboard.TargetProperty="EndPoint"
-                                                                    From="0,0.5" To="2,0.5"
-                                                                    Duration="0:0:3"/>
-                                                    <!-- Pulsing glow -->
-                                                    <DoubleAnimation Storyboard.TargetName="TxtSeasonTitle"
-                                                                     Storyboard.TargetProperty="(TextBlock.Effect).(DropShadowEffect.Opacity)"
-                                                                     From="0.3" To="0.9"
-                                                                     Duration="0:0:1.5"
-                                                                     AutoReverse="True"/>
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </EventTrigger>
-                                    </TextBlock.Triggers>
+                                    <!-- Season title shimmer managed in code-behind (StartSeasonTitleShimmer/StopSeasonTitleShimmer) -->
                                 </TextBlock>
                             </Border>
 
@@ -7411,23 +7389,7 @@
                                     <Border.Effect>
                                         <DropShadowEffect x:Name="LockdownImageGlow" Color="#FF1493" BlurRadius="12" ShadowDepth="0" Opacity="0.7"/>
                                     </Border.Effect>
-                                    <Border.Triggers>
-                                        <EventTrigger RoutedEvent="Border.Loaded">
-                                            <BeginStoryboard>
-                                                <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                                    <ColorAnimation Storyboard.TargetName="LockdownImageBorderBrush"
-                                                                    Storyboard.TargetProperty="Color"
-                                                                    From="#FF1493" To="#FF69B4" Duration="0:0:1.5"/>
-                                                    <DoubleAnimation Storyboard.TargetName="LockdownImageGlow"
-                                                                     Storyboard.TargetProperty="BlurRadius"
-                                                                     From="12" To="22" Duration="0:0:1.5"/>
-                                                    <DoubleAnimation Storyboard.TargetName="LockdownImageGlow"
-                                                                     Storyboard.TargetProperty="Opacity"
-                                                                     From="0.7" To="1.0" Duration="0:0:1.5"/>
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </EventTrigger>
-                                    </Border.Triggers>
+                                    <!-- Lockdown pulse managed in code-behind (StartLockdownPulse/StopLockdownPulse) -->
                                     <Image Source="Resources/lockdown_icon.png" Stretch="Uniform"
                                            RenderOptions.BitmapScalingMode="HighQuality"/>
                                 </Border>

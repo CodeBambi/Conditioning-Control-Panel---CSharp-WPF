@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services
 {
@@ -92,7 +93,7 @@ namespace ConditioningControlPanel.Services
 
         public void ShowLockCard(bool isTest = false)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 // Prevent stacking multiple lock cards
                 if (Application.Current.Windows.OfType<LockCardWindow>().Any())

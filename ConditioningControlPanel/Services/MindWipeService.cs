@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
 using NAudio.Wave;
 using Serilog;
@@ -362,7 +363,7 @@ namespace ConditioningControlPanel.Services
             // Wait a bit longer than the overlap to ensure smooth transition, then cleanup old player
             Task.Delay(TimeSpan.FromSeconds(CROSSFADE_OVERLAP_SECONDS + 0.1)).ContinueWith(_ =>
             {
-                System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+                DispatcherHelper.RunOnUI(() =>
                 {
                     if (cleanupA)
                     {
