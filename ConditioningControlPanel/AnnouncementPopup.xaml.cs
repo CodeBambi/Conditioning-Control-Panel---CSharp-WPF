@@ -225,7 +225,6 @@ public partial class AnnouncementPopup : Window
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        try { DragMove(); }
-        catch { }
+        // Don't dismiss on click — announcement has action buttons, use close button or "Got it"
     }
 }

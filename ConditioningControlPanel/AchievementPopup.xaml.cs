@@ -151,12 +151,7 @@ public partial class AchievementPopup : Window
     
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        // Allow dragging the window
-        try
-        {
-            DragMove();
-        }
-        catch { /* Ignore drag errors */ }
+        FadeOutAndClose();
     }
     
     protected override void OnClosed(EventArgs e)
