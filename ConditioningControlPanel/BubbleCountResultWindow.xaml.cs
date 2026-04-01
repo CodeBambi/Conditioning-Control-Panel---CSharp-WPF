@@ -290,8 +290,7 @@ namespace ConditioningControlPanel
             // Mod-aware mercy phrases (no answer included!)
             var mercyPhrases = App.Mods?.GetPhrases("BubbleCountMercy") ?? new[] { "GOOD GIRLS PAY ATTENTION" };
 
-            var random = new Random();
-            var phrase = mercyPhrases[random.Next(mercyPhrases.Length)];
+            var phrase = mercyPhrases[Random.Shared.Next(mercyPhrases.Length)];
             
             // Show mercy lock card (no answer in phrase!)
             LockCardWindow.ShowOnAllMonitors(

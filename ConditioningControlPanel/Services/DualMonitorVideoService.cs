@@ -38,6 +38,7 @@ namespace ConditioningControlPanel.Services
         private volatile bool _bufferValid;  // Guards buffer access across threads
         private bool _isPlaying;
         private bool _disposed;
+        private Task? _playerDisposeTask;
 
         // Events
         public event EventHandler? PlaybackStarted;
@@ -202,7 +203,7 @@ namespace ConditioningControlPanel.Services
                 playerToDispose.EncounteredError -= OnError;
 
                 // Dispose asynchronously after delay to avoid crashes from pending events
-                Task.Run(async () =>
+                _playerDisposeTask = Task.Run(async () =>
                 {
                     await Task.Delay(500);
                     try
@@ -578,8 +579,12 @@ namespace ConditioningControlPanel.Services
             Stop();
 
             // CRITICAL: Wait for async player disposal (500ms in Stop) to complete
-            // before disposing LibVLC, as the player needs LibVLC to be alive during disposal
-            Thread.Sleep(600);
+            // before disposing LibVLC, as the player needs LibVLC to be alive during disposal.
+            // Use message-pump-aware wait to avoid blocking the UI thread.
+            if (_playerDisposeTask != null)
+            {
+                WaitWithMessagePump(650);
+            }
 
             try
             {

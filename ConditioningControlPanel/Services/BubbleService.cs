@@ -109,9 +109,8 @@ public class BubbleService : IDisposable
         _animationTimer?.Stop();
         _animationTimer = null;
 
-        // Small delay to allow any pending animation ticks to complete
-        // This prevents race conditions when cleaning up during video playback
-        Thread.Sleep(50);
+        // DispatcherTimer ticks are synchronous on the UI thread and won't
+        // fire after Stop(), so no delay is needed here.
 
         // Pop all remaining bubbles
         PopAllBubbles();

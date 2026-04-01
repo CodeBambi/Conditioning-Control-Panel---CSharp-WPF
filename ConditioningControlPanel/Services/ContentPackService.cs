@@ -1190,9 +1190,8 @@ namespace ConditioningControlPanel.Services
                 if (needsNewSelection)
                 {
                     // Select random images
-                    var random = new Random();
                     selectedFiles = allImages
-                        .OrderBy(_ => random.Next())
+                        .OrderBy(_ => Random.Shared.Next())
                         .Take(count)
                         .ToList();
 

@@ -369,12 +369,11 @@ namespace ConditioningControlPanel.Services
 
                 if (candidates.Count > 0)
                 {
-                    var rng = new Random();
-                    int count = rng.Next(1, candidates.Count + 1);
+                    int count = Random.Shared.Next(1, candidates.Count + 1);
                     // Shuffle and take 'count' items
                     for (int i = candidates.Count - 1; i > 0; i--)
                     {
-                        int j = rng.Next(i + 1);
+                        int j = Random.Shared.Next(i + 1);
                         (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
                     }
                     for (int i = 0; i < count; i++)

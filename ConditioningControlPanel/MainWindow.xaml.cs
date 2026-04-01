@@ -3587,7 +3587,6 @@ namespace ConditioningControlPanel
                 SkillTreeOuterBorder.Background = CreateAnimatedSkillTreeBrush(isHeader: false);
 
                 // Re-animate particles
-                var rng = new Random();
                 foreach (var child in SkillTreeCanvas.Children)
                 {
                     if (child is System.Windows.Shapes.Ellipse ellipse)
@@ -3596,8 +3595,8 @@ namespace ConditioningControlPanel
                         {
                             From = 0,
                             To = 1,
-                            Duration = TimeSpan.FromSeconds(2 + rng.NextDouble() * 3),
-                            BeginTime = TimeSpan.FromSeconds(rng.NextDouble() * 5),
+                            Duration = TimeSpan.FromSeconds(2 + Random.Shared.NextDouble() * 3),
+                            BeginTime = TimeSpan.FromSeconds(Random.Shared.NextDouble() * 5),
                             AutoReverse = true,
                             RepeatBehavior = RepeatBehavior.Forever,
                             EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
@@ -8990,7 +8989,6 @@ namespace ConditioningControlPanel
         /// </summary>
         private void AddSkillTreeParticles()
         {
-            var rng = new Random();
             var colors = new[]
             {
                 Color.FromArgb(90, 255, 105, 180),   // pink
@@ -9002,17 +9000,17 @@ namespace ConditioningControlPanel
 
             for (int i = 0; i < 35; i++)
             {
-                var size = 3.0 + rng.NextDouble() * 5.0; // 3-8px
+                var size = 3.0 + Random.Shared.NextDouble() * 5.0; // 3-8px
                 var ellipse = new System.Windows.Shapes.Ellipse
                 {
                     Width = size,
                     Height = size,
-                    Fill = new SolidColorBrush(colors[rng.Next(colors.Length)]),
+                    Fill = new SolidColorBrush(colors[Random.Shared.Next(colors.Length)]),
                     Opacity = 0
                 };
 
-                Canvas.SetLeft(ellipse, rng.NextDouble() * 2400);
-                Canvas.SetTop(ellipse, rng.NextDouble() * 460);
+                Canvas.SetLeft(ellipse, Random.Shared.NextDouble() * 2400);
+                Canvas.SetTop(ellipse, Random.Shared.NextDouble() * 460);
                 Canvas.SetZIndex(ellipse, -1);
 
                 // Pulsing opacity animation with random duration and start delay
@@ -9020,8 +9018,8 @@ namespace ConditioningControlPanel
                 {
                     From = 0,
                     To = 1,
-                    Duration = TimeSpan.FromSeconds(2 + rng.NextDouble() * 3), // 2-5s
-                    BeginTime = TimeSpan.FromSeconds(rng.NextDouble() * 5),     // 0-5s delay
+                    Duration = TimeSpan.FromSeconds(2 + Random.Shared.NextDouble() * 3), // 2-5s
+                    BeginTime = TimeSpan.FromSeconds(Random.Shared.NextDouble() * 5),     // 0-5s delay
                     AutoReverse = true,
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
                     EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
@@ -14339,7 +14337,7 @@ namespace ConditioningControlPanel
             // the LOH during sessions. Compacting here returns memory to the OS.
             App.Flash.ClearImageCache();
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true);
+            GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
 
             App.Logger?.Information("Engine stopped");
         }
@@ -18657,7 +18655,7 @@ namespace ConditioningControlPanel
                                         _packThumbnailCacheBytes + estimatedBytes > MaxThumbnailCacheBytes) &&
                                        _packThumbnailCache.Count > 0)
                                 {
-                                    var lruKey = _packThumbnailLastAccess.OrderBy(kv => kv.Value).First().Key;
+                                    var lruKey = _packThumbnailLastAccess.MinBy(kv => kv.Value).Key;
                                     _packThumbnailCache.Remove(lruKey);
                                     _packThumbnailLastAccess.Remove(lruKey);
                                     if (_packThumbnailSizes.TryGetValue(lruKey, out var evictedSize))

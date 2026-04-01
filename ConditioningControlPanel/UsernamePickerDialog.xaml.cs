@@ -125,10 +125,19 @@ namespace ConditioningControlPanel
                 }
                 return false;
             }
-            catch
+            catch (Exception ex)
             {
+                App.Logger?.Warning("Name availability check failed: {Error}", ex.Message);
                 return false;
             }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _checkCts?.Cancel();
+            _checkCts?.Dispose();
+            _checkCts = null;
+            base.OnClosed(e);
         }
 
         private void BtnUseSuggestion_Click(object sender, RoutedEventArgs e)
