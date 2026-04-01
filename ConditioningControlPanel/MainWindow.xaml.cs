@@ -1572,8 +1572,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        private const int WM_SYSCOMMAND = 0x0112;
-        private const int SC_MINIMIZE = 0xF020;
         private const int WM_GETMINMAXINFO = 0x0024;
 
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
@@ -1591,16 +1589,8 @@ namespace ConditioningControlPanel
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            // Intercept minimize command to hide to tray instead
-            if (msg == WM_SYSCOMMAND && (wParam.ToInt32() & 0xFFF0) == SC_MINIMIZE)
-            {
-                handled = true; // Mark as handled to prevent default minimize
-                // Hide avatar tube FIRST to avoid event handler issues
-                HideAvatarTube();
-                _trayIcon?.MinimizeToTray();
-            }
             // Fix maximized window extending behind taskbar (buttons cut off)
-            else if (msg == WM_GETMINMAXINFO)
+            if (msg == WM_GETMINMAXINFO)
             {
                 var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(lParam);
 
