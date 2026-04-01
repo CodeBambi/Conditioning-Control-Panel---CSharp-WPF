@@ -22,13 +22,11 @@ namespace ConditioningControlPanel.Services
         private bool _disposed;
         private bool _isProcessing;
         private bool _isPaused;
-        private bool _isPlaying;
         private bool _isWaitingForChunk;
         private TimeSpan _lastPlaybackPosition;
         private DateTime _lastSyncTime;
         private DateTime _lastResyncTime;
         private const int RESYNC_INTERVAL_MS = 5000; // Force resync every 5 seconds
-        private CancellationTokenSource? _syncCts;
 
         /// <summary>
         /// Event fired when processing starts (show overlay)
@@ -168,7 +166,7 @@ namespace ConditioningControlPanel.Services
             if (paused && !_isPaused)
             {
                 _isPaused = true;
-                _isPlaying = false;
+
                 _ = _hapticService.StopAsync();
                 Log.Debug("AudioSyncService: Playback paused at {Time}", currentTime);
                 return;
@@ -184,7 +182,6 @@ namespace ConditioningControlPanel.Services
             if (paused || _isWaitingForChunk)
                 return;
 
-            _isPlaying = true;
             _lastPlaybackPosition = currentTime;
             _lastSyncTime = DateTime.UtcNow;
 
@@ -296,10 +293,8 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void StopSync()
         {
-            _isPlaying = false;
             _isPaused = false;
             _isWaitingForChunk = false;
-            _syncCts?.Cancel();
             _ = _hapticService.StopAsync();
 
             _chunkManager?.Stop();

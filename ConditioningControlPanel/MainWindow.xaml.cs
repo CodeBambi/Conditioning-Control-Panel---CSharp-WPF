@@ -6476,7 +6476,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        private System.Threading.CancellationTokenSource? _hapticSliderCts;
         private System.Windows.Threading.DispatcherTimer? _hapticSliderDebounce;
 
         private void SliderHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)

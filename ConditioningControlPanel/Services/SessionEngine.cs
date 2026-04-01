@@ -59,7 +59,6 @@ namespace ConditioningControlPanel.Services
         private double _currentFlashOpacity;
         private double _currentPinkOpacity;
         private double _currentSpiralOpacity;
-        private double _currentBrainDrainIntensity;
         private bool _brainDrainActive;
 
         // Randomized start times (±3 min from session defaults)
