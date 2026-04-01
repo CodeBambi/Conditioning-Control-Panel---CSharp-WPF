@@ -115,6 +115,9 @@ set_force_*.js
 # DroneMod (distributed separately)
 ConditioningControlPanel/DroneMod/
 
+# MSBuild temp files
+*_wpftmp.csproj
+
 # Environment and secrets
 *.env
 *.env.*

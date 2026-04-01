@@ -16,6 +16,7 @@ using System.Windows.Threading;
 using System.Windows.Forms; // For Screen class
 using NAudio.Wave;
 using Serilog;
+using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Models;
 using Image = System.Windows.Controls.Image;
 
@@ -331,7 +332,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Show on UI thread - pass sound path only ONCE
-                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                await DispatcherHelper.RunOnUIAsync(() =>
                 {
                     ShowImages(loadedImages, soundPath, false);
                 });
@@ -1043,7 +1044,7 @@ namespace ConditioningControlPanel.Services
                 {
                     var capturedLifetime = hydraLifetimeMs;
                     var capturedGeneration = childGeneration;
-                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    await DispatcherHelper.RunOnUIAsync(() =>
                     {
                         // Pass null for sound - NO AUDIO FOR HYDRA
                         ShowImages(loadedImages, null, true, capturedLifetime, capturedGeneration);
