@@ -1151,7 +1151,9 @@ public class OverlayService : IDisposable
             return;
         }
 
-        foreach (var kvp in _brainDrainImages)
+        // Snapshot to prevent "collection modified during enumeration" if StopBrainDrainBlur()
+        // is triggered by an event during iteration (e.g., Image.Source assignment)
+        foreach (var kvp in _brainDrainImages.ToList())
         {
             var window = kvp.Key;
             var image = kvp.Value;

@@ -473,6 +473,9 @@ namespace ConditioningControlPanel.Services
 
         private void ShowSubliminalVisuals(string text)
         {
+            // Guard against delayed callbacks firing after Stop() — prevents orphaned windows
+            if (!_isRunning) return;
+
             // Prevent memory explosion from too many concurrent subliminal windows
             if (_activeWindows.Count >= 15) return;
 

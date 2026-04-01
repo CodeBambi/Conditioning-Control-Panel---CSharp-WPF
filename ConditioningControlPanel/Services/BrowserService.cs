@@ -796,7 +796,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void Navigate(string url)
         {
-            if (!_isInitialized || _webView?.CoreWebView2 == null) return;
+            if (_disposed || !_isInitialized || _webView?.CoreWebView2 == null) return;
 
             try
             {

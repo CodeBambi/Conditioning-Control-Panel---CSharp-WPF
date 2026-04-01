@@ -30,7 +30,7 @@ namespace ConditioningControlPanel.Services
         private bool _disposed;
         private bool _syncEnabled = true;
         private bool _pendingQuestResetClear;
-        private bool _authRecoveryAttempted;
+        private int _authRecoveryAttempted; // 0 = not attempted, 1 = attempted (Interlocked)
         private readonly SemaphoreSlim _syncGate = new(1, 1);
 
         /// <summary>
@@ -285,8 +285,8 @@ namespace ConditioningControlPanel.Services
                         // Trigger sync UP to create the cloud profile with local data
                         _ = Task.Run(async () =>
                         {
-                            await Task.Delay(500); // Small delay
-                            await SyncProfileAsync();
+                            try { await Task.Delay(500); await SyncProfileAsync(); }
+                            catch (Exception ex) { App.Logger?.Error(ex, "Background sync-up failed"); }
                         });
                     }
                     else
@@ -883,8 +883,8 @@ namespace ConditioningControlPanel.Services
                 // Trigger an immediate sync UP so cloud gets the correct data
                 _ = Task.Run(async () =>
                 {
-                    await Task.Delay(1000); // Small delay to let startup complete
-                    await SyncProfileAsync();
+                    try { await Task.Delay(1000); await SyncProfileAsync(); }
+                    catch (Exception ex) { App.Logger?.Error(ex, "Background sync-up failed"); }
                 });
             }
             else
@@ -1400,8 +1400,8 @@ namespace ConditioningControlPanel.Services
                 _pendingQuestResetClear = false;
                 _ = Task.Run(async () =>
                 {
-                    await Task.Delay(500);
-                    await SyncProfileAsync();
+                    try { await Task.Delay(500); await SyncProfileAsync(); }
+                    catch (Exception ex) { App.Logger?.Error(ex, "Background quest-reset sync failed"); }
                 });
             }
         }
@@ -1768,10 +1768,9 @@ namespace ConditioningControlPanel.Services
             if (response.StatusCode != HttpStatusCode.Unauthorized)
                 return false;
 
-            // Attempt recovery once per session
-            if (!_authRecoveryAttempted)
+            // Attempt recovery once per session — atomic to prevent concurrent 401s from double-recovering
+            if (Interlocked.CompareExchange(ref _authRecoveryAttempted, 1, 0) == 0)
             {
-                _authRecoveryAttempted = true;
                 App.Logger?.Information("[Auth] 401 received — attempting token recovery via restore-session");
                 var recovered = await TryRecoverAuthTokenAsync();
                 if (recovered)

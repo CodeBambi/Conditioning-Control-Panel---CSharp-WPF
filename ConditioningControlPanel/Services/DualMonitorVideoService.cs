@@ -274,9 +274,12 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void SetVolume(int volume)
         {
-            if (_mediaPlayer != null)
+            // Capture locally to avoid null race if Stop() runs concurrently
+            var player = _mediaPlayer;
+            if (player != null)
             {
-                _mediaPlayer.Volume = Math.Clamp(volume, 0, 100);
+                try { player.Volume = Math.Clamp(volume, 0, 100); }
+                catch (ObjectDisposedException) { }
             }
         }
 
@@ -288,47 +291,58 @@ namespace ConditioningControlPanel.Services
             get => _mediaPlayer?.Mute ?? false;
             set
             {
-                if (_mediaPlayer != null)
-                    _mediaPlayer.Mute = value;
+                var player = _mediaPlayer;
+                if (player != null)
+                {
+                    try { player.Mute = value; }
+                    catch (ObjectDisposedException) { }
+                }
             }
         }
+
+        private readonly object _initLock = new();
 
         private void InitializeLibVLC()
         {
             if (_libVLC != null) return;
 
-            try
+            lock (_initLock)
             {
-                var appDir = AppDomain.CurrentDomain.BaseDirectory;
-                var libvlcPath = Path.Combine(appDir, "libvlc");
+                if (_libVLC != null) return; // Double-check after acquiring lock
 
-                if (!Directory.Exists(libvlcPath))
+                try
                 {
-                    libvlcPath = Path.Combine(appDir, "libvlc", "win-x64");
-                }
+                    var appDir = AppDomain.CurrentDomain.BaseDirectory;
+                    var libvlcPath = Path.Combine(appDir, "libvlc");
 
-                if (Directory.Exists(libvlcPath))
+                    if (!Directory.Exists(libvlcPath))
+                    {
+                        libvlcPath = Path.Combine(appDir, "libvlc", "win-x64");
+                    }
+
+                    if (Directory.Exists(libvlcPath))
+                    {
+                        Core.Initialize(libvlcPath);
+                    }
+                    else
+                    {
+                        Core.Initialize();
+                    }
+
+                    _libVLC = new LibVLC(
+                        "--no-video-title-show",
+                        "--no-osd",
+                        "--aout=directsound",
+                        "--verbose=-1"
+                    );
+
+                    App.Logger?.Information("DualMonitorVideo: LibVLC initialized (version {Version})", _libVLC.Version);
+                }
+                catch (Exception ex)
                 {
-                    Core.Initialize(libvlcPath);
+                    App.Logger?.Error(ex, "DualMonitorVideo: Failed to initialize LibVLC");
+                    _libVLC = null;
                 }
-                else
-                {
-                    Core.Initialize();
-                }
-
-                _libVLC = new LibVLC(
-                    "--no-video-title-show",
-                    "--no-osd",
-                    "--aout=directsound",
-                    "--verbose=-1"
-                );
-
-                App.Logger?.Information("DualMonitorVideo: LibVLC initialized (version {Version})", _libVLC.Version);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Error(ex, "DualMonitorVideo: Failed to initialize LibVLC");
-                _libVLC = null;
             }
         }
 
@@ -580,10 +594,20 @@ namespace ConditioningControlPanel.Services
 
             // CRITICAL: Wait for async player disposal (500ms in Stop) to complete
             // before disposing LibVLC, as the player needs LibVLC to be alive during disposal.
-            // Use message-pump-aware wait to avoid blocking the UI thread.
             if (_playerDisposeTask != null)
             {
-                WaitWithMessagePump(650);
+                try
+                {
+                    // Actually wait on the task (up to 2s) instead of guessing with a fixed delay
+                    if (!_playerDisposeTask.Wait(2000))
+                    {
+                        App.Logger?.Warning("DualMonitorVideo: Player dispose task did not complete within timeout");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("DualMonitorVideo: Error waiting for player dispose: {Error}", ex.Message);
+                }
             }
 
             try

@@ -552,7 +552,11 @@ namespace ConditioningControlPanel.Services
                     // If we do, the next Duck() will re-read the currently-ducked volumes as
                     // "originals", causing volumes to ratchet toward 0% over repeated cycles.
                     // Keep state intact so the next Unduck/ForceUnduck can retry restoration.
-                    _duckCount = 0;
+                    //
+                    // Restore _duckCount to 1 (not 0) so the system can recover:
+                    // If _duckCount=0 + _isDucked=true, Duck() silently returns and no future
+                    // Unduck() can ever restore volumes — audio stays permanently ducked.
+                    _duckCount = 1;
                     // Keep recovery file so crash recovery can restore if app exits
                 }
             }
