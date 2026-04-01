@@ -2567,12 +2567,11 @@ namespace ConditioningControlPanel.Services
                 };
 
                 // Random position - ensure window stays fully within bounds
-                var rnd = new Random();
                 // Calculate spawn range: from minX to (maxX - windowWidth)
                 var spawnRangeX = Math.Max(0, (_maxX - w) - _minX);
                 var spawnRangeY = Math.Max(0, (_maxY - h) - _minY);
-                _x = _minX + rnd.NextDouble() * spawnRangeX;
-                _y = _minY + rnd.NextDouble() * spawnRangeY;
+                _x = _minX + Random.Shared.NextDouble() * spawnRangeX;
+                _y = _minY + Random.Shared.NextDouble() * spawnRangeY;
                 // Clamp to ensure we're definitely within bounds
                 _x = Math.Clamp(_x, _minX, Math.Max(_minX, _maxX - w));
                 _y = Math.Clamp(_y, _minY, Math.Max(_minY, _maxY - h));
@@ -2580,7 +2579,7 @@ namespace ConditioningControlPanel.Services
                 _win.Top = _y;
 
                 // Random velocity (slightly faster for better visibility)
-                var angle = rnd.NextDouble() * Math.PI * 2;
+                var angle = Random.Shared.NextDouble() * Math.PI * 2;
                 _vx = Math.Cos(angle) * 3.0;
                 _vy = Math.Sin(angle) * 3.0;
 
@@ -2682,8 +2681,7 @@ namespace ConditioningControlPanel.Services
             {
                 var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
                 var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
-                var rnd = new Random();
-                var chosenPop = popFiles[rnd.Next(popFiles.Length)];
+                var chosenPop = popFiles[Random.Shared.Next(popFiles.Length)];
                 var popPath = Path.Combine(soundsPath, chosenPop);
 
                 if (File.Exists(popPath))

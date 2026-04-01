@@ -226,12 +226,11 @@ namespace ConditioningControlPanel.Services
                 case VibrationMode.Earthquake:
                     // Random intensity variations
                     var quakeSteps = Math.Max(2, durationMs / 100);
-                    var random = new Random();
                     for (int i = 0; i < quakeSteps; i++)
                     {
                         if (token?.IsCancellationRequested == true) break;
                         // Random between 30% and 100% of set intensity
-                        var randomIntensity = intensity * (0.3 + random.NextDouble() * 0.7);
+                        var randomIntensity = intensity * (0.3 + Random.Shared.NextDouble() * 0.7);
                         await _activeProvider.VibrateAsync(randomIntensity, 80);
                         await Task.Delay(20);
                     }
@@ -723,7 +722,6 @@ namespace ConditioningControlPanel.Services
         }
 
         // === SUBLIMINAL PATTERN SYSTEM ===
-        private static readonly Random _random = new Random();
 
         /// <summary>
         /// Trigger short haptic pulse for subliminal text

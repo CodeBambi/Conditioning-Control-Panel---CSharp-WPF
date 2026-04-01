@@ -63,6 +63,9 @@ namespace ConditioningControlPanel
             _pendingPassword = null;
             TxtPassword.Password = "";
             TxtPasswordConfirm.Password = "";
+            _checkCts?.Cancel();
+            _checkCts?.Dispose();
+            _checkCts = null;
         }
 
         /// <summary>Sanitize server error messages before showing to user (audit C3).</summary>
@@ -299,8 +302,9 @@ namespace ConditioningControlPanel
                 }
                 return false;
             }
-            catch
+            catch (Exception ex)
             {
+                App.Logger?.Warning("Name availability check failed: {Error}", ex.Message);
                 return false;
             }
         }

@@ -297,10 +297,10 @@ namespace ConditioningControlPanel
                     }
                 }
 
-                // Wait for LibVLC to stop rendering
+                // Wait for LibVLC to stop rendering (pump messages to avoid deadlock)
                 if (playersCopy.Count > 0)
                 {
-                    Thread.Sleep(100);
+                    WaitWithMessagePump(100);
                 }
 
                 // Detach VideoViews from players
@@ -320,10 +320,10 @@ namespace ConditioningControlPanel
                     }
                 }
 
-                // Small delay after detaching
+                // Small delay after detaching (pump messages to avoid deadlock)
                 if (windowsCopy.Count > 0)
                 {
-                    Thread.Sleep(50);
+                    WaitWithMessagePump(50);
                 }
 
                 // Close all windows
@@ -851,7 +851,7 @@ namespace ConditioningControlPanel
                     try { player.Stop(); } catch { }
                 }
 
-                if (playersCopy.Count > 0) Thread.Sleep(100);
+                if (playersCopy.Count > 0) WaitWithMessagePump(100);
 
                 // Detach VideoViews
                 var windowsCopy = _allWindows.ToList();
@@ -865,7 +865,7 @@ namespace ConditioningControlPanel
                     catch { }
                 }
 
-                if (windowsCopy.Count > 0) Thread.Sleep(50);
+                if (windowsCopy.Count > 0) WaitWithMessagePump(50);
 
                 // Close windows
                 _allWindows.Clear();
@@ -919,6 +919,29 @@ namespace ConditioningControlPanel
             _allWindows.Remove(this);
 
             base.OnClosed(e);
+        }
+
+        /// <summary>
+        /// Waits for the specified duration while pumping WPF messages,
+        /// preventing UI deadlocks with LibVLC callbacks.
+        /// </summary>
+        private static void WaitWithMessagePump(int milliseconds)
+        {
+            var endTime = DateTime.UtcNow.AddMilliseconds(milliseconds);
+            while (DateTime.UtcNow < endTime)
+            {
+                try
+                {
+                    Application.Current?.Dispatcher?.Invoke(
+                        DispatcherPriority.Background,
+                        new Action(() => { }));
+                }
+                catch
+                {
+                    return;
+                }
+                Thread.Sleep(10);
+            }
         }
 
         #region Per-Screen DPI
