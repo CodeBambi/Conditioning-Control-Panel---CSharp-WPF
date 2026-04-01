@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services
 {
@@ -287,13 +288,7 @@ namespace ConditioningControlPanel.Services
         {
             App.Logger?.Warning("AutonomyService: FORCE START called - bypassing all checks!");
 
-            if (Application.Current?.Dispatcher == null)
-            {
-                App.Logger?.Error("AutonomyService: ForceStart failed - no dispatcher");
-                return;
-            }
-
-            Application.Current.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 _isEnabled = true;
                 _forceTestMode = true; // Keep using 30s interval even after timer fires
@@ -335,16 +330,17 @@ namespace ConditioningControlPanel.Services
             }
 
             // CRITICAL: Must create timers on UI thread or they won't fire!
-            if (Application.Current?.Dispatcher == null)
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted)
             {
                 App.Logger?.Error("AutonomyService: Cannot start - Application.Dispatcher is null!");
                 return;
             }
 
-            if (!Application.Current.Dispatcher.CheckAccess())
+            if (!dispatcher.CheckAccess())
             {
                 App.Logger?.Information("AutonomyService: Start() called from non-UI thread, dispatching to UI thread...");
-                Application.Current.Dispatcher.Invoke(() => Start());
+                DispatcherHelper.RunOnUISync(() => Start());
                 return;
             }
 
@@ -957,15 +953,9 @@ namespace ConditioningControlPanel.Services
 
         private void PerformAction(AutonomyActionType actionType, AutonomyTriggerSource source, string? context)
         {
-            if (Application.Current?.Dispatcher == null)
-            {
-                App.Logger?.Warning("AutonomyService: PerformAction failed - Dispatcher is null");
-                return;
-            }
-
             App.Logger?.Information("AutonomyService: PerformAction starting - {Action}", actionType);
 
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 try
                 {

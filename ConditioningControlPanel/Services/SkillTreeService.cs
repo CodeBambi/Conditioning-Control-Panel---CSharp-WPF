@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
@@ -514,7 +515,7 @@ public class SkillTreeService : IDisposable
             };
 
             // Delay popup slightly so the main window has time to finish loading
-            Application.Current?.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 try
                 {
@@ -525,7 +526,7 @@ public class SkillTreeService : IDisposable
                 {
                     App.Logger?.Error(ex, "Failed to show daily streak notification");
                 }
-            });
+            }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
         catch (Exception ex)
         {
@@ -599,7 +600,7 @@ public class SkillTreeService : IDisposable
             };
 
             // Show popup using the same system as achievements
-            Application.Current?.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 try
                 {

@@ -17,6 +17,7 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using XamlAnimatedGif;
+using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
@@ -592,6 +593,34 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Pause the animated GIF to reduce CPU usage when not visible
+        /// </summary>
+        private void PauseAvatarGif()
+        {
+            if (!_useAnimatedAvatar) return;
+            try
+            {
+                var animator = AnimationBehavior.GetAnimator(ImgAvatarAnimated);
+                animator?.Pause();
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Resume the animated GIF when becoming visible again
+        /// </summary>
+        private void ResumeAvatarGif()
+        {
+            if (!_useAnimatedAvatar) return;
+            try
+            {
+                var animator = AnimationBehavior.GetAnimator(ImgAvatarAnimated);
+                animator?.Play();
+            }
+            catch { }
+        }
+
+        /// <summary>
         /// Switch to a specific avatar set (with optional animation)
         /// </summary>
         private void SwitchToAvatarSet(int setNumber, bool animate = true)
@@ -780,15 +809,50 @@ namespace ConditioningControlPanel
                 // Reload video links for companion speech bubbles
                 ReloadVideoLinks();
 
-                // Reload avatar poses from new mod
-                _avatarPoses = LoadAvatarPoses(_currentAvatarSet);
-                if (_avatarPoses.Length > 0)
+                // Validate current avatar set is supported by the new mod — if not, fall back
+                int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+                var supportedSets = GetUnlockedAvatarSets(playerLevel);
+                if (supportedSets.Length > 0 && !supportedSets.Contains(_currentAvatarSet))
                 {
+                    var oldSet = _currentAvatarSet;
+                    _currentAvatarSet = supportedSets[0];
+                    _selectedAvatarSet = _currentAvatarSet;
+                    if (App.Settings?.Current != null)
+                    {
+                        App.Settings.Current.SelectedAvatarSet = _selectedAvatarSet;
+                    }
+                    App.Logger?.Information("Avatar set {OldSet} not supported by new mod, switched to {NewSet}",
+                        oldSet, _currentAvatarSet);
+                }
+
+                // Check if the new mod has an animated version for this set
+                _useAnimatedAvatar = HasAnimatedAvatar(_currentAvatarSet);
+
+                // Reload avatar poses from new mod
+                if (_useAnimatedAvatar)
+                {
+                    LoadAnimatedAvatar(_currentAvatarSet);
+                }
+                else
+                {
+                    // Hide animated, show static
+                    ImgAvatarAnimated.Visibility = Visibility.Collapsed;
+                    AnimationBehavior.SetSourceUri(ImgAvatarAnimated, null);
+                    ImgAvatar.Visibility = Visibility.Visible;
+
+                    _avatarPoses = LoadAvatarPoses(_currentAvatarSet);
                     _currentPoseIndex = 0;
-                    ImgAvatar.Source = _avatarPoses[0];
+                    if (_avatarPoses.Length > 0)
+                    {
+                        ImgAvatar.Source = _avatarPoses[0];
+                    }
                 }
                 if (!_useAnimatedAvatar && _avatarPoses.Length > 1)
                     _poseTimer.Start();
+
+                // Update navigation arrows for supported sets
+                ApplyAvatarTransform(_currentAvatarSet);
+                UpdateNavigationArrows();
 
                 // Refresh voice lines from new mod
                 _voiceLinesPath = Services.CompanionPhraseService.VoiceLineFolder;
@@ -1402,6 +1466,7 @@ namespace ConditioningControlPanel
                 switch (_parentWindow.WindowState)
                 {
                     case WindowState.Minimized:
+                        PauseAvatarGif();
                         if (_isAttached)
                         {
                             Hide();
@@ -1414,6 +1479,7 @@ namespace ConditioningControlPanel
                         break;
                     case WindowState.Normal:
                     case WindowState.Maximized:
+                        ResumeAvatarGif();
                         if (_parentWindow.IsVisible && App.Settings?.Current?.AvatarEnabled == true)
                         {
                             Show();
@@ -1438,6 +1504,7 @@ namespace ConditioningControlPanel
                 if ((bool)e.NewValue && _parentWindow.WindowState != WindowState.Minimized
                     && App.Settings?.Current?.AvatarEnabled == true)
                 {
+                    ResumeAvatarGif();
                     Show();
                     if (_isAttached)
                     {
@@ -1448,6 +1515,7 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
+                    PauseAvatarGif();
                     if (_isAttached)
                     {
                         Hide();
@@ -2114,7 +2182,7 @@ namespace ConditioningControlPanel
             }
 
             // Use BeginInvoke for non-blocking UI update
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 // Double-check AI bubble state on UI thread
                 if (_isShowingAiBubble)
@@ -2160,7 +2228,7 @@ namespace ConditioningControlPanel
         /// <param name="playSound">Whether to play giggle sound (default true for AI responses)</param>
         public void GigglePriority(string text, bool playSound = true)
         {
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 // Clear AI waiting flag
                 _isWaitingForAi = false;
@@ -3116,7 +3184,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void ShowVoiceLineBubble(string filePath)
         {
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 if (_isMuted || !IsAvatarVisibleOnScreen) return;
 
@@ -3219,7 +3287,7 @@ namespace ConditioningControlPanel
         private void ShowTriggerBubble(string trigger)
         {
             // Use direct dispatcher invoke to ensure audio plays exactly when bubble shows
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 // When muted, still trigger haptic+audio but skip visual queue logic
                 if (_isMuted)
@@ -3953,7 +4021,7 @@ namespace ConditioningControlPanel
             }
 
             // Show the audio filename text as a speech bubble (audio is already playing from FlashService)
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 // Double-check in case state changed
                 if (_isGiggling) return;

@@ -22,6 +22,7 @@ using Rectangle = System.Windows.Shapes.Rectangle;
 using NAudio.Wave;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
@@ -95,6 +96,11 @@ namespace ConditioningControlPanel
         private bool _isStreakFixMode = false;
         private DispatcherTimer? _remoteNotificationTimer;
         private DispatcherTimer? _remoteSessionInfoTimer;
+
+        // Tab animation storyboards (so they can be stopped when tab is hidden)
+        private Storyboard? _seasonTitleStoryboard;
+        private Storyboard? _lockdownPulseStoryboard;
+        private bool _skillTreeAnimationsActive = false;
 
         private static readonly Dictionary<string, string> CommandLabels = new()
         {
@@ -1043,6 +1049,15 @@ namespace ConditioningControlPanel
                 // Refresh all mod-aware UI
                 InitializeModSelector();
                 LoadLogo();
+                LoadTakeoverImage();
+                LoadFeatureImages();
+                RefreshThemeAwareElements();
+
+                // Refresh achievement images for new mod
+                PopulateAchievementGrid();
+
+                // Refresh skill tree images for new mod
+                DrawSkillTree();
 
                 // Hide/show BambiCloud based on mod
                 var showBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
@@ -2919,7 +2934,7 @@ namespace ConditioningControlPanel
                         }
 
                         // Refresh UI on the dispatcher thread after sync completes
-                        Application.Current?.Dispatcher?.Invoke(() =>
+                        DispatcherHelper.RunOnUISync(() =>
                         {
                             // Generate quests AFTER cloud data has been restored
                             if (!isSameAccount)
@@ -3457,6 +3472,148 @@ namespace ConditioningControlPanel
             });
         }
 
+        #region Tab Animation Management
+
+        private void StartSeasonTitleShimmer()
+        {
+            if (_seasonTitleStoryboard != null) return; // already running
+            try
+            {
+                _seasonTitleStoryboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever };
+                var startPt = new PointAnimation { From = new Point(-1, 0.5), To = new Point(1, 0.5), Duration = TimeSpan.FromSeconds(3) };
+                Storyboard.SetTargetName(startPt, "SeasonTitleBrush");
+                Storyboard.SetTargetProperty(startPt, new PropertyPath("StartPoint"));
+                var endPt = new PointAnimation { From = new Point(0, 0.5), To = new Point(2, 0.5), Duration = TimeSpan.FromSeconds(3) };
+                Storyboard.SetTargetName(endPt, "SeasonTitleBrush");
+                Storyboard.SetTargetProperty(endPt, new PropertyPath("EndPoint"));
+                var glow = new DoubleAnimation { From = 0.3, To = 0.9, Duration = TimeSpan.FromSeconds(1.5), AutoReverse = true };
+                Storyboard.SetTargetName(glow, "TxtSeasonTitle");
+                Storyboard.SetTargetProperty(glow, new PropertyPath("(TextBlock.Effect).(DropShadowEffect.Opacity)"));
+                _seasonTitleStoryboard.Children.Add(startPt);
+                _seasonTitleStoryboard.Children.Add(endPt);
+                _seasonTitleStoryboard.Children.Add(glow);
+                _seasonTitleStoryboard.Begin(this, true);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to start season title shimmer: {Error}", ex.Message);
+            }
+        }
+
+        private void StopSeasonTitleShimmer()
+        {
+            try
+            {
+                _seasonTitleStoryboard?.Stop(this);
+                _seasonTitleStoryboard = null;
+            }
+            catch { }
+        }
+
+        private void StartLockdownPulse()
+        {
+            if (_lockdownPulseStoryboard != null) return;
+            try
+            {
+                _lockdownPulseStoryboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever, AutoReverse = true };
+                var colorAnim = new ColorAnimation { From = (Color)ColorConverter.ConvertFromString("#FF1493"), To = (Color)ColorConverter.ConvertFromString("#FF69B4"), Duration = TimeSpan.FromSeconds(1.5) };
+                Storyboard.SetTargetName(colorAnim, "LockdownImageBorderBrush");
+                Storyboard.SetTargetProperty(colorAnim, new PropertyPath(SolidColorBrush.ColorProperty));
+                var blurAnim = new DoubleAnimation { From = 12, To = 22, Duration = TimeSpan.FromSeconds(1.5) };
+                Storyboard.SetTargetName(blurAnim, "LockdownImageGlow");
+                Storyboard.SetTargetProperty(blurAnim, new PropertyPath(DropShadowEffect.BlurRadiusProperty));
+                var opacAnim = new DoubleAnimation { From = 0.7, To = 1.0, Duration = TimeSpan.FromSeconds(1.5) };
+                Storyboard.SetTargetName(opacAnim, "LockdownImageGlow");
+                Storyboard.SetTargetProperty(opacAnim, new PropertyPath(DropShadowEffect.OpacityProperty));
+                _lockdownPulseStoryboard.Children.Add(colorAnim);
+                _lockdownPulseStoryboard.Children.Add(blurAnim);
+                _lockdownPulseStoryboard.Children.Add(opacAnim);
+                _lockdownPulseStoryboard.Begin(this, true);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to start lockdown pulse: {Error}", ex.Message);
+            }
+        }
+
+        private void StopLockdownPulse()
+        {
+            try
+            {
+                _lockdownPulseStoryboard?.Stop(this);
+                _lockdownPulseStoryboard = null;
+            }
+            catch { }
+        }
+
+        private void StopSkillTreeAnimations()
+        {
+            if (!_skillTreeAnimationsActive) return;
+            _skillTreeAnimationsActive = false;
+            try
+            {
+                // Stop gradient animations on the outer border background
+                if (SkillTreeOuterBorder.Background is LinearGradientBrush bgBrush)
+                {
+                    foreach (var stop in bgBrush.GradientStops)
+                    {
+                        stop.BeginAnimation(GradientStop.OffsetProperty, null);
+                        stop.BeginAnimation(GradientStop.ColorProperty, null);
+                    }
+                }
+
+                // Stop particle opacity animations
+                foreach (var child in SkillTreeCanvas.Children)
+                {
+                    if (child is System.Windows.Shapes.Ellipse ellipse)
+                    {
+                        ellipse.BeginAnimation(OpacityProperty, null);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to stop skill tree animations: {Error}", ex.Message);
+            }
+        }
+
+        private void RestartSkillTreeAnimations()
+        {
+            if (_skillTreeAnimationsActive) return;
+            _skillTreeAnimationsActive = true;
+            try
+            {
+                // Re-apply gradient animations on outer border
+                SkillTreeOuterBorder.Background = CreateAnimatedSkillTreeBrush(isHeader: false);
+
+                // Re-animate particles
+                var rng = new Random();
+                foreach (var child in SkillTreeCanvas.Children)
+                {
+                    if (child is System.Windows.Shapes.Ellipse ellipse)
+                    {
+                        var opacityAnim = new DoubleAnimation
+                        {
+                            From = 0,
+                            To = 1,
+                            Duration = TimeSpan.FromSeconds(2 + rng.NextDouble() * 3),
+                            BeginTime = TimeSpan.FromSeconds(rng.NextDouble() * 5),
+                            AutoReverse = true,
+                            RepeatBehavior = RepeatBehavior.Forever,
+                            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+                        };
+                        ellipse.BeginAnimation(OpacityProperty, opacityAnim);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to restart skill tree animations: {Error}", ex.Message);
+            }
+        }
+
+        #endregion
+
         private void AnimateTabIn(UIElement tab)
         {
             try
@@ -3476,6 +3633,11 @@ namespace ConditioningControlPanel
 
         private void ShowTab(string tab)
         {
+            // Stop animations on tabs we're leaving to reduce idle CPU
+            StopSeasonTitleShimmer();
+            StopLockdownPulse();
+            StopSkillTreeAnimations();
+
             // Hide all tabs
             SettingsTab.Visibility = Visibility.Collapsed;
             PresetsTab.Visibility = Visibility.Collapsed;
@@ -3525,6 +3687,7 @@ namespace ConditioningControlPanel
                     {
                         ProgressionTab.Visibility = Visibility.Visible;
                         AnimateTabIn(ProgressionTab);
+                        RestartSkillTreeAnimations();
                         App.Logger?.Debug("ShowTab: ProgressionTab visibility set to Visible.");
                     }
                     catch (Exception ex)
@@ -3539,6 +3702,7 @@ namespace ConditioningControlPanel
                     QuestsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(QuestsTab);
                     BtnQuests.Style = activeStyle;
+                    StartSeasonTitleShimmer();
                     RefreshQuestUI();
                     break;
 
@@ -3569,6 +3733,7 @@ namespace ConditioningControlPanel
                     LabTab.Visibility = Visibility.Visible;
                     AnimateTabIn(LabTab);
                     BtnLab.Style = activeStyle;
+                    StartLockdownPulse();
                     break;
 
                 case "patreon":
@@ -4102,10 +4267,12 @@ namespace ConditioningControlPanel
             if (e.OriginalSource is GridViewColumnHeader header && header.Content is string headerText)
             {
                 // Map header text to sort field
+                // In all-time mode, level column is hidden so skip level sort
+                var levelSort = _leaderboardMode == "all-time" ? "xp" : "level";
                 string? sortField = headerText switch
                 {
-                    "Rank" => "level",
-                    "Level" => "level",
+                    "Rank" => levelSort,
+                    "Level" => levelSort,
                     "XP" => "xp",
                     "Patreon" => "is_patreon",
                     "Name" => null, // Client-side sort
@@ -4276,10 +4443,20 @@ namespace ConditioningControlPanel
                 var gridView = LstLeaderboard?.View as GridView;
                 if (gridView == null || gridView.Columns.Count == 0) return;
 
+                var isAllTime = _leaderboardMode == "all-time";
+
                 var seasonsCol = gridView.Columns.FirstOrDefault(c => c.Header?.ToString() == "Seasons");
                 if (seasonsCol != null)
                 {
-                    seasonsCol.Width = _leaderboardMode == "all-time" ? 80 : 0;
+                    seasonsCol.Width = isAllTime ? 80 : 0;
+                }
+
+                // Hide level column in all-time mode (inconsistent after season resets)
+                var levelHeader = Loc.Get("label_level");
+                var levelCol = gridView.Columns.FirstOrDefault(c => c.Header?.ToString() == levelHeader);
+                if (levelCol != null)
+                {
+                    levelCol.Width = isAllTime ? 0 : 100;
                 }
             }
             catch (Exception ex)
@@ -5635,7 +5812,7 @@ namespace ConditioningControlPanel
             {
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = "https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/privacy-policy.html",
+                    FileName = "https://cclabs.app/privacy-policy.html",
                     UseShellExecute = true
                 });
             }
@@ -7237,7 +7414,7 @@ namespace ConditioningControlPanel
         private void BtnCopyRemoteLink_Click(object sender, RoutedEventArgs e)
         {
             var code = App.RemoteControl?.SessionCode;
-            var url = "https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/remote/";
+            var url = "https://cclabs.app/remote/";
             if (!string.IsNullOrEmpty(code))
                 url += $"?code={code}";
             try
@@ -8223,13 +8400,10 @@ namespace ConditioningControlPanel
                 // Hide inline banner after 5 seconds
                 Task.Delay(5000).ContinueWith(_ =>
                 {
-                    if (Application.Current?.Dispatcher != null)
+                    DispatcherHelper.RunOnUISync(() =>
                     {
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            QuestCompleteBanner.Visibility = Visibility.Collapsed;
-                        });
-                    }
+                        QuestCompleteBanner.Visibility = Visibility.Collapsed;
+                    });
                 });
 
                 App.Logger?.Information("Quest completed: {Name} (+{XP} XP)", e.QuestDefinition.Name, e.XPAwarded);
@@ -8308,6 +8482,7 @@ namespace ConditioningControlPanel
 
             // Add sparkle particles behind everything
             AddSkillTreeParticles();
+            _skillTreeAnimationsActive = true;
 
             // Add header section at the start of the canvas
             CreateSkillTreeHeader();

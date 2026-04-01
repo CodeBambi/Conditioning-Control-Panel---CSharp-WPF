@@ -13,6 +13,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using LibVLCSharp.Shared;
+using ConditioningControlPanel.Helpers;
 using Application = System.Windows.Application;
 using Screen = System.Windows.Forms.Screen;
 using VlcMediaPlayer = LibVLCSharp.Shared.MediaPlayer;
@@ -105,10 +106,10 @@ namespace ConditioningControlPanel.Services
                 _mediaPlayer.EncounteredError += OnError;
 
                 // Create fullscreen windows on all monitors
-                Application.Current.Dispatcher.Invoke(CreateWindows);
+                DispatcherHelper.RunOnUISync(CreateWindows);
 
                 // Start render loop
-                Application.Current.Dispatcher.Invoke(() =>
+                DispatcherHelper.RunOnUISync(() =>
                 {
                     CompositionTarget.Rendering += OnCompositionTargetRendering;
                 });

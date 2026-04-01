@@ -11,6 +11,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using NAudio.Wave;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services;
 
@@ -198,13 +199,13 @@ public class BubbleService : IDisposable
             return;
         }
 
-        Application.Current.Dispatcher.BeginInvoke(() =>
+        DispatcherHelper.RunOnUI(() =>
         {
             try
             {
                 var settings = App.Settings.Current;
-                var screens = settings.DualMonitorEnabled 
-                    ? App.GetAllScreensCached() 
+                var screens = settings.DualMonitorEnabled
+                    ? App.GetAllScreensCached()
                     : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
                 
                 var screen = screens[_random.Next(screens.Length)];
@@ -228,7 +229,7 @@ public class BubbleService : IDisposable
     /// </summary>
     public void SpawnOnce()
     {
-        Application.Current.Dispatcher.BeginInvoke(() =>
+        DispatcherHelper.RunOnUI(() =>
         {
             try
             {

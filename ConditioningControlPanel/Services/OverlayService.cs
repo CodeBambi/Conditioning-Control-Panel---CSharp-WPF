@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.ComponentModel;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services;
 
@@ -134,7 +135,7 @@ public class OverlayService : IDisposable
         if (_isRunning) return;
         _isRunning = true;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             var settings = App.Settings.Current;
 
@@ -194,7 +195,7 @@ public class OverlayService : IDisposable
     {
         if (!_isRunning) return;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             var settings = App.Settings.Current;
 
@@ -239,7 +240,7 @@ public class OverlayService : IDisposable
     {
         if (!_isRunning) return;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             var settings = App.Settings.Current;
             var hasPink = settings.PinkFilterEnabled && _pinkFilterWindows.Count > 0;
@@ -291,8 +292,7 @@ public class OverlayService : IDisposable
             {
                 try
                 {
-                    if (Application.Current?.Dispatcher == null) return;
-                    Application.Current.Dispatcher.Invoke(() =>
+                    DispatcherHelper.RunOnUISync(() =>
                     {
                         if (hasPink) UpdatePinkFilterOpacity();
                         if (hasSpiral) UpdateSpiralOpacity();
@@ -314,7 +314,7 @@ public class OverlayService : IDisposable
     {
         if (!_isRunning) return;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             var settings = App.Settings.Current;
 
@@ -1050,7 +1050,7 @@ public class OverlayService : IDisposable
 
         _currentBrainDrainIntensity = intensity;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             try
             {
@@ -1107,12 +1107,7 @@ public class OverlayService : IDisposable
             {
                 try
                 {
-                    if (Application.Current?.Dispatcher?.CheckAccess() == true)
-                        window.Close();
-                    else if (Application.Current?.Dispatcher != null)
-                        Application.Current.Dispatcher.Invoke(() => window.Close());
-                    else
-                        window.Close();
+                    DispatcherHelper.RunOnUISync(() => window.Close());
                 }
                 catch (Exception ex)
                 {
@@ -1136,7 +1131,7 @@ public class OverlayService : IDisposable
         _currentBrainDrainIntensity = intensity;
         double blurRadius = intensity * 0.4; // Slightly lower multiplier for performance
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             foreach (var img in _brainDrainImages.Values)
             {
@@ -1756,7 +1751,7 @@ public class OverlayService : IDisposable
     private void CurrentSettings_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         // Ensure this is executed on the UI thread
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             if (e.PropertyName == nameof(App.Settings.Current.BrainDrainIntensity) ||
                 e.PropertyName == nameof(App.Settings.Current.BrainDrainEnabled))

@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
+using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
@@ -334,8 +335,7 @@ public class AchievementService : IDisposable
                 Category = AchievementCategory.Minigames
             };
 
-            Application.Current?.Dispatcher.BeginInvoke(
-                DispatcherPriority.ApplicationIdle, () =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 try
                 {
@@ -346,7 +346,7 @@ public class AchievementService : IDisposable
                 {
                     App.Logger?.Warning(ex, "Failed to show bubble milestone popup");
                 }
-            });
+            }, DispatcherPriority.ApplicationIdle);
         }
         catch (Exception ex)
         {
@@ -647,7 +647,7 @@ public class AchievementService : IDisposable
         // Fire event to show popup
         try
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 App.Logger?.Debug("Firing AchievementUnlocked event for: {Name}", achievement.Name);
                 AchievementUnlocked?.Invoke(this, achievement);
