@@ -64,7 +64,6 @@ namespace ConditioningControlPanel
         private int _lastSpeechLength = 0; // Track last speech length for delay calc
         private bool _isInputVisible = false;
         private readonly Random _random = new();
-        private bool _mainWindowClosed = false;
 
         /// <summary>
         /// Regex to match markdown-style links: [Link Text](url)
@@ -1594,8 +1593,6 @@ namespace ConditioningControlPanel
             else
             {
                 // Detached mode: keep floating independently
-                _mainWindowClosed = true;
-
                 App.Logger?.Information("Main window closed while detached - tube continues floating");
                 // Wrap in try-catch in case app is shutting down
                 try
