@@ -99,27 +99,44 @@
   "tooltip_your_rank_percentile_popular_girl_skill": "Your rank percentile (Popular Girl skill)",
   "label_top_0": "Top 0%",
   "label_login_with_discord_or_patreon_to_track_your_x": "Login with Discord or Patreon to track your XP!",
-  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "When enabled, clicking an image dismisses it.&#x0a;When disabled, images are click-through.",
-  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "Hydra Mode: Clicking an image spawns&#x0a;two more images instead of dismissing it.&#x0a;Creates an escalating challenge!",
+  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "When enabled, clicking an image dismisses it.
+When disabled, images are click-through.",
+  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "Hydra Mode: Clicking an image spawns
+two more images instead of dismissing it.
+Creates an escalating challenge!",
   "setting_hydra": "🐙Hydra",
-  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "Linked: Hydra spawns share the parent flash timer&#x0a;and disappear when it ends.&#x0a;Unlinked: Each hydra spawn gets its own&#x0a;fresh full-duration timer for more chaos!",
+  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "Linked: Hydra spawns share the parent flash timer
+and disappear when it ends.
+Unlinked: Each hydra spawn gets its own
+fresh full-duration timer for more chaos!",
   "setting_linked": "🔗Linked",
-  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "Toggle the pink sparkle glow effect on flash images.&#x0a;Golden lucky glow is always shown.",
+  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "Toggle the pink sparkle glow effect on flash images.
+Golden lucky glow is always shown.",
   "setting_glow": "✨Glow",
-  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "How many flash events occur per hour.&#x0a;Higher values = more frequent flashes.",
+  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "How many flash events occur per hour.
+Higher values = more frequent flashes.",
   "setting_per_hour": "Per Hour",
-  "tooltip_number_of_images_shown_per_flash_event_multip": "Number of images shown per flash event.&#x0a;Multiple images appear simultaneously.",
+  "tooltip_number_of_images_shown_per_flash_event_multip": "Number of images shown per flash event.
+Multiple images appear simultaneously.",
   "setting_images": "Images",
-  "tooltip_maximum_images_displayed_at_once_limits_scree": "Maximum images displayed at once.&#x0a;Limits screen clutter during Hydra mode.",
+  "tooltip_maximum_images_displayed_at_once_limits_scree": "Maximum images displayed at once.
+Limits screen clutter during Hydra mode.",
   "section_visuals": "👁 Visuals",
-  "tooltip_scale_of_flash_images_100_original_size_200_d": "Scale of flash images.&#x0a;100% = original size, 200% = double size.",
+  "tooltip_scale_of_flash_images_100_original_size_200_d": "Scale of flash images.
+100% = original size, 200% = double size.",
   "setting_size": "Size",
-  "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparency of flash images.&#x0a;Lower = more see-through, 100% = fully solid.",
-  "tooltip_fade_in_out_animation_speed_0_instant_appear": "Fade in/out animation speed.&#x0a;0% = instant appear/disappear.&#x0a;100% = slow smooth fade.",
+  "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparency of flash images.
+Lower = more see-through, 100% = fully solid.",
+  "tooltip_fade_in_out_animation_speed_0_instant_appear": "Fade in/out animation speed.
+0% = instant appear/disappear.
+100% = slow smooth fade.",
   "setting_fade": "Fade",
-  "tooltip_how_long_images_stay_on_screen_only_used_when": "How long images stay on screen.&#x0a;Only used when audio is disabled.",
+  "tooltip_how_long_images_stay_on_screen_only_used_when": "How long images stay on screen.
+Only used when audio is disabled.",
   "setting_5s": "5s",
-  "tooltip_when_enabled_flash_duration_matches_audio_len": "When enabled, flash duration matches audio length.&#x0a;Disable to use manual duration slider.&#x0a;Audio disabled automatically above 60 flashes/hour.",
+  "tooltip_when_enabled_flash_duration_matches_audio_len": "When enabled, flash duration matches audio length.
+Disable to use manual duration slider.
+Audio disabled automatically above 60 flashes/hour.",
   "label_link_to_audio_trigger": "📊 Link to Audio Trigger",
   "label_max_30_h": "⚠ Max 30/h",
   "tooltip_click_me_rapidly": "Click me rapidly! 💗",
@@ -148,7 +165,8 @@
   "tooltip_enable_disable_subliminal_messages": "Enable/disable subliminal messages",
   "tooltip_messages_shown_per_minute": "Messages shown per minute",
   "label_per_min": "Per Min",
-  "tooltip_display_duration_in_frames_lower_faster_flash": "Display duration in frames.&#x0a;Lower = faster flash, harder to read.",
+  "tooltip_display_duration_in_frames_lower_faster_flash": "Display duration in frames.
+Lower = faster flash, harder to read.",
   "label_frames": "Frames",
   "tooltip_text_visibility_lower_more_subtle": "Text visibility. Lower = more subtle.",
   "tooltip_play_whispered_audio_when_subliminal_messages": "Play whispered audio when subliminal messages appear.",
@@ -167,9 +185,12 @@
   "setting_auto_run": "Auto Run",
   "tooltip_start_minimized_to_system_tray": "Start minimized to system tray",
   "setting_start_hidden": "Start Hidden",
-  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ DANGER: Completely disables panic key!&#x0a;You won't be able to emergency stop.&#x0a;Use with extreme caution.",
+  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ DANGER: Completely disables panic key!
+You won't be able to emergency stop.
+Use with extreme caution.",
   "setting_no_panic": "⚠ No Panic",
-  "tooltip_disable_all_network_features_updates_ai_leade": "Disable all network features (updates, AI, leaderboard).&#x0a;App runs completely offline with no external connections.",
+  "tooltip_disable_all_network_features_updates_ai_leade": "Disable all network features (updates, AI, leaderboard).
+App runs completely offline with no external connections.",
   "setting_offline_mode": "Offline Mode",
   "tooltip_select_a_specific_video_to_play_on_startup_wh": "Select a specific video to play on startup (when Vid Launch is enabled)",
   "label_startup_video": "Startup Video:",
@@ -177,7 +198,8 @@
   "tooltip_browse_for_startup_video": "Browse for startup video",
   "tooltip_clear_selection_use_random": "Clear selection (use random)",
   "label_use_borderless_windowed_for_overlays": "💡 Use Borderless Windowed for overlays",
-  "tooltip_exclusive_fullscreen_games_block_overlays_use": "Exclusive fullscreen games block overlays.&#x0a;Use Borderless Windowed mode instead.",
+  "tooltip_exclusive_fullscreen_games_block_overlays_use": "Exclusive fullscreen games block overlays.
+Use Borderless Windowed mode instead.",
   "btn_escape": "🔑 Escape",
   "tooltip_click_to_change_panic_key": "Click to change panic key",
   "section_browser": "🌐 Browser",
@@ -277,9 +299,12 @@
   "btn_save_2": "💾 Save",
   "btn_delete_2": "🗑 Delete",
   "btn_start_session": "▶ Start Session",
-  "tooltip_features_that_unlock_as_you_level_up_keep_con": "Features that unlock as you level up.&#x0a;Keep conditioning to earn XP and unlock new features!",
+  "tooltip_features_that_unlock_as_you_level_up_keep_con": "Features that unlock as you level up.
+Keep conditioning to earn XP and unlock new features!",
   "section_unlockables": "🎁 Unlockables",
-  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "Hypnotic spiral animation overlay.&#x0a;Covers all screens with customizable opacity.&#x0a;Unlocks at Level 10.",
+  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "Hypnotic spiral animation overlay.
+Covers all screens with customizable opacity.
+Unlocks at Level 10.",
   "label_spiral_overlay": "🌀 Spiral Overlay",
   "label_lvl_10": "🔒 Lvl 10",
   "label_reach_level_10_to_unlock": "Reach Level 10 to Unlock",
@@ -290,13 +315,17 @@
   "tooltip_spiral_opacity_5_50": "Spiral opacity (5% - 50%)",
   "tooltip_choose_a_spiral_gif_animation": "Choose a spiral GIF animation",
   "label_if_you_have_display_problems_try_setting_your": "⚠ If you have display problems, try setting your monitor DPI scaling to the recommended settings",
-  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "Pink color tint overlay for all screens.&#x0a;Subtle or intense, you choose!&#x0a;Unlocks at Level 10.",
+  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "Pink color tint overlay for all screens.
+Subtle or intense, you choose!
+Unlocks at Level 10.",
   "label_pink_filter": "💗 Pink Filter",
   "tooltip_enable_disable_pink_tint_overlay": "Enable/disable pink tint overlay",
   "tooltip_apply_pink_color_filter_to_all_monitors": "Apply pink color filter to all monitors",
   "tooltip_pink_filter_intensity": "Pink filter intensity",
   "tooltip_filter_opacity_5_50": "Filter opacity (5% - 50%)",
-  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "Pop floating bubbles to earn XP!&#x0a;Fun mini-game that spawns periodically.&#x0a;Unlocks at Level 20.",
+  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "Pop floating bubbles to earn XP!
+Fun mini-game that spawns periodically.
+Unlocks at Level 20.",
   "label_bubble_pop": "🫧 Bubble Pop",
   "label_lvl_20": "🔒 Lvl 20",
   "label_reach_level_20_to_unlock": "Reach Level 20 to Unlock",
@@ -307,7 +336,9 @@
   "setting_volume": "Volume",
   "tooltip_volume_of_bubble_pop_sounds": "Volume of bubble pop sounds",
   "tooltip_bubble_pop_sound_volume": "Bubble pop sound volume",
-  "tooltip_screen_lock_that_requires_typing_phrases_rein": "Screen lock that requires typing phrases.&#x0a;Reinforces conditioning through repetition.&#x0a;Unlocks at Level 35.",
+  "tooltip_screen_lock_that_requires_typing_phrases_rein": "Screen lock that requires typing phrases.
+Reinforces conditioning through repetition.
+Unlocks at Level 35.",
   "label_lock_card": "📐 Lock Card",
   "label_lvl_35": "🔒 Lvl 35",
   "label_reach_level_35_to_unlock": "Reach Level 35 to Unlock",
@@ -325,7 +356,9 @@
   "btn_manage_phrases": "📝 Manage Phrases",
   "tooltip_edit_phrases_that_must_be_typed": "Edit phrases that must be typed",
   "tooltip_customize_lock_card_colors": "Customize lock card colors",
-  "tooltip_count_the_bubbles_challenge_memory_and_attent": "Count the bubbles challenge!&#x0a;Memory and attention test for bonus XP.&#x0a;Unlocks at Level 50.",
+  "tooltip_count_the_bubbles_challenge_memory_and_attent": "Count the bubbles challenge!
+Memory and attention test for bonus XP.
+Unlocks at Level 50.",
   "label_bubble_count": "🫧 Bubble Count",
   "label_lvl_50": "🔒 Lvl 50",
   "label_reach_level_50_to_unlock": "Reach Level 50 to Unlock",
@@ -339,7 +372,10 @@
   "tooltip_prevent_closing_until_correctly_answered": "Prevent closing until correctly answered",
   "btn_test_now": "🎮 Test Now",
   "tooltip_trigger_a_bubble_count_challenge_now": "Trigger a bubble count challenge now",
-  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "DVD screensaver-style bouncing text!&#x0a;Customizable phrases bounce across screen.&#x0a;+25 XP per bounce (max 150 XP/min).&#x0a;Unlocks at Level 60.",
+  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "DVD screensaver-style bouncing text!
+Customizable phrases bounce across screen.
++25 XP per bounce (max 150 XP/min).
+Unlocks at Level 60.",
   "label_bouncing_text": "📺 Bouncing Text",
   "label_lvl_60": "🔒 Lvl 60",
   "label_reach_level_60_to_unlock": "Reach Level 60 to Unlock",
@@ -358,7 +394,9 @@
   "section_brain_drain": "💧 Brain Drain",
   "section_rework": "🔧 REWORK",
   "section_up_for_rework_this_feature_is_temporarily_dis": "UP FOR REWORK - This feature is temporarily disabled while we optimize performance. Check back in a future update!",
-  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "Random mind wipe audio effects!&#x0a;Escalates in frequency during sessions.&#x0a;Unlocks at Level 75.",
+  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "Random mind wipe audio effects!
+Escalates in frequency during sessions.
+Unlocks at Level 75.",
   "label_mind_wipe": "🧠 Mind Wipe",
   "label_lvl_75": "🔒 Lvl 75",
   "label_reach_level_75_to_unlock": "Reach Level 75 to Unlock",
@@ -654,9 +692,9 @@
   "btn_my_profile": "My Profile",
   "btn_clear": "Clear",
   "tooltip_change_display_name": "Change display name",
-  "label_text": "&#x270E;",
+  "label_text": "✎",
   "tooltip_delete_your_profile": "Delete your profile",
-  "label_text_2": "&#x1F5D1;",
+  "label_text_2": "🗑",
   "label_og_good_girl": "OG GOOD GIRL",
   "label_online": "Online",
   "tooltip_open_discord_profile": "Open Discord Profile",
@@ -714,7 +752,7 @@
   "setting_enable_pop_up_questions": "Enable pop-up questions",
   "label_frequency": "Frequency:",
   "label_2_session_hr": "2/session hr",
-  "label_text_3": "&#x1F512;",
+  "label_text_3": "🔒",
   "label_beta_testing": "Beta Testing",
   "label_these_experimental_features_are_currently_bei": "These experimental features are currently being tested by Patreon supporters.",
   "label_who_s_the_prettiest_bimbo": "who's the prettiest bimbo?~",
@@ -792,7 +830,7 @@
   "label_ai_chat_window_awareness_slut_mode_and_premiu": "AI chat, window awareness, slut mode, and premium features",
   "label_avatar_companion": "Avatar Companion",
   "label_interacting_detaching_resizing_evolution_stag": "Interacting, detaching, resizing, evolution stages, and animations",
-  "label_text_4": "&#x1F527;",
+  "label_text_4": "🔧",
   "label_modding_guide": "Modding Guide",
   "label_opens_the_mod_creator_with_a_step_by_step_wal": "Opens the Mod Creator with a step-by-step walkthrough of every tab",
   "label_pro_tips": "💡 Pro Tips",
@@ -1076,7 +1114,7 @@
   "label_warning_2": "WARNING:",
   "label_this_will_permanently_delete_all_your_data_an": " This will permanently delete all your data and stats!",
   "label_type_delete_to_confirm": "Type DELETE to confirm:",
-  "btn_close_2": "&#x2764; Close",
+  "btn_close_2": "❤ Close",
   "dialog_haptics_setup_guide": "Haptics Setup Guide",
   "label_select_your_device_type": "Select your device type:",
   "label_lovense": "Lovense",
@@ -1127,8 +1165,8 @@
   "label_press_esc_to_close_if_allowed": "Press ESC to close (if allowed)",
   "label_press_esc_to_close": "Press ESC to close",
   "label_input_synced_from_primary_monitor": "Input synced from primary monitor",
-  "label_text_6": "&#x1F3AE;",
-  "label_text_7": "&#x2B50;",
+  "label_text_6": "🎮",
+  "label_text_7": "⭐",
   "label_for_an_invite_code_please_ask_a_discord_mod_a": "For an invite code please ask a discord mod/admin or CodeBambi directly :3",
   "label_don_t_have_an_account": "Don't have an account? ",
   "label_choose_your_display_name": "Choose your display name",
@@ -1153,7 +1191,7 @@
   "msg_video_playback_not_available_libvlc_not_initi": "Video playback not available. LibVLC not initialized.",
   "dialog_mod_creator": "Mod Creator",
   "tooltip_mod_creator_tutorial": "Mod Creator Tutorial",
-  "btn_text": "&#x2014;",
+  "btn_text": "—",
   "btn_load_ccpmod": "Load .ccpmod",
   "btn_reset_all": "Reset All",
   "btn_export_as_ccpmod": "Export as .ccpmod",
@@ -1228,7 +1266,7 @@
   "label_generating_2": "Generating...",
   "label_the_quiz_master_is_thinking_up_something_devi": "The quiz master is thinking up something devious...",
   "label_your_result": "YOUR RESULT",
-  "label_text_8": "&#x23F3;",
+  "label_text_8": "⏳",
   "label_generating_your_session": "Generating your session...",
   "label_your_journey": "YOUR JOURNEY",
   "btn_play_again": "Play Again",
@@ -1239,7 +1277,7 @@
   "label_do_you_surrender_completely": "Do you surrender completely?",
   "label_yes": "YES",
   "dialog_confirm_photo": "Confirm Photo",
-  "label_text_9": "&#x1F4F7;",
+  "label_text_9": "📷",
   "label_does_this_photo_show_you_completing": "Does this photo show you completing:",
   "btn_no_choose_another": "No, Choose Another",
   "btn_yes_submit": "Yes, Submit",
@@ -1306,7 +1344,7 @@
   "msg_discard_changes": "Discard changes?",
   "msg_save_changes_before_closing": "Save changes before closing?",
   "dialog_update_available": "Update Available",
-  "label_text_10": "&#x2B06;",
+  "label_text_10": "⬆",
   "label_update_available": "Update Available!",
   "label_what_s_new": "What's New",
   "label_no_release_notes_available": "No release notes available.",

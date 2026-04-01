@@ -2812,6 +2812,14 @@
                                       Unchecked="ChkExcludeBambiCloudDucking_Changed"
                                       ToolTip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}"
                                       Foreground="{DynamicResource PinkBrush}" FontSize="9"/>
+
+                            <!-- Audio Diagnostics -->
+                            <Button x:Name="BtnTestAudio" Content="Test Audio" Margin="0,6,0,0"
+                                    Click="BtnTestAudio_Click"
+                                    ToolTip="Play a test sound and show audio diagnostics. Use this if audio isn't working."
+                                    Background="#33FF69B4" Foreground="White" FontSize="9" Padding="8,3"
+                                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
+                                    HorizontalAlignment="Left"/>
                         </StackPanel>
                     </Border>
 

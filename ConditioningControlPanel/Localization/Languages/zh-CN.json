@@ -99,27 +99,44 @@
   "tooltip_your_rank_percentile_popular_girl_skill": "你的排名百分位（人气女孩技能）",
   "label_top_0": "前 0%",
   "label_login_with_discord_or_patreon_to_track_your_x": "使用 Discord 或 Patreon 登录以追踪你的 XP！",
-  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "启用时，点击图片可关闭。&#x0a;禁用时，图片不可点击。",
-  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "九头蛇模式：点击图片会生成&#x0a;两张新图片而不是关闭它。&#x0a;制造不断升级的挑战！",
+  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "启用时，点击图片可关闭。
+禁用时，图片不可点击。",
+  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "九头蛇模式：点击图片会生成
+两张新图片而不是关闭它。
+制造不断升级的挑战！",
   "setting_hydra": "🐙九头蛇",
-  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "关联：九头蛇衍生图片共享父级闪图计时器&#x0a;并在它结束时消失。&#x0a;不关联：每个九头蛇衍生图片获得&#x0a;独立的完整持续时间计时器，更加混乱！",
+  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "关联：九头蛇衍生图片共享父级闪图计时器
+并在它结束时消失。
+不关联：每个九头蛇衍生图片获得
+独立的完整持续时间计时器，更加混乱！",
   "setting_linked": "🔗关联",
-  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "切换闪图上的粉色闪光效果。&#x0a;金色幸运光芒始终显示。",
+  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "切换闪图上的粉色闪光效果。
+金色幸运光芒始终显示。",
   "setting_glow": "✨光芒",
-  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "每小时发生多少次闪图事件。&#x0a;数值越高 = 闪图越频繁。",
+  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "每小时发生多少次闪图事件。
+数值越高 = 闪图越频繁。",
   "setting_per_hour": "每小时",
-  "tooltip_number_of_images_shown_per_flash_event_multip": "每次闪图事件显示的图片数量。&#x0a;多张图片同时出现。",
+  "tooltip_number_of_images_shown_per_flash_event_multip": "每次闪图事件显示的图片数量。
+多张图片同时出现。",
   "setting_images": "图片",
-  "tooltip_maximum_images_displayed_at_once_limits_scree": "同时显示的最大图片数量。&#x0a;限制九头蛇模式下的屏幕混乱。",
+  "tooltip_maximum_images_displayed_at_once_limits_scree": "同时显示的最大图片数量。
+限制九头蛇模式下的屏幕混乱。",
   "section_visuals": "👁 视觉效果",
-  "tooltip_scale_of_flash_images_100_original_size_200_d": "闪图缩放比例。&#x0a;100% = 原始大小，200% = 双倍大小。",
+  "tooltip_scale_of_flash_images_100_original_size_200_d": "闪图缩放比例。
+100% = 原始大小，200% = 双倍大小。",
   "setting_size": "大小",
-  "tooltip_transparency_of_flash_images_lower_more_see_t": "闪图透明度。&#x0a;越低 = 越透明，100% = 完全不透明。",
-  "tooltip_fade_in_out_animation_speed_0_instant_appear": "淡入/淡出动画速度。&#x0a;0% = 瞬间出现/消失。&#x0a;100% = 缓慢平滑淡入淡出。",
+  "tooltip_transparency_of_flash_images_lower_more_see_t": "闪图透明度。
+越低 = 越透明，100% = 完全不透明。",
+  "tooltip_fade_in_out_animation_speed_0_instant_appear": "淡入/淡出动画速度。
+0% = 瞬间出现/消失。
+100% = 缓慢平滑淡入淡出。",
   "setting_fade": "淡入淡出",
-  "tooltip_how_long_images_stay_on_screen_only_used_when": "图片在屏幕上停留多长时间。&#x0a;仅在音频禁用时使用。",
+  "tooltip_how_long_images_stay_on_screen_only_used_when": "图片在屏幕上停留多长时间。
+仅在音频禁用时使用。",
   "setting_5s": "5秒",
-  "tooltip_when_enabled_flash_duration_matches_audio_len": "启用时，闪图持续时间与音频长度匹配。&#x0a;禁用可使用手动持续时间滑块。&#x0a;超过60次/小时时音频自动禁用。",
+  "tooltip_when_enabled_flash_duration_matches_audio_len": "启用时，闪图持续时间与音频长度匹配。
+禁用可使用手动持续时间滑块。
+超过60次/小时时音频自动禁用。",
   "label_link_to_audio_trigger": "📊 关联音频触发",
   "label_max_30_h": "⚠ 最多 30/时",
   "tooltip_click_me_rapidly": "快速点击我！💗",
@@ -148,7 +165,8 @@
   "tooltip_enable_disable_subliminal_messages": "启用/禁用潜意识信息",
   "tooltip_messages_shown_per_minute": "每分钟显示的信息数",
   "label_per_min": "每分钟",
-  "tooltip_display_duration_in_frames_lower_faster_flash": "显示持续帧数。&#x0a;越低 = 闪现越快，越难阅读。",
+  "tooltip_display_duration_in_frames_lower_faster_flash": "显示持续帧数。
+越低 = 闪现越快，越难阅读。",
   "label_frames": "帧数",
   "tooltip_text_visibility_lower_more_subtle": "文字可见度。越低 = 越隐蔽。",
   "tooltip_play_whispered_audio_when_subliminal_messages": "当潜意识信息出现时播放耳语音频。",
@@ -167,9 +185,12 @@
   "setting_auto_run": "自动运行",
   "tooltip_start_minimized_to_system_tray": "启动时最小化到系统托盘",
   "setting_start_hidden": "隐藏启动",
-  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ 危险：完全禁用紧急按键！&#x0a;你将无法紧急停止。&#x0a;请极度谨慎使用。",
+  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ 危险：完全禁用紧急按键！
+你将无法紧急停止。
+请极度谨慎使用。",
   "setting_no_panic": "⚠ 无紧急键",
-  "tooltip_disable_all_network_features_updates_ai_leade": "禁用所有网络功能（更新、AI、排行榜）。&#x0a;应用完全离线运行，无任何外部连接。",
+  "tooltip_disable_all_network_features_updates_ai_leade": "禁用所有网络功能（更新、AI、排行榜）。
+应用完全离线运行，无任何外部连接。",
   "setting_offline_mode": "离线模式",
   "tooltip_select_a_specific_video_to_play_on_startup_wh": "选择启动时播放的特定视频（启用启动视频时）",
   "label_startup_video": "启动视频：",
@@ -177,7 +198,8 @@
   "tooltip_browse_for_startup_video": "浏览启动视频",
   "tooltip_clear_selection_use_random": "清除选择（使用随机）",
   "label_use_borderless_windowed_for_overlays": "💡 使用无边框窗口模式以显示覆盖层",
-  "tooltip_exclusive_fullscreen_games_block_overlays_use": "独占全屏游戏会阻止覆盖层。&#x0a;请使用无边框窗口模式。",
+  "tooltip_exclusive_fullscreen_games_block_overlays_use": "独占全屏游戏会阻止覆盖层。
+请使用无边框窗口模式。",
   "btn_escape": "🔑 紧急键",
   "tooltip_click_to_change_panic_key": "点击更改紧急按键",
   "section_browser": "🌐 浏览器",
@@ -277,9 +299,12 @@
   "btn_save_2": "💾 保存",
   "btn_delete_2": "🗑 删除",
   "btn_start_session": "▶ 开始疗程",
-  "tooltip_features_that_unlock_as_you_level_up_keep_con": "随等级提升而解锁的功能。&#x0a;持续调教以获得 XP 并解锁新功能！",
+  "tooltip_features_that_unlock_as_you_level_up_keep_con": "随等级提升而解锁的功能。
+持续调教以获得 XP 并解锁新功能！",
   "section_unlockables": "🎁 可解锁内容",
-  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "催眠螺旋动画覆盖层。&#x0a;覆盖所有屏幕，透明度可调。&#x0a;10级解锁。",
+  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "催眠螺旋动画覆盖层。
+覆盖所有屏幕，透明度可调。
+10级解锁。",
   "label_spiral_overlay": "🌀 螺旋覆盖层",
   "label_lvl_10": "🔒 等级 10",
   "label_reach_level_10_to_unlock": "达到10级解锁",
@@ -290,13 +315,17 @@
   "tooltip_spiral_opacity_5_50": "螺旋透明度（5% - 50%）",
   "tooltip_choose_a_spiral_gif_animation": "选择螺旋GIF动画",
   "label_if_you_have_display_problems_try_setting_your": "⚠ 如果遇到显示问题，请尝试将显示器 DPI 缩放设置为推荐值",
-  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "所有屏幕的粉色滤镜覆盖层。&#x0a;细腻或浓烈，由你选择！&#x0a;10级解锁。",
+  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "所有屏幕的粉色滤镜覆盖层。
+细腻或浓烈，由你选择！
+10级解锁。",
   "label_pink_filter": "💗 粉色滤镜",
   "tooltip_enable_disable_pink_tint_overlay": "启用/禁用粉色滤镜覆盖层",
   "tooltip_apply_pink_color_filter_to_all_monitors": "对所有显示器应用粉色滤镜",
   "tooltip_pink_filter_intensity": "粉色滤镜强度",
   "tooltip_filter_opacity_5_50": "滤镜透明度（5% - 50%）",
-  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "戳破漂浮的泡泡来获得 XP！&#x0a;定期出现的趣味小游戏。&#x0a;20级解锁。",
+  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "戳破漂浮的泡泡来获得 XP！
+定期出现的趣味小游戏。
+20级解锁。",
   "label_bubble_pop": "🫧 泡泡消消乐",
   "label_lvl_20": "🔒 等级 20",
   "label_reach_level_20_to_unlock": "达到20级解锁",
@@ -307,7 +336,9 @@
   "setting_volume": "音量",
   "tooltip_volume_of_bubble_pop_sounds": "泡泡爆裂音效的音量",
   "tooltip_bubble_pop_sound_volume": "泡泡爆裂音效音量",
-  "tooltip_screen_lock_that_requires_typing_phrases_rein": "需要打字输入短语的屏幕锁定。&#x0a;通过重复来强化调教。&#x0a;35级解锁。",
+  "tooltip_screen_lock_that_requires_typing_phrases_rein": "需要打字输入短语的屏幕锁定。
+通过重复来强化调教。
+35级解锁。",
   "label_lock_card": "📐 锁定卡片",
   "label_lvl_35": "🔒 等级 35",
   "label_reach_level_35_to_unlock": "达到35级解锁",
@@ -325,7 +356,9 @@
   "btn_manage_phrases": "📝 管理短语",
   "tooltip_edit_phrases_that_must_be_typed": "编辑需要输入的短语",
   "tooltip_customize_lock_card_colors": "自定义锁定卡片颜色",
-  "tooltip_count_the_bubbles_challenge_memory_and_attent": "泡泡计数挑战！&#x0a;考验记忆力和注意力，获得额外 XP。&#x0a;50级解锁。",
+  "tooltip_count_the_bubbles_challenge_memory_and_attent": "泡泡计数挑战！
+考验记忆力和注意力，获得额外 XP。
+50级解锁。",
   "label_bubble_count": "🫧 泡泡计数",
   "label_lvl_50": "🔒 等级 50",
   "label_reach_level_50_to_unlock": "达到50级解锁",
@@ -339,7 +372,10 @@
   "tooltip_prevent_closing_until_correctly_answered": "回答正确前无法关闭",
   "btn_test_now": "🎮 立即测试",
   "tooltip_trigger_a_bubble_count_challenge_now": "立即触发泡泡计数挑战",
-  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "DVD屏保风格的弹跳文字！&#x0a;可自定义的短语在屏幕上弹跳。&#x0a;每次弹跳 +25 XP（最多150 XP/分钟）。&#x0a;60级解锁。",
+  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "DVD屏保风格的弹跳文字！
+可自定义的短语在屏幕上弹跳。
+每次弹跳 +25 XP（最多150 XP/分钟）。
+60级解锁。",
   "label_bouncing_text": "📺 弹跳文字",
   "label_lvl_60": "🔒 等级 60",
   "label_reach_level_60_to_unlock": "达到60级解锁",
@@ -358,7 +394,9 @@
   "section_brain_drain": "💧 脑力流失",
   "section_rework": "🔧 重做中",
   "section_up_for_rework_this_feature_is_temporarily_dis": "即将重做 - 此功能在我们优化性能时暂时禁用。请在未来更新中查看！",
-  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "随机洗脑音效！&#x0a;在疗程中频率逐渐增加。&#x0a;75级解锁。",
+  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "随机洗脑音效！
+在疗程中频率逐渐增加。
+75级解锁。",
   "label_mind_wipe": "🧠 洗脑",
   "label_lvl_75": "🔒 等级 75",
   "label_reach_level_75_to_unlock": "达到75级解锁",
@@ -654,9 +692,9 @@
   "btn_my_profile": "我的资料",
   "btn_clear": "清除",
   "tooltip_change_display_name": "更改显示名称",
-  "label_text": "&#x270E;",
+  "label_text": "✎",
   "tooltip_delete_your_profile": "删除你的个人资料",
-  "label_text_2": "&#x1F5D1;",
+  "label_text_2": "🗑",
   "label_og_good_girl": "OG 乖女孩",
   "label_online": "在线",
   "tooltip_open_discord_profile": "打开 Discord 个人资料",
@@ -714,7 +752,7 @@
   "setting_enable_pop_up_questions": "启用弹出问题",
   "label_frequency": "频率：",
   "label_2_session_hr": "2/疗程小时",
-  "label_text_3": "&#x1F512;",
+  "label_text_3": "🔒",
   "label_beta_testing": "测试中",
   "label_these_experimental_features_are_currently_bei": "这些实验功能目前正由 Patreon 支持者测试。",
   "label_who_s_the_prettiest_bimbo": "谁是最漂亮的宝贝呢？~",
@@ -792,7 +830,7 @@
   "label_ai_chat_window_awareness_slut_mode_and_premiu": "AI 聊天、窗口感知、淫荡模式和高级功能",
   "label_avatar_companion": "头像伙伴",
   "label_interacting_detaching_resizing_evolution_stag": "交互、分离、调整大小、进化阶段和动画",
-  "label_text_4": "&#x1F527;",
+  "label_text_4": "🔧",
   "label_modding_guide": "模组指南",
   "label_opens_the_mod_creator_with_a_step_by_step_wal": "打开模组创建器并提供每个标签页的逐步指导",
   "label_pro_tips": "💡 专业技巧",
@@ -1076,7 +1114,7 @@
   "label_warning_2": "警告：",
   "label_this_will_permanently_delete_all_your_data_an": " 这将永久删除你的所有数据和统计！",
   "label_type_delete_to_confirm": "输入 DELETE 以确认：",
-  "btn_close_2": "&#x2764; 关闭",
+  "btn_close_2": "❤ 关闭",
   "dialog_haptics_setup_guide": "触觉设置指南",
   "label_select_your_device_type": "选择你的设备类型：",
   "label_lovense": "Lovense",
@@ -1127,8 +1165,8 @@
   "label_press_esc_to_close_if_allowed": "按 ESC 关闭（如果允许）",
   "label_press_esc_to_close": "按 ESC 关闭",
   "label_input_synced_from_primary_monitor": "输入从主显示器同步",
-  "label_text_6": "&#x1F3AE;",
-  "label_text_7": "&#x2B50;",
+  "label_text_6": "🎮",
+  "label_text_7": "⭐",
   "label_for_an_invite_code_please_ask_a_discord_mod_a": "要获取邀请码，请联系 Discord 管理员或直接联系 CodeBambi :3",
   "label_don_t_have_an_account": "还没有账号？",
   "label_choose_your_display_name": "选择你的显示名称",
@@ -1153,7 +1191,7 @@
   "msg_video_playback_not_available_libvlc_not_initi": "视频播放不可用。LibVLC 未初始化。",
   "dialog_mod_creator": "模组创建器",
   "tooltip_mod_creator_tutorial": "模组创建器教程",
-  "btn_text": "&#x2014;",
+  "btn_text": "—",
   "btn_load_ccpmod": "加载 .ccpmod",
   "btn_reset_all": "全部重置",
   "btn_export_as_ccpmod": "导出为 .ccpmod",
@@ -1228,7 +1266,7 @@
   "label_generating_2": "生成中...",
   "label_the_quiz_master_is_thinking_up_something_devi": "测验大师正在想些邪恶的问题...",
   "label_your_result": "你的结果",
-  "label_text_8": "&#x23F3;",
+  "label_text_8": "⏳",
   "label_generating_your_session": "正在生成你的疗程...",
   "label_your_journey": "你的旅程",
   "btn_play_again": "再玩一次",
@@ -1239,7 +1277,7 @@
   "label_do_you_surrender_completely": "你完全投降了吗？",
   "label_yes": "是的",
   "dialog_confirm_photo": "确认照片",
-  "label_text_9": "&#x1F4F7;",
+  "label_text_9": "📷",
   "label_does_this_photo_show_you_completing": "这张照片是否展示了你完成：",
   "btn_no_choose_another": "不，选择另一张",
   "btn_yes_submit": "是，提交",
@@ -1306,7 +1344,7 @@
   "msg_discard_changes": "放弃更改？",
   "msg_save_changes_before_closing": "关闭前保存更改？",
   "dialog_update_available": "有可用更新",
-  "label_text_10": "&#x2B06;",
+  "label_text_10": "⬆",
   "label_update_available": "有可用更新！",
   "label_what_s_new": "新功能",
   "label_no_release_notes_available": "暂无发布说明。",

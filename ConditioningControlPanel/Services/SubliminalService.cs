@@ -425,7 +425,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Could not play subliminal audio: {Error}", ex.Message);
+                App.Logger?.Warning("Could not play subliminal audio: {Error}", ex.Message);
                 App.Audio.Unduck();
             }
         }

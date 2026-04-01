@@ -413,7 +413,7 @@ public class BubbleService : IDisposable
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Audio playback failed: {Error}", ex.Message);
+                App.Logger?.Warning("Audio playback failed: {Error}", ex.Message);
             }
             finally
             {
