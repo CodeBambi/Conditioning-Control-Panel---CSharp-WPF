@@ -188,9 +188,15 @@ namespace ConditioningControlPanel.Services
             SessionEnded?.Invoke(this, EventArgs.Empty);
         }
 
+        private bool _pollInProgress;
+
         private async Task PollForCommandsAsync()
         {
             if (!IsActive) return;
+            if (_pollInProgress) return; // Skip if previous poll still running (timer re-entrance)
+            _pollInProgress = true;
+            try
+            {
 
             var unifiedId = App.UnifiedUserId;
             if (string.IsNullOrEmpty(unifiedId)) return;
@@ -279,6 +285,11 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "[RemoteControl] Poll error");
+            }
+            }
+            finally
+            {
+                _pollInProgress = false;
             }
         }
 

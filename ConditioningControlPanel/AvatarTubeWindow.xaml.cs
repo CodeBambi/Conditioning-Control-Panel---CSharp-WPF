@@ -1686,6 +1686,7 @@ namespace ConditioningControlPanel
 
                 // Stop companion timers
                 _speechTimer?.Stop();
+                _speechDelayTimer?.Stop();
                 _idleTimer?.Stop();
                 _triggerTimer?.Stop();
                 _randomBubbleTimer?.Stop();

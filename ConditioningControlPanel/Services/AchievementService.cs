@@ -137,7 +137,8 @@ public class AchievementService : IDisposable
     /// </summary>
     private void TrackTimeBasedProgress(object? sender, EventArgs e)
     {
-        var settings = App.Settings.Current;
+        var settings = App.Settings?.Current;
+        if (settings == null) return;
         var now = DateTime.Now;
 
         // Track total conditioning time for skill tree (when overlay is running = session active)

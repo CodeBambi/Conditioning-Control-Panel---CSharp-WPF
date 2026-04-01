@@ -213,7 +213,9 @@ namespace ConditioningControlPanel.Services
                 }
                 finally
                 {
-                    _libVLCInitialized = true;
+                    // Only mark as initialized if it succeeded — allows retry on transient failures
+                    // (e.g., DLL temporarily locked). If it failed, _libVLC is null and next call retries.
+                    _libVLCInitialized = _libVLC != null;
                     _libVLCInitializing = false;
                     _libVLCReady.TrySetResult(_libVLC != null);
                 }
@@ -735,8 +737,8 @@ namespace ConditioningControlPanel.Services
 
             videoView.MediaPlayer = mediaPlayer;
 
-            // Create media from URL
-            var media = new Media(_libVLC!, url, FromType.FromLocation);
+            // Create media from URL — disposed after Play() (LibVLC ref-counts internally)
+            using var media = new Media(_libVLC!, url, FromType.FromLocation);
             mediaPlayer.Play(media);
 
             if (withAudio)
@@ -1110,7 +1112,9 @@ namespace ConditioningControlPanel.Services
             videoView.MediaPlayer = mediaPlayer;
 
             // Create media - use file path directly for better compatibility
-            var media = new Media(_libVLC!, path, FromType.FromPath);
+            // Media is disposed after Play() — LibVLC internally ref-counts, so this is safe
+            // (DualMonitorVideoService already uses this pattern with 'using var media')
+            using var media = new Media(_libVLC!, path, FromType.FromPath);
 
             // Play the media
             mediaPlayer.Play(media);
@@ -1131,9 +1135,6 @@ namespace ConditioningControlPanel.Services
                 mediaPlayer.Mute = true;
                 mediaPlayer.Volume = 0;
             }
-
-                // Don't dispose media - let LibVLC manage it
-                // media.Dispose(); // Commented out - may cause audio issues
 
                 App.Logger?.Debug("LibVLC video window on: {Screen} (audio: {Audio}, vol: {Vol}, mute: {Mute})",
                     screen.DeviceName, withAudio, mediaPlayer.Volume, mediaPlayer.Mute);
