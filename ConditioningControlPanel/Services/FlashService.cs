@@ -1645,7 +1645,7 @@ namespace ConditioningControlPanel.Services
                 // Dispose locally — these never made it to the fields
                 sound?.Dispose();
                 audioFile?.Dispose();
-                App.Logger.Debug("Could not play sound {Path}: {Error}", path, ex.Message);
+                App.Logger.Warning("Could not play sound {Path}: {Error}", path, ex.Message);
                 return 5.0;
             }
         }

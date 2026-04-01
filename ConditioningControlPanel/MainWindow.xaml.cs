@@ -591,7 +591,7 @@ namespace ConditioningControlPanel
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Debug("Failed to play level up sound: {Error}", ex.Message);
+                        App.Logger?.Warning("Failed to play level up sound: {Error}", ex.Message);
                     }
                 });
             }
@@ -16372,6 +16372,13 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             ApplySettingsLive();
+        }
+
+        private void BtnTestAudio_Click(object sender, RoutedEventArgs e)
+        {
+            var result = App.Audio?.TestAudioPlayback() ?? "Audio service not initialized";
+            App.Logger?.Information("[AudioDiag] Test requested:\n{Result}", result);
+            System.Windows.MessageBox.Show(result, "Audio Diagnostics", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void SliderSpiralOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

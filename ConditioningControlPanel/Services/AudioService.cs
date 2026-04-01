@@ -63,6 +63,164 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Run audio health diagnostics on startup. Logs warnings for any issues found.
+        /// Call after construction to verify audio subsystem is functional.
+        /// </summary>
+        public void RunStartupDiagnostics()
+        {
+            try
+            {
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                var soundsDir = Path.Combine(baseDir, "Resources", "sounds");
+                var subAudioDir = Path.Combine(baseDir, "Resources", "sub_audio");
+
+                // Check sound directories exist and have files
+                if (!Directory.Exists(soundsDir))
+                    App.Logger?.Warning("[AudioDiag] Resources/sounds/ directory is MISSING at {Path}", soundsDir);
+                else
+                {
+                    var soundCount = Directory.GetFiles(soundsDir, "*.*", SearchOption.AllDirectories).Length;
+                    if (soundCount == 0)
+                        App.Logger?.Warning("[AudioDiag] Resources/sounds/ directory exists but contains NO audio files");
+                    else
+                        App.Logger?.Information("[AudioDiag] Resources/sounds/: {Count} files found", soundCount);
+                }
+
+                if (!Directory.Exists(subAudioDir))
+                    App.Logger?.Warning("[AudioDiag] Resources/sub_audio/ directory is MISSING at {Path}", subAudioDir);
+                else
+                {
+                    var subCount = Directory.GetFiles(subAudioDir, "*.*").Length;
+                    if (subCount == 0)
+                        App.Logger?.Warning("[AudioDiag] Resources/sub_audio/ directory exists but contains NO audio files");
+                    else
+                        App.Logger?.Information("[AudioDiag] Resources/sub_audio/: {Count} files found", subCount);
+                }
+
+                // Check WaveOutEvent can be created (tests audio device availability)
+                try
+                {
+                    using var testDevice = new WaveOutEvent();
+                    App.Logger?.Information("[AudioDiag] WaveOutEvent: OK (audio device available)");
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning("[AudioDiag] WaveOutEvent FAILED — no audio output device? Error: {Error}", ex.Message);
+                }
+
+                // Log current audio settings for diagnosis
+                var settings = App.Settings?.Current;
+                if (settings != null)
+                {
+                    App.Logger?.Information("[AudioDiag] Settings: MasterVolume={Master}%, SubAudioEnabled={SubEnabled}, SubAudioVolume={SubVol}%, FlashAudioEnabled={FlashEnabled}, AudioDuckingEnabled={DuckEnabled}",
+                        settings.MasterVolume, settings.SubAudioEnabled, settings.SubAudioVolume, settings.FlashAudioEnabled, settings.AudioDuckingEnabled);
+
+                    if (settings.MasterVolume == 0)
+                        App.Logger?.Warning("[AudioDiag] MasterVolume is 0% — ALL audio will be silent");
+                    if (!settings.SubAudioEnabled)
+                        App.Logger?.Information("[AudioDiag] SubAudioEnabled is OFF — whisper/trigger audio will not play");
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("[AudioDiag] Diagnostics failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Play a short test sound to verify audio output is working.
+        /// Returns a diagnostic message string.
+        /// </summary>
+        public string TestAudioPlayback()
+        {
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            var soundsDir = Path.Combine(baseDir, "Resources", "sounds");
+            var subAudioDir = Path.Combine(baseDir, "Resources", "sub_audio");
+
+            var diagnostics = new System.Text.StringBuilder();
+            diagnostics.AppendLine("=== Audio Diagnostics ===");
+
+            // Check directories
+            if (!Directory.Exists(soundsDir))
+                diagnostics.AppendLine("WARNING: Resources/sounds/ directory MISSING");
+            else
+            {
+                var count = Directory.GetFiles(soundsDir, "*.*", SearchOption.AllDirectories).Length;
+                diagnostics.AppendLine($"Resources/sounds/: {count} files");
+            }
+
+            if (!Directory.Exists(subAudioDir))
+                diagnostics.AppendLine("WARNING: Resources/sub_audio/ directory MISSING");
+            else
+            {
+                var count = Directory.GetFiles(subAudioDir, "*.*").Length;
+                diagnostics.AppendLine($"Resources/sub_audio/: {count} files");
+            }
+
+            // Check audio device
+            try
+            {
+                using var testDevice = new WaveOutEvent();
+                diagnostics.AppendLine("Audio device: OK");
+            }
+            catch (Exception ex)
+            {
+                diagnostics.AppendLine($"Audio device: FAILED ({ex.Message})");
+                return diagnostics.ToString();
+            }
+
+            // Try to play a sound
+            var testFiles = new[]
+            {
+                Path.Combine(soundsDir, "chime1.mp3"),
+                Path.Combine(soundsDir, "lvup.mp3"),
+                Path.Combine(soundsDir, "bubbles", "Pop.mp3"),
+            };
+
+            string? playFile = null;
+            foreach (var f in testFiles)
+            {
+                if (File.Exists(f)) { playFile = f; break; }
+            }
+
+            if (playFile == null)
+            {
+                diagnostics.AppendLine("WARNING: No test sound files found to play");
+                return diagnostics.ToString();
+            }
+
+            try
+            {
+                StopSound();
+                _soundFile = new AudioFileReader(playFile);
+                _soundPlayer = new WaveOutEvent();
+                _soundFile.Volume = 0.5f; // Fixed 50% for test — bypasses curve
+                _soundPlayer.Init(_soundFile);
+                _soundPlayer.Play();
+                diagnostics.AppendLine($"Playing: {Path.GetFileName(playFile)} at 50% volume");
+                diagnostics.AppendLine("If you can't hear this, check Windows volume mixer.");
+            }
+            catch (Exception ex)
+            {
+                diagnostics.AppendLine($"Playback FAILED: {ex.Message}");
+            }
+
+            // Log settings
+            var s = App.Settings?.Current;
+            if (s != null)
+            {
+                diagnostics.AppendLine($"\nMaster Volume: {s.MasterVolume}%");
+                diagnostics.AppendLine($"Whispers Enabled: {s.SubAudioEnabled}");
+                diagnostics.AppendLine($"Whisper Volume: {s.SubAudioVolume}%");
+                diagnostics.AppendLine($"Flash Audio Enabled: {s.FlashAudioEnabled}");
+                var effectiveWhisperVol = Math.Pow((s.SubAudioVolume / 100.0) * (s.MasterVolume / 100.0), 1.5) * 100;
+                diagnostics.AppendLine($"Effective Whisper Volume: {effectiveWhisperVol:F1}%");
+            }
+
+            return diagnostics.ToString();
+        }
+
         #endregion
 
         #region Crash Recovery
@@ -191,7 +349,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Could not play sound {Path}: {Error}", path, ex.Message);
+                App.Logger?.Warning("Could not play sound {Path}: {Error}", path, ex.Message);
                 return 0;
             }
         }

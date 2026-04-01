@@ -595,6 +595,7 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.3, "Initializing audio...");
             Audio = new AudioService();
+            Audio.RunStartupDiagnostics();
 
             splash.SetProgress(0.4, "Initializing flash service...");
             Flash = new FlashService();

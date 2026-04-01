@@ -99,27 +99,44 @@
   "tooltip_your_rank_percentile_popular_girl_skill": "Ton percentile de rang (compétence Fille Populaire)",
   "label_top_0": "Top 0%",
   "label_login_with_discord_or_patreon_to_track_your_x": "Connecte-toi avec Discord ou Patreon pour suivre tes XP !",
-  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "Quand activé, cliquer sur une image la ferme.&#x0a;Quand désactivé, les images laissent passer les clics.",
-  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "Mode Hydre : Cliquer sur une image en fait apparaître&#x0a;deux de plus au lieu de la fermer.&#x0a;Crée un défi croissant !",
+  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "Quand activé, cliquer sur une image la ferme.
+Quand désactivé, les images laissent passer les clics.",
+  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "Mode Hydre : Cliquer sur une image en fait apparaître
+deux de plus au lieu de la fermer.
+Crée un défi croissant !",
   "setting_hydra": "🐙Hydre",
-  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "Lié : Les copies Hydre partagent le chrono du flash parent&#x0a;et disparaissent quand il se termine.&#x0a;Non lié : Chaque copie obtient son propre&#x0a;chrono de durée complète pour plus de chaos !",
+  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "Lié : Les copies Hydre partagent le chrono du flash parent
+et disparaissent quand il se termine.
+Non lié : Chaque copie obtient son propre
+chrono de durée complète pour plus de chaos !",
   "setting_linked": "🔗Lié",
-  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "Active/désactive l'effet d'éclat rose étincelant sur les images flash.&#x0a;L'éclat doré chanceux est toujours affiché.",
+  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "Active/désactive l'effet d'éclat rose étincelant sur les images flash.
+L'éclat doré chanceux est toujours affiché.",
   "setting_glow": "✨Éclat",
-  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "Combien d'événements flash se produisent par heure.&#x0a;Plus la valeur est élevée = flashs plus fréquents.",
+  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "Combien d'événements flash se produisent par heure.
+Plus la valeur est élevée = flashs plus fréquents.",
   "setting_per_hour": "Par Heure",
-  "tooltip_number_of_images_shown_per_flash_event_multip": "Nombre d'images affichées par événement flash.&#x0a;Plusieurs images apparaissent simultanément.",
+  "tooltip_number_of_images_shown_per_flash_event_multip": "Nombre d'images affichées par événement flash.
+Plusieurs images apparaissent simultanément.",
   "setting_images": "Images",
-  "tooltip_maximum_images_displayed_at_once_limits_scree": "Maximum d'images affichées en même temps.&#x0a;Limite l'encombrement de l'écran en mode Hydre.",
+  "tooltip_maximum_images_displayed_at_once_limits_scree": "Maximum d'images affichées en même temps.
+Limite l'encombrement de l'écran en mode Hydre.",
   "section_visuals": "👁 Visuels",
-  "tooltip_scale_of_flash_images_100_original_size_200_d": "Taille des images flash.&#x0a;100% = taille originale, 200% = double taille.",
+  "tooltip_scale_of_flash_images_100_original_size_200_d": "Taille des images flash.
+100% = taille originale, 200% = double taille.",
   "setting_size": "Taille",
-  "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparence des images flash.&#x0a;Plus bas = plus transparent, 100% = totalement opaque.",
-  "tooltip_fade_in_out_animation_speed_0_instant_appear": "Vitesse d'animation du fondu.&#x0a;0% = apparition/disparition instantanée.&#x0a;100% = fondu lent et doux.",
+  "tooltip_transparency_of_flash_images_lower_more_see_t": "Transparence des images flash.
+Plus bas = plus transparent, 100% = totalement opaque.",
+  "tooltip_fade_in_out_animation_speed_0_instant_appear": "Vitesse d'animation du fondu.
+0% = apparition/disparition instantanée.
+100% = fondu lent et doux.",
   "setting_fade": "Fondu",
-  "tooltip_how_long_images_stay_on_screen_only_used_when": "Combien de temps les images restent à l'écran.&#x0a;Utilisé uniquement quand l'audio est désactivé.",
+  "tooltip_how_long_images_stay_on_screen_only_used_when": "Combien de temps les images restent à l'écran.
+Utilisé uniquement quand l'audio est désactivé.",
   "setting_5s": "5s",
-  "tooltip_when_enabled_flash_duration_matches_audio_len": "Quand activé, la durée du flash correspond à la longueur de l'audio.&#x0a;Désactive pour utiliser le curseur de durée manuelle.&#x0a;Audio désactivé automatiquement au-dessus de 60 flashs/heure.",
+  "tooltip_when_enabled_flash_duration_matches_audio_len": "Quand activé, la durée du flash correspond à la longueur de l'audio.
+Désactive pour utiliser le curseur de durée manuelle.
+Audio désactivé automatiquement au-dessus de 60 flashs/heure.",
   "label_link_to_audio_trigger": "📊 Lier au Déclencheur Audio",
   "label_max_30_h": "⚠ Max 30/h",
   "tooltip_click_me_rapidly": "Clique-moi rapidement ! 💗",
@@ -148,7 +165,8 @@
   "tooltip_enable_disable_subliminal_messages": "Activer/désactiver les messages subliminaux",
   "tooltip_messages_shown_per_minute": "Messages affichés par minute",
   "label_per_min": "Par Min",
-  "tooltip_display_duration_in_frames_lower_faster_flash": "Durée d'affichage en images.&#x0a;Plus bas = flash plus rapide, plus dur à lire.",
+  "tooltip_display_duration_in_frames_lower_faster_flash": "Durée d'affichage en images.
+Plus bas = flash plus rapide, plus dur à lire.",
   "label_frames": "Images",
   "tooltip_text_visibility_lower_more_subtle": "Visibilité du texte. Plus bas = plus subtil.",
   "tooltip_play_whispered_audio_when_subliminal_messages": "Jouer un audio chuchoté quand les messages subliminaux apparaissent.",
@@ -167,9 +185,12 @@
   "setting_auto_run": "Auto Run",
   "tooltip_start_minimized_to_system_tray": "Démarrer minimisé dans la barre des tâches",
   "setting_start_hidden": "Dém. Caché",
-  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ DANGER : Désactive complètement la touche panique !&#x0a;Tu ne pourras plus faire d'arrêt d'urgence.&#x0a;Utilise avec une extrême prudence.",
+  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ DANGER : Désactive complètement la touche panique !
+Tu ne pourras plus faire d'arrêt d'urgence.
+Utilise avec une extrême prudence.",
   "setting_no_panic": "⚠ Sans Panique",
-  "tooltip_disable_all_network_features_updates_ai_leade": "Désactiver toutes les fonctionnalités réseau (mises à jour, IA, classement).&#x0a;L'appli fonctionne entièrement hors ligne sans connexion externe.",
+  "tooltip_disable_all_network_features_updates_ai_leade": "Désactiver toutes les fonctionnalités réseau (mises à jour, IA, classement).
+L'appli fonctionne entièrement hors ligne sans connexion externe.",
   "setting_offline_mode": "Mode Hors Ligne",
   "tooltip_select_a_specific_video_to_play_on_startup_wh": "Sélectionner une vidéo spécifique à lancer au démarrage (quand Vid Démar. est activé)",
   "label_startup_video": "Vidéo de démarrage :",
@@ -177,7 +198,8 @@
   "tooltip_browse_for_startup_video": "Parcourir pour la vidéo de démarrage",
   "tooltip_clear_selection_use_random": "Effacer la sélection (utiliser aléatoire)",
   "label_use_borderless_windowed_for_overlays": "💡 Utilise le mode Fenêtré sans Bordure pour les superpositions",
-  "tooltip_exclusive_fullscreen_games_block_overlays_use": "Le plein écran exclusif bloque les superpositions.&#x0a;Utilise le mode Fenêtré sans Bordure à la place.",
+  "tooltip_exclusive_fullscreen_games_block_overlays_use": "Le plein écran exclusif bloque les superpositions.
+Utilise le mode Fenêtré sans Bordure à la place.",
   "btn_escape": "🔑 Échap",
   "tooltip_click_to_change_panic_key": "Clique pour changer la touche panique",
   "section_browser": "🌐 Navigateur",
@@ -277,9 +299,12 @@
   "btn_save_2": "💾 Sauvegarder",
   "btn_delete_2": "🗑 Supprimer",
   "btn_start_session": "▶ Démarrer la Session",
-  "tooltip_features_that_unlock_as_you_level_up_keep_con": "Fonctionnalités qui se débloquent en montant de niveau.&#x0a;Continue le conditionnement pour gagner des XP et débloquer de nouvelles fonctionnalités !",
+  "tooltip_features_that_unlock_as_you_level_up_keep_con": "Fonctionnalités qui se débloquent en montant de niveau.
+Continue le conditionnement pour gagner des XP et débloquer de nouvelles fonctionnalités !",
   "section_unlockables": "🎁 Débloquables",
-  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "Superposition d'animation spirale hypnotique.&#x0a;Couvre tous les écrans avec opacité personnalisable.&#x0a;Se débloque au Niveau 10.",
+  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "Superposition d'animation spirale hypnotique.
+Couvre tous les écrans avec opacité personnalisable.
+Se débloque au Niveau 10.",
   "label_spiral_overlay": "🌀 Superposition Spirale",
   "label_lvl_10": "🔒 Niv 10",
   "label_reach_level_10_to_unlock": "Atteins le Niveau 10 pour Débloquer",
@@ -290,13 +315,17 @@
   "tooltip_spiral_opacity_5_50": "Opacité de la spirale (5% - 50%)",
   "tooltip_choose_a_spiral_gif_animation": "Choisir une animation GIF spirale",
   "label_if_you_have_display_problems_try_setting_your": "⚠ Si tu as des problèmes d'affichage, essaie de régler la mise à l'échelle DPI de ton moniteur aux paramètres recommandés",
-  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "Superposition de teinte rose pour tous les écrans.&#x0a;Subtile ou intense, à toi de choisir !&#x0a;Se débloque au Niveau 10.",
+  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "Superposition de teinte rose pour tous les écrans.
+Subtile ou intense, à toi de choisir !
+Se débloque au Niveau 10.",
   "label_pink_filter": "💗 Filtre Rose",
   "tooltip_enable_disable_pink_tint_overlay": "Activer/désactiver la superposition de teinte rose",
   "tooltip_apply_pink_color_filter_to_all_monitors": "Appliquer le filtre de couleur rose à tous les moniteurs",
   "tooltip_pink_filter_intensity": "Intensité du filtre rose",
   "tooltip_filter_opacity_5_50": "Opacité du filtre (5% - 50%)",
-  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "Éclate des bulles flottantes pour gagner des XP !&#x0a;Mini-jeu amusant qui apparaît périodiquement.&#x0a;Se débloque au Niveau 20.",
+  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "Éclate des bulles flottantes pour gagner des XP !
+Mini-jeu amusant qui apparaît périodiquement.
+Se débloque au Niveau 20.",
   "label_bubble_pop": "🫧 Éclate-Bulles",
   "label_lvl_20": "🔒 Niv 20",
   "label_reach_level_20_to_unlock": "Atteins le Niveau 20 pour Débloquer",
@@ -307,7 +336,9 @@
   "setting_volume": "Volume",
   "tooltip_volume_of_bubble_pop_sounds": "Volume des sons d'éclatement de bulles",
   "tooltip_bubble_pop_sound_volume": "Volume du son d'éclatement des bulles",
-  "tooltip_screen_lock_that_requires_typing_phrases_rein": "Verrouillage d'écran qui nécessite de taper des phrases.&#x0a;Renforce le conditionnement par la répétition.&#x0a;Se débloque au Niveau 35.",
+  "tooltip_screen_lock_that_requires_typing_phrases_rein": "Verrouillage d'écran qui nécessite de taper des phrases.
+Renforce le conditionnement par la répétition.
+Se débloque au Niveau 35.",
   "label_lock_card": "📐 Carte de Verrouillage",
   "label_lvl_35": "🔒 Niv 35",
   "label_reach_level_35_to_unlock": "Atteins le Niveau 35 pour Débloquer",
@@ -325,7 +356,9 @@
   "btn_manage_phrases": "📝 Gérer les Phrases",
   "tooltip_edit_phrases_that_must_be_typed": "Modifier les phrases qui doivent être tapées",
   "tooltip_customize_lock_card_colors": "Personnaliser les couleurs des cartes de verrouillage",
-  "tooltip_count_the_bubbles_challenge_memory_and_attent": "Défi de comptage de bulles !&#x0a;Test de mémoire et d'attention pour des XP bonus.&#x0a;Se débloque au Niveau 50.",
+  "tooltip_count_the_bubbles_challenge_memory_and_attent": "Défi de comptage de bulles !
+Test de mémoire et d'attention pour des XP bonus.
+Se débloque au Niveau 50.",
   "label_bubble_count": "🫧 Comptage de Bulles",
   "label_lvl_50": "🔒 Niv 50",
   "label_reach_level_50_to_unlock": "Atteins le Niveau 50 pour Débloquer",
@@ -339,7 +372,10 @@
   "tooltip_prevent_closing_until_correctly_answered": "Empêcher la fermeture tant que la réponse n'est pas correcte",
   "btn_test_now": "🎮 Tester Maintenant",
   "tooltip_trigger_a_bubble_count_challenge_now": "Déclencher un défi de comptage de bulles maintenant",
-  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "Texte rebondissant style écran de veille DVD !&#x0a;Phrases personnalisables qui rebondissent sur l'écran.&#x0a;+25 XP par rebond (max 150 XP/min).&#x0a;Se débloque au Niveau 60.",
+  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "Texte rebondissant style écran de veille DVD !
+Phrases personnalisables qui rebondissent sur l'écran.
++25 XP par rebond (max 150 XP/min).
+Se débloque au Niveau 60.",
   "label_bouncing_text": "📺 Texte Rebondissant",
   "label_lvl_60": "🔒 Niv 60",
   "label_reach_level_60_to_unlock": "Atteins le Niveau 60 pour Débloquer",
@@ -358,7 +394,9 @@
   "section_brain_drain": "💧 Drainage Cérébral",
   "section_rework": "🔧 REFONTE",
   "section_up_for_rework_this_feature_is_temporarily_dis": "EN REFONTE - Cette fonctionnalité est temporairement désactivée pendant que nous optimisons les performances. Reviens dans une prochaine mise à jour !",
-  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "Effets audio d'effacement mental aléatoires !&#x0a;S'intensifie en fréquence pendant les sessions.&#x0a;Se débloque au Niveau 75.",
+  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "Effets audio d'effacement mental aléatoires !
+S'intensifie en fréquence pendant les sessions.
+Se débloque au Niveau 75.",
   "label_mind_wipe": "🧠 Effacement Mental",
   "label_lvl_75": "🔒 Niv 75",
   "label_reach_level_75_to_unlock": "Atteins le Niveau 75 pour Débloquer",
@@ -654,9 +692,9 @@
   "btn_my_profile": "Mon Profil",
   "btn_clear": "Effacer",
   "tooltip_change_display_name": "Changer le nom d'affichage",
-  "label_text": "&#x270E;",
+  "label_text": "✎",
   "tooltip_delete_your_profile": "Supprimer ton profil",
-  "label_text_2": "&#x1F5D1;",
+  "label_text_2": "🗑",
   "label_og_good_girl": "BONNE FILLE OG",
   "label_online": "En Ligne",
   "tooltip_open_discord_profile": "Ouvrir le Profil Discord",
@@ -714,7 +752,7 @@
   "setting_enable_pop_up_questions": "Activer les questions pop-up",
   "label_frequency": "Fréquence :",
   "label_2_session_hr": "2/h de session",
-  "label_text_3": "&#x1F512;",
+  "label_text_3": "🔒",
   "label_beta_testing": "Test Bêta",
   "label_these_experimental_features_are_currently_bei": "Ces fonctionnalités expérimentales sont actuellement testées par les supporters Patreon.",
   "label_who_s_the_prettiest_bimbo": "qui est la plus jolie bimbo ?~",
@@ -792,7 +830,7 @@
   "label_ai_chat_window_awareness_slut_mode_and_premiu": "Chat IA, conscience de fenêtre, mode salope, et fonctionnalités premium",
   "label_avatar_companion": "Avatar Compagnon",
   "label_interacting_detaching_resizing_evolution_stag": "Interaction, détachement, redimensionnement, stades d'évolution, et animations",
-  "label_text_4": "&#x1F527;",
+  "label_text_4": "🔧",
   "label_modding_guide": "Guide de Modding",
   "label_opens_the_mod_creator_with_a_step_by_step_wal": "Ouvre le Créateur de Mods avec un guide pas à pas de chaque onglet",
   "label_pro_tips": "💡 Astuces Pro",
@@ -1076,7 +1114,7 @@
   "label_warning_2": "ATTENTION :",
   "label_this_will_permanently_delete_all_your_data_an": " Ceci supprimera définitivement toutes tes données et statistiques !",
   "label_type_delete_to_confirm": "Tape DELETE pour confirmer :",
-  "btn_close_2": "&#x2764; Fermer",
+  "btn_close_2": "❤ Fermer",
   "dialog_haptics_setup_guide": "Guide de Configuration Haptique",
   "label_select_your_device_type": "Sélectionne ton type d'appareil :",
   "label_lovense": "Lovense",
@@ -1127,8 +1165,8 @@
   "label_press_esc_to_close_if_allowed": "Appuie sur Échap pour fermer (si autorisé)",
   "label_press_esc_to_close": "Appuie sur Échap pour fermer",
   "label_input_synced_from_primary_monitor": "Saisie synchronisée depuis le moniteur principal",
-  "label_text_6": "&#x1F3AE;",
-  "label_text_7": "&#x2B50;",
+  "label_text_6": "🎮",
+  "label_text_7": "⭐",
   "label_for_an_invite_code_please_ask_a_discord_mod_a": "Pour un code d'invitation, demande à un mod/admin Discord ou directement à CodeBambi :3",
   "label_don_t_have_an_account": "Tu n'as pas de compte ? ",
   "label_choose_your_display_name": "Choisis ton nom d'affichage",
@@ -1153,7 +1191,7 @@
   "msg_video_playback_not_available_libvlc_not_initi": "Lecture vidéo non disponible. LibVLC non initialisé.",
   "dialog_mod_creator": "Créateur de Mods",
   "tooltip_mod_creator_tutorial": "Tutoriel du Créateur de Mods",
-  "btn_text": "&#x2014;",
+  "btn_text": "—",
   "btn_load_ccpmod": "Charger .ccpmod",
   "btn_reset_all": "Tout Réinitialiser",
   "btn_export_as_ccpmod": "Exporter en .ccpmod",
@@ -1228,7 +1266,7 @@
   "label_generating_2": "Génération...",
   "label_the_quiz_master_is_thinking_up_something_devi": "Le maître du quiz prépare quelque chose de vicieux...",
   "label_your_result": "TON RÉSULTAT",
-  "label_text_8": "&#x23F3;",
+  "label_text_8": "⏳",
   "label_generating_your_session": "Génération de ta session...",
   "label_your_journey": "TON PARCOURS",
   "btn_play_again": "Rejouer",
@@ -1239,7 +1277,7 @@
   "label_do_you_surrender_completely": "Tu te rends complètement ?",
   "label_yes": "OUI",
   "dialog_confirm_photo": "Confirmer la Photo",
-  "label_text_9": "&#x1F4F7;",
+  "label_text_9": "📷",
   "label_does_this_photo_show_you_completing": "Cette photo te montre en train de terminer :",
   "btn_no_choose_another": "Non, En Choisir une Autre",
   "btn_yes_submit": "Oui, Soumettre",
@@ -1306,7 +1344,7 @@
   "msg_discard_changes": "Abandonner les modifications ?",
   "msg_save_changes_before_closing": "Sauvegarder les modifications avant de fermer ?",
   "dialog_update_available": "Mise à Jour Disponible",
-  "label_text_10": "&#x2B06;",
+  "label_text_10": "⬆",
   "label_update_available": "Mise à Jour Disponible !",
   "label_what_s_new": "Quoi de Neuf",
   "label_no_release_notes_available": "Aucune note de version disponible.",

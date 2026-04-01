@@ -99,27 +99,44 @@
   "tooltip_your_rank_percentile_popular_girl_skill": "Твой ранговый процентиль (навык «Популярная девочка»)",
   "label_top_0": "Топ 0%",
   "label_login_with_discord_or_patreon_to_track_your_x": "Войди через Discord или Patreon, чтобы отслеживать свой XP!",
-  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "Если включено, клик по изображению закрывает его.&#x0a;Если выключено, изображения прозрачны для кликов.",
-  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "Режим Гидры: клик по изображению порождает&#x0a;два новых вместо закрытия.&#x0a;Создаёт нарастающий вызов!",
+  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "Если включено, клик по изображению закрывает его.
+Если выключено, изображения прозрачны для кликов.",
+  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "Режим Гидры: клик по изображению порождает
+два новых вместо закрытия.
+Создаёт нарастающий вызов!",
   "setting_hydra": "🐙Гидра",
-  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "Связанные: порождения Гидры наследуют таймер родительской вспышки&#x0a;и исчезают, когда он истекает.&#x0a;Несвязанные: каждое порождение получает свой&#x0a;полный таймер для большего хаоса!",
+  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "Связанные: порождения Гидры наследуют таймер родительской вспышки
+и исчезают, когда он истекает.
+Несвязанные: каждое порождение получает свой
+полный таймер для большего хаоса!",
   "setting_linked": "🔗Связь",
-  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "Переключить розовый эффект сияния на вспышках.&#x0a;Золотое счастливое свечение показывается всегда.",
+  "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "Переключить розовый эффект сияния на вспышках.
+Золотое счастливое свечение показывается всегда.",
   "setting_glow": "✨Сияние",
-  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "Сколько вспышек происходит в час.&#x0a;Больше значение = чаще вспышки.",
+  "tooltip_how_many_flash_events_occur_per_hour_higher_v": "Сколько вспышек происходит в час.
+Больше значение = чаще вспышки.",
   "setting_per_hour": "В час",
-  "tooltip_number_of_images_shown_per_flash_event_multip": "Количество изображений за одну вспышку.&#x0a;Несколько изображений появляются одновременно.",
+  "tooltip_number_of_images_shown_per_flash_event_multip": "Количество изображений за одну вспышку.
+Несколько изображений появляются одновременно.",
   "setting_images": "Изображения",
-  "tooltip_maximum_images_displayed_at_once_limits_scree": "Максимум изображений на экране одновременно.&#x0a;Ограничивает заполнение экрана в режиме Гидры.",
+  "tooltip_maximum_images_displayed_at_once_limits_scree": "Максимум изображений на экране одновременно.
+Ограничивает заполнение экрана в режиме Гидры.",
   "section_visuals": "👁 Визуальные эффекты",
-  "tooltip_scale_of_flash_images_100_original_size_200_d": "Масштаб вспышек.&#x0a;100% = оригинальный размер, 200% = двойной размер.",
+  "tooltip_scale_of_flash_images_100_original_size_200_d": "Масштаб вспышек.
+100% = оригинальный размер, 200% = двойной размер.",
   "setting_size": "Размер",
-  "tooltip_transparency_of_flash_images_lower_more_see_t": "Прозрачность вспышек.&#x0a;Меньше = более прозрачно, 100% = полностью непрозрачно.",
-  "tooltip_fade_in_out_animation_speed_0_instant_appear": "Скорость анимации появления/исчезания.&#x0a;0% = мгновенное появление/исчезновение.&#x0a;100% = медленное плавное затухание.",
+  "tooltip_transparency_of_flash_images_lower_more_see_t": "Прозрачность вспышек.
+Меньше = более прозрачно, 100% = полностью непрозрачно.",
+  "tooltip_fade_in_out_animation_speed_0_instant_appear": "Скорость анимации появления/исчезания.
+0% = мгновенное появление/исчезновение.
+100% = медленное плавное затухание.",
   "setting_fade": "Затухание",
-  "tooltip_how_long_images_stay_on_screen_only_used_when": "Как долго изображения остаются на экране.&#x0a;Используется только при выключенном звуке.",
+  "tooltip_how_long_images_stay_on_screen_only_used_when": "Как долго изображения остаются на экране.
+Используется только при выключенном звуке.",
   "setting_5s": "5с",
-  "tooltip_when_enabled_flash_duration_matches_audio_len": "Если включено, длительность вспышки совпадает с длиной аудио.&#x0a;Выключи для ручной настройки ползунком.&#x0a;Аудио автоматически выключается при >60 вспышках/час.",
+  "tooltip_when_enabled_flash_duration_matches_audio_len": "Если включено, длительность вспышки совпадает с длиной аудио.
+Выключи для ручной настройки ползунком.
+Аудио автоматически выключается при >60 вспышках/час.",
   "label_link_to_audio_trigger": "📊 Привязка к аудиотриггеру",
   "label_max_30_h": "⚠ Макс. 30/ч",
   "tooltip_click_me_rapidly": "Нажимай на меня быстро! 💗",
@@ -148,7 +165,8 @@
   "tooltip_enable_disable_subliminal_messages": "Включить/выключить сублиминальные сообщения",
   "tooltip_messages_shown_per_minute": "Сообщений в минуту",
   "label_per_min": "В мин",
-  "tooltip_display_duration_in_frames_lower_faster_flash": "Длительность показа в кадрах.&#x0a;Меньше = более быстрая вспышка, труднее прочитать.",
+  "tooltip_display_duration_in_frames_lower_faster_flash": "Длительность показа в кадрах.
+Меньше = более быстрая вспышка, труднее прочитать.",
   "label_frames": "Кадры",
   "tooltip_text_visibility_lower_more_subtle": "Видимость текста. Меньше = более незаметно.",
   "tooltip_play_whispered_audio_when_subliminal_messages": "Воспроизводить шёпот при появлении сублиминальных сообщений.",
@@ -167,9 +185,12 @@
   "setting_auto_run": "Автозапуск",
   "tooltip_start_minimized_to_system_tray": "Запускать свёрнутым в системный трей",
   "setting_start_hidden": "Скрытый старт",
-  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ ОПАСНО: Полностью отключает тревожную клавишу!&#x0a;Ты не сможешь экстренно остановить.&#x0a;Используй с крайней осторожностью.",
+  "tooltip_danger_completely_disables_panic_key_you_won": "⚠ ОПАСНО: Полностью отключает тревожную клавишу!
+Ты не сможешь экстренно остановить.
+Используй с крайней осторожностью.",
   "setting_no_panic": "⚠ Без паники",
-  "tooltip_disable_all_network_features_updates_ai_leade": "Отключить все сетевые функции (обновления, ИИ, таблица лидеров).&#x0a;Приложение работает полностью офлайн без внешних подключений.",
+  "tooltip_disable_all_network_features_updates_ai_leade": "Отключить все сетевые функции (обновления, ИИ, таблица лидеров).
+Приложение работает полностью офлайн без внешних подключений.",
   "setting_offline_mode": "Офлайн-режим",
   "tooltip_select_a_specific_video_to_play_on_startup_wh": "Выбрать конкретное видео для воспроизведения при старте (если включено «Видео при старте»)",
   "label_startup_video": "Видео при старте:",
@@ -177,7 +198,8 @@
   "tooltip_browse_for_startup_video": "Выбрать видео для старта",
   "tooltip_clear_selection_use_random": "Сбросить выбор (случайное)",
   "label_use_borderless_windowed_for_overlays": "💡 Используй безрамочный оконный режим для оверлеев",
-  "tooltip_exclusive_fullscreen_games_block_overlays_use": "Эксклюзивный полноэкранный режим в играх блокирует оверлеи.&#x0a;Используй безрамочный оконный режим.",
+  "tooltip_exclusive_fullscreen_games_block_overlays_use": "Эксклюзивный полноэкранный режим в играх блокирует оверлеи.
+Используй безрамочный оконный режим.",
   "btn_escape": "🔑 Тревожная",
   "tooltip_click_to_change_panic_key": "Нажми, чтобы сменить тревожную клавишу",
   "section_browser": "🌐 Браузер",
@@ -277,9 +299,12 @@
   "btn_save_2": "💾 Сохранить",
   "btn_delete_2": "🗑 Удалить",
   "btn_start_session": "▶ Начать сессию",
-  "tooltip_features_that_unlock_as_you_level_up_keep_con": "Функции, которые открываются с повышением уровня.&#x0a;Продолжай кондиционирование, чтобы получать XP и открывать новые функции!",
+  "tooltip_features_that_unlock_as_you_level_up_keep_con": "Функции, которые открываются с повышением уровня.
+Продолжай кондиционирование, чтобы получать XP и открывать новые функции!",
   "section_unlockables": "🎁 Разблокируемое",
-  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "Анимация гипнотической спирали.&#x0a;Покрывает все экраны с настраиваемой прозрачностью.&#x0a;Открывается на Уровне 10.",
+  "tooltip_hypnotic_spiral_animation_overlay_covers_all": "Анимация гипнотической спирали.
+Покрывает все экраны с настраиваемой прозрачностью.
+Открывается на Уровне 10.",
   "label_spiral_overlay": "🌀 Спираль-оверлей",
   "label_lvl_10": "🔒 Ур. 10",
   "label_reach_level_10_to_unlock": "Достигни Уровня 10, чтобы открыть",
@@ -290,13 +315,17 @@
   "tooltip_spiral_opacity_5_50": "Прозрачность спирали (5% - 50%)",
   "tooltip_choose_a_spiral_gif_animation": "Выбери GIF-анимацию спирали",
   "label_if_you_have_display_problems_try_setting_your": "⚠ Если у тебя проблемы с отображением, попробуй установить масштабирование DPI монитора на рекомендуемые значения",
-  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "Розовый цветовой фильтр для всех экранов.&#x0a;Лёгкий или интенсивный — тебе выбирать!&#x0a;Открывается на Уровне 10.",
+  "tooltip_pink_color_tint_overlay_for_all_screens_subtl": "Розовый цветовой фильтр для всех экранов.
+Лёгкий или интенсивный — тебе выбирать!
+Открывается на Уровне 10.",
   "label_pink_filter": "💗 Розовый фильтр",
   "tooltip_enable_disable_pink_tint_overlay": "Включить/выключить розовый фильтр",
   "tooltip_apply_pink_color_filter_to_all_monitors": "Применить розовый фильтр ко всем мониторам",
   "tooltip_pink_filter_intensity": "Интенсивность розового фильтра",
   "tooltip_filter_opacity_5_50": "Прозрачность фильтра (5% - 50%)",
-  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "Лопай пузырьки, чтобы получить XP!&#x0a;Весёлая мини-игра, появляющаяся периодически.&#x0a;Открывается на Уровне 20.",
+  "tooltip_pop_floating_bubbles_to_earn_xp_fun_mini_game": "Лопай пузырьки, чтобы получить XP!
+Весёлая мини-игра, появляющаяся периодически.
+Открывается на Уровне 20.",
   "label_bubble_pop": "🫧 Лопание пузырьков",
   "label_lvl_20": "🔒 Ур. 20",
   "label_reach_level_20_to_unlock": "Достигни Уровня 20, чтобы открыть",
@@ -307,7 +336,9 @@
   "setting_volume": "Громкость",
   "tooltip_volume_of_bubble_pop_sounds": "Громкость звуков лопания",
   "tooltip_bubble_pop_sound_volume": "Громкость звука лопания пузырьков",
-  "tooltip_screen_lock_that_requires_typing_phrases_rein": "Блокировка экрана с вводом фраз.&#x0a;Укрепляет кондиционирование через повторение.&#x0a;Открывается на Уровне 35.",
+  "tooltip_screen_lock_that_requires_typing_phrases_rein": "Блокировка экрана с вводом фраз.
+Укрепляет кондиционирование через повторение.
+Открывается на Уровне 35.",
   "label_lock_card": "📐 Карточка-замок",
   "label_lvl_35": "🔒 Ур. 35",
   "label_reach_level_35_to_unlock": "Достигни Уровня 35, чтобы открыть",
@@ -325,7 +356,9 @@
   "btn_manage_phrases": "📝 Управление фразами",
   "tooltip_edit_phrases_that_must_be_typed": "Редактировать фразы для ввода",
   "tooltip_customize_lock_card_colors": "Настроить цвета карточки-замка",
-  "tooltip_count_the_bubbles_challenge_memory_and_attent": "Испытание «Посчитай пузырьки»!&#x0a;Тест памяти и внимания за бонусный XP.&#x0a;Открывается на Уровне 50.",
+  "tooltip_count_the_bubbles_challenge_memory_and_attent": "Испытание «Посчитай пузырьки»!
+Тест памяти и внимания за бонусный XP.
+Открывается на Уровне 50.",
   "label_bubble_count": "🫧 Подсчёт пузырьков",
   "label_lvl_50": "🔒 Ур. 50",
   "label_reach_level_50_to_unlock": "Достигни Уровня 50, чтобы открыть",
@@ -339,7 +372,10 @@
   "tooltip_prevent_closing_until_correctly_answered": "Запретить закрытие до правильного ответа",
   "btn_test_now": "🎮 Проверить",
   "tooltip_trigger_a_bubble_count_challenge_now": "Запустить испытание «Подсчёт пузырьков» сейчас",
-  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "Прыгающий текст в стиле DVD-заставки!&#x0a;Настраиваемые фразы летают по экрану.&#x0a;+25 XP за каждый отскок (макс. 150 XP/мин).&#x0a;Открывается на Уровне 60.",
+  "tooltip_dvd_screensaver_style_bouncing_text_customiza": "Прыгающий текст в стиле DVD-заставки!
+Настраиваемые фразы летают по экрану.
++25 XP за каждый отскок (макс. 150 XP/мин).
+Открывается на Уровне 60.",
   "label_bouncing_text": "📺 Прыгающий текст",
   "label_lvl_60": "🔒 Ур. 60",
   "label_reach_level_60_to_unlock": "Достигни Уровня 60, чтобы открыть",
@@ -358,7 +394,9 @@
   "section_brain_drain": "💧 Промывка мозгов",
   "section_rework": "🔧 ПЕРЕРАБОТКА",
   "section_up_for_rework_this_feature_is_temporarily_dis": "НА ПЕРЕРАБОТКЕ — Эта функция временно отключена, пока мы оптимизируем производительность. Проверь в следующих обновлениях!",
-  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "Случайные аудиоэффекты стирания памяти!&#x0a;Частота нарастает во время сессий.&#x0a;Открывается на Уровне 75.",
+  "tooltip_random_mind_wipe_audio_effects_escalates_in_f": "Случайные аудиоэффекты стирания памяти!
+Частота нарастает во время сессий.
+Открывается на Уровне 75.",
   "label_mind_wipe": "🧠 Стирание памяти",
   "label_lvl_75": "🔒 Ур. 75",
   "label_reach_level_75_to_unlock": "Достигни Уровня 75, чтобы открыть",
@@ -654,9 +692,9 @@
   "btn_my_profile": "Мой профиль",
   "btn_clear": "Очистить",
   "tooltip_change_display_name": "Изменить отображаемое имя",
-  "label_text": "&#x270E;",
+  "label_text": "✎",
   "tooltip_delete_your_profile": "Удалить профиль",
-  "label_text_2": "&#x1F5D1;",
+  "label_text_2": "🗑",
   "label_og_good_girl": "ОГ ХОРОШАЯ ДЕВОЧКА",
   "label_online": "Онлайн",
   "tooltip_open_discord_profile": "Открыть профиль Discord",
@@ -714,7 +752,7 @@
   "setting_enable_pop_up_questions": "Включить всплывающие вопросы",
   "label_frequency": "Частота:",
   "label_2_session_hr": "2/ч сессии",
-  "label_text_3": "&#x1F512;",
+  "label_text_3": "🔒",
   "label_beta_testing": "Бета-тестирование",
   "label_these_experimental_features_are_currently_bei": "Эти экспериментальные функции сейчас тестируются спонсорами Patreon.",
   "label_who_s_the_prettiest_bimbo": "кто тут самая красивая бимбо?~",
@@ -792,7 +830,7 @@
   "label_ai_chat_window_awareness_slut_mode_and_premiu": "ИИ-чат, осведомлённость об окнах, шлюха-режим и премиум-функции",
   "label_avatar_companion": "Аватар-компаньон",
   "label_interacting_detaching_resizing_evolution_stag": "Взаимодействие, отсоединение, изменение размера, стадии эволюции и анимации",
-  "label_text_4": "&#x1F527;",
+  "label_text_4": "🔧",
   "label_modding_guide": "Руководство по моддингу",
   "label_opens_the_mod_creator_with_a_step_by_step_wal": "Открывает конструктор модов с пошаговым руководством по каждой вкладке",
   "label_pro_tips": "💡 Полезные советы",
@@ -1076,7 +1114,7 @@
   "label_warning_2": "ВНИМАНИЕ:",
   "label_this_will_permanently_delete_all_your_data_an": " Это навсегда удалит все твои данные и статистику!",
   "label_type_delete_to_confirm": "Набери DELETE для подтверждения:",
-  "btn_close_2": "&#x2764; Закрыть",
+  "btn_close_2": "❤ Закрыть",
   "dialog_haptics_setup_guide": "Руководство по настройке тактильной отдачи",
   "label_select_your_device_type": "Выбери тип устройства:",
   "label_lovense": "Lovense",
@@ -1127,8 +1165,8 @@
   "label_press_esc_to_close_if_allowed": "Нажми ESC для закрытия (если разрешено)",
   "label_press_esc_to_close": "Нажми ESC для закрытия",
   "label_input_synced_from_primary_monitor": "Ввод синхронизирован с основного монитора",
-  "label_text_6": "&#x1F3AE;",
-  "label_text_7": "&#x2B50;",
+  "label_text_6": "🎮",
+  "label_text_7": "⭐",
   "label_for_an_invite_code_please_ask_a_discord_mod_a": "За инвайт-кодом обратись к модератору/админу Discord или напрямую к CodeBambi :3",
   "label_don_t_have_an_account": "Нет аккаунта? ",
   "label_choose_your_display_name": "Выбери отображаемое имя",
@@ -1153,7 +1191,7 @@
   "msg_video_playback_not_available_libvlc_not_initi": "Воспроизведение видео недоступно. LibVLC не инициализирован.",
   "dialog_mod_creator": "Конструктор модов",
   "tooltip_mod_creator_tutorial": "Обучение конструктору модов",
-  "btn_text": "&#x2014;",
+  "btn_text": "—",
   "btn_load_ccpmod": "Загрузить .ccpmod",
   "btn_reset_all": "Сбросить всё",
   "btn_export_as_ccpmod": "Экспорт как .ccpmod",
@@ -1228,7 +1266,7 @@
   "label_generating_2": "Генерация...",
   "label_the_quiz_master_is_thinking_up_something_devi": "Мастер квиза придумывает что-то коварное...",
   "label_your_result": "ТВОЙ РЕЗУЛЬТАТ",
-  "label_text_8": "&#x23F3;",
+  "label_text_8": "⏳",
   "label_generating_your_session": "Генерация сессии...",
   "label_your_journey": "ТВОЙ ПУТЬ",
   "btn_play_again": "Играть снова",
@@ -1239,7 +1277,7 @@
   "label_do_you_surrender_completely": "Ты сдаёшься полностью?",
   "label_yes": "ДА",
   "dialog_confirm_photo": "Подтверждение фото",
-  "label_text_9": "&#x1F4F7;",
+  "label_text_9": "📷",
   "label_does_this_photo_show_you_completing": "На этом фото видно, как ты выполняешь:",
   "btn_no_choose_another": "Нет, выбрать другое",
   "btn_yes_submit": "Да, отправить",
@@ -1306,7 +1344,7 @@
   "msg_discard_changes": "Отменить изменения?",
   "msg_save_changes_before_closing": "Сохранить изменения перед закрытием?",
   "dialog_update_available": "Доступно обновление",
-  "label_text_10": "&#x2B06;",
+  "label_text_10": "⬆",
   "label_update_available": "Доступно обновление!",
   "label_what_s_new": "Что нового",
   "label_no_release_notes_available": "Примечания к выпуску недоступны.",
