@@ -14,6 +14,7 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using NAudio.Wave;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -70,18 +71,18 @@ namespace ConditioningControlPanel
         private Session? _generatedSession;
         private bool _sessionReady;
 
-        private static readonly string[] LoadingFlavors = new[]
+        private static string[] LoadingFlavors => new[]
         {
-            "The quiz master is thinking up something devious...",
-            "Crafting the perfect question just for you...",
-            "Analyzing your psyche...",
-            "Preparing to read you like an open book...",
-            "This one's going to be interesting...",
-            "Calibrating the spice level...",
-            "The deeper we go, the more revealing it gets...",
-            "Almost there... don't get nervous...",
-            "Your answers are telling a story...",
-            "One moment while I think of something naughty..."
+            Loc.Get("quiz_loading_1"),
+            Loc.Get("quiz_loading_2"),
+            Loc.Get("quiz_loading_3"),
+            Loc.Get("quiz_loading_4"),
+            Loc.Get("quiz_loading_5"),
+            Loc.Get("quiz_loading_6"),
+            Loc.Get("quiz_loading_7"),
+            Loc.Get("quiz_loading_8"),
+            Loc.Get("quiz_loading_9"),
+            Loc.Get("quiz_loading_10")
         };
 
         private static readonly Random _random = new();
@@ -388,7 +389,7 @@ namespace ConditioningControlPanel
 
         private void UpdateScore(int score)
         {
-            ScoreText.Text = $"Score: {score}";
+            ScoreText.Text = Loc.GetF("quiz_score", score);
 
             if (TryFindResource("ScorePulseStoryboard") is Storyboard sb)
             {
@@ -412,7 +413,7 @@ namespace ConditioningControlPanel
         private void ShowLoading(string? flavorText = null)
         {
             _loadingDotCount = 0;
-            TxtLoadingDots.Text = "Generating";
+            TxtLoadingDots.Text = Loc.Get("label_generating_3");
             TxtLoadingFlavor.Text = flavorText ?? LoadingFlavors[_random.Next(LoadingFlavors.Length)];
             _loadingDotsTimer.Start();
             ShowPanel(LoadingPanel);
@@ -503,17 +504,17 @@ namespace ConditioningControlPanel
                 App.Logger?.Warning(ex, "QuizWindow: Failed to save quiz result to settings");
             }
 
-            TxtFinalScore.Text = $"{result.TotalScore} / {result.MaxScore}";
+            TxtFinalScore.Text = Loc.GetF("quiz_final_score", result.TotalScore, result.MaxScore);
 
             var percentage = result.MaxScore > 0 ? (double)result.TotalScore / result.MaxScore * 100 : 0;
             TxtScoreLabel.Text = percentage switch
             {
-                >= 90 => "You're completely hopeless (in the best way)",
-                >= 75 => "You're in deep and loving it",
-                >= 60 => "You know exactly who you are",
-                >= 40 => "Curious little thing, aren't you?",
-                >= 20 => "Just testing the waters... for now",
-                _ => "Maybe next time you'll be more honest"
+                >= 90 => Loc.Get("quiz_result_90"),
+                >= 75 => Loc.Get("quiz_result_75"),
+                >= 60 => Loc.Get("quiz_result_60"),
+                >= 40 => Loc.Get("quiz_result_40"),
+                >= 20 => Loc.Get("quiz_result_20"),
+                _ => Loc.Get("quiz_result_0")
             };
 
             TxtProfileText.Text = result.ProfileText;
@@ -566,7 +567,7 @@ namespace ConditioningControlPanel
                 {
                     var displayName = session.Name.Length > 30 ? session.Name.Substring(0, 30) + "..." : session.Name;
                     TxtTrySessionIcon.Text = "\u2728"; // sparkles
-                    TxtTrySessionLabel.Text = $"Save: {displayName}";
+                    TxtTrySessionLabel.Text = Loc.GetF("quiz_save_session", displayName);
                     BtnTrySession.IsHitTestVisible = true;
                     BtnTrySession.Opacity = 1.0;
 
@@ -618,7 +619,7 @@ namespace ConditioningControlPanel
                 try
                 {
                     fileService.ExportSession(_generatedSession, dialog.FileName);
-                    TxtTrySessionLabel.Text = "Session saved!";
+                    TxtTrySessionLabel.Text = Loc.Get("label_session_saved");
                     BtnTrySession.IsHitTestVisible = false;
                 }
                 catch (Exception ex)
@@ -1074,7 +1075,7 @@ namespace ConditioningControlPanel
         private void LoadingDotsTimer_Tick(object? sender, EventArgs e)
         {
             _loadingDotCount = (_loadingDotCount + 1) % 4;
-            TxtLoadingDots.Text = "Generating" + new string('.', _loadingDotCount);
+            TxtLoadingDots.Text = Loc.Get("label_generating_3") + new string('.', _loadingDotCount);
         }
 
         // ============ AUDIO ============
@@ -1250,7 +1251,7 @@ namespace ConditioningControlPanel
             if (_bgStop2 != null) _bgStop2.Color = Color.FromRgb(0x0A, 0x00, 0x00);
 
             // Set ominous question text
-            TxtQuestion.Text = "Do you surrender completely?";
+            TxtQuestion.Text = Loc.Get("label_do_you_surrender_completely");
             TxtQuestion.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x20, 0x20));
 
             // Hide answers B, C, D
@@ -1264,7 +1265,7 @@ namespace ConditioningControlPanel
             {
                 letterLabel.Visibility = Visibility.Collapsed;
             }
-            TxtAnswerA.Text = "YES";
+            TxtAnswerA.Text = Loc.Get("label_yes");
             TxtAnswerA.FontSize = 42;
             TxtAnswerA.FontWeight = FontWeights.ExtraBold;
             TxtAnswerA.Foreground = new SolidColorBrush(Colors.White);

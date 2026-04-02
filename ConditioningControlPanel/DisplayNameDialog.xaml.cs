@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -21,7 +22,7 @@ namespace ConditioningControlPanel
         {
             if (isChangeName)
             {
-                TxtTitle.Text = "Change Your Display Name";
+                TxtTitle.Text = Loc.Get("label_change_your_display_name");
                 WarningPanel.Visibility = Visibility.Collapsed;
 
                 if (!string.IsNullOrEmpty(currentName))
@@ -39,7 +40,7 @@ namespace ConditioningControlPanel
             if (confirmationMode == "delete")
             {
                 _isDeleteMode = true;
-                TxtTitle.Text = "Delete Your Profile";
+                TxtTitle.Text = Loc.Get("label_delete_your_profile");
                 TxtTitle.Foreground = new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF4444"));
 
@@ -48,10 +49,10 @@ namespace ConditioningControlPanel
                 var warningStack = (System.Windows.Controls.StackPanel)WarningPanel.Child;
                 var warningLabel = (System.Windows.Controls.TextBlock)warningStack.Children[0];
                 var warningText = (System.Windows.Controls.TextBlock)warningStack.Children[1];
-                warningLabel.Text = "WARNING:";
+                warningLabel.Text = Loc.Get("label_warning_2");
                 warningLabel.Foreground = new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF4444"));
-                warningText.Text = " This will permanently delete all your data and stats!";
+                warningText.Text = Loc.Get("label_this_will_permanently_delete_all_your_data_an");
                 warningText.Foreground = new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF4444"));
 
@@ -59,8 +60,8 @@ namespace ConditioningControlPanel
                 var border = (System.Windows.Controls.Border)Content;
                 var grid = (System.Windows.Controls.Grid)border.Child;
                 var promptBlock = (System.Windows.Controls.TextBlock)grid.Children[2];
-                promptBlock.Text = "Type DELETE to confirm:";
-                BtnConfirm.Content = "Delete";
+                promptBlock.Text = Loc.Get("label_type_delete_to_confirm");
+                BtnConfirm.Content = Loc.Get("btn_delete");
                 BtnConfirm.Background = new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF4444"));
 
@@ -81,7 +82,7 @@ namespace ConditioningControlPanel
                 else
                 {
                     var length = TxtDisplayName.Text.Trim().Length;
-                    TxtCharCount.Text = $"{length}/20 characters";
+                    TxtCharCount.Text = Loc.GetF("label_char_count_of_max", length, 20);
                     BtnConfirm.IsEnabled = length >= 2 && length <= 20;
                 }
             };
@@ -127,8 +128,8 @@ namespace ConditioningControlPanel
             if (name.Length < 2 || name.Length > 20)
             {
                 MessageBox.Show(
-                    "Please enter a name with 2-20 characters.",
-                    "Invalid Name",
+                    Loc.Get("msg_enter_name_2_20_chars"),
+                    Loc.Get("title_invalid_name"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return;

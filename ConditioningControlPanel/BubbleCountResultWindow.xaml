@@ -1,7 +1,8 @@
 <Window x:Class="ConditioningControlPanel.BubbleCountResultWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="How Many Bubbles?"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_how_many_bubbles}"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -29,7 +30,7 @@
             
             <StackPanel>
                 <!-- Title -->
-                <TextBlock Text="🫧 How Many Bubbles? 🫧"
+                <TextBlock Text="{loc:Str label_how_many_bubbles}"
                            FontSize="40"
                            FontWeight="Bold"
                            Foreground="{DynamicResource PinkBrush}"
@@ -41,7 +42,7 @@
                 </TextBlock>
                 
                 <!-- Instruction -->
-                <TextBlock Text="Enter the number of bubbles you counted:"
+                <TextBlock Text="{loc:Str label_enter_the_number_of_bubbles_you_counted}"
                            FontSize="18"
                            Foreground="{DynamicResource PinkBrush}"
                            HorizontalAlignment="Center"
@@ -63,7 +64,7 @@
                 
                 <!-- Attempts remaining -->
                 <TextBlock x:Name="TxtAttempts"
-                           Text="Attempts remaining: 3"
+                           Text="{loc:Str label_attempts_remaining_3}"
                            FontSize="16"
                            Foreground="#888888"
                            HorizontalAlignment="Center"
@@ -80,7 +81,7 @@
                 
                 <!-- Submit Button -->
                 <Button x:Name="BtnSubmit"
-                        Content="✓ SUBMIT"
+                        Content="{loc:Str btn_submit}"
                         FontSize="24"
                         FontWeight="Bold"
                         Foreground="White"
@@ -110,7 +111,7 @@
                 
                 <!-- Strict Mode Indicator -->
                 <TextBlock x:Name="TxtStrict"
-                           Text="🔒 STRICT MODE - Must answer correctly"
+                           Text="{loc:Str label_strict_mode_must_answer_correctly}"
                            FontSize="14"
                            Foreground="#FF6B6B"
                            HorizontalAlignment="Center"
@@ -119,7 +120,7 @@
                 
                 <!-- ESC Hint -->
                 <TextBlock x:Name="TxtEscHint"
-                           Text="Press ESC to skip (won't earn XP)"
+                           Text="{loc:Str label_press_esc_to_skip_won_t_earn_xp}"
                            FontSize="12"
                            Foreground="#666666"
                            HorizontalAlignment="Center"

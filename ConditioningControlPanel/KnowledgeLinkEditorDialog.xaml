@@ -1,8 +1,9 @@
 <Window x:Class="ConditioningControlPanel.KnowledgeLinkEditorDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Add Knowledge Link"
-        Width="450" SizeToContent="Height"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_add_knowledge_link}"
+        Width="450" SizeToContent="{loc:Str btn_height}"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource DarkerBgBrush}"
         ResizeMode="NoResize">
@@ -18,21 +19,21 @@
 
         <!-- URL -->
         <StackPanel Grid.Row="0" Margin="0,0,0,15">
-            <TextBlock Text="URL" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,0,5"/>
+            <TextBlock Text="{loc:Str label_url_2}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,0,5"/>
             <TextBox x:Name="TxtUrl" Background="{DynamicResource PanelBgBrush}" Foreground="White"
                      BorderBrush="{DynamicResource PanelAccentBrush}" Padding="8" FontSize="12"/>
         </StackPanel>
 
         <!-- Title -->
         <StackPanel Grid.Row="1" Margin="0,0,0,15">
-            <TextBlock Text="Title" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,0,5"/>
+            <TextBlock Text="{loc:Str label_title}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,0,5"/>
             <TextBox x:Name="TxtTitle" Background="{DynamicResource PanelBgBrush}" Foreground="White"
                      BorderBrush="{DynamicResource PanelAccentBrush}" Padding="8" FontSize="12"/>
         </StackPanel>
 
         <!-- Description -->
         <StackPanel Grid.Row="2" Margin="0,0,0,15">
-            <TextBlock Text="Description (optional)" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,0,5"/>
+            <TextBlock Text="{loc:Str label_description_optional}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" Margin="0,0,0,5"/>
             <TextBox x:Name="TxtDescription" Background="{DynamicResource PanelBgBrush}" Foreground="White"
                      BorderBrush="{DynamicResource PanelAccentBrush}" Padding="8" FontSize="12"
                      Height="60" TextWrapping="Wrap" AcceptsReturn="True"/>
@@ -40,10 +41,10 @@
 
         <!-- Buttons -->
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="Cancel" Width="80" Margin="0,0,10,0"
+            <Button Content="{loc:Str btn_cancel}" Width="80" Margin="0,0,10,0"
                     Background="{DynamicResource PanelAccentBrush}" Foreground="White" BorderThickness="0"
                     Padding="8" Cursor="Hand" Click="BtnCancel_Click"/>
-            <Button Content="Add" Width="80"
+            <Button Content="{loc:Str btn_add}" Width="80"
                     Background="{DynamicResource PinkBrush}" Foreground="White" BorderThickness="0"
                     Padding="8" Cursor="Hand" Click="BtnAdd_Click"/>
         </StackPanel>

@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {

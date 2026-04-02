@@ -5,6 +5,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {

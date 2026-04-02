@@ -12,6 +12,8 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using XamlAnimatedGif;
+using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -29,16 +31,16 @@ namespace ConditioningControlPanel
         private int _maxUnlockedSet = 1; // Highest avatar set unlocked based on level
         private bool _useAnimatedAvatar = false; // Whether to use animated GIF
 
-        // Avatar set titles
-        private static readonly string[] AvatarTitles = new[]
+        // Avatar set titles (localization keys)
+        private static readonly string[] AvatarTitleKeys = new[]
         {
-            "BASIC BIMBO",          // Set 1: Level 1-19
-            "DUMB AIRHEAD",         // Set 2: Level 20-34
-            "SYNTHETIC BLOWDOLL",   // Set 3: Level 35-49
-            "PERFECT FUCKPUPPET",   // Set 4: Level 50-124
-            "BRAINWASHED SLAVEDOLL",// Set 5: Level 125-149
-            "PLATINUM PUPPET",      // Set 6: Level 150+
-            "BAMBI COW"             // Set 7: Level 75+ (companion-only)
+            "avatar_title_basic_bimbo",          // Set 1: Level 1-19
+            "avatar_title_dumb_airhead",         // Set 2: Level 20-34
+            "avatar_title_synthetic_blowdoll",   // Set 3: Level 35-49
+            "avatar_title_perfect_fuckpuppet",   // Set 4: Level 50-124
+            "avatar_title_brainwashed_slavedoll", // Set 5: Level 125-149
+            "avatar_title_platinum_puppet",      // Set 6: Level 150+
+            "avatar_title_bambi_cow"             // Set 7: Level 75+ (companion-only)
         };
 
         // Companion speech and chat
@@ -57,7 +59,6 @@ namespace ConditioningControlPanel
         private int _lastSpeechLength = 0; // Track last speech length for delay calc
         private bool _isInputVisible = false;
         private readonly Random _random = new();
-        private bool _mainWindowClosed = false;
 
         /// <summary>
         /// Regex to match markdown-style links: [Link Text](url)
@@ -112,7 +113,7 @@ namespace ConditioningControlPanel
         private const double VerticalOffset = 20;
 
         // Floating animation settings
-        private const double FloatDistance = 8;
+        private const double FloatDistance = 4;
         private const double FloatDuration = 2.0;
 
         // Current scale factor
@@ -242,7 +243,9 @@ namespace ConditioningControlPanel
                 Interval = TimeSpan.FromSeconds(3)
             };
             _poseTimer.Tick += PoseTimer_Tick;
-            
+            if (!_useAnimatedAvatar && _avatarPoses.Length > 1)
+                _poseTimer.Start();
+
             // Subscribe to parent window events
             _parentWindow.LocationChanged += ParentWindow_PositionChanged;
             _parentWindow.SizeChanged += ParentWindow_PositionChanged;
@@ -584,6 +587,34 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Pause the animated GIF to reduce CPU usage when not visible
+        /// </summary>
+        private void PauseAvatarGif()
+        {
+            if (!_useAnimatedAvatar) return;
+            try
+            {
+                var animator = AnimationBehavior.GetAnimator(ImgAvatarAnimated);
+                animator?.Pause();
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Resume the animated GIF when becoming visible again
+        /// </summary>
+        private void ResumeAvatarGif()
+        {
+            if (!_useAnimatedAvatar) return;
+            try
+            {
+                var animator = AnimationBehavior.GetAnimator(ImgAvatarAnimated);
+                animator?.Play();
+            }
+            catch { }
+        }
+
+        /// <summary>
         /// Switch to a specific avatar set (with optional animation)
         /// </summary>
         private void SwitchToAvatarSet(int setNumber, bool animate = true)
@@ -717,14 +748,14 @@ namespace ConditioningControlPanel
                 TxtAvatarTitle.Text = displayName.ToUpperInvariant();
                 TxtAvatarLevel.Visibility = Visibility.Visible;
                 TxtAvatarLevel.Text = companionProgress.IsMaxLevel
-                    ? "MAX!"
-                    : $"Lv. {companionProgress.Level}";
+                    ? Loc.Get("avatar_level_max")
+                    : Loc.GetF("avatar_level_format", companionProgress.Level);
             }
             else
             {
                 // For sets 1-3 (pre-level 50), use legacy avatar titles
-                int titleIndex = Math.Clamp(_currentAvatarSet - 1, 0, AvatarTitles.Length - 1);
-                var title = AvatarTitles[titleIndex];
+                int titleIndex = Math.Clamp(_currentAvatarSet - 1, 0, AvatarTitleKeys.Length - 1);
+                var title = Loc.Get(AvatarTitleKeys[titleIndex]);
                 title = App.Mods?.MakeModAware(title) ?? title;
                 TxtAvatarTitle.Text = title;
 
@@ -736,7 +767,7 @@ namespace ConditioningControlPanel
                 else
                 {
                     TxtAvatarLevel.Visibility = Visibility.Visible;
-                    TxtAvatarLevel.Text = $"Lv. {level}";
+                    TxtAvatarLevel.Text = Loc.GetF("avatar_level_format", level);
                 }
             }
         }
@@ -772,13 +803,50 @@ namespace ConditioningControlPanel
                 // Reload video links for companion speech bubbles
                 ReloadVideoLinks();
 
-                // Reload avatar poses from new mod
-                _avatarPoses = LoadAvatarPoses(_currentAvatarSet);
-                if (_avatarPoses.Length > 0)
+                // Validate current avatar set is supported by the new mod — if not, fall back
+                int playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+                var supportedSets = GetUnlockedAvatarSets(playerLevel);
+                if (supportedSets.Length > 0 && !supportedSets.Contains(_currentAvatarSet))
                 {
-                    _currentPoseIndex = 0;
-                    ImgAvatar.Source = _avatarPoses[0];
+                    var oldSet = _currentAvatarSet;
+                    _currentAvatarSet = supportedSets[0];
+                    _selectedAvatarSet = _currentAvatarSet;
+                    if (App.Settings?.Current != null)
+                    {
+                        App.Settings.Current.SelectedAvatarSet = _selectedAvatarSet;
+                    }
+                    App.Logger?.Information("Avatar set {OldSet} not supported by new mod, switched to {NewSet}",
+                        oldSet, _currentAvatarSet);
                 }
+
+                // Check if the new mod has an animated version for this set
+                _useAnimatedAvatar = HasAnimatedAvatar(_currentAvatarSet);
+
+                // Reload avatar poses from new mod
+                if (_useAnimatedAvatar)
+                {
+                    LoadAnimatedAvatar(_currentAvatarSet);
+                }
+                else
+                {
+                    // Hide animated, show static
+                    ImgAvatarAnimated.Visibility = Visibility.Collapsed;
+                    AnimationBehavior.SetSourceUri(ImgAvatarAnimated, null);
+                    ImgAvatar.Visibility = Visibility.Visible;
+
+                    _avatarPoses = LoadAvatarPoses(_currentAvatarSet);
+                    _currentPoseIndex = 0;
+                    if (_avatarPoses.Length > 0)
+                    {
+                        ImgAvatar.Source = _avatarPoses[0];
+                    }
+                }
+                if (!_useAnimatedAvatar && _avatarPoses.Length > 1)
+                    _poseTimer.Start();
+
+                // Update navigation arrows for supported sets
+                ApplyAvatarTransform(_currentAvatarSet);
+                UpdateNavigationArrows();
 
                 // Refresh voice lines from new mod
                 _voiceLinesPath = Services.CompanionPhraseService.VoiceLineFolder;
@@ -818,7 +886,7 @@ namespace ConditioningControlPanel
             {
                 var dx = App.Mods?.GetAvatarOffsetX() ?? 0;
                 var dy = App.Mods?.GetAvatarOffsetY() ?? 0;
-                AvatarBorder.Margin = new Thickness(5, 100, 126 - dx, 205 + dy);
+                AvatarBorder.Margin = new Thickness(5, 100, 126 - dx, 210 + dy);
                 TitleBox.Margin = new Thickness(0, 0, 121 - dx, 180);
                 InputPanel.Margin = new Thickness(0, 0, 126 - dx, 520);
             }
@@ -826,7 +894,7 @@ namespace ConditioningControlPanel
             {
                 var dx = App.Mods?.GetAvatarDetachedOffsetX() ?? 0;
                 var dy = App.Mods?.GetAvatarDetachedOffsetY() ?? 0;
-                AvatarBorder.Margin = new Thickness(5, 100, 426 - dx, 203 + dy);
+                AvatarBorder.Margin = new Thickness(5, 100, 426 - dx, 208 + dy);
                 TitleBox.Margin = new Thickness(0, 0, 416 - dx, 193);
                 InputPanel.Margin = new Thickness(0, 0, 426 - dx, 520);
             }
@@ -1392,6 +1460,7 @@ namespace ConditioningControlPanel
                 switch (_parentWindow.WindowState)
                 {
                     case WindowState.Minimized:
+                        PauseAvatarGif();
                         if (_isAttached)
                         {
                             Hide();
@@ -1404,6 +1473,7 @@ namespace ConditioningControlPanel
                         break;
                     case WindowState.Normal:
                     case WindowState.Maximized:
+                        ResumeAvatarGif();
                         if (_parentWindow.IsVisible && App.Settings?.Current?.AvatarEnabled == true)
                         {
                             Show();
@@ -1428,6 +1498,7 @@ namespace ConditioningControlPanel
                 if ((bool)e.NewValue && _parentWindow.WindowState != WindowState.Minimized
                     && App.Settings?.Current?.AvatarEnabled == true)
                 {
+                    ResumeAvatarGif();
                     Show();
                     if (_isAttached)
                     {
@@ -1438,6 +1509,7 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
+                    PauseAvatarGif();
                     if (_isAttached)
                     {
                         Hide();
@@ -1516,8 +1588,6 @@ namespace ConditioningControlPanel
             else
             {
                 // Detached mode: keep floating independently
-                _mainWindowClosed = true;
-
                 App.Logger?.Information("Main window closed while detached - tube continues floating");
                 // Wrap in try-catch in case app is shutting down
                 try
@@ -1611,6 +1681,7 @@ namespace ConditioningControlPanel
 
                 // Stop companion timers
                 _speechTimer?.Stop();
+                _speechDelayTimer?.Stop();
                 _idleTimer?.Stop();
                 _triggerTimer?.Stop();
                 _randomBubbleTimer?.Stop();
@@ -2104,7 +2175,7 @@ namespace ConditioningControlPanel
             }
 
             // Use BeginInvoke for non-blocking UI update
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 // Double-check AI bubble state on UI thread
                 if (_isShowingAiBubble)
@@ -2150,7 +2221,7 @@ namespace ConditioningControlPanel
         /// <param name="playSound">Whether to play giggle sound (default true for AI responses)</param>
         public void GigglePriority(string text, bool playSound = true)
         {
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 // Clear AI waiting flag
                 _isWaitingForAi = false;
@@ -2837,6 +2908,7 @@ namespace ConditioningControlPanel
             {
                 System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ =>
                 {
+                    if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                     Dispatcher.Invoke(() => OnTriggerTick(null, EventArgs.Empty));
                 });
             }));
@@ -2929,6 +3001,7 @@ namespace ConditioningControlPanel
             // Spawn a bubble near the avatar after 1 second (speech bubble appears first)
             Task.Delay(1000).ContinueWith(_ =>
             {
+                if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                 Dispatcher.Invoke(() =>
                 {
                     try
@@ -3104,7 +3177,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void ShowVoiceLineBubble(string filePath)
         {
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 if (_isMuted || !IsAvatarVisibleOnScreen) return;
 
@@ -3207,7 +3280,7 @@ namespace ConditioningControlPanel
         private void ShowTriggerBubble(string trigger)
         {
             // Use direct dispatcher invoke to ensure audio plays exactly when bubble shows
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 // When muted, still trigger haptic+audio but skip visual queue logic
                 if (_isMuted)
@@ -3941,7 +4014,7 @@ namespace ConditioningControlPanel
             }
 
             // Show the audio filename text as a speech bubble (audio is already playing from FlashService)
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 // Double-check in case state changed
                 if (_isGiggling) return;
@@ -4512,8 +4585,8 @@ namespace ConditioningControlPanel
 
             // Show current scale percentage
             int scalePercent = (int)(_currentScale * 100);
-            MenuItemShrink.Header = _currentScale > MinScale ? "－ Shrink" : "－ Shrink (min)";
-            MenuItemGrow.Header = _currentScale < MaxScale ? "＋ Grow" : "＋ Grow (max)";
+            MenuItemShrink.Header = _currentScale > MinScale ? Loc.Get("menu_shrink") : Loc.Get("menu_shrink_min");
+            MenuItemGrow.Header = _currentScale < MaxScale ? Loc.Get("menu_grow") : Loc.Get("menu_grow_max");
 
             // Gray out disabled items
             MenuItemShrink.Foreground = MenuItemShrink.IsEnabled
@@ -4822,13 +4895,13 @@ namespace ConditioningControlPanel
             if (customPromptActive)
             {
                 // Show custom prompt indicator
-                MenuItemPersonality.Header = "Personality: Custom Prompt";
+                MenuItemPersonality.Header = Loc.Get("label_personality_custom_prompt");
                 MenuItemPersonality.Foreground = new SolidColorBrush(Color.FromRgb(255, 165, 0)); // Orange for custom
 
                 // Add info item
                 var infoItem = new MenuItem
                 {
-                    Header = "Custom Prompt Active",
+                    Header = Loc.Get("menu_custom_prompt_active"),
                     Foreground = new SolidColorBrush(Color.FromRgb(255, 165, 0)),
                     Background = darkBg,
                     IsEnabled = false
@@ -4841,7 +4914,7 @@ namespace ConditioningControlPanel
                 // Add option to disable custom prompt
                 var disableItem = new MenuItem
                 {
-                    Header = "Disable Custom Prompt",
+                    Header = Loc.Get("menu_disable_custom_prompt"),
                     Foreground = new SolidColorBrush(Colors.White),
                     Background = darkBg
                 };
@@ -4852,7 +4925,7 @@ namespace ConditioningControlPanel
                         App.Settings.Current.CompanionPrompt.UseCustomPrompt = false;
                         App.Settings.Save();
                         UpdateQuickMenuState();
-                        Giggle("Back to presets~ *giggles*");
+                        Giggle(Loc.Get("avatar_back_to_presets"));
                     }
                 };
                 MenuItemPersonality.Items.Add(disableItem);
@@ -4885,7 +4958,7 @@ namespace ConditioningControlPanel
             // Update parent menu header with mode-aware name
             var activePreset = App.Personality?.GetActivePreset();
             var displayName = App.Mods?.GetPersonalityDisplayName(activePreset?.Name ?? "BambiSprite") ?? activePreset?.Name ?? "BambiSprite";
-            MenuItemPersonality.Header = $"Personality: {displayName}";
+            MenuItemPersonality.Header = Loc.GetF("avatar_personality_format", displayName);
         }
 
         private string GetPersonalityMenuHeader(PersonalityPreset preset, string activeId)
@@ -5004,40 +5077,40 @@ namespace ConditioningControlPanel
         public void UpdateQuickMenuState()
         {
             // Talk to companion - mode-aware label
-            var talkToLabel = App.Mods?.GetTalkToLabel() ?? "Talk to Bambi";
+            var talkToLabel = App.Mods?.GetTalkToLabel() ?? Loc.Get("menu_talk_to_bambi");
             var chatAvailable = App.Ai?.IsAvailable == true;
             MenuItemTalkToBambi.IsEnabled = chatAvailable;
             if (chatAvailable)
             {
-                MenuItemTalkToBambi.Header = $"💬 {talkToLabel}";
+                MenuItemTalkToBambi.Header = Loc.GetF("menu_talk_to_format", talkToLabel);
                 MenuItemTalkToBambi.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")); // Pink
             }
             else
             {
-                MenuItemTalkToBambi.Header = $"🔒 {talkToLabel}";
+                MenuItemTalkToBambi.Header = Loc.GetF("menu_talk_to_locked_format", talkToLabel);
                 MenuItemTalkToBambi.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
             }
 
             // Engine state (use Flash.IsRunning as proxy)
             var engineRunning = App.Flash?.IsRunning == true;
-            MenuItemEngine.Header = engineRunning ? "■ Stop Engine" : "▶ Start Engine";
+            MenuItemEngine.Header = engineRunning ? Loc.Get("menu_stop_engine") : Loc.Get("menu_start_engine");
             MenuItemEngine.Foreground = engineRunning ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Color.FromRgb(144, 238, 144));
 
             // Trigger mode
             var triggerOn = App.Settings?.Current?.TriggerModeEnabled == true;
-            MenuItemTriggerMode.Header = triggerOn ? "☑ Trigger Mode" : "☐ Trigger Mode";
+            MenuItemTriggerMode.Header = triggerOn ? Loc.Get("menu_trigger_mode_on") : Loc.Get("menu_trigger_mode_off");
             MenuItemTriggerMode.Foreground = triggerOn ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
 
             // Takeover (Patreon only) - mode-aware name
             var takeoverAvailable = App.Patreon?.HasPremiumAccess == true;
             var takeoverOn = App.Settings?.Current?.AutonomyModeEnabled == true;
-            var takeoverName = App.Mods?.GetTakeoverLabel() ?? "Bambi Takeover";
-            MenuItemBambiTakeover.Header = takeoverOn ? $"☑ {takeoverName}" : $"☐ {takeoverName}";
+            var takeoverName = App.Mods?.GetTakeoverLabel() ?? Loc.Get("menu_bambi_takeover");
+            MenuItemBambiTakeover.Header = takeoverOn ? Loc.GetF("menu_takeover_on_format", takeoverName) : Loc.GetF("menu_takeover_off_format", takeoverName);
             MenuItemBambiTakeover.Foreground = takeoverOn ? new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")) : new SolidColorBrush(Colors.White);
             MenuItemBambiTakeover.IsEnabled = takeoverAvailable;
             if (!takeoverAvailable)
             {
-                MenuItemBambiTakeover.Header = $"🔒 {takeoverName} (Patreon)";
+                MenuItemBambiTakeover.Header = Loc.GetF("menu_takeover_locked_format", takeoverName);
                 MenuItemBambiTakeover.Foreground = new SolidColorBrush(Color.FromRgb(155, 89, 182)); // Purple for Patreon
             }
 
@@ -5045,16 +5118,16 @@ namespace ConditioningControlPanel
             PopulatePersonalityMenu();
 
             // Mute avatar
-            MenuItemMute.Header = _isMuted ? "☑ Mute Avatar" : "☐ Mute Avatar";
+            MenuItemMute.Header = _isMuted ? Loc.Get("menu_mute_avatar_on") : Loc.Get("menu_mute_avatar_off");
             MenuItemMute.Foreground = _isMuted ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Colors.White);
 
             // Mute whispers (inverted - muted when SubAudioEnabled is false)
             var whispersMuted = App.Settings?.Current?.SubAudioEnabled != true;
-            MenuItemMuteWhispers.Header = whispersMuted ? "☑ Mute Whispers" : "☐ Mute Whispers";
+            MenuItemMuteWhispers.Header = whispersMuted ? Loc.Get("menu_mute_whispers_on") : Loc.Get("menu_mute_whispers_off");
             MenuItemMuteWhispers.Foreground = whispersMuted ? new SolidColorBrush(Color.FromRgb(255, 99, 71)) : new SolidColorBrush(Colors.White);
 
             // Pause browser
-            MenuItemPauseBrowser.Header = _isBrowserPaused ? "▶ Resume Browser" : "⏸ Pause Browser";
+            MenuItemPauseBrowser.Header = _isBrowserPaused ? Loc.Get("menu_resume_browser") : Loc.Get("menu_pause_browser");
             MenuItemPauseBrowser.Foreground = _isBrowserPaused ? new SolidColorBrush(Color.FromRgb(144, 238, 144)) : new SolidColorBrush(Colors.White);
 
             // Lock most options when remote controlled (keep talk, attach/detach, resize)
@@ -5062,7 +5135,7 @@ namespace ConditioningControlPanel
             {
                 var lockedBrush = new SolidColorBrush(Color.FromRgb(0x60, 0x60, 0x70));
                 MenuItemEngine.IsEnabled = false;
-                MenuItemEngine.Header = "🔒 Start Engine";
+                MenuItemEngine.Header = Loc.Get("label_start_engine");
                 MenuItemEngine.Foreground = lockedBrush;
                 MenuItemTriggerMode.IsEnabled = false;
                 MenuItemTriggerMode.Foreground = lockedBrush;

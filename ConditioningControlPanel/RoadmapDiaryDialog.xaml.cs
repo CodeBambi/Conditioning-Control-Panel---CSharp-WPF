@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows.Media.Imaging;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -88,7 +89,7 @@ namespace ConditioningControlPanel
             if (btn != null)
             {
                 var originalContent = btn.Content;
-                btn.Content = "Saved!";
+                btn.Content = Loc.Get("btn_saved");
                 btn.IsEnabled = false;
 
                 var timer = new System.Windows.Threading.DispatcherTimer

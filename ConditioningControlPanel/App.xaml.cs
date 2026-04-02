@@ -4,6 +4,8 @@ using System.Threading;
 using System.Net.Http;
 using System.Text;
 using Microsoft.Win32;
+using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.AIService;
 using Serilog;
@@ -41,6 +43,7 @@ namespace ConditioningControlPanel
         private static EventWaitHandle? _showSignal;
         private SplashScreen? _splash;
         private static Thread? _showSignalThread;
+        private readonly TaskCompletionSource _patreonInitDone = new();
 
         /// <summary>
         /// User data folder path in LocalAppData - persists across updates
@@ -448,6 +451,13 @@ namespace ConditioningControlPanel
 
             base.OnStartup(e);
 
+            // Cap all WPF animations to 30 FPS (default 60) to reduce idle CPU usage.
+            // Decorative animations (glows, shimmers, particles) look identical at 30 FPS.
+            // Feature animations using DispatcherTimers are unaffected.
+            System.Windows.Media.Animation.Timeline.DesiredFrameRateProperty.OverrideMetadata(
+                typeof(System.Windows.Media.Animation.Timeline),
+                new FrameworkPropertyMetadata(30));
+
             splash.SetProgress(0.05, "Initializing logging...");
 
             // Setup logging - use UserDataPath (writable) instead of BaseDirectory (may be in Program Files)
@@ -570,12 +580,16 @@ namespace ConditioningControlPanel
             // Clean up stale temp files from previous sessions (crash recovery, leaked files)
             CleanupStaleTempFiles();
 
+            // Initialize localization (must be after settings, before UI)
+            LocalizationManager.Instance.Initialize(Settings?.Current?.Language ?? "en");
+
             // Initialize mod system (must be after settings, before services that use content config)
             Mods = new ModService();
             Mods.Initialize(Settings?.Current?.ActiveModId);
 
             splash.SetProgress(0.3, "Initializing audio...");
             Audio = new AudioService();
+            Audio.RunStartupDiagnostics();
 
             splash.SetProgress(0.4, "Initializing flash service...");
             Flash = new FlashService();
@@ -855,6 +869,10 @@ namespace ConditioningControlPanel
             {
                 Logger?.Error(ex, "Failed to initialize Patreon and sync profile");
             }
+            finally
+            {
+                _patreonInitDone.TrySetResult();
+            }
         }
 
         /// <summary>
@@ -902,6 +920,11 @@ namespace ConditioningControlPanel
                             Logger?.Warning(upgradeEx, "Discord auto-upgrade failed (non-fatal, will retry next launch)");
                         }
                     }
+
+                    // Wait for Patreon init to finish (up to 10s) before deciding whether to load profile
+                    // This prevents a race where Discord init finishes first and calls LoadProfileAsync
+                    // while Patreon is still initializing — causing duplicate profile loads
+                    await Task.WhenAny(_patreonInitDone.Task, Task.Delay(10_000));
 
                     // If not already syncing via Patreon, load cloud profile and start heartbeat for Discord-only users
                     if (Patreon?.IsAuthenticated != true && ProfileSync != null)

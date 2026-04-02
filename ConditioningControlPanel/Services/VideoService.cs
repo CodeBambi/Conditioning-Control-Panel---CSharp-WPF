@@ -9,6 +9,8 @@ using System.Windows.Threading;
 using NAudio.Wave;
 using LibVLCSharp.Shared;
 using LibVLCSharp.WPF;
+using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Localization;
 using Application = System.Windows.Application;
 using Screen = System.Windows.Forms.Screen;
 
@@ -205,7 +207,9 @@ namespace ConditioningControlPanel.Services
                 }
                 finally
                 {
-                    _libVLCInitialized = true;
+                    // Only mark as initialized if it succeeded — allows retry on transient failures
+                    // (e.g., DLL temporarily locked). If it failed, _libVLC is null and next call retries.
+                    _libVLCInitialized = _libVLC != null;
                     _libVLCInitializing = false;
                     _libVLCReady.TrySetResult(_libVLC != null);
                 }
@@ -403,21 +407,21 @@ namespace ConditioningControlPanel.Services
                 // Build helpful error message
                 var activePackCount = App.ContentPacks?.GetActivePackIds()?.Count ?? 0;
                 var installedPackCount = App.ContentPacks?.InstalledPacks?.Count ?? 0;
-                var message = $"No videos found in:\n{_videosPath}\n\n";
+                var message = Loc.GetF("video_no_videos_found", _videosPath) + "\n\n";
 
                 if (installedPackCount > 0 && activePackCount == 0)
                 {
-                    message += $"You have {installedPackCount} content pack(s) installed but none are active.\n";
-                    message += "Go to Assets tab and enable your content packs, or select an Asset Preset.\n\n";
+                    message += Loc.GetF("video_packs_installed_none_active", installedPackCount) + "\n";
+                    message += Loc.Get("video_enable_packs_hint") + "\n\n";
                 }
                 else if (activePackCount > 0)
                 {
-                    message += $"You have {activePackCount} active pack(s) but none contain videos.\n\n";
+                    message += Loc.GetF("video_active_packs_no_videos", activePackCount) + "\n\n";
                 }
 
-                message += "Please add .mp4, .mov, .avi, .wmv, .mkv, or .webm files to your assets folder.";
+                message += Loc.Get("video_add_files_hint");
 
-                System.Windows.MessageBox.Show(message, "No Videos");
+                System.Windows.MessageBox.Show(message, Loc.Get("video_no_videos_title"));
                 return;
             }
 
@@ -446,15 +450,8 @@ namespace ConditioningControlPanel.Services
                             return;
                         }
 
-                        if (Application.Current.Dispatcher.HasShutdownStarted)
-                        {
-                            App.Logger?.Warning("VideoService: Dispatcher is shutting down, cannot play video");
-                            _triggerInProgress = false;
-                            return;
-                        }
-
                         App.Logger?.Debug("VideoService: Freeze delay complete, calling PlayVideo on UI thread");
-                        Application.Current.Dispatcher.Invoke(() =>
+                        DispatcherHelper.RunOnUISync(() =>
                         {
                             PlayVideo(path, App.Settings.Current.StrictLockEnabled);
                         });
@@ -534,14 +531,8 @@ namespace ConditioningControlPanel.Services
                             return;
                         }
 
-                        if (Application.Current.Dispatcher.HasShutdownStarted)
-                        {
-                            App.Logger?.Warning("VideoService: Dispatcher is shutting down, cannot play specific video");
-                            return;
-                        }
-
                         App.Logger?.Debug("VideoService: Freeze delay complete, calling PlayVideo for specific video");
-                        Application.Current.Dispatcher.Invoke(() =>
+                        DispatcherHelper.RunOnUISync(() =>
                         {
                             PlayVideo(videoPath, strictMode);
                         });
@@ -596,7 +587,7 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            Application.Current?.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 _videoPlaying = true;
                 _strictActive = false;
@@ -740,8 +731,8 @@ namespace ConditioningControlPanel.Services
 
             videoView.MediaPlayer = mediaPlayer;
 
-            // Create media from URL
-            var media = new Media(_libVLC!, url, FromType.FromLocation);
+            // Create media from URL — disposed after Play() (LibVLC ref-counts internally)
+            using var media = new Media(_libVLC!, url, FromType.FromLocation);
             mediaPlayer.Play(media);
 
             if (withAudio)
@@ -846,7 +837,7 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("VideoService: LibVLC initialized = {Initialized}, LibVLC instance = {HasInstance}",
                     _libVLCInitialized, _libVLC != null);
 
-                Application.Current.Dispatcher.Invoke(() =>
+                DispatcherHelper.RunOnUISync(() =>
                 {
                     try
                     {
@@ -1115,7 +1106,9 @@ namespace ConditioningControlPanel.Services
             videoView.MediaPlayer = mediaPlayer;
 
             // Create media - use file path directly for better compatibility
-            var media = new Media(_libVLC!, path, FromType.FromPath);
+            // Media is disposed after Play() — LibVLC internally ref-counts, so this is safe
+            // (DualMonitorVideoService already uses this pattern with 'using var media')
+            using var media = new Media(_libVLC!, path, FromType.FromPath);
 
             // Play the media
             mediaPlayer.Play(media);
@@ -1136,9 +1129,6 @@ namespace ConditioningControlPanel.Services
                 mediaPlayer.Mute = true;
                 mediaPlayer.Volume = 0;
             }
-
-                // Don't dispose media - let LibVLC manage it
-                // media.Dispose(); // Commented out - may cause audio issues
 
                 App.Logger?.Debug("LibVLC video window on: {Screen} (audio: {Audio}, vol: {Vol}, mute: {Mute})",
                     screen.DeviceName, withAudio, mediaPlayer.Volume, mediaPlayer.Mute);
@@ -1232,7 +1222,7 @@ namespace ConditioningControlPanel.Services
             };
 
             mediaElement.MediaEnded += (s, e) =>
-                Application.Current.Dispatcher.BeginInvoke(OnEnded);
+                DispatcherHelper.RunOnUI(OnEnded);
 
             mediaElement.MediaFailed += (s, e) =>
             {
@@ -1249,24 +1239,18 @@ namespace ConditioningControlPanel.Services
                     if (!_codecWarningShown)
                     {
                         _codecWarningShown = true;
-                        Application.Current.Dispatcher.BeginInvoke(() =>
+                        DispatcherHelper.RunOnUI(() =>
                         {
                             System.Windows.MessageBox.Show(
-                                "Video playback requires Windows Media components.\n\n" +
-                                "If you're on Windows N/KN edition, please install the Media Feature Pack:\n\n" +
-                                "1. Open Settings > Apps > Optional features\n" +
-                                "2. Click 'Add a feature'\n" +
-                                "3. Search for 'Media Feature Pack'\n" +
-                                "4. Install and restart your PC\n\n" +
-                                "Alternatively, install K-Lite Codec Pack from codecguide.com",
-                                "Video Codec Required",
+                                Loc.Get("video_codec_required_body"),
+                                Loc.Get("video_codec_required_title"),
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Warning);
                         });
                     }
                 }
 
-                Application.Current.Dispatcher.BeginInvoke(OnEnded);
+                DispatcherHelper.RunOnUI(OnEnded);
             };
 
             var grid = new Grid { Background = Brushes.Black };
@@ -1418,8 +1402,7 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    if (Application.Current?.Dispatcher == null) return;
-                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    DispatcherHelper.RunOnUI(() =>
                     {
                         if (!_videoPlaying) return;
 
@@ -1580,8 +1563,7 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
-                        if (Application.Current?.Dispatcher == null) return;
-                        Application.Current.Dispatcher.BeginInvoke(() =>
+                        DispatcherHelper.RunOnUI(() =>
                         {
                             try
                             {
@@ -1779,8 +1761,7 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    if (Application.Current?.Dispatcher == null) return;
-                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    DispatcherHelper.RunOnUI(() =>
                     {
                         CloseMessageWindows();
                         then();
@@ -2330,8 +2311,7 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    if (Application.Current?.Dispatcher == null) return;
-                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    DispatcherHelper.RunOnUI(() =>
                     {
                         try
                         {
@@ -2582,12 +2562,11 @@ namespace ConditioningControlPanel.Services
                 };
 
                 // Random position - ensure window stays fully within bounds
-                var rnd = new Random();
                 // Calculate spawn range: from minX to (maxX - windowWidth)
                 var spawnRangeX = Math.Max(0, (_maxX - w) - _minX);
                 var spawnRangeY = Math.Max(0, (_maxY - h) - _minY);
-                _x = _minX + rnd.NextDouble() * spawnRangeX;
-                _y = _minY + rnd.NextDouble() * spawnRangeY;
+                _x = _minX + Random.Shared.NextDouble() * spawnRangeX;
+                _y = _minY + Random.Shared.NextDouble() * spawnRangeY;
                 // Clamp to ensure we're definitely within bounds
                 _x = Math.Clamp(_x, _minX, Math.Max(_minX, _maxX - w));
                 _y = Math.Clamp(_y, _minY, Math.Max(_minY, _maxY - h));
@@ -2595,7 +2574,7 @@ namespace ConditioningControlPanel.Services
                 _win.Top = _y;
 
                 // Random velocity (slightly faster for better visibility)
-                var angle = rnd.NextDouble() * Math.PI * 2;
+                var angle = Random.Shared.NextDouble() * Math.PI * 2;
                 _vx = Math.Cos(angle) * 3.0;
                 _vy = Math.Sin(angle) * 3.0;
 
@@ -2697,8 +2676,7 @@ namespace ConditioningControlPanel.Services
             {
                 var soundsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "bubbles");
                 var popFiles = new[] { "Pop.mp3", "Pop2.mp3", "Pop3.mp3" };
-                var rnd = new Random();
-                var chosenPop = popFiles[rnd.Next(popFiles.Length)];
+                var chosenPop = popFiles[Random.Shared.Next(popFiles.Length)];
                 var popPath = Path.Combine(soundsPath, chosenPop);
 
                 if (File.Exists(popPath))

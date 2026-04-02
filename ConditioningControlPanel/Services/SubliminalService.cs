@@ -173,8 +173,8 @@ namespace ConditioningControlPanel.Services
             App.Progression?.AddXP(10, XPSource.Subliminal);
         }
 
-        // Track if a deferred reset is pending (for when video ends)
-        private bool _deferredResetPending;
+        // Track if a deferred reset is pending (for when video ends) — accessed from timer/event callbacks
+        private int _deferredResetPending; // 0 = false, 1 = true (for Interlocked)
 
         /// <summary>
         /// Trigger a Bambi Freeze subliminal with audio - used before videos and bubble count games
@@ -212,7 +212,7 @@ namespace ConditioningControlPanel.Services
                 if (deferReset)
                 {
                     // Mark that we should trigger reset when video ends
-                    _deferredResetPending = true;
+                    Interlocked.Exchange(ref _deferredResetPending, 1);
                     App.Logger?.Information("Bambi Freeze triggered with audio (reset deferred until video ends)");
                 }
                 else
@@ -235,12 +235,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void TriggerDeferredBambiReset()
         {
-            if (!_deferredResetPending)
+            if (Interlocked.CompareExchange(ref _deferredResetPending, 0, 1) != 1)
             {
                 return;
             }
-
-            _deferredResetPending = false;
 
             // 90% chance to trigger reset
             if (_random.NextDouble() > 0.90)
@@ -421,7 +419,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Could not play subliminal audio: {Error}", ex.Message);
+                App.Logger?.Warning("Could not play subliminal audio: {Error}", ex.Message);
                 App.Audio.Unduck();
             }
         }
@@ -469,6 +467,9 @@ namespace ConditioningControlPanel.Services
 
         private void ShowSubliminalVisuals(string text, int? opacity = null)
         {
+            // Guard against delayed callbacks firing after Stop() — prevents orphaned windows
+            if (!_isRunning) return;
+
             // Prevent memory explosion from too many concurrent subliminal windows
             if (_activeWindows.Count >= 15) return;
 

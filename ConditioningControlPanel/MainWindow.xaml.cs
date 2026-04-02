@@ -14,7 +14,9 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Rectangle = System.Windows.Shapes.Rectangle;
 using NAudio.Wave;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
@@ -89,28 +91,33 @@ namespace ConditioningControlPanel
         private DispatcherTimer? _remoteNotificationTimer;
         private DispatcherTimer? _remoteSessionInfoTimer;
 
+        // Tab animation storyboards (so they can be stopped when tab is hidden)
+        private Storyboard? _seasonTitleStoryboard;
+        private Storyboard? _lockdownPulseStoryboard;
+        private bool _skillTreeAnimationsActive = false;
+
         private static readonly Dictionary<string, string> CommandLabels = new()
         {
-            ["show_pink_filter"] = "Pink Filter enabled",
-            ["stop_pink_filter"] = "Pink Filter disabled",
-            ["show_spiral"] = "Spiral enabled",
-            ["stop_spiral"] = "Spiral disabled",
-            ["start_bubbles"] = "Bubbles started",
-            ["stop_bubbles"] = "Bubbles stopped",
-            ["trigger_video"] = "Video triggered",
-            ["trigger_haptic"] = "Haptic triggered",
-            ["trigger_bubble_count"] = "Bubble Count triggered",
-            ["start_autonomy"] = "Autonomy enabled",
-            ["stop_autonomy"] = "Autonomy disabled",
-            ["start_session"] = "Session started",
-            ["pause_session"] = "Session paused",
-            ["resume_session"] = "Session resumed",
-            ["stop_session"] = "Session stopped",
-            ["enable_strict_lock"] = "Strict Lock enabled",
-            ["disable_strict_lock"] = "Strict Lock disabled",
-            ["disable_panic"] = "Panic key disabled",
-            ["enable_panic"] = "Panic key enabled",
-            ["trigger_panic"] = "All effects stopped",
+            ["show_pink_filter"] = "cmd_pink_filter_enabled",
+            ["stop_pink_filter"] = "cmd_pink_filter_disabled",
+            ["show_spiral"] = "cmd_spiral_enabled",
+            ["stop_spiral"] = "cmd_spiral_disabled",
+            ["start_bubbles"] = "cmd_bubbles_started",
+            ["stop_bubbles"] = "cmd_bubbles_stopped",
+            ["trigger_video"] = "cmd_video_triggered",
+            ["trigger_haptic"] = "cmd_haptic_triggered",
+            ["trigger_bubble_count"] = "cmd_bubble_count_triggered",
+            ["start_autonomy"] = "cmd_autonomy_enabled",
+            ["stop_autonomy"] = "cmd_autonomy_disabled",
+            ["start_session"] = "cmd_session_started",
+            ["pause_session"] = "cmd_session_paused",
+            ["resume_session"] = "cmd_session_resumed",
+            ["stop_session"] = "cmd_session_stopped",
+            ["enable_strict_lock"] = "cmd_strict_lock_enabled",
+            ["disable_strict_lock"] = "cmd_strict_lock_disabled",
+            ["disable_panic"] = "cmd_panic_key_disabled",
+            ["enable_panic"] = "cmd_panic_key_enabled",
+            ["trigger_panic"] = "cmd_all_effects_stopped",
         };
 
         private static readonly HashSet<string> SuppressedCommands = new()
@@ -125,6 +132,7 @@ namespace ConditioningControlPanel
         /// </summary>
         public event EventHandler? EngineStopped;
         private DateTime _lastPanicTime = DateTime.MinValue;
+        private string? _lastKnownUnifiedId;
 
         /// <summary>
         /// Gets the browser WebView2 control for external access (e.g., avatar audio controls)
@@ -276,6 +284,7 @@ namespace ConditioningControlPanel
 
             // Subscribe to cloud profile sync event to refresh UI when profile loads
             App.ProfileSync.ProfileLoaded += OnProfileLoaded;
+            App.ProfileSync.SyncHealthChanged += OnSyncHealthChanged;
 
             LoadSettings();
             InitializePresets();
@@ -376,6 +385,7 @@ namespace ConditioningControlPanel
 
             Task.Delay(TimeSpan.FromSeconds(schedulerGracePeriodSeconds)).ContinueWith(_ =>
             {
+                if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                 Dispatcher.BeginInvoke(() =>
                 {
                     if (Application.Current == null) return;
@@ -419,6 +429,24 @@ namespace ConditioningControlPanel
                         App.Autonomy?.Start();
                         App.Logger?.Information("Started autonomy service after profile loaded");
                     }
+                }
+            });
+        }
+
+        private void OnSyncHealthChanged(object? sender, int failureCount)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (failureCount >= 3)
+                {
+                    App.Logger?.Warning("[SyncHealth] {Count} consecutive sync failures — notifying user", failureCount);
+                    // Show a subtle notification in the title bar area
+                    Title = $"Conditioning Control Panel — Cloud sync issue";
+                }
+                else if (failureCount == 0)
+                {
+                    // Restore normal title
+                    Title = "Conditioning Control Panel";
                 }
             });
         }
@@ -557,7 +585,7 @@ namespace ConditioningControlPanel
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Debug("Failed to play level up sound: {Error}", ex.Message);
+                        App.Logger?.Warning("Failed to play level up sound: {Error}", ex.Message);
                     }
                 });
             }
@@ -675,7 +703,7 @@ namespace ConditioningControlPanel
                 {
                     // Update pause button to show resume icon
                     if (TxtPauseIcon != null) TxtPauseIcon.Text = "▶";
-                    if (BtnPauseSession != null) BtnPauseSession.ToolTip = "Resume session";
+                    if (BtnPauseSession != null) BtnPauseSession.ToolTip = Loc.Get("tooltip_resume_session");
                 }
             }
             else if (_panicPressCount >= 2)
@@ -753,9 +781,9 @@ namespace ConditioningControlPanel
                 TxtTakeoverHeader.Text = $"🤖 {takeoverLabel}";
                 TxtTakeoverLocked.Text = $"🤖 {takeoverLabel}";
                 TxtTakeoverUnlocked.Text = $"🤖 {takeoverLabel}";
-                BtnAutonomyStartStop.ToolTip = $"Start/Stop {takeoverLabel}";
-                ImgTakeover.ToolTip = $"{takeoverLabel} - Let her take control~";
-                RunPatreonFeatures.Text = $"AI Chat, Window Awareness, Slut Mode, {takeoverLabel}";
+                BtnAutonomyStartStop.ToolTip = Loc.GetF("tooltip_start_stop_takeover", takeoverLabel);
+                ImgTakeover.ToolTip = Loc.GetF("tooltip_takeover_let_her_take_control", takeoverLabel);
+                RunPatreonFeatures.Text = Loc.GetF("label_patreon_features", takeoverLabel);
             }
             catch (Exception ex)
             {
@@ -1015,6 +1043,15 @@ namespace ConditioningControlPanel
                 // Refresh all mod-aware UI
                 InitializeModSelector();
                 LoadLogo();
+                LoadTakeoverImage();
+                LoadFeatureImages();
+                RefreshThemeAwareElements();
+
+                // Refresh achievement images for new mod
+                PopulateAchievementGrid();
+
+                // Refresh skill tree images for new mod
+                DrawSkillTree();
 
                 // Hide/show BambiCloud based on mod
                 var showBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
@@ -1265,6 +1302,12 @@ namespace ConditioningControlPanel
             ApplyModFeatureNames();
             if (App.Mods != null)
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
+
+            // Re-apply code-behind strings when language changes (section headers, feature names, etc.)
+            LocalizationManager.Instance.LanguageChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
+
+            // Initialize language selector
+            InitializeLanguageSelector();
 
             // Initialize quick login UI
             UpdateQuickLoginUI();
@@ -1523,8 +1566,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        private const int WM_SYSCOMMAND = 0x0112;
-        private const int SC_MINIMIZE = 0xF020;
         private const int WM_GETMINMAXINFO = 0x0024;
 
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
@@ -1542,16 +1583,8 @@ namespace ConditioningControlPanel
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            // Intercept minimize command to hide to tray instead
-            if (msg == WM_SYSCOMMAND && (wParam.ToInt32() & 0xFFF0) == SC_MINIMIZE)
-            {
-                handled = true; // Mark as handled to prevent default minimize
-                // Hide avatar tube FIRST to avoid event handler issues
-                HideAvatarTube();
-                _trayIcon?.MinimizeToTray();
-            }
             // Fix maximized window extending behind taskbar (buttons cut off)
-            else if (msg == WM_GETMINMAXINFO)
+            if (msg == WM_GETMINMAXINFO)
             {
                 var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(lParam);
 
@@ -2087,7 +2120,7 @@ namespace ConditioningControlPanel
             // If not active (locked), show message
             if (App.Roadmap?.IsStepActive(stepId) != true)
             {
-                MessageBox.Show("Complete the previous steps first!", "Step Locked",
+                MessageBox.Show(Loc.Get("msg_complete_the_previous_steps_first"), "Step Locked",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -2122,8 +2155,8 @@ namespace ConditioningControlPanel
 
             // Prompt for optional note
             string? note = null;
-            var noteDialog = new InputDialog("Add Note (Optional)",
-                "Add a personal note about this step:", "");
+            var noteDialog = new InputDialog(Loc.Get("title_add_note"),
+                Loc.Get("msg_add_note_prompt"), "");
             if (noteDialog.ShowDialog() == true && !string.IsNullOrEmpty(noteDialog.ResultText))
             {
                 note = noteDialog.ResultText;
@@ -2300,7 +2333,7 @@ namespace ConditioningControlPanel
                 {
                     DailyCompletedOverlay.Visibility = Visibility.Visible;
                     BtnRerollDaily.IsEnabled = false;
-                    BtnRerollDaily.Content = "✅ Completed";
+                    BtnRerollDaily.Content = Loc.Get("btn_completed");
                 }
                 else
                 {
@@ -2371,7 +2404,7 @@ namespace ConditioningControlPanel
                 {
                     WeeklyCompletedOverlay.Visibility = Visibility.Visible;
                     BtnRerollWeekly.IsEnabled = false;
-                    BtnRerollWeekly.Content = "✅ Completed";
+                    BtnRerollWeekly.Content = Loc.Get("btn_completed");
                 }
                 else
                 {
@@ -2582,21 +2615,21 @@ namespace ConditioningControlPanel
 
                 if (_isStreakFixMode)
                 {
-                    BtnFixStreak.Content = "✖ Cancel";
+                    BtnFixStreak.Content = Loc.Get("btn_cancel_2");
                 }
                 else
                 {
-                    BtnFixStreak.Content = "🔧 Fix Day";
+                    BtnFixStreak.Content = Loc.Get("btn_fix_day");
                 }
 
                 if (alreadyUsed)
-                    BtnFixStreak.ToolTip = "Already used this season";
+                    BtnFixStreak.ToolTip = Loc.Get("tooltip_already_used_this_season");
                 else if (!hasEnoughXP)
-                    BtnFixStreak.ToolTip = "Requires 500 XP";
+                    BtnFixStreak.ToolTip = Loc.Get("tooltip_requires_500_xp");
                 else if (!hasMissedDays)
-                    BtnFixStreak.ToolTip = "No missed days — your streak is perfect!";
+                    BtnFixStreak.ToolTip = Loc.Get("tooltip_no_missed_days_your_streak_is_perfect");
                 else
-                    BtnFixStreak.ToolTip = "Use Oopsie Insurance to fix a missed day (500 XP)";
+                    BtnFixStreak.ToolTip = Loc.Get("tooltip_use_oopsie_insurance_to_fix_a_missed_day_500");
             }
             else
             {
@@ -2624,7 +2657,7 @@ namespace ConditioningControlPanel
 
             if (settings.SeasonalStreakRecoveryUsed)
             {
-                TxtFixStreakStatus.Text = "Already used Oopsie Insurance this season!";
+                TxtFixStreakStatus.Text = Loc.Get("label_already_used_oopsie_insurance_this_season");
                 TxtFixStreakStatus.Visibility = Visibility.Visible;
                 return;
             }
@@ -2641,21 +2674,21 @@ namespace ConditioningControlPanel
 
             if (!hasMissedDays)
             {
-                TxtFixStreakStatus.Text = "No broken streak — you're doing great sweetie!";
+                TxtFixStreakStatus.Text = Loc.Get("label_no_broken_streak_you_re_doing_great_sweetie");
                 TxtFixStreakStatus.Visibility = Visibility.Visible;
                 return;
             }
 
             if (settings.PlayerXP < 500)
             {
-                TxtFixStreakStatus.Text = "Not enough XP! You need 500 XP to fix a day.";
+                TxtFixStreakStatus.Text = Loc.Get("label_not_enough_xp_you_need_500_xp_to_fix_a_day");
                 TxtFixStreakStatus.Visibility = Visibility.Visible;
                 return;
             }
 
             // Enter fix mode
             _isStreakFixMode = true;
-            TxtFixStreakStatus.Text = "Click a missed day to fix it (costs 500 XP, once per season)";
+            TxtFixStreakStatus.Text = Loc.Get("label_click_a_missed_day_to_fix_it_costs_500_xp_onc");
             TxtFixStreakStatus.Visibility = Visibility.Visible;
             RefreshStreakCalendar();
         }
@@ -2689,7 +2722,7 @@ namespace ConditioningControlPanel
             var fixDateStr = fixDate.ToString("yyyy-MM-dd");
             if (App.ProfileSync != null && !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId))
             {
-                TxtFixStreakStatus.Text = "Processing...";
+                TxtFixStreakStatus.Text = Loc.Get("label_processing");
                 TxtFixStreakStatus.Visibility = Visibility.Visible;
 
                 var (success, error, newXp) = await App.ProfileSync.UseOopsieInsuranceAsync(fixDateStr);
@@ -2718,7 +2751,7 @@ namespace ConditioningControlPanel
             else
             {
                 // No cloud account
-                TxtFixStreakStatus.Text = "❌ Oopsie Insurance requires a cloud account. Please log in first.";
+                TxtFixStreakStatus.Text = Loc.Get("label_oopsie_insurance_requires_a_cloud_account_ple");
                 TxtFixStreakStatus.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF5252"));
                 TxtFixStreakStatus.Visibility = Visibility.Visible;
                 return;
@@ -2799,7 +2832,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void OpenUnifiedLoginDialog()
         {
-            var previousUnifiedId = App.UnifiedUserId;
+            var previousUnifiedId = App.UnifiedUserId ?? _lastKnownUnifiedId;
 
             var loginDialog = new LoginDialog
             {
@@ -2885,7 +2918,7 @@ namespace ConditioningControlPanel
                         }
 
                         // Refresh UI on the dispatcher thread after sync completes
-                        Application.Current?.Dispatcher?.Invoke(() =>
+                        DispatcherHelper.RunOnUISync(() =>
                         {
                             // Generate quests AFTER cloud data has been restored
                             if (!isSameAccount)
@@ -3001,8 +3034,23 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Logs out from all providers
         /// </summary>
-        private void BtnQuickLogout_Click(object sender, RoutedEventArgs e)
+        private async void BtnQuickLogout_Click(object sender, RoutedEventArgs e)
         {
+            // Push latest state to server before clearing local data
+            // (prevents streak/progression loss when heartbeat hasn't synced yet)
+            try
+            {
+                if (App.ProfileSync != null && !string.IsNullOrEmpty(App.UnifiedUserId))
+                    await App.ProfileSync.SyncProfileAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to sync before logout");
+            }
+
+            // Remember which account was logged in (for same-account detection on re-login)
+            _lastKnownUnifiedId = App.UnifiedUserId;
+
             // Stop heartbeat
             App.ProfileSync?.StopHeartbeat();
 
@@ -3238,7 +3286,7 @@ namespace ConditioningControlPanel
                 ChkQuickDiscordRichPresence.IsChecked = false;
                 if (ChkDiscordTabRichPresence != null) ChkDiscordTabRichPresence.IsChecked = false;
                 _isLoading = false;
-                MessageBox.Show("Discord Rich Presence requires a linked Discord account.\n\nLink your Discord in the Profile tab first.",
+                MessageBox.Show(Loc.Get("msg_discord_rich_presence_requires_a_linked_disco"),
                     "Discord Not Linked", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -3307,10 +3355,55 @@ namespace ConditioningControlPanel
 
         #endregion
 
+        private void InitializeLanguageSelector()
+        {
+            if (CmbLanguagePill == null) return;
+
+            CmbLanguagePill.Items.Clear();
+            int selectedIndex = 0;
+            var currentLang = App.Settings?.Current?.Language ?? "en";
+
+            for (int i = 0; i < LocalizationManager.AvailableLanguages.Length; i++)
+            {
+                var (code, displayName, shortName) = LocalizationManager.AvailableLanguages[i];
+                CmbLanguagePill.Items.Add(new ComboBoxItem
+                {
+                    Content = $"🌐 {shortName}",
+                    Tag = code,
+                    ToolTip = displayName
+                });
+                if (code == currentLang)
+                    selectedIndex = i;
+            }
+
+            CmbLanguagePill.SelectedIndex = selectedIndex;
+        }
+
+        private void CmbLanguagePill_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CmbLanguagePill?.SelectedItem is not ComboBoxItem selected) return;
+            var langCode = selected.Tag as string ?? "en";
+
+            if (App.Settings?.Current != null && App.Settings.Current.Language != langCode)
+            {
+                App.Settings.Current.Language = langCode;
+                LocalizationManager.Instance.SetLanguage(langCode);
+                App.Settings.Save();
+
+                // XAML bindings update live; code-behind strings need a restart
+                if (TxtBannerSecondary != null)
+                {
+                    TxtBannerSecondary.Text = Loc.Get("msg_restart_to_apply");
+                    TxtBannerSecondary.Opacity = 1;
+                    TxtBannerSecondary.IsHitTestVisible = true;
+                }
+            }
+        }
+
         private async void BtnCheckUpdates_Click(object sender, RoutedEventArgs e)
         {
             BtnCheckUpdates.IsEnabled = false;
-            BtnCheckUpdates.Content = "Checking...";
+            BtnCheckUpdates.Content = Loc.Get("btn_checking");
 
             try
             {
@@ -3319,7 +3412,7 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnCheckUpdates.IsEnabled = true;
-                BtnCheckUpdates.Content = "Check for Updates";
+                BtnCheckUpdates.Content = Loc.Get("btn_check_updates");
             }
         }
 
@@ -3363,6 +3456,147 @@ namespace ConditioningControlPanel
             });
         }
 
+        #region Tab Animation Management
+
+        private void StartSeasonTitleShimmer()
+        {
+            if (_seasonTitleStoryboard != null) return; // already running
+            try
+            {
+                _seasonTitleStoryboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever };
+                var startPt = new PointAnimation { From = new Point(-1, 0.5), To = new Point(1, 0.5), Duration = TimeSpan.FromSeconds(3) };
+                Storyboard.SetTargetName(startPt, "SeasonTitleBrush");
+                Storyboard.SetTargetProperty(startPt, new PropertyPath("StartPoint"));
+                var endPt = new PointAnimation { From = new Point(0, 0.5), To = new Point(2, 0.5), Duration = TimeSpan.FromSeconds(3) };
+                Storyboard.SetTargetName(endPt, "SeasonTitleBrush");
+                Storyboard.SetTargetProperty(endPt, new PropertyPath("EndPoint"));
+                var glow = new DoubleAnimation { From = 0.3, To = 0.9, Duration = TimeSpan.FromSeconds(1.5), AutoReverse = true };
+                Storyboard.SetTargetName(glow, "TxtSeasonTitle");
+                Storyboard.SetTargetProperty(glow, new PropertyPath("(TextBlock.Effect).(DropShadowEffect.Opacity)"));
+                _seasonTitleStoryboard.Children.Add(startPt);
+                _seasonTitleStoryboard.Children.Add(endPt);
+                _seasonTitleStoryboard.Children.Add(glow);
+                _seasonTitleStoryboard.Begin(this, true);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to start season title shimmer: {Error}", ex.Message);
+            }
+        }
+
+        private void StopSeasonTitleShimmer()
+        {
+            try
+            {
+                _seasonTitleStoryboard?.Stop(this);
+                _seasonTitleStoryboard = null;
+            }
+            catch { }
+        }
+
+        private void StartLockdownPulse()
+        {
+            if (_lockdownPulseStoryboard != null) return;
+            try
+            {
+                _lockdownPulseStoryboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever, AutoReverse = true };
+                var colorAnim = new ColorAnimation { From = (Color)ColorConverter.ConvertFromString("#FF1493"), To = (Color)ColorConverter.ConvertFromString("#FF69B4"), Duration = TimeSpan.FromSeconds(1.5) };
+                Storyboard.SetTargetName(colorAnim, "LockdownImageBorderBrush");
+                Storyboard.SetTargetProperty(colorAnim, new PropertyPath(SolidColorBrush.ColorProperty));
+                var blurAnim = new DoubleAnimation { From = 12, To = 22, Duration = TimeSpan.FromSeconds(1.5) };
+                Storyboard.SetTargetName(blurAnim, "LockdownImageGlow");
+                Storyboard.SetTargetProperty(blurAnim, new PropertyPath(DropShadowEffect.BlurRadiusProperty));
+                var opacAnim = new DoubleAnimation { From = 0.7, To = 1.0, Duration = TimeSpan.FromSeconds(1.5) };
+                Storyboard.SetTargetName(opacAnim, "LockdownImageGlow");
+                Storyboard.SetTargetProperty(opacAnim, new PropertyPath(DropShadowEffect.OpacityProperty));
+                _lockdownPulseStoryboard.Children.Add(colorAnim);
+                _lockdownPulseStoryboard.Children.Add(blurAnim);
+                _lockdownPulseStoryboard.Children.Add(opacAnim);
+                _lockdownPulseStoryboard.Begin(this, true);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to start lockdown pulse: {Error}", ex.Message);
+            }
+        }
+
+        private void StopLockdownPulse()
+        {
+            try
+            {
+                _lockdownPulseStoryboard?.Stop(this);
+                _lockdownPulseStoryboard = null;
+            }
+            catch { }
+        }
+
+        private void StopSkillTreeAnimations()
+        {
+            if (!_skillTreeAnimationsActive) return;
+            _skillTreeAnimationsActive = false;
+            try
+            {
+                // Stop gradient animations on the outer border background
+                if (SkillTreeOuterBorder.Background is LinearGradientBrush bgBrush)
+                {
+                    foreach (var stop in bgBrush.GradientStops)
+                    {
+                        stop.BeginAnimation(GradientStop.OffsetProperty, null);
+                        stop.BeginAnimation(GradientStop.ColorProperty, null);
+                    }
+                }
+
+                // Stop particle opacity animations
+                foreach (var child in SkillTreeCanvas.Children)
+                {
+                    if (child is System.Windows.Shapes.Ellipse ellipse)
+                    {
+                        ellipse.BeginAnimation(OpacityProperty, null);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to stop skill tree animations: {Error}", ex.Message);
+            }
+        }
+
+        private void RestartSkillTreeAnimations()
+        {
+            if (_skillTreeAnimationsActive) return;
+            _skillTreeAnimationsActive = true;
+            try
+            {
+                // Re-apply gradient animations on outer border
+                SkillTreeOuterBorder.Background = CreateAnimatedSkillTreeBrush(isHeader: false);
+
+                // Re-animate particles
+                foreach (var child in SkillTreeCanvas.Children)
+                {
+                    if (child is System.Windows.Shapes.Ellipse ellipse)
+                    {
+                        var opacityAnim = new DoubleAnimation
+                        {
+                            From = 0,
+                            To = 1,
+                            Duration = TimeSpan.FromSeconds(2 + Random.Shared.NextDouble() * 3),
+                            BeginTime = TimeSpan.FromSeconds(Random.Shared.NextDouble() * 5),
+                            AutoReverse = true,
+                            RepeatBehavior = RepeatBehavior.Forever,
+                            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+                        };
+                        ellipse.BeginAnimation(OpacityProperty, opacityAnim);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Failed to restart skill tree animations: {Error}", ex.Message);
+            }
+        }
+
+        #endregion
+
         private void AnimateTabIn(UIElement tab)
         {
             try
@@ -3382,6 +3616,11 @@ namespace ConditioningControlPanel
 
         private void ShowTab(string tab)
         {
+            // Stop animations on tabs we're leaving to reduce idle CPU
+            StopSeasonTitleShimmer();
+            StopLockdownPulse();
+            StopSkillTreeAnimations();
+
             // Hide all tabs
             SettingsTab.Visibility = Visibility.Collapsed;
             PresetsTab.Visibility = Visibility.Collapsed;
@@ -3431,6 +3670,7 @@ namespace ConditioningControlPanel
                     {
                         ProgressionTab.Visibility = Visibility.Visible;
                         AnimateTabIn(ProgressionTab);
+                        RestartSkillTreeAnimations();
                         App.Logger?.Debug("ShowTab: ProgressionTab visibility set to Visible.");
                     }
                     catch (Exception ex)
@@ -3445,6 +3685,7 @@ namespace ConditioningControlPanel
                     QuestsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(QuestsTab);
                     BtnQuests.Style = activeStyle;
+                    StartSeasonTitleShimmer();
                     RefreshQuestUI();
                     break;
 
@@ -3475,6 +3716,7 @@ namespace ConditioningControlPanel
                     LabTab.Visibility = Visibility.Visible;
                     AnimateTabIn(LabTab);
                     BtnLab.Style = activeStyle;
+                    StartLockdownPulse();
                     break;
 
                 case "patreon":
@@ -3560,7 +3802,7 @@ namespace ConditioningControlPanel
 
             if (App.Ai == null || !App.Ai.IsAvailable)
             {
-                MessageBox.Show("You need to be logged in to use the AI quiz.", "Login Required",
+                MessageBox.Show(Loc.Get("msg_you_need_to_be_logged_in_to_use_the_ai_quiz"), "Login Required",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -3714,13 +3956,13 @@ namespace ConditioningControlPanel
                     {
                         ChkStrictLock.IsEnabled = false;
                         ChkStrictLock.Opacity = 0.4;
-                        ChkStrictLock.ToolTip = "YOU ARE IN LOCKDOWN MODE, THERE IS NO ESCAPE!";
+                        ChkStrictLock.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
                     }
                     if (ChkNoPanic != null)
                     {
                         ChkNoPanic.IsEnabled = false;
                         ChkNoPanic.Opacity = 0.4;
-                        ChkNoPanic.ToolTip = "YOU ARE IN LOCKDOWN MODE, THERE IS NO ESCAPE!";
+                        ChkNoPanic.ToolTip = Loc.Get("tooltip_you_are_in_lockdown_mode_there_is_no_escape");
                     }
 
                     // Swap UI panels
@@ -4008,10 +4250,12 @@ namespace ConditioningControlPanel
             if (e.OriginalSource is GridViewColumnHeader header && header.Content is string headerText)
             {
                 // Map header text to sort field
+                // In all-time mode, level column is hidden so skip level sort
+                var levelSort = _leaderboardMode == "all-time" ? "xp" : "level";
                 string? sortField = headerText switch
                 {
-                    "Rank" => "level",
-                    "Level" => "level",
+                    "Rank" => levelSort,
+                    "Level" => levelSort,
                     "XP" => "xp",
                     "Patreon" => "is_patreon",
                     "Name" => null, // Client-side sort
@@ -4029,31 +4273,31 @@ namespace ConditioningControlPanel
                 else if (headerText == "Name")
                 {
                     // Client-side alphabetical sort
-                    TxtLeaderboardStatus.Text = "Sorting by name...";
+                    TxtLeaderboardStatus.Text = Loc.Get("label_sorting_by_name");
                     var sorted = App.Leaderboard.Entries.OrderBy(x => x.DisplayName).ToList();
                     LstLeaderboard.ItemsSource = sorted;
-                    TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users • Sorted by Name";
+                    TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users_sorted_by_name", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
                 }
                 else if (headerText == "Online")
                 {
                     // Client-side: online first, then by level descending
-                    TxtLeaderboardStatus.Text = "Sorting by online status...";
+                    TxtLeaderboardStatus.Text = Loc.Get("label_sorting_by_online_status");
                     var sorted = App.Leaderboard.Entries
                         .OrderByDescending(x => x.IsOnline)
                         .ThenByDescending(x => x.Level)
                         .ToList();
                     LstLeaderboard.ItemsSource = sorted;
-                    TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users • Online first";
+                    TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users_online_first", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
                 }
                 else if (headerText == "Achievements")
                 {
                     // Client-side: by achievement count descending
-                    TxtLeaderboardStatus.Text = "Sorting by achievements...";
+                    TxtLeaderboardStatus.Text = Loc.Get("label_sorting_by_achievements");
                     var sorted = App.Leaderboard.Entries
                         .OrderByDescending(x => x.AchievementsCount)
                         .ToList();
                     LstLeaderboard.ItemsSource = sorted;
-                    TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users • Sorted by Achievements";
+                    TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users_sorted_by_achievements", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
                 }
             }
         }
@@ -4182,10 +4426,20 @@ namespace ConditioningControlPanel
                 var gridView = LstLeaderboard?.View as GridView;
                 if (gridView == null || gridView.Columns.Count == 0) return;
 
+                var isAllTime = _leaderboardMode == "all-time";
+
                 var seasonsCol = gridView.Columns.FirstOrDefault(c => c.Header?.ToString() == "Seasons");
                 if (seasonsCol != null)
                 {
-                    seasonsCol.Width = _leaderboardMode == "all-time" ? 80 : 0;
+                    seasonsCol.Width = isAllTime ? 80 : 0;
+                }
+
+                // Hide level column in all-time mode (inconsistent after season resets)
+                var levelHeader = Loc.Get("label_level");
+                var levelCol = gridView.Columns.FirstOrDefault(c => c.Header?.ToString() == levelHeader);
+                if (levelCol != null)
+                {
+                    levelCol.Width = isAllTime ? 0 : 100;
                 }
             }
             catch (Exception ex)
@@ -4239,7 +4493,7 @@ namespace ConditioningControlPanel
         {
             if (App.Leaderboard == null || TxtLeaderboardStatus == null || BtnRefreshLeaderboard == null) return;
 
-            TxtLeaderboardStatus.Text = "Syncing...";
+            TxtLeaderboardStatus.Text = Loc.Get("label_syncing");
             BtnRefreshLeaderboard.IsEnabled = false;
 
             try
@@ -4260,29 +4514,29 @@ namespace ConditioningControlPanel
                     App.Logger?.Information("Profile sync completed");
                 }
 
-                TxtLeaderboardStatus.Text = "Loading...";
+                TxtLeaderboardStatus.Text = Loc.Get("label_loading_2");
                 var success = await App.Leaderboard.RefreshAsync(sortBy, _leaderboardMode);
 
                 if (success)
                 {
                     // Apply client-side sort (server always returns XP order from sorted set)
                     ApplyLeaderboardSort(sortBy ?? App.Leaderboard.CurrentSortBy);
-                    TxtLeaderboardStatus.Text = $"{App.Leaderboard.OnlineUsers} online / {App.Leaderboard.TotalUsers} users";
+                    TxtLeaderboardStatus.Text = Loc.GetF("label_0_online_1_users", App.Leaderboard.OnlineUsers, App.Leaderboard.TotalUsers);
 
                     // Update season flavour text based on mode
                     if (_leaderboardMode == "all-time")
                     {
-                        TxtLeaderboardSeason.Text = "all-time ~ legends never die~";
+                        TxtLeaderboardSeason.Text = Loc.Get("label_all_time_legends_never_die");
                         if (TxtLeaderboardSubtitle != null)
-                            TxtLeaderboardSubtitle.Text = "cumulative XP across all seasons~";
+                            TxtLeaderboardSubtitle.Text = Loc.Get("label_cumulative_xp_across_all_seasons");
                     }
                     else
                     {
                         var seasonTitle = App.QuestDefinitions?.SeasonTitle;
                         if (!string.IsNullOrEmpty(seasonTitle))
-                            TxtLeaderboardSeason.Text = $"{seasonTitle} ~ prove your devotion~";
+                            TxtLeaderboardSeason.Text = Loc.GetF("label_0_prove_your_devotion", seasonTitle);
                         if (TxtLeaderboardSubtitle != null)
-                            TxtLeaderboardSubtitle.Text = "resets monthly — your rank is everything~";
+                            TxtLeaderboardSubtitle.Text = Loc.Get("label_resets_monthly_your_rank_is_everything");
                     }
 
                     // Show/hide Trophy Case columns based on skill unlock
@@ -4292,13 +4546,13 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    TxtLeaderboardStatus.Text = App.Leaderboard.LastRefreshError ?? "Failed to load";
+                    TxtLeaderboardStatus.Text = App.Leaderboard.LastRefreshError ?? Loc.Get("label_failed_to_load");
                 }
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Error refreshing leaderboard");
-                TxtLeaderboardStatus.Text = "Error loading leaderboard";
+                TxtLeaderboardStatus.Text = Loc.Get("label_error_loading_leaderboard");
             }
             finally
             {
@@ -4385,7 +4639,7 @@ namespace ConditioningControlPanel
             {
                 var unlocked = App.Achievements.GetUnlockedCount();
                 var total = App.Achievements.GetTotalCount();
-                TxtAchievementCount.Text = $"{unlocked} / {total} Achievements Unlocked";
+                TxtAchievementCount.Text = Loc.GetF("label_0_1_achievements_unlocked", unlocked, total);
             }
         }
 
@@ -4542,11 +4796,11 @@ namespace ConditioningControlPanel
             {
                 if (App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
                 {
-                    TxtActivePromptName.Text = "Custom (Edited)";
+                    TxtActivePromptName.Text = Loc.Get("label_custom_edited");
                 }
                 else
                 {
-                    TxtActivePromptName.Text = "Default (Built-in)";
+                    TxtActivePromptName.Text = Loc.Get("label_default_built_in");
                 }
                 BtnDeactivatePrompt.Visibility = Visibility.Collapsed;
             }
@@ -4705,8 +4959,8 @@ namespace ConditioningControlPanel
             if (!(App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false))
             {
                 System.Windows.MessageBox.Show(
-                    $"{def.Name} unlocks at Level {def.RequiredLevel}.\n\nYou're currently Level {playerLevel}. Keep training to unlock!",
-                    "Level Required",
+                    Loc.GetF("msg_companion_level_required", def.Name, def.RequiredLevel, playerLevel),
+                    Loc.Get("dialog_level_required"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return;
@@ -4754,7 +5008,7 @@ namespace ConditioningControlPanel
             if (!isUnlocked)
             {
                 App.Logger?.Warning("{Companion} is locked", def.Name);
-                ShowStyledDialog("Locked", $"{def.Name} is not unlocked yet.\nUnlock it first to assign a personality.", "OK", "");
+                ShowStyledDialog(Loc.Get("dialog_locked"), Loc.GetF("msg_companion_locked", def.Name), "OK", "");
                 return;
             }
 
@@ -4795,15 +5049,15 @@ namespace ConditioningControlPanel
                         App.Logger?.Information("Assigned prompt '{Prompt}' to companion {Companion}",
                             prompt.Name, def.Name);
 
-                        ShowStyledDialog("Personality Assigned",
-                            $"{def.Name} will now use \"{prompt.Name}\" personality.\n\nThis will activate automatically when you switch to this companion.",
-                            "OK", "");
+                        ShowStyledDialog(Loc.Get("title_personality_assigned"),
+                            Loc.GetF("msg_personality_assigned", def.Name, prompt.Name),
+                            Loc.Get("btn_ok"), "");
                     }
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "Failed to assign prompt to companion");
-                    ShowStyledDialog("Error", $"Failed to import prompt: {ex.Message}", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_error"), Loc.GetF("msg_failed_to_import_prompt", ex.Message), Loc.Get("btn_ok"), "");
                 }
             }
         }
@@ -4820,7 +5074,7 @@ namespace ConditioningControlPanel
                 var promptName = Services.CompanionService.GetAssignedPromptName((Models.CompanionId)i);
                 var displayName = App.Mods?.MakeModAware(promptName ?? "") ?? promptName ?? "";
                 promptTexts[i].Text = displayName;
-                promptTexts[i].ToolTip = string.IsNullOrEmpty(displayName) ? null : $"AI Personality: {displayName}";
+                promptTexts[i].ToolTip = string.IsNullOrEmpty(displayName) ? null : Loc.GetF("tooltip_ai_personality", displayName);
             }
         }
 
@@ -4842,7 +5096,7 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnRefreshPrompts.IsEnabled = true;
-                BtnRefreshPrompts.Content = "Refresh";
+                BtnRefreshPrompts.Content = Loc.Get("btn_refresh");
             }
         }
 
@@ -4860,7 +5114,7 @@ namespace ConditioningControlPanel
                 var available = await App.CommunityPrompts?.GetAvailablePromptsAsync();
                 if (available == null || available.Count == 0)
                 {
-                    ShowStyledDialog("Community Prompts", "No community prompts available yet.\n\nCreate and export your own to share!", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_community_prompts"), Loc.Get("msg_no_community_prompts"), Loc.Get("btn_ok"), "");
                     return;
                 }
 
@@ -4870,12 +5124,12 @@ namespace ConditioningControlPanel
 
                 if (notInstalled.Count == 0)
                 {
-                    ShowStyledDialog("Community Prompts", "You've installed all available prompts!", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_community_prompts"), Loc.Get("msg_all_prompts_installed"), Loc.Get("btn_ok"), "");
                     return;
                 }
 
                 // Show simple selection (first 5)
-                var message = "Available prompts:\n\n";
+                var message = Loc.Get("label_available_prompts");
                 for (int i = 0; i < Math.Min(5, notInstalled.Count); i++)
                 {
                     var p = notInstalled[i];
@@ -4883,17 +5137,17 @@ namespace ConditioningControlPanel
                 }
 
                 if (notInstalled.Count > 5)
-                    message += $"...and {notInstalled.Count - 5} more\n\n";
+                    message += Loc.GetF("label_and_more_prompts", notInstalled.Count - 5);
 
-                message += "Install the first one?";
+                message += Loc.Get("label_install_first_one");
 
-                var result = ShowStyledDialog("Browse Community Prompts", message, "Install", "Cancel");
+                var result = ShowStyledDialog(Loc.Get("title_browse_community_prompts"), message, Loc.Get("btn_install"), Loc.Get("btn_cancel"));
                 if (result && notInstalled.Count > 0)
                 {
                     var prompt = await App.CommunityPrompts?.InstallPromptAsync(notInstalled[0].Id);
                     if (prompt != null)
                     {
-                        ShowStyledDialog("Installed!", $"'{prompt.Name}' has been installed.\n\nUse the 'Use' button to activate it.", "OK", "");
+                        ShowStyledDialog(Loc.Get("title_installed"), Loc.GetF("msg_prompt_installed", prompt.Name), Loc.Get("btn_ok"), "");
                         UpdateCommunityPromptsUI();
                     }
                 }
@@ -4901,7 +5155,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Error browsing prompts");
-                ShowStyledDialog("Error", $"Failed to browse prompts:\n{ex.Message}", "OK", "");
+                ShowStyledDialog(Loc.Get("title_error"), Loc.GetF("msg_failed_to_browse_prompts", ex.Message), Loc.Get("btn_ok"), "");
             }
         }
 
@@ -4912,7 +5166,7 @@ namespace ConditioningControlPanel
                 var dialog = new Microsoft.Win32.OpenFileDialog
                 {
                     Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
-                    Title = "Import Community Prompt"
+                    Title = Loc.Get("title_import_community_prompt")
                 };
 
                 if (dialog.ShowDialog() == true)
@@ -4920,19 +5174,19 @@ namespace ConditioningControlPanel
                     var prompt = App.CommunityPrompts?.ImportFromFile(dialog.FileName);
                     if (prompt != null)
                     {
-                        ShowStyledDialog("Imported!", $"'{prompt.Name}' by {prompt.Author} has been imported.", "OK", "");
+                        ShowStyledDialog(Loc.Get("title_imported"), Loc.GetF("msg_prompt_imported", prompt.Name, prompt.Author), Loc.Get("btn_ok"), "");
                         UpdateCommunityPromptsUI();
                     }
                     else
                     {
-                        ShowStyledDialog("Error", "Failed to import prompt. The file may be invalid.", "OK", "");
+                        ShowStyledDialog(Loc.Get("title_error"), Loc.Get("msg_failed_to_import_prompt_invalid"), Loc.Get("btn_ok"), "");
                     }
                 }
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Error importing prompt");
-                ShowStyledDialog("Error", $"Failed to import prompt:\n{ex.Message}", "OK", "");
+                ShowStyledDialog(Loc.Get("title_error"), Loc.GetF("msg_failed_to_import_prompt_error", ex.Message), Loc.Get("btn_ok"), "");
             }
         }
 
@@ -4947,27 +5201,27 @@ namespace ConditioningControlPanel
                 var prompt = App.CommunityPrompts?.ExportCurrentSettings(name, author, "A custom AI personality.");
                 if (prompt == null)
                 {
-                    ShowStyledDialog("Error", "Failed to export current settings.", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_error"), Loc.Get("msg_failed_to_export_settings"), Loc.Get("btn_ok"), "");
                     return;
                 }
 
                 var dialog = new Microsoft.Win32.SaveFileDialog
                 {
                     Filter = "JSON files (*.json)|*.json",
-                    Title = "Export Community Prompt",
+                    Title = Loc.Get("title_export_community_prompt"),
                     FileName = $"{name.Replace(" ", "_")}.json"
                 };
 
                 if (dialog.ShowDialog() == true)
                 {
                     await App.CommunityPrompts?.SavePromptToFileAsync(prompt, dialog.FileName);
-                    ShowStyledDialog("Exported!", $"Prompt exported to:\n{dialog.FileName}\n\nShare this file with others!", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_exported"), Loc.GetF("msg_prompt_exported", dialog.FileName), Loc.Get("btn_ok"), "");
                 }
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Error exporting prompt");
-                ShowStyledDialog("Error", $"Failed to export prompt:\n{ex.Message}", "OK", "");
+                ShowStyledDialog(Loc.Get("title_error"), Loc.GetF("msg_failed_to_export_prompt", ex.Message), Loc.Get("btn_ok"), "");
             }
         }
 
@@ -5000,15 +5254,15 @@ namespace ConditioningControlPanel
                     _ when isWhitelisted => "Whitelisted - All features unlocked!",
                     _ => isActivePatron ? "Patron - Thank you for your support!" : "Connected - Subscribe to unlock features"
                 };
-                BtnPatreonLogin.Content = "Logout";
+                BtnPatreonLogin.Content = Loc.Get("btn_logout");
             }
             else
             {
                 // Check if user is logged in with another provider (has unified_id)
                 var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                TxtPatreonStatus.Text = "Not Connected";
-                TxtPatreonTier.Text = "Login to unlock exclusive features";
+                TxtPatreonStatus.Text = Loc.Get("label_not_connected");
+                TxtPatreonTier.Text = Loc.Get("label_login_to_unlock_exclusive_features");
 
                 // Show "Link Patreon" if logged in via Discord, otherwise "Login"
                 BtnPatreonLogin.Content = hasUnifiedId ? "Link Patreon" : "Login";
@@ -5051,7 +5305,7 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    TxtAiStatus.Text = "AI initializing...";
+                    TxtAiStatus.Text = Loc.Get("label_ai_initializing");
                 }
             }
 
@@ -5109,7 +5363,7 @@ namespace ConditioningControlPanel
                 {
                     // Link Patreon to existing account
                     BtnPatreonLogin.IsEnabled = false;
-                    BtnPatreonLogin.Content = "Connecting...";
+                    BtnPatreonLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -5179,7 +5433,7 @@ namespace ConditioningControlPanel
                 {
                     // Link Discord to existing account
                     BtnDiscordLogin.IsEnabled = false;
-                    BtnDiscordLogin.Content = "Connecting...";
+                    BtnDiscordLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -5227,15 +5481,15 @@ namespace ConditioningControlPanel
                 var discordDisplayName = App.Settings?.Current?.UserDisplayName ?? App.Discord.DisplayName;
                 TxtDiscordStatus.Text = $"Connected as {discordDisplayName}";
                 TxtDiscordInfo.Text = $"@{App.Discord.Username}";
-                BtnDiscordLogin.Content = "Logout";
+                BtnDiscordLogin.Content = Loc.Get("btn_logout");
             }
             else
             {
                 // Check if user is logged in with another provider (has unified_id)
                 var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                TxtDiscordStatus.Text = "Not Connected";
-                TxtDiscordInfo.Text = "Link Discord for community features";
+                TxtDiscordStatus.Text = Loc.Get("label_not_connected");
+                TxtDiscordInfo.Text = Loc.Get("label_link_discord_for_community_features");
 
                 // Show "Link Discord" if logged in via Patreon, otherwise "Login"
                 BtnDiscordLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
@@ -5280,7 +5534,7 @@ namespace ConditioningControlPanel
             if (App.Patreon == null) return;
 
             BtnLinkPatreon.IsEnabled = false;
-            BtnLinkPatreon.Content = "Connecting...";
+            BtnLinkPatreon.Content = Loc.Get("login_connecting");
 
             try
             {
@@ -5310,7 +5564,7 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnLinkPatreon.IsEnabled = true;
-                BtnLinkPatreon.Content = "⭐ Link Patreon";
+                BtnLinkPatreon.Content = Loc.Get("btn_link_patreon");
             }
         }
 
@@ -5322,7 +5576,7 @@ namespace ConditioningControlPanel
             if (App.Discord == null) return;
 
             BtnLinkDiscord.IsEnabled = false;
-            BtnLinkDiscord.Content = "Connecting...";
+            BtnLinkDiscord.Content = Loc.Get("login_connecting");
 
             try
             {
@@ -5352,7 +5606,7 @@ namespace ConditioningControlPanel
             finally
             {
                 BtnLinkDiscord.IsEnabled = true;
-                BtnLinkDiscord.Content = "🎮 Link Discord";
+                BtnLinkDiscord.Content = Loc.Get("btn_link_discord");
             }
         }
 
@@ -5363,7 +5617,7 @@ namespace ConditioningControlPanel
             if (App.ProfileSync == null) return;
 
             BtnBackupSettingsNow.IsEnabled = false;
-            BtnBackupSettingsNow.Content = "Backing up...";
+            BtnBackupSettingsNow.Content = Loc.Get("btn_backing_up");
 
             try
             {
@@ -5372,8 +5626,8 @@ namespace ConditioningControlPanel
                 if (success)
                 {
                     MessageBox.Show(
-                        "Settings backed up to cloud successfully!",
-                        "Backup Complete",
+                        Loc.Get("msg_settings_backed_up_to_cloud_successfully"),
+                        Loc.Get("title_backup_complete"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
 
@@ -5382,8 +5636,8 @@ namespace ConditioningControlPanel
                 else
                 {
                     MessageBox.Show(
-                        "Failed to backup settings. Please try again later.",
-                        "Backup Failed",
+                        Loc.Get("msg_failed_to_backup_settings"),
+                        Loc.Get("title_backup_failed"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
                 }
@@ -5392,15 +5646,15 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "Manual settings backup failed");
                 MessageBox.Show(
-                    $"Backup failed: {ex.Message}",
-                    "Backup Error",
+                    Loc.GetF("msg_backup_failed_0", ex.Message),
+                    Loc.Get("title_backup_error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
             finally
             {
                 BtnBackupSettingsNow.IsEnabled = true;
-                BtnBackupSettingsNow.Content = "☁ Backup Now";
+                BtnBackupSettingsNow.Content = Loc.Get("btn_backup_now");
             }
         }
 
@@ -5409,17 +5663,15 @@ namespace ConditioningControlPanel
             if (App.ProfileSync == null) return;
 
             var confirm = MessageBox.Show(
-                "This will replace your current settings with the cloud backup.\n\n" +
-                "Your progression (level, XP, skills) will NOT be affected.\n\n" +
-                "Are you sure you want to restore?",
-                "Restore Settings from Cloud",
+                Loc.Get("msg_restore_settings_confirm"),
+                Loc.Get("title_restore_settings_from_cloud"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
             if (confirm != MessageBoxResult.Yes) return;
 
             BtnRestoreSettings.IsEnabled = false;
-            BtnRestoreSettings.Content = "Restoring...";
+            BtnRestoreSettings.Content = Loc.Get("btn_restoring");
 
             try
             {
@@ -5428,8 +5680,8 @@ namespace ConditioningControlPanel
                 if (restored == null)
                 {
                     MessageBox.Show(
-                        "No cloud backup found or restore failed.",
-                        "Restore Failed",
+                        Loc.Get("msg_no_cloud_backup_found_or_restore_failed"),
+                        Loc.Get("title_restore_failed"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
                     return;
@@ -5462,8 +5714,8 @@ namespace ConditioningControlPanel
                 _isLoading = false;
 
                 MessageBox.Show(
-                    "Settings restored from cloud! Some changes may require a restart to take full effect.",
-                    "Settings Restored",
+                    Loc.Get("msg_settings_restored_from_cloud"),
+                    Loc.Get("title_settings_restored"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
             }
@@ -5471,15 +5723,15 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "Manual settings restore failed");
                 MessageBox.Show(
-                    $"Restore failed: {ex.Message}",
-                    "Restore Error",
+                    Loc.GetF("msg_restore_failed_0", ex.Message),
+                    Loc.Get("title_restore_error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
             finally
             {
                 BtnRestoreSettings.IsEnabled = true;
-                BtnRestoreSettings.Content = "Restore from Cloud";
+                BtnRestoreSettings.Content = Loc.Get("btn_restore_from_cloud");
             }
         }
 
@@ -5488,7 +5740,7 @@ namespace ConditioningControlPanel
             if (App.ProfileSync == null) return;
 
             BtnExportData.IsEnabled = false;
-            BtnExportData.Content = "Exporting...";
+            BtnExportData.Content = Loc.Get("btn_exporting");
 
             try
             {
@@ -5497,8 +5749,8 @@ namespace ConditioningControlPanel
                 if (!success || jsonData == null)
                 {
                     MessageBox.Show(
-                        error ?? "Failed to export data.",
-                        "Export Failed",
+                        error ?? Loc.Get("msg_failed_to_export_data"),
+                        Loc.Get("title_export_failed"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
                     return;
@@ -5508,15 +5760,15 @@ namespace ConditioningControlPanel
                 {
                     FileName = $"my-data-export-{DateTime.Now:yyyy-MM-dd}.json",
                     Filter = "JSON files (*.json)|*.json",
-                    Title = "Save Data Export"
+                    Title = Loc.Get("title_save_data_export")
                 };
 
                 if (dialog.ShowDialog() == true)
                 {
                     File.WriteAllText(dialog.FileName, jsonData);
                     MessageBox.Show(
-                        $"Data exported to:\n{dialog.FileName}",
-                        "Export Complete",
+                        Loc.GetF("msg_data_exported_to_0", dialog.FileName),
+                        Loc.Get("title_export_complete"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
                 }
@@ -5525,15 +5777,15 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "Data export failed");
                 MessageBox.Show(
-                    $"Export failed: {ex.Message}",
-                    "Export Error",
+                    Loc.GetF("msg_export_failed_0", ex.Message),
+                    Loc.Get("title_export_error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
             finally
             {
                 BtnExportData.IsEnabled = true;
-                BtnExportData.Content = "Export My Data";
+                BtnExportData.Content = Loc.Get("btn_export_my_data");
             }
         }
 
@@ -5543,7 +5795,7 @@ namespace ConditioningControlPanel
             {
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = "https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/privacy-policy.html",
+                    FileName = "https://cclabs.app/privacy-policy.html",
                     UseShellExecute = true
                 });
             }
@@ -5564,17 +5816,17 @@ namespace ConditioningControlPanel
                 if (info?.BackedUpAt != null)
                 {
                     var dateStr = info.BackedUpAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
-                    TxtCloudBackupStatus.Text = $"Last backup: {dateStr} (v{info.AppVersion})";
+                    TxtCloudBackupStatus.Text = Loc.GetF("label_last_backup_0_v_1", dateStr, info.AppVersion);
                 }
                 else
                 {
-                    TxtCloudBackupStatus.Text = "No cloud backup found. Back up your settings to protect them.";
+                    TxtCloudBackupStatus.Text = Loc.Get("label_no_cloud_backup_found_back_up_your_settings_t");
                 }
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("Failed to update backup status: {Error}", ex.Message);
-                TxtCloudBackupStatus.Text = "Could not check backup status.";
+                TxtCloudBackupStatus.Text = Loc.Get("label_could_not_check_backup_status");
             }
         }
 
@@ -5782,13 +6034,13 @@ namespace ConditioningControlPanel
             // Update button and status text
             if (_avatarTubeWindow.IsDetached)
             {
-                BtnDetachCompanionTab.Content = "Attach";
-                TxtDetachStatusCompanion.Text = "Floating freely - drag to reposition";
+                BtnDetachCompanionTab.Content = Loc.Get("btn_attach");
+                TxtDetachStatusCompanion.Text = Loc.Get("label_floating_freely_drag_to_reposition");
             }
             else
             {
-                BtnDetachCompanionTab.Content = "Detach";
-                TxtDetachStatusCompanion.Text = "Anchored to window";
+                BtnDetachCompanionTab.Content = Loc.Get("btn_detach");
+                TxtDetachStatusCompanion.Text = Loc.Get("label_anchored_to_window");
             }
         }
 
@@ -5951,12 +6203,12 @@ namespace ConditioningControlPanel
             if (TxtPrivacyDetails.Visibility == Visibility.Collapsed)
             {
                 TxtPrivacyDetails.Visibility = Visibility.Visible;
-                BtnPrivacySpoiler.Content = "▼ Hide";
+                BtnPrivacySpoiler.Content = Loc.Get("btn_hide");
             }
             else
             {
                 TxtPrivacyDetails.Visibility = Visibility.Collapsed;
-                BtnPrivacySpoiler.Content = "▶ Click to reveal";
+                BtnPrivacySpoiler.Content = Loc.Get("btn_click_to_reveal");
             }
         }
 
@@ -5982,8 +6234,8 @@ namespace ConditioningControlPanel
             {
                 ChkHapticsEnabled.IsChecked = false;
                 MessageBox.Show(
-                    "Haptic feedback is available for Patreon supporters.",
-                    "Patreon Feature",
+                    Loc.Get("msg_haptic_feedback_patreon_only"),
+                    Loc.Get("title_patreon_feature"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return;
@@ -6124,8 +6376,8 @@ namespace ConditioningControlPanel
             {
                 TxtHapticUrlHint.Text = tag switch
                 {
-                    "Lovense" => "Lovense: Enter IP from Lovense Remote → Settings → Game Mode (http://IP:30010)",
-                    "Buttplug" => "Buttplug: Start Intiface Central, use default ws://localhost:12345",
+                    "Lovense" => Loc.Get("label_lovense_hint"),
+                    "Buttplug" => Loc.Get("label_buttplug_hint"),
                     _ => ""
                 };
             }
@@ -6148,8 +6400,8 @@ namespace ConditioningControlPanel
             if (App.Patreon?.HasPremiumAccess != true)
             {
                 MessageBox.Show(
-                    "Haptic feedback is available for Patreon supporters.",
-                    "Patreon Feature",
+                    Loc.Get("msg_haptic_feedback_patreon_only"),
+                    Loc.Get("title_patreon_feature"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return;
@@ -6160,15 +6412,15 @@ namespace ConditioningControlPanel
             if (App.Haptics.IsConnected)
             {
                 await App.Haptics.DisconnectAsync();
-                BtnHapticConnect.Content = "Connect";
-                TxtHapticStatus.Text = "Disconnected";
+                BtnHapticConnect.Content = Loc.Get("btn_connect");
+                TxtHapticStatus.Text = Loc.Get("label_disconnected");
                 TxtHapticStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(0xFF, 0x6B, 0x6B));
-                TxtHapticDevices.Text = "No devices";
+                TxtHapticDevices.Text = Loc.Get("label_no_devices");
             }
             else
             {
-                BtnHapticConnect.Content = "Connecting...";
+                BtnHapticConnect.Content = Loc.Get("login_connecting");
                 BtnHapticConnect.IsEnabled = false;
 
                 try
@@ -6177,28 +6429,28 @@ namespace ConditioningControlPanel
 
                     if (success)
                     {
-                        BtnHapticConnect.Content = "Disconnect";
-                        TxtHapticStatus.Text = "Connected";
+                        BtnHapticConnect.Content = Loc.Get("btn_disconnect");
+                        TxtHapticStatus.Text = Loc.Get("label_connected");
                         TxtHapticStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                             System.Windows.Media.Color.FromRgb(0x00, 0xE6, 0x76));
 
                         var devices = App.Haptics.ConnectedDevices;
                         TxtHapticDevices.Text = devices.Count > 0
                             ? string.Join(", ", devices)
-                            : "No devices found";
+                            : Loc.Get("label_no_devices_found");
                     }
                     else
                     {
-                        BtnHapticConnect.Content = "Connect";
-                        TxtHapticStatus.Text = "Failed";
+                        BtnHapticConnect.Content = Loc.Get("btn_connect");
+                        TxtHapticStatus.Text = Loc.Get("label_failed");
                         TxtHapticStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                             System.Windows.Media.Color.FromRgb(0xFF, 0x6B, 0x6B));
                     }
                 }
                 catch (Exception ex)
                 {
-                    BtnHapticConnect.Content = "Connect";
-                    TxtHapticStatus.Text = "Error";
+                    BtnHapticConnect.Content = Loc.Get("btn_connect");
+                    TxtHapticStatus.Text = Loc.Get("label_error");
                     TxtHapticDevices.Text = ex.Message;
                 }
                 finally
@@ -6208,7 +6460,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        private System.Threading.CancellationTokenSource? _hapticSliderCts;
         private System.Windows.Threading.DispatcherTimer? _hapticSliderDebounce;
 
         private void SliderHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -6242,7 +6493,7 @@ namespace ConditioningControlPanel
 
             if (!App.Haptics.IsConnected)
             {
-                MessageBox.Show("Connect to a device first.", "Not Connected", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Loc.Get("msg_connect_to_a_device_first"), Loc.Get("label_not_connected"), MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -6437,8 +6688,8 @@ namespace ConditioningControlPanel
                 if (!KeywordTriggerService.HasAccess())
                 {
                     MessageBox.Show(
-                        "Keyword Triggers are available for Patreon supporters.",
-                        "Patreon Feature",
+                        Loc.Get("msg_keyword_triggers_patreon_only"),
+                        Loc.Get("title_patreon_feature"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
                     return;
@@ -6472,7 +6723,7 @@ namespace ConditioningControlPanel
             if (BtnKeywordTriggersStartStop == null) return;
             var running = App.Settings?.Current?.KeywordTriggersEnabled == true;
 
-            BtnKeywordTriggersStartStop.Content = running ? "Stop" : "Start";
+            BtnKeywordTriggersStartStop.Content = running ? Loc.Get("btn_stop") : Loc.Get("btn_start");
             BtnKeywordTriggersStartStop.Background = running
                 ? new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#555555"))
@@ -6513,8 +6764,8 @@ namespace ConditioningControlPanel
             {
                 ChkScreenOcrEnabled.IsChecked = false;
                 MessageBox.Show(
-                    "Screen OCR requires Patreon access.",
-                    "Patreon Feature",
+                    Loc.Get("msg_screen_ocr_patreon_only"),
+                    Loc.Get("title_patreon_feature"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return;
@@ -6599,8 +6850,8 @@ namespace ConditioningControlPanel
             var imported = App.KeywordTriggers?.ImportFromCustomTriggers();
             if (imported == null || imported.Count == 0)
             {
-                MessageBox.Show("No new triggers to import. All existing trigger phrases are already in your keyword triggers list.",
-                    "Import Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Loc.Get("msg_no_new_triggers_to_import_all_existing_trigge"),
+                    Loc.Get("title_import_complete"), MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
@@ -6609,8 +6860,8 @@ namespace ConditioningControlPanel
             App.Settings.Save();
             RefreshKeywordTriggerList();
 
-            MessageBox.Show($"Imported {imported.Count} trigger(s) from your Trigger Mode list.",
-                "Import Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(Loc.GetF("msg_imported_0_trigger_s_from_your_trigger_mode_l", imported.Count),
+                Loc.Get("title_import_complete"), MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void BtnDeleteKeywordTrigger_Click(object sender, RoutedEventArgs e)
@@ -6678,7 +6929,7 @@ namespace ConditioningControlPanel
             var dlg = new Microsoft.Win32.OpenFileDialog
             {
                 Filter = "Audio Files|*.mp3;*.wav;*.ogg|All Files|*.*",
-                Title = "Select Trigger Audio File"
+                Title = Loc.Get("title_select_trigger_audio")
             };
 
             if (dlg.ShowDialog() == true)
@@ -6980,7 +7231,7 @@ namespace ConditioningControlPanel
                     _isLoading = true;
                     ChkRemoteControlEnabled.IsChecked = false;
                     _isLoading = false;
-                    ShowStyledDialog("Login Required", "You need to log in and sync your profile before using Remote Control.\n\nLog in via Patreon or Discord in the Settings tab.", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_login_required"), Loc.Get("msg_login_required_remote"), Loc.Get("btn_ok"), "");
                     return;
                 }
 
@@ -7004,7 +7255,7 @@ namespace ConditioningControlPanel
                     ChkRemoteControlEnabled.IsChecked = false;
                     _isLoading = false;
                     RemoteControlPanel.Visibility = System.Windows.Visibility.Collapsed;
-                    ShowStyledDialog("Connection Error", "Could not start remote control session. The server may be temporarily unavailable.\n\nPlease check your internet connection and try again.", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_connection_error"), Loc.Get("msg_remote_connection_error"), Loc.Get("btn_ok"), "");
                     return;
                 }
 
@@ -7129,15 +7380,15 @@ namespace ConditioningControlPanel
                     var pin = App.RemoteControl?.ConnectPin;
                     var copyText = !string.IsNullOrEmpty(pin) ? $"{code} (PIN: {pin})" : code;
                     System.Windows.Clipboard.SetText(copyText);
-                    BtnCopyRemoteCode.Content = "Copied!";
+                    BtnCopyRemoteCode.Content = Loc.Get("btn_copied");
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "Failed to copy remote code to clipboard");
-                    BtnCopyRemoteCode.Content = "Failed";
+                    BtnCopyRemoteCode.Content = Loc.Get("label_failed");
                 }
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-                timer.Tick += (s, _) => { BtnCopyRemoteCode.Content = "Copy"; timer.Stop(); };
+                timer.Tick += (s, _) => { BtnCopyRemoteCode.Content = Loc.Get("btn_copy"); timer.Stop(); };
                 timer.Start();
             }
         }
@@ -7145,21 +7396,21 @@ namespace ConditioningControlPanel
         private void BtnCopyRemoteLink_Click(object sender, RoutedEventArgs e)
         {
             var code = App.RemoteControl?.SessionCode;
-            var url = "https://codebambi.github.io/Conditioning-Control-Panel---CSharp-WPF/remote/";
+            var url = "https://cclabs.app/remote/";
             if (!string.IsNullOrEmpty(code))
                 url += $"?code={code}";
             try
             {
                 System.Windows.Clipboard.SetText(url);
-                BtnCopyRemoteLink.Content = "Copied!";
+                BtnCopyRemoteLink.Content = Loc.Get("btn_copied");
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to copy remote link to clipboard");
-                BtnCopyRemoteLink.Content = "Failed";
+                BtnCopyRemoteLink.Content = Loc.Get("label_failed");
             }
             var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-            timer.Tick += (s, _) => { BtnCopyRemoteLink.Content = "Copy Link"; timer.Stop(); };
+            timer.Tick += (s, _) => { BtnCopyRemoteLink.Content = Loc.Get("btn_copy_link"); timer.Stop(); };
             timer.Start();
         }
 
@@ -7241,7 +7492,7 @@ namespace ConditioningControlPanel
             {
                 RemoteStatusDot.Fill = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(0x00, 0xFF, 0x88));
-                TxtRemoteStatus.Text = "Controller connected";
+                TxtRemoteStatus.Text = Loc.Get("label_controller_connected");
                 TxtRemoteStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(0x00, 0xFF, 0x88));
             }
@@ -7249,7 +7500,7 @@ namespace ConditioningControlPanel
             {
                 RemoteStatusDot.Fill = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(0xFF, 0xA5, 0x00));
-                TxtRemoteStatus.Text = "Waiting for controller...";
+                TxtRemoteStatus.Text = Loc.Get("label_waiting_for_controller");
                 TxtRemoteStatus.Foreground = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(0xA0, 0xA0, 0xA0));
             }
@@ -7415,7 +7666,7 @@ namespace ConditioningControlPanel
 
         private void ShowCommandNotification(string action)
         {
-            var label = CommandLabels.TryGetValue(action, out var l) ? l : action.Replace("_", " ");
+            var label = CommandLabels.TryGetValue(action, out var l) ? Loc.Get(l) : action.Replace("_", " ");
             TxtRemoteCommand.Text = label;
 
             var fadeIn = new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200));
@@ -7746,7 +7997,7 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current?.OfflineMode == true &&
                 !string.IsNullOrWhiteSpace(App.Settings?.Current?.OfflineUsername))
             {
-                TxtBannerSecondary.Text = $"Welcome back, {App.Settings.Current.OfflineUsername}! (Offline Mode)";
+                TxtBannerSecondary.Text = Loc.GetF("label_welcome_back_0_offline_mode", App.Settings.Current.OfflineUsername);
                 return;
             }
 
@@ -7756,12 +8007,12 @@ namespace ConditioningControlPanel
                            ?? App.Discord?.DisplayName;
             if (!string.IsNullOrEmpty(displayName))
             {
-                TxtBannerSecondary.Text = $"Welcome back, {displayName}!";
+                TxtBannerSecondary.Text = Loc.GetF("label_welcome_back_0", displayName);
             }
             else
             {
                 // Not logged in - show generic welcome
-                TxtBannerSecondary.Text = "Welcome! Consider logging in with Patreon for extra features.";
+                TxtBannerSecondary.Text = Loc.Get("label_welcome_consider_logging_in_with_patreon_for");
             }
         }
 
@@ -7774,7 +8025,7 @@ namespace ConditioningControlPanel
             {
                 var dialog = new Window
                 {
-                    Title = "Welcome Back!",
+                    Title = Loc.Get("title_welcome_back"),
                     Owner = this,
                     WindowStartupLocation = WindowStartupLocation.CenterOwner,
                     SizeToContent = SizeToContent.WidthAndHeight,
@@ -8131,13 +8382,10 @@ namespace ConditioningControlPanel
                 // Hide inline banner after 5 seconds
                 Task.Delay(5000).ContinueWith(_ =>
                 {
-                    if (Application.Current?.Dispatcher != null)
+                    DispatcherHelper.RunOnUISync(() =>
                     {
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            QuestCompleteBanner.Visibility = Visibility.Collapsed;
-                        });
-                    }
+                        QuestCompleteBanner.Visibility = Visibility.Collapsed;
+                    });
                 });
 
                 App.Logger?.Information("Quest completed: {Name} (+{XP} XP)", e.QuestDefinition.Name, e.XPAwarded);
@@ -8216,6 +8464,7 @@ namespace ConditioningControlPanel
 
             // Add sparkle particles behind everything
             AddSkillTreeParticles();
+            _skillTreeAnimationsActive = true;
 
             // Add header section at the start of the canvas
             CreateSkillTreeHeader();
@@ -8300,14 +8549,14 @@ namespace ConditioningControlPanel
             var titleStack = new StackPanel { Margin = new Thickness(0, 0, 0, 15) };
             titleStack.Children.Add(new TextBlock
             {
-                Text = "✨ " + (App.Mods?.GetEnhancementTreeTitle() ?? "Bimbo Enhancement Tree"),
+                Text = "✨ " + (App.Mods?.GetEnhancementTreeTitle() ?? Loc.Get("label_enhancement_tree_title")),
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")),
                 FontSize = 22,
                 FontWeight = FontWeights.Bold
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.GetEnhancementTreeSubtitle() ?? "you earn sparkle points from leveling up + every 100 bubbles popped~",
+                Text = App.Mods?.GetEnhancementTreeSubtitle() ?? Loc.Get("label_enhancement_tree_subtitle"),
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 11,
                 FontStyle = FontStyles.Italic,
@@ -8315,7 +8564,7 @@ namespace ConditioningControlPanel
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.GetEnhancementTreeWarning() ?? "once you pick a path, there's no going back~",
+                Text = App.Mods?.GetEnhancementTreeWarning() ?? Loc.Get("label_enhancement_tree_warning"),
                 Foreground = new SolidColorBrush(Color.FromRgb(136, 170, 204)),
                 FontSize = 10,
                 FontStyle = FontStyles.Italic,
@@ -8346,7 +8595,7 @@ namespace ConditioningControlPanel
             var pointsInfoStack = new StackPanel();
             pointsInfoStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.GetPointsLabel() ?? "Sparkle Points",
+                Text = App.Mods?.GetPointsLabel() ?? Loc.Get("label_sparkle_points"),
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 10
             });
@@ -8389,7 +8638,7 @@ namespace ConditioningControlPanel
             });
             ditzyButtonStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.GetStatsTitle() ?? "Ditzy Data Stats",
+                Text = App.Mods?.GetStatsTitle() ?? Loc.Get("label_ditzy_data_stats"),
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                 FontSize = 11,
                 FontWeight = FontWeights.Bold,
@@ -8462,55 +8711,55 @@ namespace ConditioningControlPanel
 
                 // Row 1: Session stats
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Sessions Started", achievements.TotalSessionsStarted.ToString("N0"), 0);
-                AddStatRow("Sessions Completed", achievements.CompletedSessions.Count.ToString("N0"), 1);
-                AddStatRow("Sessions Abandoned", achievements.TotalSessionsAbandoned.ToString("N0"), 2);
+                AddStatRow(Loc.Get("label_sessions_started"), achievements.TotalSessionsStarted.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_sessions_completed"), achievements.CompletedSessions.Count.ToString("N0"), 1);
+                AddStatRow(Loc.Get("label_sessions_abandoned"), achievements.TotalSessionsAbandoned.ToString("N0"), 2);
                 row++;
 
                 // Row 2: XP & Skill Points
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Total XP Earned", achievements.TotalXPEarned.ToString("N0"), 0);
-                AddStatRow("Skill Points Earned", achievements.TotalSkillPointsEarned.ToString("N0"), 1);
-                AddStatRow("Longest Session", $"{achievements.LongestSessionMinutes:F1} min", 2);
+                AddStatRow(Loc.Get("label_total_xp_earned_stat"), achievements.TotalXPEarned.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_skill_points_earned"), achievements.TotalSkillPointsEarned.ToString("N0"), 1);
+                AddStatRow(Loc.Get("label_longest_session"), $"{achievements.LongestSessionMinutes:F1} {Loc.Get("label_min_abbrev")}", 2);
                 row++;
 
                 // Row 3: Attention checks
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Attention Passes", achievements.TotalAttentionChecksPassed.ToString("N0"), 0);
-                AddStatRow("Video Att. Passed", achievements.VideoAttentionChecksPassed.ToString("N0"), 1);
-                AddStatRow("Video Att. Failed", achievements.VideoAttentionChecksFailed.ToString("N0"), 2);
+                AddStatRow(Loc.Get("label_attention_passes"), achievements.TotalAttentionChecksPassed.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_video_att_passed"), achievements.VideoAttentionChecksPassed.ToString("N0"), 1);
+                AddStatRow(Loc.Get("label_video_att_failed"), achievements.VideoAttentionChecksFailed.ToString("N0"), 2);
                 row++;
 
                 // Row 4: Bubble count
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Bubble Count Games", achievements.TotalBubbleCountGames.ToString("N0"), 0);
-                AddStatRow("BC Correct", achievements.TotalBubbleCountCorrect.ToString("N0"), 1);
-                AddStatRow("BC Best Streak", achievements.BubbleCountBestStreak.ToString("N0"), 2);
+                AddStatRow(Loc.Get("label_bubble_count_games"), achievements.TotalBubbleCountGames.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_bc_correct"), achievements.TotalBubbleCountCorrect.ToString("N0"), 1);
+                AddStatRow(Loc.Get("label_bc_best_streak"), achievements.BubbleCountBestStreak.ToString("N0"), 2);
                 row++;
 
                 // Row 5: Content consumption
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Total Flashes", achievements.TotalFlashImages.ToString("N0"), 0);
-                AddStatRow("Bubbles Popped", achievements.TotalBubblesPopped.ToString("N0"), 1);
-                AddStatRow("Lock Cards Done", achievements.TotalLockCardsCompleted.ToString("N0"), 2);
+                AddStatRow(Loc.Get("label_total_flashes_stat"), achievements.TotalFlashImages.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_bubbles_popped_stat"), achievements.TotalBubblesPopped.ToString("N0"), 1);
+                AddStatRow(Loc.Get("label_lock_cards_done"), achievements.TotalLockCardsCompleted.ToString("N0"), 2);
                 row++;
 
                 // Row 6: Time stats
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 var videoMin = achievements.TotalVideoMinutes;
-                var videoTimeStr = videoMin >= 60 ? $"{videoMin / 60:F1} hrs" : $"{videoMin:F1} min";
-                AddStatRow("Video Time", videoTimeStr, 0);
+                var videoTimeStr = videoMin >= 60 ? $"{videoMin / 60:F1} {Loc.Get("label_hrs")}" : $"{videoMin:F1} {Loc.Get("label_min_abbrev")}";
+                AddStatRow(Loc.Get("label_video_time"), videoTimeStr, 0);
                 var pinkMin = achievements.TotalPinkFilterMinutes;
-                var pinkTimeStr = pinkMin >= 60 ? $"{pinkMin / 60:F1} hrs" : $"{pinkMin:F1} min";
-                AddStatRow("Pink Filter Time", pinkTimeStr, 1);
+                var pinkTimeStr = pinkMin >= 60 ? $"{pinkMin / 60:F1} {Loc.Get("label_hrs")}" : $"{pinkMin:F1} {Loc.Get("label_min_abbrev")}";
+                AddStatRow(Loc.Get("label_pink_filter_time"), pinkTimeStr, 1);
                 var spiralMin = achievements.TotalSpiralMinutes;
-                var spiralTimeStr = spiralMin >= 60 ? $"{spiralMin / 60:F1} hrs" : $"{spiralMin:F1} min";
-                AddStatRow("Spiral Time", spiralTimeStr, 2);
+                var spiralTimeStr = spiralMin >= 60 ? $"{spiralMin / 60:F1} {Loc.Get("label_hrs")}" : $"{spiralMin:F1} {Loc.Get("label_min_abbrev")}";
+                AddStatRow(Loc.Get("label_spiral_time"), spiralTimeStr, 2);
                 row++;
 
                 // Row 7: Misc stats
                 statsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                AddStatRow("Consecutive Days", achievements.ConsecutiveDays.ToString("N0"), 0);
+                AddStatRow(Loc.Get("label_consecutive_days"), achievements.ConsecutiveDays.ToString("N0"), 0);
 
                 detailedStatsStack.Children.Add(statsGrid);
             }
@@ -8537,7 +8786,7 @@ namespace ConditioningControlPanel
             };
             xpStack.Children.Add(new TextBlock
             {
-                Text = "XP Mult: ",
+                Text = Loc.Get("label_xp_mult"),
                 Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
                 FontSize = 12,
                 VerticalAlignment = VerticalAlignment.Center
@@ -8554,7 +8803,7 @@ namespace ConditioningControlPanel
             {
                 xpStack.Children.Add(new TextBlock
                 {
-                    Text = " 🔥 RUSH!",
+                    Text = " " + Loc.Get("label_xp_rush"),
                     Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentDarkColorHex() ?? "#FF1493")),
                     FontSize = 12,
                     FontWeight = FontWeights.Bold,
@@ -8723,7 +8972,6 @@ namespace ConditioningControlPanel
         /// </summary>
         private void AddSkillTreeParticles()
         {
-            var rng = new Random();
             var colors = new[]
             {
                 Color.FromArgb(90, 255, 105, 180),   // pink
@@ -8735,17 +8983,17 @@ namespace ConditioningControlPanel
 
             for (int i = 0; i < 35; i++)
             {
-                var size = 3.0 + rng.NextDouble() * 5.0; // 3-8px
+                var size = 3.0 + Random.Shared.NextDouble() * 5.0; // 3-8px
                 var ellipse = new System.Windows.Shapes.Ellipse
                 {
                     Width = size,
                     Height = size,
-                    Fill = new SolidColorBrush(colors[rng.Next(colors.Length)]),
+                    Fill = new SolidColorBrush(colors[Random.Shared.Next(colors.Length)]),
                     Opacity = 0
                 };
 
-                Canvas.SetLeft(ellipse, rng.NextDouble() * 2400);
-                Canvas.SetTop(ellipse, rng.NextDouble() * 460);
+                Canvas.SetLeft(ellipse, Random.Shared.NextDouble() * 2400);
+                Canvas.SetTop(ellipse, Random.Shared.NextDouble() * 460);
                 Canvas.SetZIndex(ellipse, -1);
 
                 // Pulsing opacity animation with random duration and start delay
@@ -8753,8 +9001,8 @@ namespace ConditioningControlPanel
                 {
                     From = 0,
                     To = 1,
-                    Duration = TimeSpan.FromSeconds(2 + rng.NextDouble() * 3), // 2-5s
-                    BeginTime = TimeSpan.FromSeconds(rng.NextDouble() * 5),     // 0-5s delay
+                    Duration = TimeSpan.FromSeconds(2 + Random.Shared.NextDouble() * 3), // 2-5s
+                    BeginTime = TimeSpan.FromSeconds(Random.Shared.NextDouble() * 5),     // 0-5s delay
                     AutoReverse = true,
                     RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
                     EasingFunction = new System.Windows.Media.Animation.SineEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut }
@@ -8955,7 +9203,7 @@ namespace ConditioningControlPanel
             var tooltipStack = new StackPanel { MaxWidth = 280 };
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText,
+                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.LocalizedFlavorText,
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1")),
                 FontStyle = FontStyles.Italic,
                 TextWrapping = TextWrapping.Wrap,
@@ -8963,7 +9211,7 @@ namespace ConditioningControlPanel
             });
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.Description,
+                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.LocalizedDescription,
                 Foreground = Brushes.White,
                 TextWrapping = TextWrapping.Wrap
             });
@@ -8972,7 +9220,7 @@ namespace ConditioningControlPanel
                 var prereqSkill = Models.SkillDefinition.All.FirstOrDefault(s => s.Id == skill.PrerequisiteId);
                 tooltipStack.Children.Add(new TextBlock
                 {
-                    Text = $"🔒 Requires: {prereqSkill?.Name ?? skill.PrerequisiteId}",
+                    Text = Loc.GetF("label_skill_requires", prereqSkill?.LocalizedName ?? skill.PrerequisiteId),
                     Foreground = new SolidColorBrush(Color.FromRgb(255, 100, 100)),
                     Margin = new Thickness(0, 6, 0, 0)
                 });
@@ -9048,7 +9296,7 @@ namespace ConditioningControlPanel
                 Background = new SolidColorBrush(Color.FromRgb(30, 28, 45)),
                 Child = new TextBlock
                 {
-                    Text = App.Mods?.MakeModAware(skill.Name) ?? skill.Name,
+                    Text = App.Mods?.MakeModAware(skill.Name) ?? skill.LocalizedName,
                     Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 210)),
                     FontSize = 9.5,
                     FontWeight = FontWeights.SemiBold,
@@ -9065,7 +9313,7 @@ namespace ConditioningControlPanel
                           canPurchase ? (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4") :
                           Color.FromRgb(40, 35, 50);
 
-            var buttonText = isUnlocked ? $"💎{skill.Cost} ✓ OWNED" :
+            var buttonText = isUnlocked ? $"💎{skill.Cost} {Loc.Get("label_skill_owned")}" :
                             canPurchase ? $"💎 {skill.Cost}" :
                             $"🔒 {skill.Cost}";
 
@@ -9347,7 +9595,7 @@ namespace ConditioningControlPanel
             var tooltipStack = new StackPanel { MaxWidth = 280 };
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText,
+                Text = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.LocalizedFlavorText,
                 Foreground = new SolidColorBrush(Color.FromRgb(200, 150, 255)),
                 FontStyle = FontStyles.Italic,
                 TextWrapping = TextWrapping.Wrap,
@@ -9355,7 +9603,7 @@ namespace ConditioningControlPanel
             });
             tooltipStack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.Description,
+                Text = App.Mods?.MakeModAware(skill.Description) ?? skill.LocalizedDescription,
                 Foreground = Brushes.White,
                 TextWrapping = TextWrapping.Wrap
             });
@@ -9381,7 +9629,7 @@ namespace ConditioningControlPanel
 
             stack.Children.Add(new TextBlock
             {
-                Text = App.Mods?.MakeModAware(skill.Name) ?? skill.Name,
+                Text = App.Mods?.MakeModAware(skill.Name) ?? skill.LocalizedName,
                 Foreground = new SolidColorBrush(isUnlocked ? Color.FromRgb(180, 130, 255) : Color.FromRgb(153, 50, 204)),
                 FontSize = 10,
                 FontWeight = FontWeights.Bold,
@@ -9432,9 +9680,13 @@ namespace ConditioningControlPanel
                 if (skill == null) return;
 
                 // Show confirmation dialog
+                var skillName = App.Mods?.MakeModAware(skill.Name) ?? skill.LocalizedName;
+                var pointsLabel = (App.Mods?.GetPointsLabel() ?? Loc.Get("label_sparkle_points")).ToLower();
+                var flavorText = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.LocalizedFlavorText;
+                var descText = App.Mods?.MakeModAware(skill.Description) ?? skill.LocalizedDescription;
                 var result = MessageBox.Show(
-                    $"Purchase '{App.Mods?.MakeModAware(skill.Name) ?? skill.Name}' for {skill.Cost} {(App.Mods?.GetPointsLabel() ?? "sparkle points").ToLower()}?\n\n{App.Mods?.MakeModAware(skill.FlavorText) ?? skill.FlavorText}\n\n{App.Mods?.MakeModAware(skill.Description) ?? skill.Description}",
-                    "Purchase Enhancement",
+                    Loc.GetF("msg_purchase_skill", skillName, skill.Cost, pointsLabel, flavorText, descText),
+                    Loc.Get("dialog_purchase_enhancement"),
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
 
@@ -9462,7 +9714,7 @@ namespace ConditioningControlPanel
                         }
                         else if (!string.IsNullOrEmpty(error))
                         {
-                            MessageBox.Show(error, "Purchase Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            MessageBox.Show(error, Loc.Get("dialog_purchase_failed"), MessageBoxButton.OK, MessageBoxImage.Warning);
                         }
                     }
                     finally
@@ -10171,7 +10423,7 @@ namespace ConditioningControlPanel
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                Title = "Select Corner GIF",
+                Title = Loc.Get("title_select_corner_gif"),
                 Filter = "GIF files (*.gif)|*.gif|All files (*.*)|*.*",
                 InitialDirectory = System.IO.Path.Combine(App.EffectiveAssetsPath, "images")
             };
@@ -10224,7 +10476,7 @@ namespace ConditioningControlPanel
             {
                 // Hide spoilers
                 SessionSpoilerPanel.Visibility = Visibility.Collapsed;
-                BtnRevealSpoilers.Content = "👁 Reveal Details";
+                BtnRevealSpoilers.Content = Loc.Get("btn_reveal_details");
                 return;
             }
             
@@ -10259,7 +10511,7 @@ namespace ConditioningControlPanel
             if (warning3)
             {
                 SessionSpoilerPanel.Visibility = Visibility.Visible;
-                BtnRevealSpoilers.Content = "😎 Hide Details";
+                BtnRevealSpoilers.Content = Loc.Get("btn_hide_details");
             }
         }
         
@@ -10465,7 +10717,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Failed to start session");
-                ShowStyledDialog("Error", $"Failed to start session:\n{ex.Message}", "OK", "");
+                ShowStyledDialog(Loc.Get("title_error"), Loc.GetF("msg_failed_to_start_session", ex.Message), Loc.Get("btn_ok"), "");
             }
         }
         
@@ -10502,15 +10754,15 @@ namespace ConditioningControlPanel
                     var session = _sessionEngine.CurrentSession;
 
                     // Update session button with remaining time
-                    BtnStartSession.Content = $"STOP SESSION ({((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2})";
+                    BtnStartSession.Content = Loc.GetF("btn_stop_session_0_1", $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}");
 
                     // Update Start button label with session name + timer
                     var mName = session.GetModeAwareName();
                     var name = mName.Length > 14
                         ? mName.Substring(0, 11) + "..."
                         : mName;
-                    var pauseIndicator = _sessionEngine.IsPaused ? " [PAUSED]" : "";
-                    TxtStartLabel.Text = $"{name} {((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2}{pauseIndicator}";
+                    var pauseIndicator = _sessionEngine.IsPaused ? $" [{Loc.Get("label_paused")}]" : "";
+                    TxtStartLabel.Text = Loc.GetF("label_0_1_2_3", name, $"{((int)remaining.TotalMinutes):D2}", $"{remaining.Seconds:D2}", pauseIndicator);
                 }
             });
         }
@@ -10528,7 +10780,7 @@ namespace ConditioningControlPanel
             App.IsSessionRunning = true;
             Dispatcher.Invoke(() =>
             {
-                BtnStartSession.Content = "STOP SESSION";
+                BtnStartSession.Content = Loc.Get("btn_stop_session_2");
                 BtnStartSession.Click -= BtnStartSession_Click;
                 BtnStartSession.Click += BtnStopSession_Click;
 
@@ -10564,13 +10816,13 @@ namespace ConditioningControlPanel
                 // Stop the engine when session stops
                 StopEngine();
 
-                BtnStartSession.Content = "▶ Start Session";
+                BtnStartSession.Content = Loc.Get("btn_start_session");
                 BtnStartSession.Click -= BtnStopSession_Click;
                 BtnStartSession.Click += BtnStartSession_Click;
 
                 // Reset Start button to normal state
                 TxtStartIcon.Text = "▶";
-                TxtStartLabel.Text = "START";
+                TxtStartLabel.Text = Loc.Get("label_start");
 
                 // Restore pink color
                 BtnStart.ClearValue(System.Windows.Controls.Control.BackgroundProperty);
@@ -10586,7 +10838,7 @@ namespace ConditioningControlPanel
 
             if (App.Lockdown?.IsActive == true)
             {
-                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nYou cannot end a session during lockdown!", "LOCKDOWN",
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_end_a_se"), Loc.Get("title_lockdown"),
                     MessageBoxButton.OK, MessageBoxImage.Stop);
                 return;
             }
@@ -10601,18 +10853,16 @@ namespace ConditioningControlPanel
             var potentialXP = (int)Math.Round((session?.BonusXP ?? 0) * multiplier);
 
             var penaltyText = _sessionEngine.PauseCount > 0
-                ? $"\n(Plus {_sessionEngine.XPPenalty} XP pause penalty)"
+                ? Loc.GetF("msg_plus_pause_penalty_0", _sessionEngine.XPPenalty)
                 : "";
 
             var confirmed = ShowStyledDialog(
-                "⚠ Stop Session?",
-                $"You're currently in a session:\n" +
-                $"{session?.Icon} {session?.Name}\n\n" +
-                $"Time elapsed: {((int)elapsed.TotalMinutes):D2}:{elapsed.Seconds:D2}\n" +
-                $"Time remaining: {((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2}\n\n" +
-                $"If you stop now, you will lose ALL {potentialXP} XP.{penaltyText}\n\n" +
-                "Are you sure you want to quit?",
-                "Yes, stop session", "Keep going");
+                Loc.Get("title_stop_session_confirm"),
+                Loc.GetF("msg_stop_session_body", session?.Icon, session?.Name,
+                    $"{((int)elapsed.TotalMinutes):D2}:{elapsed.Seconds:D2}",
+                    $"{((int)remaining.TotalMinutes):D2}:{remaining.Seconds:D2}",
+                    potentialXP, penaltyText),
+                Loc.Get("btn_yes_stop_session"), Loc.Get("btn_keep_going"));
 
             if (confirmed)
             {
@@ -10626,7 +10876,7 @@ namespace ConditioningControlPanel
 
             if (App.Lockdown?.IsActive == true)
             {
-                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nYou cannot pause during lockdown!", "LOCKDOWN",
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_pause_du"), Loc.Get("title_lockdown"),
                     MessageBoxButton.OK, MessageBoxImage.Stop);
                 return;
             }
@@ -10636,24 +10886,21 @@ namespace ConditioningControlPanel
                 // Resume
                 _sessionEngine.ResumeSession();
                 if (TxtPauseIcon != null) TxtPauseIcon.Text = "⏸";
-                BtnPauseSession.ToolTip = $"Pause session (-100 XP penalty per pause)\nPaused {_sessionEngine.PauseCount}x so far";
+                BtnPauseSession.ToolTip = Loc.GetF("tooltip_pause_session_100_xp_penalty_per_pause_npause", _sessionEngine.PauseCount);
             }
             else
             {
                 // Confirm pause (costs XP)
                 var confirmed = ShowStyledDialog(
-                    "⏸ Pause Session?",
-                    "Pausing will cost you 100 XP from your session reward.\n\n" +
-                    $"Current penalty: -{_sessionEngine.XPPenalty} XP\n" +
-                    $"After this pause: -{_sessionEngine.XPPenalty + 100} XP\n\n" +
-                    "Are you sure?",
-                    "Yes, pause", "Keep going");
+                    Loc.Get("title_pause_session_confirm"),
+                    Loc.GetF("msg_pause_session_body", _sessionEngine.XPPenalty, _sessionEngine.XPPenalty + 100),
+                    Loc.Get("btn_yes_pause"), Loc.Get("btn_keep_going"));
 
                 if (confirmed)
                 {
                     _sessionEngine.PauseSession();
                     if (TxtPauseIcon != null) TxtPauseIcon.Text = "▶";
-                    BtnPauseSession.ToolTip = "Resume session";
+                    BtnPauseSession.ToolTip = Loc.Get("tooltip_resume_session");
                 }
             }
         }
@@ -10818,7 +11065,7 @@ namespace ConditioningControlPanel
             RefreshPresetsDropdown();
             
             App.Logger?.Information("Loaded preset: {Name}", preset.Name);
-            MessageBox.Show($"Preset '{preset.Name}' loaded!", "Preset Loaded", 
+            MessageBox.Show(Loc.GetF("msg_preset_0_loaded", preset.Name), Loc.Get("title_preset_loaded"),
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
@@ -10827,8 +11074,8 @@ namespace ConditioningControlPanel
             if (_selectedPreset == null) return;
             
             var result = MessageBox.Show(
-                $"Load preset '{_selectedPreset.Name}'?\n\nThis will replace your current settings.",
-                "Load Preset",
+                Loc.GetF("msg_load_preset_confirm_0", _selectedPreset.Name),
+                Loc.Get("title_load_preset"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
                 
@@ -10845,7 +11092,7 @@ namespace ConditioningControlPanel
 
         private void PromptSaveNewPreset()
         {
-            var dialog = new InputDialog("New Preset", "Enter a name for your preset:", "My Custom Preset");
+            var dialog = new InputDialog(Loc.Get("title_new_preset"), Loc.Get("msg_enter_a_name_for_your_preset"), Loc.Get("label_my_custom_preset"));
             dialog.Owner = this;
             
             if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.ResultText))
@@ -10855,7 +11102,7 @@ namespace ConditioningControlPanel
                 // Check if name already exists
                 if (_allPresets.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
                 {
-                    MessageBox.Show("A preset with this name already exists.", "Name Taken", 
+                    MessageBox.Show(Loc.Get("msg_a_preset_with_this_name_already_exists"), Loc.Get("title_name_taken"),
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
@@ -10870,7 +11117,7 @@ namespace ConditioningControlPanel
                 SelectPreset(preset);
                 
                 App.Logger?.Information("Created new preset: {Name}", name);
-                MessageBox.Show($"Preset '{name}' saved!", "Preset Saved", 
+                MessageBox.Show(Loc.GetF("msg_preset_0_saved", name), Loc.Get("title_preset_saved"),
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
@@ -10880,8 +11127,8 @@ namespace ConditioningControlPanel
             if (_selectedPreset == null || _selectedPreset.IsDefault) return;
             
             var result = MessageBox.Show(
-                $"Save current settings over preset '{_selectedPreset.Name}'?",
-                "Overwrite Preset",
+                Loc.GetF("msg_overwrite_preset_confirm_0", _selectedPreset.Name),
+                Loc.Get("title_overwrite_preset"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
                 
@@ -10903,7 +11150,7 @@ namespace ConditioningControlPanel
                     SelectPreset(updated);
                     
                     App.Logger?.Information("Updated preset: {Name}", updated.Name);
-                    MessageBox.Show($"Preset '{updated.Name}' updated!", "Preset Updated", 
+                    MessageBox.Show(Loc.GetF("msg_preset_0_updated", updated.Name), Loc.Get("title_preset_updated"),
                         MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
@@ -10912,10 +11159,10 @@ namespace ConditioningControlPanel
         private void BtnDeletePreset_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedPreset == null || _selectedPreset.IsDefault) return;
-            
+
             var result = MessageBox.Show(
-                $"Delete preset '{_selectedPreset.Name}'?\n\nThis cannot be undone.",
-                "Delete Preset",
+                Loc.GetF("msg_delete_preset_confirm_0", _selectedPreset.Name),
+                Loc.Get("title_delete_preset"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
                 
@@ -11106,7 +11353,7 @@ namespace ConditioningControlPanel
             Grid.SetColumn(buttonPanel, 1);
 
             var editBtn = CreateSessionActionButton("✏", "Edit Session", session.Id, SessionBtn_Edit);
-            var exportBtn = CreateSessionActionButton("📤", "Export Session", session.Id, SessionBtn_Export);
+            var exportBtn = CreateSessionActionButton("📤", Loc.Get("tooltip_export_session"), session.Id, SessionBtn_Export);
             var deleteBtn = CreateSessionDeleteButton("🗑", "Delete Session", session.Id, SessionBtn_Delete);
 
             buttonPanel.Children.Add(editBtn);
@@ -11213,7 +11460,7 @@ namespace ConditioningControlPanel
             SessionDetailScroller.Visibility = Visibility.Visible;
             SessionButtonsPanel.Visibility = Visibility.Visible;
             SessionSpoilerPanel.Visibility = Visibility.Collapsed;
-            BtnRevealSpoilers.Content = "👁 Reveal Details";
+            BtnRevealSpoilers.Content = Loc.Get("btn_reveal_details");
 
             TxtDetailTitle.Text = $"{session.Icon} {session.GetModeAwareName()}";
             TxtDetailSubtitle.Text = GenerateSessionTimelineDescription(session);
@@ -11479,13 +11726,13 @@ namespace ConditioningControlPanel
             {
                 case DropType.Session:
                     DropOverlayIcon.Text = "📋";
-                    DropOverlayTitle.Text = "Drop to Import Session";
+                    DropOverlayTitle.Text = Loc.Get("label_drop_to_import_session");
                     DropOverlaySubtitle.Text = Path.GetFileName(files[0]);
                     break;
 
                 case DropType.Zip:
                     DropOverlayIcon.Text = "📦";
-                    DropOverlayTitle.Text = "Drop to Extract Assets";
+                    DropOverlayTitle.Text = Loc.Get("label_drop_to_extract_assets");
                     var zipCount = files.Count(f => Path.GetExtension(f).Equals(".zip", StringComparison.OrdinalIgnoreCase));
                     DropOverlaySubtitle.Text = zipCount == 1
                         ? Path.GetFileName(files.First(f => f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
@@ -11494,13 +11741,13 @@ namespace ConditioningControlPanel
 
                 case DropType.Folder:
                     DropOverlayIcon.Text = "📁";
-                    DropOverlayTitle.Text = "Drop to Import Folder";
+                    DropOverlayTitle.Text = Loc.Get("label_drop_to_import_folder");
                     DropOverlaySubtitle.Text = $"Scan for images & videos";
                     break;
 
                 case DropType.Assets:
                     DropOverlayIcon.Text = "🖼️";
-                    DropOverlayTitle.Text = "Drop to Import Assets";
+                    DropOverlayTitle.Text = Loc.Get("label_drop_to_import_assets");
                     DropOverlaySubtitle.Text = files.Length == 1
                         ? Path.GetFileName(files[0])
                         : $"{files.Length} files";
@@ -11570,13 +11817,13 @@ namespace ConditioningControlPanel
                 ShowTab("assets");
 
                 App.Logger?.Information("Asset import complete: {Summary}", result.GetSummary());
-                MessageBox.Show(result.GetSummary(), "Import Complete", MessageBoxButton.OK,
+                MessageBox.Show(result.GetSummary(), Loc.Get("title_import_complete"), MessageBoxButton.OK,
                     result.TotalImported > 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Asset import failed");
-                MessageBox.Show($"Import failed: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(Loc.GetF("msg_import_failed_0", ex.Message), Loc.Get("title_import_error"), MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -11619,7 +11866,7 @@ namespace ConditioningControlPanel
                         var dialog = new Microsoft.Win32.SaveFileDialog
                         {
                             Filter = "Session Files (*.session.json)|*.session.json",
-                            Title = "Save as New Custom Session",
+                            Title = Loc.Get("title_save_as_new_custom_session"),
                             InitialDirectory = SessionFileService.CustomSessionsFolder,
                             FileName = SessionFileService.GetExportFileName(editedSession)
                         };
@@ -11627,7 +11874,7 @@ namespace ConditioningControlPanel
                         if (dialog.ShowDialog() == true)
                         {
                             _sessionManager.AddNewSession(editedSession, dialog.FileName);
-                            MessageBox.Show("Built-in session saved as a new custom session!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                            MessageBox.Show(Loc.Get("msg_built_in_session_saved_as_a_new_custom_sessio"), Loc.Get("title_success"), MessageBoxButton.OK, MessageBoxImage.Information);
                         }
                     }
                     else // Custom session
@@ -11668,9 +11915,9 @@ namespace ConditioningControlPanel
 
                 // Confirm deletion
                 var result = ShowStyledDialog(
-                    "Delete Session",
-                    $"Are you sure you want to delete '{session.Name}'?\n\nThis cannot be undone.",
-                    "Delete", "Cancel");
+                    Loc.Get("title_delete_session"),
+                    Loc.GetF("msg_delete_session_confirm_0", session.Name),
+                    Loc.Get("btn_delete"), Loc.Get("btn_cancel"));
 
                 if (result && _sessionManager != null)
                 {
@@ -11681,8 +11928,8 @@ namespace ConditioningControlPanel
                     if (_selectedSession?.Id == sessionId)
                     {
                         _selectedSession = null;
-                        TxtDetailTitle.Text = "Select a Session";
-                        TxtDetailSubtitle.Text = "Click on a session to see details";
+                        TxtDetailTitle.Text = Loc.Get("label_select_a_session");
+                        TxtDetailSubtitle.Text = Loc.Get("label_click_on_a_session_to_see_details");
                     }
                 }
             }
@@ -11720,7 +11967,7 @@ namespace ConditioningControlPanel
             var filePath = files[0];
             if (!filePath.EndsWith(".session.json", StringComparison.OrdinalIgnoreCase))
             {
-                ShowDropZoneStatus("Only .session.json files allowed", isError: true);
+                ShowDropZoneStatus(Loc.Get("msg_only_session_json_files_allowed"), isError: true);
                 return;
             }
 
@@ -11796,7 +12043,7 @@ namespace ConditioningControlPanel
                 var dialog = new Microsoft.Win32.SaveFileDialog
                 {
                     Filter = "Session Files (*.session.json)|*.session.json",
-                    Title = "Save New Session",
+                    Title = Loc.Get("title_save_new_session"),
                     InitialDirectory = SessionFileService.CustomSessionsFolder,
                     FileName = SessionFileService.GetExportFileName(session)
                 };
@@ -11807,7 +12054,7 @@ namespace ConditioningControlPanel
                     _sessionManager.AddNewSession(session, dialog.FileName);
 
                     // The OnSessionAdded event will handle UI updates
-                    MessageBox.Show("New session saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(Loc.Get("msg_new_session_saved"), Loc.Get("title_success"), MessageBoxButton.OK, MessageBoxImage.Information);
                     App.Logger?.Information("Session created: {Name} at {Path}", session.Name, dialog.FileName);
                 }
             }
@@ -11835,7 +12082,7 @@ namespace ConditioningControlPanel
 
             var dialog = new Microsoft.Win32.SaveFileDialog
             {
-                Title = "Export Session",
+                Title = Loc.Get("title_export_session"),
                 Filter = "Session files (*.session.json)|*.session.json",
                 FileName = Services.SessionFileService.GetExportFileName(session),
                 DefaultExt = ".session.json"
@@ -11846,12 +12093,12 @@ namespace ConditioningControlPanel
                 try
                 {
                     _sessionFileService.ExportSession(session, dialog.FileName);
-                    ShowStyledDialog("Export Complete", $"Session exported to:\n{dialog.FileName}", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_export_complete"), Loc.GetF("msg_session_exported_to_0", dialog.FileName), "OK", "");
                     App.Logger?.Information("Session exported: {Name} to {Path}", session.Name, dialog.FileName);
                 }
                 catch (Exception ex)
                 {
-                    ShowStyledDialog("Export Failed", $"Failed to export session:\n{ex.Message}", "OK", "");
+                    ShowStyledDialog(Loc.Get("title_export_failed"), Loc.GetF("msg_failed_to_export_session_0", ex.Message), "OK", "");
                     App.Logger?.Error(ex, "Failed to export session");
                 }
             }
@@ -11867,9 +12114,9 @@ namespace ConditioningControlPanel
 
             try
             {
-                TxtBrowserStatus.Text = "● Loading...";
+                TxtBrowserStatus.Text = Loc.Get("label_loading");
                 TxtBrowserStatus.Foreground = FindResource("PinkBrush") as SolidColorBrush;
-                BrowserLoadingText.Text = "🌐 Initializing WebView2...";
+                BrowserLoadingText.Text = Loc.Get("label_initializing_webview2");
                 
                 _browser = new BrowserService();
                 
@@ -11877,7 +12124,7 @@ namespace ConditioningControlPanel
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        TxtBrowserStatus.Text = "● Connected";
+                        TxtBrowserStatus.Text = Loc.Get("label_connected_2");
                         TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(0, 230, 118)); // Green
 
                         // Now that CoreWebView2 is ready, attach message handler for video end notifications
@@ -11893,7 +12140,7 @@ namespace ConditioningControlPanel
                 {
                     Dispatcher.Invoke(async () =>
                     {
-                        TxtBrowserStatus.Text = "● Connected";
+                        TxtBrowserStatus.Text = Loc.Get("label_connected_2");
                         TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(0, 230, 118)); // Green
 
                         // Inject audio sync script when navigating to video sites
@@ -11917,7 +12164,7 @@ namespace ConditioningControlPanel
                     Dispatcher.Invoke(() => HandleBrowserFullscreenChanged(isFullscreen));
                 };
 
-                BrowserLoadingText.Text = "🌐 Creating browser...";
+                BrowserLoadingText.Text = Loc.Get("label_creating_browser");
 
                 // Navigate to mode-appropriate site
                 var startUrl = App.Mods?.GetDefaultBrowserUrl() ?? "https://bambicloud.com/";
@@ -11936,44 +12183,44 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    var errorMsg = "WebView2 returned null - unknown error";
-                    BrowserLoadingText.Text = $"❌ {errorMsg}\n\nInstall WebView2 Runtime:\ngo.microsoft.com/fwlink/p/?LinkId=2124703";
-                    TxtBrowserStatus.Text = "● Error";
+                    var errorMsg = Loc.Get("msg_webview2_returned_null");
+                    BrowserLoadingText.Text = Loc.GetF("label_0_n_ninstall_webview2_runtime_ngo_microsoft_c", errorMsg);
+                    TxtBrowserStatus.Text = Loc.Get("label_error_2");
                     TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
-                    MessageBox.Show(errorMsg, "Browser Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show(errorMsg, Loc.Get("title_browser_error"), MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
             catch (InvalidOperationException invEx)
             {
                 BrowserLoadingText.Text = $"❌ {invEx.Message}";
-                TxtBrowserStatus.Text = "● Not Installed";
+                TxtBrowserStatus.Text = Loc.Get("label_not_installed");
                 TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
-                MessageBox.Show(invEx.Message, "WebView2 Not Installed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(invEx.Message, Loc.Get("title_webview2_not_installed"), MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             catch (System.Runtime.InteropServices.COMException comEx)
             {
-                var errorMsg = $"WebView2 COM Error:\n{comEx.Message}\n\nError Code: {comEx.HResult}";
-                BrowserLoadingText.Text = $"❌ COM Error\n\nInstall WebView2:\ngo.microsoft.com/fwlink/p/?LinkId=2124703";
-                TxtBrowserStatus.Text = "● COM Error";
+                var errorMsg = Loc.GetF("msg_webview2_com_error_0_1", comEx.Message, comEx.HResult);
+                BrowserLoadingText.Text = Loc.Get("label_com_error_install_webview2");
+                TxtBrowserStatus.Text = Loc.Get("label_com_error");
                 TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
-                MessageBox.Show(errorMsg, "WebView2 Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(errorMsg, Loc.Get("title_webview2_error"), MessageBoxButton.OK, MessageBoxImage.Error);
             }
             catch (System.DllNotFoundException dllEx)
             {
-                var errorMsg = $"WebView2 DLL not found:\n{dllEx.Message}";
-                BrowserLoadingText.Text = $"❌ Missing DLL\n\nInstall WebView2:\ngo.microsoft.com/fwlink/p/?LinkId=2124703";
-                TxtBrowserStatus.Text = "● Missing DLL";
+                var errorMsg = Loc.GetF("msg_webview2_dll_not_found_0", dllEx.Message);
+                BrowserLoadingText.Text = Loc.Get("label_missing_dll_install_webview2");
+                TxtBrowserStatus.Text = Loc.Get("label_missing_dll");
                 TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
-                MessageBox.Show(errorMsg, "Missing DLL", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(errorMsg, Loc.Get("title_missing_dll"), MessageBoxButton.OK, MessageBoxImage.Error);
             }
             catch (Exception ex)
             {
                 var stack = ex.StackTrace;
                 var errorMsg = $"Browser Error:\n\nType: {ex.GetType().Name}\n\nMessage: {ex.Message}\n\nStack: {(stack != null ? stack.Substring(0, Math.Min(500, stack.Length)) : "(none)")}";
                 BrowserLoadingText.Text = $"❌ {ex.GetType().Name}\n{ex.Message}";
-                TxtBrowserStatus.Text = "● Error";
+                TxtBrowserStatus.Text = Loc.Get("label_error_2");
                 TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(255, 107, 107));
-                MessageBox.Show(errorMsg, "Browser Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(errorMsg, Loc.Get("title_browser_error"), MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -12461,7 +12708,7 @@ namespace ConditioningControlPanel
                 {
                     // Link Discord to existing account
                     BtnDiscordTabLogin.IsEnabled = false;
-                    BtnDiscordTabLogin.Content = "Connecting...";
+                    BtnDiscordTabLogin.Content = Loc.Get("login_connecting");
 
                     try
                     {
@@ -12514,20 +12761,20 @@ namespace ConditioningControlPanel
             {
                 if (isLoggedIn)
                 {
-                    TxtDiscordTabStatus.Text = $"Connected as {App.Discord.Username}";
-                    TxtDiscordTabInfo.Text = "Discord account linked";
-                    BtnDiscordTabLogin.Content = "Logout";
+                    TxtDiscordTabStatus.Text = Loc.GetF("label_connected_as_0", App.Discord.Username);
+                    TxtDiscordTabInfo.Text = Loc.Get("label_discord_account_linked");
+                    BtnDiscordTabLogin.Content = Loc.Get("btn_logout");
                 }
                 else
                 {
                     // Check if user is logged in with another provider (has unified_id)
                     var hasUnifiedId = !string.IsNullOrEmpty(App.Settings?.Current?.UnifiedId);
 
-                    TxtDiscordTabStatus.Text = "Not Connected";
-                    TxtDiscordTabInfo.Text = "Link Discord for community features";
+                    TxtDiscordTabStatus.Text = Loc.Get("label_not_connected");
+                    TxtDiscordTabInfo.Text = Loc.Get("label_link_discord_for_community_features");
 
                     // Show "Link Discord" if logged in via Patreon, otherwise "Login"
-                    BtnDiscordTabLogin.Content = hasUnifiedId ? "Link Discord" : "Login";
+                    BtnDiscordTabLogin.Content = hasUnifiedId ? Loc.Get("btn_link_discord_2") : Loc.Get("btn_login");
                 }
             }
 
@@ -12631,9 +12878,10 @@ namespace ConditioningControlPanel
                     System.Windows.Clipboard.SetText(discordId);
                     // Show brief feedback
                     var originalText = TxtProfileDiscordId.Text;
-                    TxtProfileDiscordId.Text = "Copied!";
+                    TxtProfileDiscordId.Text = Loc.Get("btn_copied");
                     Task.Delay(1000).ContinueWith(_ =>
                     {
+                        if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                         Dispatcher.Invoke(() =>
                         {
                             if (TxtProfileDiscordId != null)
@@ -12684,9 +12932,10 @@ namespace ConditioningControlPanel
                         if (TxtProfileDiscordId != null)
                         {
                             var originalText = TxtProfileDiscordId.Text;
-                            TxtProfileDiscordId.Text = "ID Copied!";
+                            TxtProfileDiscordId.Text = Loc.Get("label_id_copied");
                             Task.Delay(1500).ContinueWith(_ =>
                             {
+                                if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
                                 Dispatcher.Invoke(() =>
                                 {
                                     if (TxtProfileDiscordId != null)
@@ -12733,8 +12982,8 @@ namespace ConditioningControlPanel
                 else
                 {
                     MessageBox.Show(
-                        error ?? "Failed to change display name",
-                        "Name Change Failed",
+                        error ?? Loc.Get("msg_failed_to_change_display_name"),
+                        Loc.Get("title_name_change_failed"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
                 }
@@ -12743,8 +12992,8 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "Error changing display name");
                 MessageBox.Show(
-                    "An error occurred while changing your name. Please try again.",
-                    "Error",
+                    Loc.Get("msg_error_changing_name"),
+                    Loc.Get("label_error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
@@ -12778,16 +13027,16 @@ namespace ConditioningControlPanel
                     ClearAccountData();
 
                     MessageBox.Show(
-                        "Your profile has been deleted.",
-                        "Profile Deleted",
+                        Loc.Get("msg_profile_deleted"),
+                        Loc.Get("title_profile_deleted"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
                 }
                 else
                 {
                     MessageBox.Show(
-                        error ?? "Failed to delete profile",
-                        "Deletion Failed",
+                        error ?? Loc.Get("msg_failed_to_delete_profile"),
+                        Loc.Get("title_deletion_failed"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
                 }
@@ -12796,8 +13045,8 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "Error deleting profile");
                 MessageBox.Show(
-                    "An error occurred while deleting your profile. Please try again.",
-                    "Error",
+                    Loc.Get("msg_error_deleting_profile"),
+                    Loc.Get("label_error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
@@ -12989,7 +13238,7 @@ namespace ConditioningControlPanel
             // Online status
             if (TxtProfileViewerOnline != null)
             {
-                TxtProfileViewerOnline.Text = "Online";
+                TxtProfileViewerOnline.Text = Loc.Get("label_online");
                 TxtProfileViewerOnline.Foreground = new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#43B581"));
             }
@@ -13134,7 +13383,7 @@ namespace ConditioningControlPanel
                 if (ProfileAchievementGrid != null) ProfileAchievementGrid.ItemsSource = null;
                 if (TxtNoAchievements != null)
                 {
-                    TxtNoAchievements.Text = "No achievements yet";
+                    TxtNoAchievements.Text = Loc.Get("label_no_achievements_yet");
                     TxtNoAchievements.Visibility = Visibility.Visible;
                 }
             }
@@ -13530,13 +13779,13 @@ namespace ConditioningControlPanel
                 }
 
                 // Show placeholder in the embedded container
-                BrowserLoadingText.Text = "🌐 Browser popped out\nClick ⧉ to focus window";
+                BrowserLoadingText.Text = Loc.Get("label_browser_popped_out_nclick_to_focus_window");
                 BrowserLoadingText.Visibility = Visibility.Visible;
 
                 // Create popup window
                 _browserPopoutWindow = new Window
                 {
-                    Title = "Conditioning Control Panel - Browser",
+                    Title = Loc.Get("title_browser_window"),
                     Width = 1024,
                     Height = 768,
                     MinWidth = 400,
@@ -13579,13 +13828,13 @@ namespace ConditioningControlPanel
                         BrowserLoadingText.Visibility = Visibility.Collapsed;
                     }
                     _browserPopoutWindow = null;
-                    BtnPopOutBrowser.Content = "⧉ Pop Out";
-                    BtnPopOutBrowser.ToolTip = "Pop out browser to resizable window";
+                    BtnPopOutBrowser.Content = Loc.Get("btn_pop_out");
+                    BtnPopOutBrowser.ToolTip = Loc.Get("tooltip_pop_out_browser_to_resizable_window");
                 };
 
                 // Update button to show it's popped out
-                BtnPopOutBrowser.Content = "◱ Focus";
-                BtnPopOutBrowser.ToolTip = "Browser is popped out - click to focus";
+                BtnPopOutBrowser.Content = Loc.Get("btn_focus");
+                BtnPopOutBrowser.ToolTip = Loc.Get("tooltip_browser_is_popped_out_click_to_focus");
 
                 _browserPopoutWindow.Show();
                 App.Logger?.Information("Browser popped out to separate window");
@@ -13840,7 +14089,7 @@ namespace ConditioningControlPanel
 
             if (_isRunning && App.Lockdown?.IsActive == true)
             {
-                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nYou cannot stop during lockdown!", "LOCKDOWN",
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"), Loc.Get("title_lockdown"),
                     MessageBoxButton.OK, MessageBoxImage.Stop);
                 return;
             }
@@ -14071,7 +14320,7 @@ namespace ConditioningControlPanel
             // the LOH during sessions. Compacting here returns memory to the OS.
             App.Flash.ClearImageCache();
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true);
+            GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
 
             App.Logger?.Information("Engine stopped");
         }
@@ -14491,7 +14740,7 @@ namespace ConditioningControlPanel
                 // Also update Presets tab button using direct reference
                 if (TxtPresetsStatus != null)
                 {
-                    TxtPresetsStatus.Text = "Running...";
+                    TxtPresetsStatus.Text = Loc.Get("label_running");
                 }
             }
             else
@@ -14662,7 +14911,7 @@ namespace ConditioningControlPanel
             }
             else
             {
-                TxtStartupVideo.Text = "(Random)";
+                TxtStartupVideo.Text = Loc.Get("label_random");
             }
 
             // Audio
@@ -15068,7 +15317,7 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    MessageBox.Show("Settings saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(Loc.Get("msg_settings_saved"), Loc.Get("title_success"), MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
             else
@@ -15096,7 +15345,7 @@ namespace ConditioningControlPanel
                         RefreshPresetsList();
 
                         App.Logger?.Information("Overwritten preset: {Name}", updated.Name);
-                        MessageBox.Show($"Preset '{updated.Name}' updated!", "Preset Saved",
+                        MessageBox.Show(Loc.GetF("msg_preset_0_updated", updated.Name), Loc.Get("title_preset_saved"),
                             MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                 }
@@ -15108,7 +15357,7 @@ namespace ConditioningControlPanel
                 else
                 {
                     // Cancel - just show settings saved message
-                    MessageBox.Show("Settings saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(Loc.Get("msg_settings_saved"), Loc.Get("title_success"), MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             }
         }
@@ -15117,14 +15366,14 @@ namespace ConditioningControlPanel
         {
             if (App.Lockdown?.IsActive == true)
             {
-                MessageBox.Show("YOU ARE IN LOCKDOWN MODE.\nTHERE IS NO ESCAPE!", "LOCKDOWN",
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nthere_is_no_escape"), Loc.Get("title_lockdown"),
                     MessageBoxButton.OK, MessageBoxImage.Stop);
                 return;
             }
 
             if (_isRunning)
             {
-                var result = MessageBox.Show("Engine is running. Stop and exit?", "Confirm Exit",
+                var result = MessageBox.Show(Loc.Get("msg_engine_is_running_stop_and_exit"), Loc.Get("title_confirm_exit"),
                     MessageBoxButton.YesNo, MessageBoxImage.Question);
                 if (result != MessageBoxResult.Yes)
                     return;
@@ -15347,63 +15596,65 @@ namespace ConditioningControlPanel
         /// </summary>
         private void ApplyModFeatureNames()
         {
-            string M(string text) => App.Mods?.MakeModAware(text) ?? text;
+            // If a mod is active, use mod-aware text; otherwise use localized text
+            string ML(string englishText, string locKey) => App.Mods?.MakeModAware(englishText) is string modText && modText != englishText
+                ? modText : Loc.Get(locKey);
 
             // Main section headers
-            if (TxtFeatureFlash != null) TxtFeatureFlash.Text = M("⚡ Flash Images");
-            if (TxtFeatureVideo != null) TxtFeatureVideo.Text = M("🎬 Mandatory Video");
-            if (TxtFeatureSubliminal != null) TxtFeatureSubliminal.Text = M("💭 Subliminals");
-            if (TxtFeatureWhispers != null) TxtFeatureWhispers.Text = M("📊 Audio Whispers");
+            if (TxtFeatureFlash != null) TxtFeatureFlash.Text = ML("⚡ Flash Images", "section_flash_images");
+            if (TxtFeatureVideo != null) TxtFeatureVideo.Text = ML("🎬 Mandatory Video", "section_mandatory_video");
+            if (TxtFeatureSubliminal != null) TxtFeatureSubliminal.Text = ML("💭 Subliminals", "section_subliminals");
+            if (TxtFeatureWhispers != null) TxtFeatureWhispers.Text = ML("📊 Audio Whispers", "label_audio_whispers");
 
             // Enhancement locked/unlocked pairs
-            if (TxtFeatureSpiralLocked != null) TxtFeatureSpiralLocked.Text = M("🌀 Spiral Overlay");
-            if (TxtFeatureSpiral != null) TxtFeatureSpiral.Text = M("🌀 Spiral Overlay");
-            if (TxtFeaturePinkFilterLocked != null) TxtFeaturePinkFilterLocked.Text = M("💗 Pink Filter");
-            if (TxtFeaturePinkFilter != null) TxtFeaturePinkFilter.Text = M("💗 Pink Filter");
-            if (TxtFeatureBubblePopLocked != null) TxtFeatureBubblePopLocked.Text = M("🫧 Bubble Pop");
-            if (TxtFeatureBubblePop != null) TxtFeatureBubblePop.Text = M("🫧 Bubble Pop");
-            if (TxtFeatureLockCardLocked != null) TxtFeatureLockCardLocked.Text = M("📐 Lock Card");
-            if (TxtFeatureLockCard != null) TxtFeatureLockCard.Text = M("📐 Lock Card");
-            if (TxtFeatureBubbleCountLocked != null) TxtFeatureBubbleCountLocked.Text = M("🫧 Bubble Count");
-            if (TxtFeatureBubbleCount != null) TxtFeatureBubbleCount.Text = M("🫧 Bubble Count");
-            if (TxtFeatureBouncingLocked != null) TxtFeatureBouncingLocked.Text = M("📺 Bouncing Text");
-            if (TxtFeatureBouncing != null) TxtFeatureBouncing.Text = M("📺 Bouncing Text");
-            if (TxtFeatureBrainDrain != null) TxtFeatureBrainDrain.Text = M("💧 Brain Drain");
-            if (TxtFeatureMindWipeLocked != null) TxtFeatureMindWipeLocked.Text = M("🧠 Mind Wipe");
-            if (TxtFeatureMindWipe != null) TxtFeatureMindWipe.Text = M("🧠 Mind Wipe");
-            if (TxtFeatureCornerGif != null) TxtFeatureCornerGif.Text = M("🖼 Corner GIF");
+            if (TxtFeatureSpiralLocked != null) TxtFeatureSpiralLocked.Text = ML("🌀 Spiral Overlay", "label_spiral_overlay");
+            if (TxtFeatureSpiral != null) TxtFeatureSpiral.Text = ML("🌀 Spiral Overlay", "label_spiral_overlay");
+            if (TxtFeaturePinkFilterLocked != null) TxtFeaturePinkFilterLocked.Text = ML("💗 Pink Filter", "label_pink_filter");
+            if (TxtFeaturePinkFilter != null) TxtFeaturePinkFilter.Text = ML("💗 Pink Filter", "label_pink_filter");
+            if (TxtFeatureBubblePopLocked != null) TxtFeatureBubblePopLocked.Text = ML("🫧 Bubble Pop", "label_bubble_pop");
+            if (TxtFeatureBubblePop != null) TxtFeatureBubblePop.Text = ML("🫧 Bubble Pop", "label_bubble_pop");
+            if (TxtFeatureLockCardLocked != null) TxtFeatureLockCardLocked.Text = ML("📐 Lock Card", "label_lock_card");
+            if (TxtFeatureLockCard != null) TxtFeatureLockCard.Text = ML("📐 Lock Card", "label_lock_card");
+            if (TxtFeatureBubbleCountLocked != null) TxtFeatureBubbleCountLocked.Text = ML("🫧 Bubble Count", "label_bubble_count");
+            if (TxtFeatureBubbleCount != null) TxtFeatureBubbleCount.Text = ML("🫧 Bubble Count", "label_bubble_count");
+            if (TxtFeatureBouncingLocked != null) TxtFeatureBouncingLocked.Text = ML("📺 Bouncing Text", "label_bouncing_text");
+            if (TxtFeatureBouncing != null) TxtFeatureBouncing.Text = ML("📺 Bouncing Text", "label_bouncing_text");
+            if (TxtFeatureBrainDrain != null) TxtFeatureBrainDrain.Text = ML("💧 Brain Drain", "label_brain_drain");
+            if (TxtFeatureMindWipeLocked != null) TxtFeatureMindWipeLocked.Text = ML("🧠 Mind Wipe", "label_mind_wipe");
+            if (TxtFeatureMindWipe != null) TxtFeatureMindWipe.Text = ML("🧠 Mind Wipe", "label_mind_wipe");
+            if (TxtFeatureCornerGif != null) TxtFeatureCornerGif.Text = ML("🖼 Corner GIF", "label_corner_gif");
 
             // Preset/session detail labels
-            if (TxtDetailFlashLabel != null) TxtDetailFlashLabel.Text = M("⚡ Flash Images");
-            if (TxtDetailVideoLabel != null) TxtDetailVideoLabel.Text = M("🎬 Mandatory Videos");
-            if (TxtDetailSubLabel != null) TxtDetailSubLabel.Text = M("💭 Subliminals");
-            if (TxtSessionFlashLabel != null) TxtSessionFlashLabel.Text = M("⚡ Flash Images");
-            if (TxtSessionSubLabel != null) TxtSessionSubLabel.Text = M("💭 Subliminals");
+            if (TxtDetailFlashLabel != null) TxtDetailFlashLabel.Text = ML("⚡ Flash Images", "section_flash_images");
+            if (TxtDetailVideoLabel != null) TxtDetailVideoLabel.Text = ML("🎬 Mandatory Videos", "label_mandatory_videos");
+            if (TxtDetailSubLabel != null) TxtDetailSubLabel.Text = ML("💭 Subliminals", "section_subliminals");
+            if (TxtSessionFlashLabel != null) TxtSessionFlashLabel.Text = ML("⚡ Flash Images", "section_flash_images");
+            if (TxtSessionSubLabel != null) TxtSessionSubLabel.Text = ML("💭 Subliminals", "section_subliminals");
 
             // Autonomy toggle labels
-            if (TxtAutoFlash != null) TxtAutoFlash.Text = M("Flashes");
-            if (TxtAutoVideo != null) TxtAutoVideo.Text = M("Videos");
-            if (TxtAutoSubliminal != null) TxtAutoSubliminal.Text = M("Subliminals");
-            if (TxtAutoBubbles != null) TxtAutoBubbles.Text = M("Bubbles");
-            if (TxtAutoPinkFilter != null) TxtAutoPinkFilter.Text = M("Pink Filter");
-            if (TxtAutoLockCards != null) TxtAutoLockCards.Text = M("Lock Cards");
-            if (TxtAutoBouncing != null) TxtAutoBouncing.Text = M("Bouncing");
-            if (TxtAutoMindwipe != null) TxtAutoMindwipe.Text = M("Mindwipe");
+            if (TxtAutoFlash != null) TxtAutoFlash.Text = ML("Flashes", "tab_flashes");
+            if (TxtAutoVideo != null) TxtAutoVideo.Text = ML("Videos", "tab_videos");
+            if (TxtAutoSubliminal != null) TxtAutoSubliminal.Text = ML("Subliminals", "tab_subliminals");
+            if (TxtAutoBubbles != null) TxtAutoBubbles.Text = ML("Bubbles", "label_haptic_bubbles");
+            if (TxtAutoPinkFilter != null) TxtAutoPinkFilter.Text = ML("Pink Filter", "label_pink_filter");
+            if (TxtAutoLockCards != null) TxtAutoLockCards.Text = ML("Lock Cards", "label_lock_card");
+            if (TxtAutoBouncing != null) TxtAutoBouncing.Text = ML("Bouncing", "label_bouncing_text");
+            if (TxtAutoMindwipe != null) TxtAutoMindwipe.Text = ML("Mindwipe", "label_mind_wipe");
 
             // Enhancement tab tooltip
             if (BtnEnhancements != null)
-                BtnEnhancements.ToolTip = App.Mods?.GetTabTooltip() ?? "Bimbo Enhancement Tree";
+                BtnEnhancements.ToolTip = App.Mods?.GetTabTooltip() ?? Loc.Get("tooltip_enhancement_tree");
 
             // Stat pill tooltips
             if (PillConditioningTime != null)
                 PillConditioningTime.ToolTip = App.Mods?.GetStatPillTooltip("pink_hours")
-                    ?? M("Total conditioning time (Pink Hours skill)");
+                    ?? ML("Total conditioning time (Pink Hours skill)", "tooltip_total_conditioning_time_pink_hours_skill");
             if (PillOnlineUsers != null)
                 PillOnlineUsers.ToolTip = App.Mods?.GetStatPillTooltip("hive_mind")
-                    ?? M("Bimbos online now (Hive Mind skill)");
+                    ?? ML("Bimbos online now (Hive Mind skill)", "tooltip_bimbos_online_now_hive_mind_skill");
             if (PillRankPercentile != null)
                 PillRankPercentile.ToolTip = App.Mods?.GetStatPillTooltip("popular_girl")
-                    ?? M("Your rank percentile (Popular Girl skill)");
+                    ?? ML("Your rank percentile (Popular Girl skill)", "tooltip_your_rank_percentile_popular_girl_skill");
 
             // Refresh bonus chips with updated names
             RefreshXPBarBonuses();
@@ -15509,12 +15760,12 @@ namespace ConditioningControlPanel
                     else if (App.Leaderboard?.Entries?.Count > 0)
                     {
                         // Leaderboard loaded but player not found - might be unranked or need to sync
-                        TxtPillRankPercentile.Text = "Unranked";
+                        TxtPillRankPercentile.Text = Loc.Get("label_unranked");
                     }
                     else
                     {
                         // Leaderboard not loaded yet
-                        TxtPillRankPercentile.Text = "Loading...";
+                        TxtPillRankPercentile.Text = Loc.Get("label_loading_2");
                     }
                 }
             }
@@ -15860,8 +16111,8 @@ namespace ConditioningControlPanel
                 // Update lock message
                 if (TxtAutonomyLockStatus != null && TxtAutonomyLockMessage != null)
                 {
-                    TxtAutonomyLockStatus.Text = "🔒 Patreon Only";
-                    TxtAutonomyLockMessage.Text = "Support on Patreon to unlock";
+                    TxtAutonomyLockStatus.Text = Loc.Get("label_patreon_only");
+                    TxtAutonomyLockMessage.Text = Loc.Get("label_support_on_patreon_to_unlock");
                 }
 
                 App.Logger?.Debug("UpdateUnlockablesVisibility: Completed successfully.");
@@ -15986,12 +16237,12 @@ namespace ConditioningControlPanel
                 SliderFlashDuration.IsEnabled = true;
                 SliderFlashDuration.Opacity = 1.0;
                 TxtAudioWarning.Visibility = Visibility.Visible;
-                TxtAudioWarning.Text = "⚠ Audio off >60/h";
+                TxtAudioWarning.Text = Loc.Get("label_audio_off_60_h");
             }
             else
             {
                 ChkFlashAudio.IsEnabled = true;
-                TxtAudioWarning.Text = "⚠ Max 60/h";
+                TxtAudioWarning.Text = Loc.Get("label_max_60_h");
                 TxtAudioWarning.Visibility = (ChkFlashAudio.IsChecked ?? true) ? Visibility.Collapsed : Visibility.Visible;
             }
         }
@@ -16102,6 +16353,13 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             ApplySettingsLive();
+        }
+
+        private void BtnTestAudio_Click(object sender, RoutedEventArgs e)
+        {
+            var result = App.Audio?.TestAudioPlayback() ?? "Audio service not initialized";
+            App.Logger?.Information("[AudioDiag] Test requested:\n{Result}", result);
+            System.Windows.MessageBox.Show(result, "Audio Diagnostics", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void SliderSpiralOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -16815,12 +17073,12 @@ namespace ConditioningControlPanel
 
             if (isEnabled)
             {
-                BtnAutonomyStartStop.Content = "■ Stop";
+                BtnAutonomyStartStop.Content = Loc.Get("btn_stop_2");
                 BtnAutonomyStartStop.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")); // Pink
             }
             else
             {
-                BtnAutonomyStartStop.Content = "▶ Start";
+                BtnAutonomyStartStop.Content = Loc.Get("btn_start_2");
                 BtnAutonomyStartStop.Foreground = new SolidColorBrush(Color.FromRgb(144, 238, 144)); // Light green
             }
         }
@@ -17049,19 +17307,31 @@ namespace ConditioningControlPanel
                 // Fetch from server on startup (with short delay)
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    _ = Task.Delay(3000).ContinueWith(_ => Dispatcher.Invoke(RefreshMarqueeFromSettings));
+                    _ = Task.Delay(3000).ContinueWith(_ =>
+                    {
+                        if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
+                        Dispatcher.Invoke(RefreshMarqueeFromSettings);
+                    });
                 }));
 
                 // Check for server-controlled update banner (fallback for when auto-update fails)
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    _ = Task.Delay(5000).ContinueWith(_ => Dispatcher.Invoke(CheckServerUpdateBanner));
+                    _ = Task.Delay(5000).ContinueWith(_ =>
+                    {
+                        if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
+                        Dispatcher.Invoke(CheckServerUpdateBanner);
+                    });
                 }));
 
                 // Check for server-triggered announcement popup
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    _ = Task.Delay(7000).ContinueWith(_ => Dispatcher.Invoke(CheckServerAnnouncement));
+                    _ = Task.Delay(7000).ContinueWith(_ =>
+                    {
+                        if (Application.Current?.Dispatcher?.HasShutdownStarted == true) return;
+                        Dispatcher.Invoke(CheckServerAnnouncement);
+                    });
                 }));
 
                 // Start 5-minute refresh timer to check for server-side message updates
@@ -17198,6 +17468,8 @@ namespace ConditioningControlPanel
             public string? title { get; set; }
             public string? message { get; set; }
             public string? image_url { get; set; }
+            public string? link_url { get; set; }
+            public string? theme { get; set; }
         }
 
         /// <summary>
@@ -17238,7 +17510,9 @@ namespace ConditioningControlPanel
                                 result.id!,
                                 result.title!,
                                 result.message ?? "",
-                                result.image_url);
+                                result.image_url,
+                                result.link_url,
+                                result.theme);
                             popup.Show();
                         });
                     }
@@ -17452,7 +17726,7 @@ namespace ConditioningControlPanel
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                Title = "Select Startup Video",
+                Title = Loc.Get("title_select_startup_video"),
                 Filter = "Video Files|*.mp4;*.mov;*.avi;*.wmv;*.mkv;*.webm|All Files|*.*",
                 InitialDirectory = System.IO.Path.Combine(App.EffectiveAssetsPath, "videos")
             };
@@ -17469,7 +17743,7 @@ namespace ConditioningControlPanel
         private void BtnClearStartupVideo_Click(object sender, RoutedEventArgs e)
         {
             App.Settings.Current.StartupVideoPath = null;
-            TxtStartupVideo.Text = "(Random)";
+            TxtStartupVideo.Text = Loc.Get("label_random");
             App.Settings.Save();
             App.Logger?.Information("Startup video cleared - will use random");
         }
@@ -17534,7 +17808,7 @@ namespace ConditioningControlPanel
             
             if (enabledPhrases.Count == 0)
             {
-                MessageBox.Show("No phrases enabled! Add some phrases first.", "No Phrases", 
+                MessageBox.Show(Loc.Get("msg_no_phrases_enabled_add_some_phrases_first"), "No Phrases", 
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -17585,7 +17859,7 @@ namespace ConditioningControlPanel
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
                 Filter = "GIF Files (*.gif)|*.gif|All Image Files|*.gif;*.png;*.jpg;*.jpeg",
-                Title = "Select Spiral GIF"
+                Title = Loc.Get("title_select_spiral_gif")
             };
             
             // Start in last used directory if available
@@ -17641,15 +17915,13 @@ namespace ConditioningControlPanel
             var installedIds = App.Settings?.Current?.InstalledPackIds;
             if (installedIds == null || installedIds.Count == 0)
             {
-                MessageBox.Show("No downloaded packs to delete.", "Delete Packs", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Loc.Get("msg_no_downloaded_packs_to_delete"), Loc.Get("title_delete_downloaded_packs"), MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             var confirm = MessageBox.Show(
-                $"Delete {installedIds.Count} downloaded content pack(s)?\n\n"
-                + "This only removes downloaded pack data.\n"
-                + "Your own images and videos in the assets folder will NOT be affected.",
-                "Delete Downloaded Packs", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                Loc.GetF("msg_delete_downloaded_packs_confirm_0", installedIds.Count),
+                Loc.Get("title_delete_downloaded_packs"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
 
             if (confirm != MessageBoxResult.Yes) return;
 
@@ -17660,7 +17932,7 @@ namespace ConditioningControlPanel
             App.Flash?.LoadAssets();
             App.Video?.ReloadAssets();
             App.BubbleCount?.ReloadAssets();
-            MessageBox.Show("All downloaded packs have been deleted.\nYour local files were not affected.", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(Loc.Get("msg_all_downloaded_packs_have_been_deleted_nyour"), Loc.Get("btn_done"), MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private async Task RefreshPacksAsync()
@@ -17901,12 +18173,11 @@ namespace ConditioningControlPanel
                 // Show login prompt — direct to appropriate login method
                 if (App.HasCloudIdentity)
                 {
-                    // User is logged in but token may be expired
-                    MessageBox.Show(message, "Authentication Required", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(message, Loc.Get("title_authentication_required"), MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else
                 {
-                    MessageBox.Show($"{message}\n\nPlease log in from the Settings tab.", "Login Required", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show(Loc.GetF("msg_0_n_nplease_log_in_from_the_settings_tab", message), Loc.Get("title_login_required"), MessageBoxButton.OK, MessageBoxImage.Information);
                 }
             });
         }
@@ -17921,12 +18192,12 @@ namespace ConditioningControlPanel
                 // Calculate time until reset
                 var timeUntilReset = e.ResetTime - DateTime.UtcNow;
                 var hoursText = timeUntilReset.TotalHours > 1
-                    ? $"{(int)timeUntilReset.TotalHours} hours"
-                    : $"{(int)timeUntilReset.TotalMinutes} minutes";
+                    ? Loc.GetF("label_0_hours", (int)timeUntilReset.TotalHours)
+                    : Loc.GetF("label_0_minutes", (int)timeUntilReset.TotalMinutes);
 
                 MessageBox.Show(
-                    $"{e.Message}\n\nYou can download again in approximately {hoursText}.",
-                    "Download Limit Reached",
+                    Loc.GetF("msg_download_limit_reached_0_1", e.Message, hoursText),
+                    Loc.Get("title_download_limit_reached"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             });
@@ -18190,7 +18461,7 @@ namespace ConditioningControlPanel
                 {
                     // Parent pack folder or root - show empty
                     _currentFolderFiles.Clear();
-                    TxtThumbnailsEmpty.Text = "Select a subfolder to view files";
+                    TxtThumbnailsEmpty.Text = Loc.Get("label_select_a_subfolder_to_view_files");
                     TxtThumbnailsEmpty.Visibility = Visibility.Visible;
                     ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
                 }
@@ -18262,7 +18533,7 @@ namespace ConditioningControlPanel
             var packFiles = App.ContentPacks?.GetPackFiles(packId, fileType);
             if (packFiles == null || packFiles.Count == 0)
             {
-                TxtThumbnailsEmpty.Text = "No files in this pack folder";
+                TxtThumbnailsEmpty.Text = Loc.Get("label_no_files_in_this_pack_folder");
                 TxtThumbnailsEmpty.Visibility = Visibility.Visible;
                 ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
                 return;
@@ -18367,7 +18638,7 @@ namespace ConditioningControlPanel
                                         _packThumbnailCacheBytes + estimatedBytes > MaxThumbnailCacheBytes) &&
                                        _packThumbnailCache.Count > 0)
                                 {
-                                    var lruKey = _packThumbnailLastAccess.OrderBy(kv => kv.Value).First().Key;
+                                    var lruKey = _packThumbnailLastAccess.MinBy(kv => kv.Value).Key;
                                     _packThumbnailCache.Remove(lruKey);
                                     _packThumbnailLastAccess.Remove(lruKey);
                                     if (_packThumbnailSizes.TryGetValue(lruKey, out var evictedSize))
@@ -18409,7 +18680,7 @@ namespace ConditioningControlPanel
 
             if (!Directory.Exists(folderPath))
             {
-                TxtThumbnailsEmpty.Text = "Folder does not exist";
+                TxtThumbnailsEmpty.Text = Loc.Get("label_folder_does_not_exist");
                 TxtThumbnailsEmpty.Visibility = Visibility.Visible;
                 ThumbnailsItemsControl.ItemsSource = _currentFolderFiles;
                 return;
@@ -18423,7 +18694,7 @@ namespace ConditioningControlPanel
 
             if (files.Count == 0)
             {
-                TxtThumbnailsEmpty.Text = "No media files in this folder";
+                TxtThumbnailsEmpty.Text = Loc.Get("label_no_media_files_in_this_folder");
                 TxtThumbnailsEmpty.Visibility = Visibility.Visible;
                 return;
             }
@@ -19030,7 +19301,7 @@ namespace ConditioningControlPanel
             // Simple input dialog using WPF
             var dialog = new System.Windows.Window
             {
-                Title = "Save Asset Preset",
+                Title = Loc.Get("title_save_asset_preset"),
                 Width = 350,
                 Height = 150,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
@@ -19125,13 +19396,13 @@ namespace ConditioningControlPanel
         {
             if (CmbAssetPresets.SelectedItem is not Models.AssetPreset preset)
             {
-                MessageBox.Show("Please select a preset to update.", "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_please_select_a_preset_to_update"), "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             if (preset.IsDefault)
             {
-                MessageBox.Show("Cannot update the default 'All Assets' preset.\nUse 'Save As' to create a new preset.", "Cannot Update Default", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_cannot_update_the_default_all_assets_preset_n"), "Cannot Update Default", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -19167,13 +19438,13 @@ namespace ConditioningControlPanel
         {
             if (CmbAssetPresets.SelectedItem is not Models.AssetPreset preset)
             {
-                MessageBox.Show("Please select a preset to delete.", "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_please_select_a_preset_to_delete"), "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             if (preset.IsDefault)
             {
-                MessageBox.Show("Cannot delete the default 'All Assets' preset.", "Cannot Delete Default", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_cannot_delete_the_default_all_assets_preset"), "Cannot Delete Default", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -19260,7 +19531,7 @@ namespace ConditioningControlPanel
 
             var dialog = new System.Windows.Window
             {
-                Title = "Save Phrase Preset",
+                Title = Loc.Get("title_save_phrase_preset"),
                 Width = 350,
                 Height = 150,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
@@ -19348,7 +19619,7 @@ namespace ConditioningControlPanel
         {
             if (CmbPhrasePresets.SelectedItem is not Models.PhrasePreset preset)
             {
-                MessageBox.Show("Please select a preset to delete.", "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Get("msg_please_select_a_preset_to_delete"), "No Preset Selected", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -19531,7 +19802,7 @@ namespace ConditioningControlPanel
                         App.Flash?.LoadAssets();
                         App.Video?.ReloadAssets();
                         App.BubbleCount?.ReloadAssets();
-                        MessageBox.Show($"'{pack.Name}' installed successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                        MessageBox.Show(Loc.GetF("msg_0_installed_successfully", pack.Name), Loc.Get("title_success"), MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (UnauthorizedAccessException)
                     {
@@ -19698,13 +19969,9 @@ namespace ConditioningControlPanel
                     var packNames = string.Join("\n• ", packFoldersToMove.Select(p => p.PackName));
 
                     var moveResult = MessageBox.Show(
-                        $"Found {packFoldersToMove.Count} downloaded content pack(s) ({sizeText}):\n\n" +
-                        $"• {packNames}\n\n" +
-                        "Do you want to move them to the new folder?\n\n" +
-                        "• Yes - Move packs to new location (recommended)\n" +
-                        "• No - Leave packs where they are (you may need to re-download)\n\n" +
-                        (totalBytes > 500_000_000 ? "⚠️ This may take a moment due to the file size." : ""),
-                        "Move Downloaded Packs?",
+                        Loc.GetF("msg_move_packs_confirm", packFoldersToMove.Count, sizeText, packNames,
+                            totalBytes > 500_000_000 ? Loc.Get("msg_may_take_a_moment") : ""),
+                        Loc.Get("title_move_downloaded_packs"),
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Question);
                     shouldMovePacks = moveResult == MessageBoxResult.Yes;
@@ -19793,8 +20060,8 @@ namespace ConditioningControlPanel
                     {
                         App.Logger?.Error(ex, "Failed to move packs to new location");
                         MessageBox.Show(
-                            $"Could not move packs to new location: {ex.Message}\n\nYou may need to re-download them.",
-                            "Warning",
+                            Loc.GetF("msg_could_not_move_packs_0", ex.Message),
+                            Loc.Get("label_warning"),
                             MessageBoxButton.OK,
                             MessageBoxImage.Warning);
                     }
@@ -19814,9 +20081,9 @@ namespace ConditioningControlPanel
                 RefreshAssetTree();
 
                 MessageBox.Show(
-                    $"Custom assets folder set to:\n{selectedPath}\n\nSubfolders 'images' and 'videos' have been created." +
-                    (shouldMovePacks ? "\n\nYour downloaded packs have been moved." : ""),
-                    "Assets Folder Set",
+                    Loc.GetF("msg_custom_assets_folder_set_0", selectedPath) +
+                    (shouldMovePacks ? "\n\n" + Loc.Get("msg_packs_have_been_moved") : ""),
+                    Loc.Get("title_assets_folder_set"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
 
@@ -19838,7 +20105,7 @@ namespace ConditioningControlPanel
         private void BtnRefreshAssets_Click(object sender, RoutedEventArgs e)
         {
             App.Flash.LoadAssets();
-            MessageBox.Show("Assets refreshed!", "Success");
+            MessageBox.Show(Loc.Get("msg_assets_refreshed"), Loc.Get("title_success"));
         }
 
         private void BtnViewLog_Click(object sender, RoutedEventArgs e)
@@ -19850,7 +20117,7 @@ namespace ConditioningControlPanel
             }
             else
             {
-                MessageBox.Show("No logs found.", "Info");
+                MessageBox.Show(Loc.Get("msg_no_logs_found"), "Info");
             }
         }
 
@@ -19858,7 +20125,7 @@ namespace ConditioningControlPanel
         {
             _isCapturingPanicKey = true;
             UpdatePanicKeyButton();
-            MessageBox.Show("Press any key to set as the new panic key...", "Change Panic Key", 
+            MessageBox.Show(Loc.Get("msg_press_any_key_to_set_as_the_new_panic_key"), "Change Panic Key", 
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
@@ -20001,7 +20268,7 @@ namespace ConditioningControlPanel
                     BtnPatreonLogin.IsEnabled = !isOffline;
                     BtnPatreonLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        BtnPatreonLogin.ToolTip = "Disabled in offline mode";
+                        BtnPatreonLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                     else
                         BtnPatreonLogin.ToolTip = null;
                 }
@@ -20012,7 +20279,7 @@ namespace ConditioningControlPanel
                     BtnDiscordLogin.IsEnabled = !isOffline;
                     BtnDiscordLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        BtnDiscordLogin.ToolTip = "Disabled in offline mode";
+                        BtnDiscordLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                     else
                         BtnDiscordLogin.ToolTip = null;
                 }
@@ -20023,7 +20290,7 @@ namespace ConditioningControlPanel
                     BtnUnifiedLogin.IsEnabled = !isOffline;
                     BtnUnifiedLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        BtnUnifiedLogin.ToolTip = "Disabled in offline mode";
+                        BtnUnifiedLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                 }
 
                 // Discord tab login button (in Profile/Discord tab)
@@ -20032,7 +20299,7 @@ namespace ConditioningControlPanel
                     BtnDiscordTabLogin.IsEnabled = !isOffline;
                     BtnDiscordTabLogin.Opacity = isOffline ? 0.5 : 1.0;
                     if (isOffline)
-                        BtnDiscordTabLogin.ToolTip = "Disabled in offline mode";
+                        BtnDiscordTabLogin.ToolTip = Loc.Get("tooltip_disabled_in_offline_mode");
                 }
 
                 // === BROWSER SECTION ===
@@ -20081,7 +20348,7 @@ namespace ConditioningControlPanel
                     if (BrowserLoadingText != null)
                     {
                         BrowserLoadingText.Visibility = Visibility.Visible;
-                        BrowserLoadingText.Text = "🔌 Browser disabled in Offline Mode";
+                        BrowserLoadingText.Text = Loc.Get("label_browser_disabled_in_offline_mode");
                     }
                     if (BrowserContainer != null)
                     {
@@ -20192,10 +20459,8 @@ namespace ConditioningControlPanel
             {
                 // Show warning when both startup and hidden are enabled
                 var result = MessageBox.Show(this,
-                    "The app will launch minimized to system tray on startup.\n\n" +
-                    "You will need to click the tray icon to show the main window.\n\n" +
-                    "Are you sure you want to enable this?",
-                    "Startup Warning",
+                    Loc.Get("msg_startup_hidden_warning"),
+                    Loc.Get("title_startup_warning"),
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning);
 
@@ -20210,8 +20475,8 @@ namespace ConditioningControlPanel
             if (!StartupManager.SetStartupState(isEnabled))
             {
                 MessageBox.Show(this,
-                    "Failed to update Windows startup setting.\nPlease check your permissions.",
-                    "Startup Error",
+                    Loc.Get("msg_failed_to_update_startup"),
+                    Loc.Get("title_startup_error"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 ChkWinStart.IsChecked = StartupManager.IsRegistered();
@@ -20229,10 +20494,8 @@ namespace ConditioningControlPanel
             {
                 // Show warning when enabling hidden while startup is already enabled
                 var result = MessageBox.Show(this,
-                    "The app will launch minimized to system tray on startup.\n\n" +
-                    "You will need to click the tray icon to show the main window.\n\n" +
-                    "Are you sure you want to enable this?",
-                    "Startup Warning",
+                    Loc.Get("msg_startup_hidden_warning"),
+                    Loc.Get("title_startup_warning"),
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning);
 
@@ -20303,6 +20566,7 @@ namespace ConditioningControlPanel
                 if (App.ProfileSync != null)
                 {
                     App.ProfileSync.ProfileLoaded -= OnProfileLoaded;
+                    App.ProfileSync.SyncHealthChanged -= OnSyncHealthChanged;
                 }
                 if (App.Achievements != null)
                 {

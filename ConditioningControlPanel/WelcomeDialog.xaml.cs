@@ -1,3 +1,6 @@
+using System.Windows;
+using ConditioningControlPanel.Localization;
+
 namespace ConditioningControlPanel
 {
     /// <summary>

@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Screen = System.Windows.Forms.Screen;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services;
 
@@ -41,7 +42,6 @@ public class BubbleCountService : IDisposable
     
     public event EventHandler? GameCompleted;
     public event EventHandler? GameFailed;
-    public event EventHandler? BubblePopped;
 
     public void Start()
     {
@@ -169,7 +169,7 @@ public class BubbleCountService : IDisposable
         // Small delay to let the freeze effect register before game starts
         Task.Delay(800).ContinueWith(_ =>
         {
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 try
                 {
@@ -378,8 +378,7 @@ public class BubbleCountService : IDisposable
             {
                 try
                 {
-                    if (Application.Current?.Dispatcher == null) return;
-                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    DispatcherHelper.RunOnUI(() =>
                     {
                         CloseMessageWindows();
                         then();

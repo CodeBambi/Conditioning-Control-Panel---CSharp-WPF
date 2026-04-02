@@ -685,8 +685,8 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var escapedStatus = status.Replace("'", "\\'");
-                var script = $"if (window.__hapticUpdateProgress) window.__hapticUpdateProgress({percent}, '{escapedStatus}');";
+                var jsonStatus = System.Text.Json.JsonSerializer.Serialize(status);
+                var script = $"if (window.__hapticUpdateProgress) window.__hapticUpdateProgress({percent}, {jsonStatus});";
                 await _webView.CoreWebView2.ExecuteScriptAsync(script);
             }
             catch (Exception ex)
@@ -790,7 +790,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void Navigate(string url)
         {
-            if (!_isInitialized || _webView?.CoreWebView2 == null) return;
+            if (_disposed || !_isInitialized || _webView?.CoreWebView2 == null) return;
 
             try
             {

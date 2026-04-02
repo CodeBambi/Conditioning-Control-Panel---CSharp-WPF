@@ -5,6 +5,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.ComponentModel;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services;
 
@@ -29,7 +30,6 @@ public class OverlayService : IDisposable
     private bool _isRunning;
     private DispatcherTimer? _updateTimer;
     private DispatcherTimer? _gifLoopTimer;
-    private DispatcherTimer? _gifFrameTimer;
     private bool _isDisposed;
     private bool _isGifSpiral;
     private string _spiralPath = "";
@@ -39,10 +39,11 @@ public class OverlayService : IDisposable
     private int _consecutiveTopmostLossCount;
 
     // GIF frame animation fields
-    private List<BitmapSource> _spiralGifFrames = new();
     private readonly List<System.Windows.Controls.Image> _spiralGifImages = new();
-    private int _currentGifFrameIndex = 0;
+    private List<BitmapSource> _spiralGifFrames = new();
+    private int _currentGifFrameIndex;
     private TimeSpan _gifFrameDelay = TimeSpan.FromMilliseconds(50);
+    private DispatcherTimer? _gifFrameTimer;
 
     public bool IsRunning => _isRunning;
 
@@ -130,7 +131,7 @@ public class OverlayService : IDisposable
         if (_isRunning) return;
         _isRunning = true;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             var settings = App.Settings.Current;
 
@@ -190,7 +191,7 @@ public class OverlayService : IDisposable
     {
         if (!_isRunning) return;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             var settings = App.Settings.Current;
 
@@ -235,7 +236,7 @@ public class OverlayService : IDisposable
     {
         if (!_isRunning) return;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             var settings = App.Settings.Current;
             var hasPink = settings.PinkFilterEnabled && _pinkFilterWindows.Count > 0;
@@ -287,8 +288,7 @@ public class OverlayService : IDisposable
             {
                 try
                 {
-                    if (Application.Current?.Dispatcher == null) return;
-                    Application.Current.Dispatcher.Invoke(() =>
+                    DispatcherHelper.RunOnUISync(() =>
                     {
                         if (hasPink) UpdatePinkFilterOpacity();
                         if (hasSpiral) UpdateSpiralOpacity();
@@ -310,7 +310,7 @@ public class OverlayService : IDisposable
     {
         if (!_isRunning) return;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             var settings = App.Settings.Current;
 
@@ -544,48 +544,52 @@ public class OverlayService : IDisposable
         {
             var settings = App.Settings.Current;
 
+            var screens = settings.DualMonitorEnabled
+                ? App.GetAllScreensCached()
+                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
             _isGifSpiral = _spiralPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
 
-            // For GIFs, load frames on background thread to avoid UI freeze
+            // For GIFs, load frames once and share across all screens
             if (_isGifSpiral)
             {
-                var spiralPath = _spiralPath;
-                Task.Run(() =>
+                if (!LoadSpiralGifFrames())
                 {
-                    try
-                    {
-                        if (!LoadSpiralGifFrames())
-                        {
-                            App.Logger?.Warning("Spiral: Failed to load GIF frames from {Path}", spiralPath);
-                            return;
-                        }
+                    App.Logger?.Warning("Spiral: Failed to load GIF frames from {Path}", _spiralPath);
+                    return;
+                }
 
-                        // Frames are frozen BitmapSources — safe to use cross-thread
-                        // Create windows on UI thread
-                        Application.Current?.Dispatcher?.BeginInvoke(() =>
-                        {
-                            try
-                            {
-                                if (!_isRunning) return; // Service was stopped while loading
-                                CreateSpiralGifWindows();
-                            }
-                            catch (Exception ex)
-                            {
-                                App.Logger?.Error("Failed to create spiral GIF windows: {Error}", ex.Message);
-                            }
-                        });
-                    }
-                    catch (Exception ex)
+                foreach (var screen in screens)
+                {
+                    var (window, image) = CreateSpiralGifWindow(screen, settings.SpiralOpacity);
+                    if (window != null)
                     {
-                        App.Logger?.Error("Failed to load spiral GIF frames: {Error}", ex.Message);
+                        _spiralWindows.Add(window);
+                        if (image != null)
+                            _spiralGifImages.Add(image);
                     }
-                });
+                }
+
+                // Start frame animation timer
+                if (_spiralGifFrames.Count > 1 && _spiralGifImages.Count > 0)
+                {
+                    _gifFrameTimer = new DispatcherTimer(DispatcherPriority.Render)
+                    {
+                        Interval = _gifFrameDelay
+                    };
+                    _gifFrameTimer.Tick += GifFrameTimer_Tick;
+                    _gifFrameTimer.Start();
+                    App.Logger?.Debug("Spiral GIF animation started with {FrameCount} frames at {Delay}ms interval",
+                        _spiralGifFrames.Count, _gifFrameDelay.TotalMilliseconds);
+                }
             }
             else
             {
-                // For video files, use MediaElement (no heavy loading needed)
                 CreateSpiralVideoWindows();
             }
+
+            App.Logger?.Debug("Spiral started on {Count} screens at opacity {Opacity}% (GIF: {IsGif})",
+                _spiralWindows.Count, settings.SpiralOpacity, _isGifSpiral);
         }
         catch (Exception ex)
         {
@@ -594,48 +598,9 @@ public class OverlayService : IDisposable
     }
 
     /// <summary>
-    /// Create spiral GIF windows on all screens after frames are loaded.
+    /// Create spiral GIF windows on all screens using pre-loaded frames.
     /// Must be called on the UI thread.
     /// </summary>
-    private void CreateSpiralGifWindows()
-    {
-        if (_spiralWindows.Count > 0) return;
-
-        var settings = App.Settings.Current;
-        var screens = settings.DualMonitorEnabled
-            ? App.GetAllScreensCached()
-            : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
-
-        foreach (var screen in screens)
-        {
-            var (window, image) = CreateSpiralGifWindow(screen, settings.SpiralOpacity);
-            if (window != null)
-            {
-                _spiralWindows.Add(window);
-                if (image != null)
-                {
-                    _spiralGifImages.Add(image);
-                }
-            }
-        }
-
-        // Start frame animation timer
-        if (_spiralGifFrames.Count > 1 && _spiralGifImages.Count > 0)
-        {
-            _gifFrameTimer = new DispatcherTimer(DispatcherPriority.Render)
-            {
-                Interval = _gifFrameDelay
-            };
-            _gifFrameTimer.Tick += GifFrameTimer_Tick;
-            _gifFrameTimer.Start();
-            App.Logger?.Debug("Spiral GIF animation started with {FrameCount} frames at {Delay}ms interval",
-                _spiralGifFrames.Count, _gifFrameDelay.TotalMilliseconds);
-        }
-
-        App.Logger?.Debug("Spiral GIF started on {Count} screens at opacity {Opacity}%",
-            _spiralWindows.Count, settings.SpiralOpacity);
-    }
-
     /// <summary>
     /// Create spiral video windows on all screens.
     /// Must be called on the UI thread.
@@ -673,8 +638,7 @@ public class OverlayService : IDisposable
     }
 
     /// <summary>
-    /// Load GIF frames from file or embedded resource using System.Drawing.
-    /// This is much more reliable than WPF MediaElement for GIF animation.
+    /// Load GIF frames from file or embedded resource.
     /// </summary>
     private bool LoadSpiralGifFrames()
     {
@@ -686,7 +650,6 @@ public class OverlayService : IDisposable
             Stream? gifStream = null;
             bool needsDispose = false;
 
-            // Check if it's an embedded resource (pack:// URI)
             if (_spiralPath.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
             {
                 try
@@ -785,9 +748,6 @@ public class OverlayService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Convert System.Drawing.Bitmap to WPF BitmapSource.
-    /// </summary>
     private static BitmapSource ConvertToBitmapSource(System.Drawing.Bitmap bitmap)
     {
         var bitmapData = bitmap.LockBits(
@@ -815,28 +775,19 @@ public class OverlayService : IDisposable
         }
     }
 
-    /// <summary>
-    /// Timer tick for GIF frame animation - updates all spiral images to the next frame.
-    /// </summary>
     private void GifFrameTimer_Tick(object? sender, EventArgs e)
     {
         if (_spiralGifFrames.Count == 0 || _spiralGifImages.Count == 0) return;
-
         try
         {
-            // Advance to next frame
             _currentGifFrameIndex = (_currentGifFrameIndex + 1) % _spiralGifFrames.Count;
             var frame = _spiralGifFrames[_currentGifFrameIndex];
-
-            // Update all spiral images to show the same frame (synchronized)
             foreach (var image in _spiralGifImages)
-            {
                 image.Source = frame;
-            }
         }
         catch (Exception ex)
         {
-            App.Logger?.Debug("Spiral: Frame animation tick failed: {Error}", ex.Message);
+            App.Logger?.Debug("Spiral: Frame tick failed: {Error}", ex.Message);
         }
     }
 
@@ -867,7 +818,7 @@ public class OverlayService : IDisposable
     }
 
     /// <summary>
-    /// Creates a spiral window with frame-by-frame GIF animation (reliable, no freezing).
+    /// Creates a spiral window with pre-loaded GIF frames.
     /// </summary>
     private (Window? window, System.Windows.Controls.Image? image) CreateSpiralGifWindow(System.Windows.Forms.Screen screen, int opacity)
     {
@@ -882,7 +833,7 @@ public class OverlayService : IDisposable
 
             var image = new System.Windows.Controls.Image
             {
-                Source = _spiralGifFrames[0], // Start with first frame
+                Source = _spiralGifFrames[0],
                 Stretch = Stretch.UniformToFill,
                 Opacity = actualOpacity,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -1017,22 +968,18 @@ public class OverlayService : IDisposable
 
     private void StopSpiral()
     {
-        // Stop frame animation timer
         _gifFrameTimer?.Stop();
         _gifFrameTimer = null;
 
-        // Stop video loop timer
         _gifLoopTimer?.Stop();
         _gifLoopTimer = null;
 
-        // Release Image.Source references so BitmapSource frames can be GC'd
         foreach (var img in _spiralGifImages)
-        {
             img.Source = null;
-        }
         _spiralGifImages.Clear();
         _spiralGifFrames.Clear();
         _currentGifFrameIndex = 0;
+
 
         // Stop and clear MediaElements
         foreach (var media in _spiralMediaElements.ToList())
@@ -1099,7 +1046,7 @@ public class OverlayService : IDisposable
 
         _currentBrainDrainIntensity = intensity;
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             try
             {
@@ -1156,12 +1103,7 @@ public class OverlayService : IDisposable
             {
                 try
                 {
-                    if (Application.Current?.Dispatcher?.CheckAccess() == true)
-                        window.Close();
-                    else if (Application.Current?.Dispatcher != null)
-                        Application.Current.Dispatcher.Invoke(() => window.Close());
-                    else
-                        window.Close();
+                    DispatcherHelper.RunOnUISync(() => window.Close());
                 }
                 catch (Exception ex)
                 {
@@ -1185,7 +1127,7 @@ public class OverlayService : IDisposable
         _currentBrainDrainIntensity = intensity;
         double blurRadius = intensity * 0.4; // Slightly lower multiplier for performance
 
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             foreach (var img in _brainDrainImages.Values)
             {
@@ -1205,7 +1147,9 @@ public class OverlayService : IDisposable
             return;
         }
 
-        foreach (var kvp in _brainDrainImages)
+        // Snapshot to prevent "collection modified during enumeration" if StopBrainDrainBlur()
+        // is triggered by an event during iteration (e.g., Image.Source assignment)
+        foreach (var kvp in _brainDrainImages.ToList())
         {
             var window = kvp.Key;
             var image = kvp.Value;
@@ -1805,7 +1749,7 @@ public class OverlayService : IDisposable
     private void CurrentSettings_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         // Ensure this is executed on the UI thread
-        Application.Current.Dispatcher.Invoke(() =>
+        DispatcherHelper.RunOnUISync(() =>
         {
             if (e.PropertyName == nameof(App.Settings.Current.BrainDrainIntensity) ||
                 e.PropertyName == nameof(App.Settings.Current.BrainDrainEnabled))
@@ -1910,11 +1854,10 @@ public class OverlayService : IDisposable
             }
             _spiralWindows.Clear();
             foreach (var img in _spiralGifImages)
-            {
                 img.Source = null;
-            }
             _spiralGifImages.Clear();
             _spiralGifFrames.Clear();
+    
 
             App.Logger?.Debug("OverlayService disposed - all windows closed");
         }

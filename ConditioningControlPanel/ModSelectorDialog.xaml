@@ -1,7 +1,8 @@
 <Window x:Class="ConditioningControlPanel.ModSelectorDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Choose Your Experience"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_choose_your_experience}"
         Height="480" Width="620"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
@@ -20,12 +21,12 @@
             </Grid.RowDefinitions>
 
             <!-- Title -->
-            <TextBlock Grid.Row="0" Text="Choose Your Experience"
+            <TextBlock Grid.Row="0" Text="{loc:Str dialog_choose_your_experience}"
                        Foreground="{DynamicResource PinkBrush}" FontSize="24" FontWeight="Bold"
                        HorizontalAlignment="Center" Margin="0,0,0,10"/>
 
             <!-- Subtitle -->
-            <TextBlock Grid.Row="1" Text="Select a theme to customize your experience. You can change this later or install custom mods."
+            <TextBlock Grid.Row="1" Text="{loc:Str label_select_a_theme_to_customize_your_experience_y}"
                        Foreground="#B0B0B0" FontSize="13"
                        HorizontalAlignment="Center" Margin="0,0,0,25" TextWrapping="Wrap" TextAlignment="Center"/>
 
@@ -53,16 +54,16 @@
                         </Style>
                     </Border.Style>
                     <StackPanel VerticalAlignment="Center" Margin="20">
-                        <TextBlock Text="BS" FontSize="36" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
+                        <TextBlock Text="{loc:Str label_bs}" FontSize="36" FontWeight="Bold" Foreground="{DynamicResource PinkBrush}"
                                    HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                        <TextBlock Text="Bambi Sleep" FontSize="18" FontWeight="SemiBold" Foreground="White"
+                        <TextBlock Text="{loc:Str label_bambi_sleep}" FontSize="18" FontWeight="SemiBold" Foreground="White"
                                    HorizontalAlignment="Center" Margin="0,0,0,12"/>
                         <TextBlock TextWrapping="Wrap" TextAlignment="Center" Foreground="#A0A0A0" FontSize="12" LineHeight="18">
-                            <Run Text="Bambi Sleep specific content."/>
+                            <Run Text="{loc:Str label_bambi_sleep_specific_content}"/>
                             <LineBreak/>
-                            <Run Text="Includes BambiCloud browser,"/>
+                            <Run Text="{loc:Str label_includes_bambicloud_browser}"/>
                             <LineBreak/>
-                            <Run Text="Bambi-themed triggers and prompts."/>
+                            <Run Text="{loc:Str label_bambi_themed_triggers_and_prompts}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>
@@ -83,16 +84,16 @@
                         </Style>
                     </Border.Style>
                     <StackPanel VerticalAlignment="Center" Margin="20">
-                        <TextBlock Text="SH" FontSize="36" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
+                        <TextBlock Text="{loc:Str label_sh}" FontSize="36" FontWeight="Bold" Foreground="{DynamicResource SecondaryBrush}"
                                    HorizontalAlignment="Center" Margin="0,0,0,10"/>
-                        <TextBlock Text="Sissy Hypno" FontSize="18" FontWeight="SemiBold" Foreground="White"
+                        <TextBlock Text="{loc:Str label_sissy_hypno}" FontSize="18" FontWeight="SemiBold" Foreground="White"
                                    HorizontalAlignment="Center" Margin="0,0,0,12"/>
                         <TextBlock TextWrapping="Wrap" TextAlignment="Center" Foreground="#A0A0A0" FontSize="12" LineHeight="18">
-                            <Run Text="Generic sissy hypno content."/>
+                            <Run Text="{loc:Str label_generic_sissy_hypno_content}"/>
                             <LineBreak/>
-                            <Run Text="HypnoTube browser only,"/>
+                            <Run Text="{loc:Str label_hypnotube_browser_only}"/>
                             <LineBreak/>
-                            <Run Text="universal triggers and prompts."/>
+                            <Run Text="{loc:Str label_universal_triggers_and_prompts}"/>
                         </TextBlock>
                     </StackPanel>
                 </Border>

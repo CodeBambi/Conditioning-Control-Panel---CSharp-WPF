@@ -3,6 +3,7 @@ using System.Text;
 using System.Windows.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services
 {
@@ -168,10 +169,7 @@ namespace ConditioningControlPanel.Services
             ControllerIdle = false;
 
             // Stop all effects that were triggered by the remote controller
-            if (System.Windows.Application.Current?.Dispatcher != null)
-            {
-                System.Windows.Application.Current.Dispatcher.Invoke(() => StopAllRemoteEffects());
-            }
+            DispatcherHelper.RunOnUISync(() => StopAllRemoteEffects());
 
             // Reset overlay level bypass when remote session ends
             if (App.Overlay != null)
@@ -186,9 +184,15 @@ namespace ConditioningControlPanel.Services
             SessionEnded?.Invoke(this, EventArgs.Empty);
         }
 
+        private bool _pollInProgress;
+
         private async Task PollForCommandsAsync()
         {
             if (!IsActive) return;
+            if (_pollInProgress) return; // Skip if previous poll still running (timer re-entrance)
+            _pollInProgress = true;
+            try
+            {
 
             var unifiedId = App.UnifiedUserId;
             if (string.IsNullOrEmpty(unifiedId)) return;
@@ -277,6 +281,11 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "[RemoteControl] Poll error");
+            }
+            }
+            finally
+            {
+                _pollInProgress = false;
             }
         }
 
@@ -416,9 +425,7 @@ namespace ConditioningControlPanel.Services
 
         private void ExecuteCommand(string action, JObject? parameters)
         {
-            if (System.Windows.Application.Current?.Dispatcher == null) return;
-
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 try
                 {

@@ -1,7 +1,8 @@
 <Window x:Class="ConditioningControlPanel.ModManagerDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Mod Manager"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_mod_manager}"
         Height="500" Width="700"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
@@ -21,7 +22,7 @@
             <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="12,12,0,0" Padding="20,12"
                     MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid>
-                    <TextBlock Text="Mod Manager" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
+                    <TextBlock Text="{loc:Str dialog_mod_manager}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"
                                VerticalAlignment="Center"/>
                     <Button x:Name="BtnClose" Content="X" Click="BtnClose_Click"
                             HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -84,24 +85,24 @@
 
                             <!-- Theme Color Preview -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock Text="Theme:" Foreground="#808080" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock Text="{loc:Str label_theme}" Foreground="#808080" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <Border x:Name="ThemeColorPreview" Width="20" Height="20" CornerRadius="4" Margin="0,0,5,0"/>
                                 <TextBlock x:Name="TxtThemeColor" FontSize="12" Foreground="#A0A0A0" VerticalAlignment="Center"/>
                             </StackPanel>
 
                             <!-- Companion Info -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                <TextBlock Text="Companion:" Foreground="#808080" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock Text="{loc:Str label_companion}" Foreground="#808080" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <TextBlock x:Name="TxtCompanion" FontSize="12" Foreground="#A0A0A0" VerticalAlignment="Center"/>
                             </StackPanel>
 
                             <!-- Active Indicator -->
-                            <TextBlock x:Name="TxtActiveIndicator" Text="Currently Active" FontSize="13" FontWeight="SemiBold"
+                            <TextBlock x:Name="TxtActiveIndicator" Text="{loc:Str label_currently_active}" FontSize="13" FontWeight="SemiBold"
                                        Foreground="#4CAF50" Margin="0,10,0,10" Visibility="Collapsed"/>
 
                             <!-- Action Buttons -->
                             <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                <Button x:Name="BtnActivate" Content="Activate" Click="BtnActivate_Click"
+                                <Button x:Name="BtnActivate" Content="{loc:Str btn_activate}" Click="BtnActivate_Click"
                                         Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="SemiBold"
                                         Padding="16,8" BorderThickness="0" Cursor="Hand" Margin="0,0,10,0">
                                     <Button.Style>
@@ -124,7 +125,7 @@
                                         </Style>
                                     </Button.Style>
                                 </Button>
-                                <Button x:Name="BtnUninstall" Content="Uninstall" Click="BtnUninstall_Click"
+                                <Button x:Name="BtnUninstall" Content="{loc:Str btn_uninstall}" Click="BtnUninstall_Click"
                                         Background="{DynamicResource PanelAccentBrush}" Foreground="#FF6B6B" FontWeight="SemiBold"
                                         Padding="16,8" BorderThickness="0" Cursor="Hand">
                                     <Button.Style>
@@ -156,7 +157,7 @@
             <!-- Bottom Bar -->
             <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,12,12" Padding="15,10">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button x:Name="BtnInstall" Content="Install from file..." Click="BtnInstall_Click"
+                    <Button x:Name="BtnInstall" Content="{loc:Str btn_install_from_file}" Click="BtnInstall_Click"
                             Background="{DynamicResource PanelAccentBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
                             Cursor="Hand" Margin="0,0,10,0" FontSize="12">
                         <Button.Style>
@@ -179,7 +180,7 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                    <Button x:Name="BtnExport" Content="Export current..." Click="BtnExport_Click"
+                    <Button x:Name="BtnExport" Content="{loc:Str btn_export_current}" Click="BtnExport_Click"
                             Background="{DynamicResource PanelAccentBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
                             Cursor="Hand" Margin="0,0,10,0" FontSize="12">
                         <Button.Style>
@@ -202,7 +203,7 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                    <Button x:Name="BtnCreate" Content="Create New" Click="BtnCreate_Click"
+                    <Button x:Name="BtnCreate" Content="{loc:Str btn_create_new_2}" Click="BtnCreate_Click"
                             Background="{DynamicResource PinkBrush}" Foreground="White" Padding="14,7" BorderThickness="0"
                             Cursor="Hand" Margin="0,0,10,0" FontSize="12" FontWeight="SemiBold">
                         <Button.Style>

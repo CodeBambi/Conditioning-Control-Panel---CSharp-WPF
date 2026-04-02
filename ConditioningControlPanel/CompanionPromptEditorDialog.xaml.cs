@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Data;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -91,7 +92,7 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    TxtActivePromptName.Text = "Unknown Prompt";
+                    TxtActivePromptName.Text = Loc.Get("label_unknown_prompt");
                     TxtActivePromptName.Foreground = new System.Windows.Media.SolidColorBrush(
                         System.Windows.Media.Color.FromRgb(255, 107, 107)); // Red
                 }
@@ -99,14 +100,14 @@ namespace ConditioningControlPanel
             else if (App.Settings?.Current?.CompanionPrompt?.UseCustomPrompt == true)
             {
                 // Custom prompt is active
-                TxtActivePromptName.Text = "Custom";
+                TxtActivePromptName.Text = Loc.Get("label_custom");
                 TxtActivePromptName.Foreground = new System.Windows.Media.SolidColorBrush(
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
             }
             else
             {
                 // Default prompt
-                TxtActivePromptName.Text = "Default";
+                TxtActivePromptName.Text = Loc.Get("label_default");
                 TxtActivePromptName.Foreground = new System.Windows.Media.SolidColorBrush(
                     System.Windows.Media.Color.FromRgb(112, 112, 112)); // Gray
             }
@@ -226,7 +227,7 @@ namespace ConditioningControlPanel
             }
             else
             {
-                MessageBox.Show("Please select a link to remove.", "No Selection",
+                MessageBox.Show(Loc.Get("msg_please_select_a_link_to_remove"), "No Selection",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }

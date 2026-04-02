@@ -1,4 +1,5 @@
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel;
 

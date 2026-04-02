@@ -7,6 +7,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using NAudio.Wave;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services;
 
@@ -106,9 +107,8 @@ public class BubbleService : IDisposable
         _animationTimer?.Stop();
         _animationTimer = null;
 
-        // Small delay to allow any pending animation ticks to complete
-        // This prevents race conditions when cleaning up during video playback
-        Thread.Sleep(50);
+        // DispatcherTimer ticks are synchronous on the UI thread and won't
+        // fire after Stop(), so no delay is needed here.
 
         // Pop all remaining bubbles
         PopAllBubbles();
@@ -196,13 +196,13 @@ public class BubbleService : IDisposable
             return;
         }
 
-        Application.Current.Dispatcher.BeginInvoke(() =>
+        DispatcherHelper.RunOnUI(() =>
         {
             try
             {
                 var settings = App.Settings.Current;
-                var screens = settings.DualMonitorEnabled 
-                    ? App.GetAllScreensCached() 
+                var screens = settings.DualMonitorEnabled
+                    ? App.GetAllScreensCached()
                     : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
                 
                 var screen = screens[_random.Next(screens.Length)];
@@ -226,7 +226,7 @@ public class BubbleService : IDisposable
     /// </summary>
     public void SpawnOnce()
     {
-        Application.Current.Dispatcher.BeginInvoke(() =>
+        DispatcherHelper.RunOnUI(() =>
         {
             try
             {
@@ -410,7 +410,7 @@ public class BubbleService : IDisposable
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Audio playback failed: {Error}", ex.Message);
+                App.Logger?.Warning("Audio playback failed: {Error}", ex.Message);
             }
             finally
             {

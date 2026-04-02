@@ -2,6 +2,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {

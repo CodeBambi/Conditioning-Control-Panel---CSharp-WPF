@@ -2,6 +2,8 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services.AIService
@@ -79,7 +81,7 @@ namespace ConditioningControlPanel.Services.AIService
             if (!IsAvailable)
             {
                 App.Logger?.Debug("AiService: AI not available — user needs to log in for AI chat");
-                return "Log in with Discord or Patreon to chat with me~ *giggles*";
+                return Loc.Get("ai_login_required_hint");
             }
 
             // Get prompt from active personality preset (handles all personalities including slut mode)

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services;
@@ -112,18 +114,18 @@ public class SkillTreeService : IDisposable
     /// </summary>
     public async Task<(bool Success, string? Error)> PurchaseSkillAsync(string skillId)
     {
-        if (!CanPurchaseSkill(skillId)) return (false, "Cannot purchase this skill");
+        if (!CanPurchaseSkill(skillId)) return (false, Loc.Get("skill_err_cannot_purchase"));
 
         var settings = App.Settings?.Current;
-        if (settings == null) return (false, "Settings unavailable");
+        if (settings == null) return (false, Loc.Get("skill_err_settings_unavailable"));
 
         var skill = SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
-        if (skill == null) return (false, "Unknown skill");
+        if (skill == null) return (false, Loc.Get("skill_err_unknown"));
 
         // Require login — purchases are server-authoritative
         var unifiedId = settings.UnifiedId;
         if (string.IsNullOrEmpty(unifiedId) || App.ProfileSync == null)
-            return (false, "Please log in to purchase enhancements.");
+            return (false, Loc.Get("skill_err_login_required"));
 
         var (success, error) = await App.ProfileSync.PurchaseSkillAsync(skillId);
         if (!success)
@@ -260,29 +262,29 @@ public class SkillTreeService : IDisposable
         var settings = App.Settings?.Current;
         if (settings == null) return breakdown;
 
-        breakdown.Add(("Base", 1.0));
+        breakdown.Add((Loc.Get("skill_mult_base"), 1.0));
 
         if (HasSkill("sparkle_boost_1"))
-            breakdown.Add(("Sparkle Boost", 0.10));
+            breakdown.Add((Loc.Get("skill_mult_sparkle_boost"), 0.10));
         if (HasSkill("sparkle_boost_2"))
-            breakdown.Add(("Extra Sparkly", 0.15));
+            breakdown.Add((Loc.Get("skill_mult_extra_sparkly"), 0.15));
         if (HasSkill("sparkle_boost_3"))
-            breakdown.Add(("Maximum Sparkle", 0.20));
+            breakdown.Add((Loc.Get("skill_mult_maximum_sparkle"), 0.20));
 
         if (HasSkill("streak_power") && settings.CurrentStreak > 0)
         {
             var streakBonus = Math.Min(settings.CurrentStreak * 0.005, 0.15);
-            breakdown.Add(($"Streak Power ({settings.CurrentStreak} days)", streakBonus));
+            breakdown.Add((Loc.GetF("skill_mult_streak_power_days", settings.CurrentStreak), streakBonus));
         }
 
         var hour = DateTime.Now.Hour;
         if (HasSkill("night_shift") && (hour >= 23 || hour < 5))
-            breakdown.Add(("Night Shift", 0.50));
+            breakdown.Add((Loc.Get("skill_mult_night_shift"), 0.50));
         if (HasSkill("early_bird_bimbo") && hour >= 5 && hour < 8)
-            breakdown.Add(("Early Bird Bimbo", 0.50));
+            breakdown.Add((Loc.Get("skill_mult_early_bird"), 0.50));
 
         if (settings.PinkRushActive && HasSkill("pink_rush"))
-            breakdown.Add(("PINK RUSH ACTIVE!", 2.0)); // Shows as +200% (3x total)
+            breakdown.Add((Loc.Get("skill_mult_pink_rush_active"), 2.0)); // Shows as +200% (3x total)
 
         return breakdown;
     }
@@ -301,7 +303,7 @@ public class SkillTreeService : IDisposable
 
         if (_random.NextDouble() < 0.05)
         {
-            LuckyProc?.Invoke(this, new LuckyProcEventArgs(App.Mods?.GetLuckyFlashLabel() ?? "Lucky Flash", 10));
+            LuckyProc?.Invoke(this, new LuckyProcEventArgs(App.Mods?.GetLuckyFlashLabel() ?? Loc.Get("skill_lucky_flash"), 10));
             return 10;
         }
         return 1;
@@ -317,7 +319,7 @@ public class SkillTreeService : IDisposable
 
         if (_random.NextDouble() < 0.05)
         {
-            LuckyProc?.Invoke(this, new LuckyProcEventArgs(App.Mods?.GetLuckyBubbleLabel() ?? "Lucky Bubble", 20));
+            LuckyProc?.Invoke(this, new LuckyProcEventArgs(App.Mods?.GetLuckyBubbleLabel() ?? Loc.Get("skill_lucky_bubble"), 20));
             return 20;
         }
         return 1;
@@ -506,25 +508,25 @@ public class SkillTreeService : IDisposable
             var fakeAchievement = new Models.Achievement
             {
                 Id = "daily_streak_bonus",
-                Name = $"Day {streakDays} Streak Bonus!",
-                FlavorText = $"Welcome back! +{xpAwarded} XP for your {streakDays}-day streak~",
+                Name = Loc.GetF("skill_streak_bonus_name", streakDays),
+                FlavorText = Loc.GetF("skill_streak_bonus_flavor", xpAwarded, streakDays),
                 ImageName = "../skills/milestone_rewards.png",
                 Category = Models.AchievementCategory.TimeSessions
             };
 
             // Delay popup slightly so the main window has time to finish loading
-            Application.Current?.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 try
                 {
-                    var popup = new AchievementPopup(fakeAchievement, headerIcon: "🎁", headerText: "DAILY STREAK BONUS!");
+                    var popup = new AchievementPopup(fakeAchievement, headerIcon: "🎁", headerText: Loc.Get("skill_daily_streak_bonus_header"));
                     popup.Show();
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Error(ex, "Failed to show daily streak notification");
                 }
-            });
+            }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
         catch (Exception ex)
         {
@@ -591,14 +593,14 @@ public class SkillTreeService : IDisposable
             var fakeAchievement = new Models.Achievement
             {
                 Id = "perfect_week_bonus",
-                Name = $"Perfect Princess Streak! 🎀",
-                FlavorText = $"{streak} days in a row! You've earned {xpAwarded:N0} bonus XP! ✨",
+                Name = Loc.Get("skill_perfect_week_name_popup"),
+                FlavorText = Loc.GetF("skill_perfect_week_flavor_popup", streak, xpAwarded),
                 ImageName = "../skills/perfect_bimbo_week.png",
                 Category = Models.AchievementCategory.TimeSessions
             };
 
             // Show popup using the same system as achievements
-            Application.Current?.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 try
                 {
@@ -736,7 +738,7 @@ public class SkillTreeService : IDisposable
     public string GetFormattedConditioningTime()
     {
         var settings = App.Settings?.Current;
-        if (settings == null) return "0h 0m";
+        if (settings == null) return Loc.Get("skill_time_zero");
 
         var totalMinutes = settings.TotalConditioningMinutes;
         var hours = (int)(totalMinutes / 60);
@@ -746,10 +748,10 @@ public class SkillTreeService : IDisposable
         {
             var days = hours / 24;
             hours = hours % 24;
-            return $"{days}d {hours}h {minutes}m";
+            return Loc.GetF("skill_time_dhm", days, hours, minutes);
         }
 
-        return $"{hours}h {minutes}m";
+        return Loc.GetF("skill_time_hm", hours, minutes);
     }
 
     #endregion

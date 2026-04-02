@@ -1,6 +1,7 @@
 <Window x:Class="ConditioningControlPanel.EasterEggWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         Title="..."
         Height="650" Width="550"
         WindowStartupLocation="CenterOwner"
@@ -73,7 +74,7 @@
 
             <!-- Footer -->
             <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" CornerRadius="0,0,10,10" Padding="20,12">
-                <Button Content="&#x2764; Close" Click="BtnClose_Click" Cursor="Hand"
+                <Button Content="{loc:Str btn_close_2}" Click="BtnClose_Click" Cursor="Hand"
                         HorizontalAlignment="Center">
                     <Button.Style>
                         <Style TargetType="Button">

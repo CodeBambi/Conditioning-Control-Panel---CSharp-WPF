@@ -1,6 +1,8 @@
 using System.IO;
 using System.Text.Json;
 using System.Windows.Threading;
+using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services;
@@ -133,7 +135,8 @@ public class AchievementService : IDisposable
     /// </summary>
     private void TrackTimeBasedProgress(object? sender, EventArgs e)
     {
-        var settings = App.Settings.Current;
+        var settings = App.Settings?.Current;
+        if (settings == null) return;
         var now = DateTime.Now;
 
         // Track total conditioning time for skill tree (when overlay is running = session active)
@@ -325,25 +328,24 @@ public class AchievementService : IDisposable
             var fakeAchievement = new Achievement
             {
                 Id = "bubble_milestone",
-                Name = $"{totalBubbles} Bubbles Popped!",
-                FlavorText = "+1 Sparkle Point earned!",
+                Name = Loc.GetF("achievement_bubble_milestone_name", totalBubbles),
+                FlavorText = Loc.Get("achievement_bubble_milestone_flavor"),
                 ImageName = "bubble_pop.png",
                 Category = AchievementCategory.Minigames
             };
 
-            Application.Current?.Dispatcher.BeginInvoke(
-                DispatcherPriority.ApplicationIdle, () =>
+            DispatcherHelper.RunOnUI(() =>
             {
                 try
                 {
-                    var popup = new AchievementPopup(fakeAchievement, "✨", "Bubble Milestone!");
+                    var popup = new AchievementPopup(fakeAchievement, "✨", Loc.Get("achievement_bubble_milestone_header"));
                     popup.Show();
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "Failed to show bubble milestone popup");
                 }
-            });
+            }, DispatcherPriority.ApplicationIdle);
         }
         catch (Exception ex)
         {
@@ -644,7 +646,7 @@ public class AchievementService : IDisposable
         // Fire event to show popup
         try
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 App.Logger?.Debug("Firing AchievementUnlocked event for: {Name}", achievement.Name);
                 AchievementUnlocked?.Invoke(this, achievement);

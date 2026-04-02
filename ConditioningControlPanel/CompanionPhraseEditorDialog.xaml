@@ -1,7 +1,8 @@
 <Window x:Class="ConditioningControlPanel.CompanionPhraseEditorDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Manage Companion Phrases"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_manage_companion_phrases}"
         Width="820" Height="620"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource DarkerBgBrush}"
@@ -155,25 +156,25 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
-            <TextBlock Text="PHRASE MANAGER" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
-            <TextBlock Text="Manage companion speech bubble phrases and connect audio files"
+            <TextBlock Text="{loc:Str label_phrase_manager}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
+            <TextBlock Text="{loc:Str label_manage_companion_speech_bubble_phrases_and_co}"
                        Foreground="#808080" FontSize="11" Margin="0,3,0,0"/>
         </StackPanel>
 
         <!-- Toolbar -->
         <Grid Grid.Row="1" Margin="0,0,0,8">
             <StackPanel Orientation="Horizontal">
-                <Button x:Name="BtnSelectAll" Content="Select All" Style="{StaticResource SecondaryButton}"
+                <Button x:Name="BtnSelectAll" Content="{loc:Str btn_select_all}" Style="{StaticResource SecondaryButton}"
                         Margin="0,0,6,0" Click="BtnSelectAll_Click"/>
-                <Button x:Name="BtnDeselectAll" Content="Deselect All" Style="{StaticResource SecondaryButton}"
+                <Button x:Name="BtnDeselectAll" Content="{loc:Str btn_deselect_all}" Style="{StaticResource SecondaryButton}"
                         Margin="0,0,6,0" Click="BtnDeselectAll_Click"/>
-                <Button x:Name="BtnEnableSelected" Content="Enable Selected" Style="{StaticResource SecondaryButton}"
+                <Button x:Name="BtnEnableSelected" Content="{loc:Str btn_enable_selected}" Style="{StaticResource SecondaryButton}"
                         Margin="0,0,6,0" Click="BtnEnableSelected_Click"/>
-                <Button x:Name="BtnDisableSelected" Content="Disable Selected" Style="{StaticResource SecondaryButton}"
+                <Button x:Name="BtnDisableSelected" Content="{loc:Str btn_disable_selected}" Style="{StaticResource SecondaryButton}"
                         Click="BtnDisableSelected_Click"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <TextBlock Text="Filter:" Foreground="#808080" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Text="{loc:Str label_filter}" Foreground="#808080" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <ComboBox x:Name="CmbCategoryFilter" Width="160" Style="{StaticResource DarkComboBox}"
                           FontSize="11" SelectionChanged="CmbCategoryFilter_SelectionChanged"/>
             </StackPanel>
@@ -187,15 +188,15 @@
         <!-- Footer Buttons -->
         <Grid Grid.Row="3" Margin="0,10,0,0">
             <StackPanel Orientation="Horizontal">
-                <Button x:Name="BtnAddPhrase" Content="+ Add Phrase" Style="{StaticResource ActionButton}"
+                <Button x:Name="BtnAddPhrase" Content="{loc:Str btn_add_phrase}" Style="{StaticResource ActionButton}"
                         Margin="0,0,8,0" Click="BtnAddPhrase_Click"/>
-                <Button x:Name="BtnRemoveSelected" Content="Remove Selected" Style="{StaticResource SecondaryButton}"
+                <Button x:Name="BtnRemoveSelected" Content="{loc:Str btn_remove_selected}" Style="{StaticResource SecondaryButton}"
                         Foreground="#FF6B6B" Click="BtnRemoveSelected_Click"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <TextBlock x:Name="TxtTotalCount" Foreground="#808080" FontSize="11"
                            VerticalAlignment="Center" Margin="0,0,12,0"/>
-                <Button Content="Close" Style="{StaticResource SecondaryButton}" Padding="16,6"
+                <Button Content="{loc:Str btn_close}" Style="{StaticResource SecondaryButton}" Padding="16,6"
                         Click="BtnClose_Click"/>
             </StackPanel>
         </Grid>

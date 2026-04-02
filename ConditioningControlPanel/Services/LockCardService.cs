@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services
 {
@@ -88,7 +89,7 @@ namespace ConditioningControlPanel.Services
 
         public void ShowLockCard(string? customPhrase = null, int customRepeats = -1, bool customStrict = false, bool isTest = false)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            DispatcherHelper.RunOnUISync(() =>
             {
                 // Prevent stacking multiple lock cards
                 if (Application.Current.Windows.OfType<LockCardWindow>().Any())
