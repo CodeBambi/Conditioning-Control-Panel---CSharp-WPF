@@ -22,79 +22,45 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.7.0";
+        public const string AppVersion = "5.7.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.7.0 — Mod System & Localization Update
+        public const string CurrentPatchNotes = @"v5.7.1 — Stability & Anti-Cheat Update
 
-🧩 MOD SYSTEM
-• New .ccpmod package format for installable mod bundles
-• Mod Manager — install, switch, and remove mods from the UI
-• Mod Creator — visual tool for building your own mods with drag-and-drop
-• Audio section in Mod Creator — manage voice lines, giggles, pops, and chimes with play preview
-• Browser section in Mod Creator — set default URL, site name, and video link suggestions
-• Mods can customize: theme colors, identity labels, triggers, messages, phrases, subliminal pools, lock card phrases, achievement badges, avatar poses, skill tree icons, bubble/tube assets, sounds, and more
-• Moddable enhancement tree: titles, tooltips, boost descriptions, stat pill text, points label
-• Configurable tube layout: avatar position offsets, scale, and per-mode Y offsets
-• Supported avatar sets — mods declare which avatar sets they provide, hiding unsupported companions
-• Custom avatar sets — mods can add sets 8+ with custom unlock levels
-• Video links — mods define name-to-URL pairs for companion speech bubble suggestions
-• Auto-loads active mod as preset when opening the Mod Creator
-• Fallback chain: active mod → base mod for any missing resources
+🛡️ ANTI-CHEAT
+• Fixed XP inflation exploit via local settings file editing
+• Time-proportional XP rate limiting across all sync endpoints
+• Client adopts server-authoritative XP after every sync
+• Startup merge rejects suspiciously high local XP
 
-🤖 DRONE MODE (Built-in Mod)
-• Matrix-inspired terminal aesthetic — green on black with custom tube artwork
-• Custom companion personality (DroneOS) with full phrase set across 20+ categories
-• 28 custom drone achievement badges
-• 5 custom avatar chassis (Alpha through Omega) with 4 poses each
-• 22 custom skill tree icons with drone-themed names
-• Custom bubble, pop sounds, and computing-style giggle sounds
-• 240 voice lines for companion speech
-• 20 curated video links for the companion to suggest
-• Full subliminal pool and lock card phrase set
+🔧 BUG FIXES
+• Fixed mod installation failing when temp and install paths are on different drives
+• Mod images now appear immediately without needing to reload
+• Fixed corner spiral overlay not displaying (broken resource path since v5.7.0)
+• Spiral overlay now enabled by default at Level 10
+• Fixed sparkle points from bubble pops not persisting after season reset
+• Lock card now force-steals keyboard focus to prevent keystrokes leaking into other apps
+• Fixed notification popups stealing keyboard focus and being draggable
+• Fixed minimize button hiding window to tray instead of minimizing
+• Fixed corrupted HTML entities in localization files
 
-🌍 LOCALIZATION
-• Full UI localization infrastructure with 9 languages
-• 2,034 translated keys per language
-• Covers all tabs, dialogs, skill tree, sessions, notifications, banners, leaderboard, remote control, and code-behind strings
-• Languages: English, Spanish, French, German, Japanese, Korean, Chinese (Simplified), Portuguese, Russian
-
-📢 ANNOUNCEMENTS
-• Server announcements now support themed popups and download links
-• Matrix green/black theme for special announcements
-
-🛠️ BUG FIXES
-• Fixed race conditions causing XP/level resets — added write locks + crash recovery
-• Fixed quest streak resetting on login by preserving cloud streak value
-• Fixed streak reset bugs: prevent silent resets, unify trim windows, preserve earned streaks
-• Fixed daily quests permanently showing as completed after day rollover
-• Fixed quest streak sync and subliminal thread safety
-• Fixed custom session crashes from unhandled async void exceptions
-• Fixed bubble count double pop sound and off-screen positioning
-• Fixed spiral GIF playing too fast by using median frame delay
-• Fixed spiral GIF stutter by reverting to synchronous loading
-• Fixed avatar tube SizeToContent localization bug, adjusted layout and float animation
-• Fixed avatar pose timer not starting for multi-pose static avatar sets
-• Fixed bubble click-through on transparent windows
-• Fixed avatar head clipping during floating animation
-• Fixed Mod Creator avatar slots not loading from installed mods
-
-🔐 STABILITY & AUTH
-• Hardened auth & sync pipeline: V2-first load, 401 recovery, heartbeat fix, race prevention
-• Server: fix V2 sync rejecting legacy users
-• Server: backfill skill points for pre-deployment users
+⚡ PERFORMANCE & STABILITY
+• Fixed race conditions, resource leaks, and state corruption (full code logic audit)
+• CPU optimization via DispatcherHelper adoption and animation management
+• Fixed fire-and-forget task crashes during shutdown
+• Removed dead code flagged by compiler warnings
 
 🔒 SECURITY
-• Path traversal protection in all mod resource resolvers
-• Mod manifests re-validated on every load (defense-in-depth)
-• All theme colors validated as hex codes
-• Video links filtered to HTTPS-only at runtime
-• Size caps on all manifest fields (phrases, triggers, pools, tooltips)
-• Duplicate custom avatar set detection
-• Announcement link URLs validated as HTTPS on both server and client";
+• Security audit R13: fixed orphan scan DoS, Patreon API amplification, prototype pollution
+• HTTPS validation on content pack external links
+
+🌍 LOCALIZATION
+• Improved Russian translations (special thanks to piklop!)
+• Fixed duplicate keys in Spanish localization
+• Season: Airhead April";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

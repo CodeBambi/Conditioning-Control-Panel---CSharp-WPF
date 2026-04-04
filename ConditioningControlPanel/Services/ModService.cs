@@ -160,7 +160,7 @@ namespace ConditioningControlPanel.Services
                     if (Directory.Exists(installDir))
                         Directory.Delete(installDir, recursive: true);
 
-                    Directory.Move(tempDir, installDir);
+                    CopyDirectory(tempDir, installDir);
 
                     // Register
                     var package = new ModPackage(manifest, installDir, isBuiltIn: false);
