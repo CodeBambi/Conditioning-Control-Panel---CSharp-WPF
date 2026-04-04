@@ -4503,7 +4503,7 @@
                             <!-- Season Title Banner -->
                             <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="12" Padding="20,14" Margin="0,0,0,18"
                                     BorderThickness="1" BorderBrush="#3D3D60">
-                                <TextBlock x:Name="TxtSeasonTitle" Text="{loc:Str label_mindless_march}"
+                                <TextBlock x:Name="TxtSeasonTitle" Text="{loc:Str label_airhead_april}"
                                            FontSize="28" FontWeight="ExtraBold" FontStyle="Italic"
                                            HorizontalAlignment="Center" TextAlignment="Center">
                                     <TextBlock.Foreground>

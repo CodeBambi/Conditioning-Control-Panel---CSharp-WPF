@@ -76,14 +76,13 @@ namespace ConditioningControlPanel.Services
 
         // Reference to main window for service access
         private readonly MainWindow _mainWindow;
-        private bool _mainWindowClosed = false;
 
         public bool IsRunning => _isRunning;
 
         /// <summary>
         /// Safely check if main window is still valid and available
         /// </summary>
-        private bool IsMainWindowValid => _mainWindow != null && !_mainWindowClosed && _mainWindow.IsLoaded;
+        private bool IsMainWindowValid => _mainWindow != null && _mainWindow.IsLoaded;
         public bool IsPaused => _isPaused;
         public int CurrentPhaseIndex => _currentPhaseIndex;
         public int PauseCount => _pauseCount;

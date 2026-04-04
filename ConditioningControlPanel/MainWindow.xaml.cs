@@ -19768,7 +19768,8 @@ namespace ConditioningControlPanel
                         try
                         {
                             var externalUrl = pack.ExternalUrl ?? await App.ContentPacks!.GetExternalPackDownloadUrlAsync(pack.Id);
-                            if (!string.IsNullOrEmpty(externalUrl))
+                            if (!string.IsNullOrEmpty(externalUrl) && Uri.TryCreate(externalUrl, UriKind.Absolute, out var extUri)
+                                && extUri.Scheme == Uri.UriSchemeHttps)
                             {
                                 Process.Start(new ProcessStartInfo(externalUrl) { UseShellExecute = true });
                             }
@@ -19870,7 +19871,8 @@ namespace ConditioningControlPanel
 
         private void BtnPackUpgrade_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.Tag is ContentPack pack && !string.IsNullOrEmpty(pack.UpgradeUrl))
+            if (sender is Button btn && btn.Tag is ContentPack pack && !string.IsNullOrEmpty(pack.UpgradeUrl)
+                && Uri.TryCreate(pack.UpgradeUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
             {
                 Process.Start(new ProcessStartInfo(pack.UpgradeUrl) { UseShellExecute = true });
             }
@@ -19878,7 +19880,8 @@ namespace ConditioningControlPanel
 
         private void BtnPackPatreon_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button btn && btn.Tag is ContentPack pack && !string.IsNullOrEmpty(pack.PatreonUrl))
+            if (sender is Button btn && btn.Tag is ContentPack pack && !string.IsNullOrEmpty(pack.PatreonUrl)
+                && Uri.TryCreate(pack.PatreonUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
             {
                 Process.Start(new ProcessStartInfo(pack.PatreonUrl) { UseShellExecute = true });
             }

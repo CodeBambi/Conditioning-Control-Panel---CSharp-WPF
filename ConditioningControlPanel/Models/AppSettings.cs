@@ -1427,7 +1427,7 @@ namespace ConditioningControlPanel.Models
 
         #region Spiral Overlay (Unlocks Lv.10)
 
-        private bool _spiralEnabled = false;
+        private bool _spiralEnabled = true;
         public bool SpiralEnabled
         {
             get => _spiralEnabled;

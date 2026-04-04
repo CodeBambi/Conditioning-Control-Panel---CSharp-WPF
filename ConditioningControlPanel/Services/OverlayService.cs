@@ -128,7 +128,7 @@ public class OverlayService : IDisposable
                     return settings.SpiralPath;
                 }
                 
-                return ModResourceResolver.ResolveUri("spirals/spiral.gif");
+                return ModResourceResolver.ResolveUri("spiral.gif");
             }
     public void Start()
     {
