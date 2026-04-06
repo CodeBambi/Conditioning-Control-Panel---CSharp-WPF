@@ -52,8 +52,7 @@ namespace ConditioningControlPanel
 
         private IntPtr _hwnd;
 
-        // Focus reclaim timer — prevents keystrokes leaking into other apps
-        private DispatcherTimer? _focusReclaimTimer;
+
 
         /// <summary>
         /// Check if any lock card window is currently open
@@ -373,7 +372,6 @@ namespace ConditioningControlPanel
             foreach (var window in _allWindows)
             {
                 window._isCompleted = true;
-                window._focusReclaimTimer?.Stop();
                 window.TxtInput.IsEnabled = false;
                 window.TxtHint.Visibility = Visibility.Collapsed;
                 window.CompletionPanel.Visibility = Visibility.Visible;
@@ -473,7 +471,6 @@ namespace ConditioningControlPanel
                 return;
             }
             
-            _focusReclaimTimer?.Stop();
             _closeTimer?.Stop();
             _allWindows.Remove(this);
             base.OnClosing(e);

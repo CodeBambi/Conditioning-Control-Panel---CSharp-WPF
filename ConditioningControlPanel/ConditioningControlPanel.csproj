@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>5.7.0</Version>
+    <Version>5.7.1</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -101,10 +101,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Localization language files -->
+    <!-- Localization language files - must be on disk for File.ReadAllText() -->
     <Content Include="Localization\Languages\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
 
@@ -112,6 +113,7 @@
     <Content Include="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
 
@@ -120,8 +122,19 @@
     <Content Include="assets\sessions\*.session.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
+
+  <!-- WebView2Loader.dll must be on disk - the WebView2 SDK loads it outside .NET's single-file extraction -->
+  <Target Name="IncludeWebView2LoaderInPublish" AfterTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(NuGetPackageRoot)microsoft.web.webview2\1.0.2535.41\runtimes\win-x64\native\WebView2Loader.dll">
+        <RelativePath>WebView2Loader.dll</RelativePath>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
 
   <ItemGroup>

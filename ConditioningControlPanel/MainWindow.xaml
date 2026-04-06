@@ -1746,8 +1746,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v5_7_0_is_out}"
-                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v5_7_0_mod_system_update}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v5_7_1_is_out}"
+                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v5_7_1_stability_update}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -4466,6 +4466,34 @@
                                                     </Trigger>
                                                     <Trigger Property="IsEnabled" Value="False">
                                                         <Setter TargetName="border" Property="Opacity" Value="0.5"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button x:Name="BtnReportBug" Content="{loc:Str btn_report_bug}"
+                                Click="BtnReportBug_Click" Cursor="Hand" Margin="0,8,0,0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+                                    <Setter Property="Foreground" Value="#E0E0E0"/>
+                                    <Setter Property="FontSize" Value="12"/>
+                                    <Setter Property="Padding" Value="16,8"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                        CornerRadius="6" Padding="{TemplateBinding Padding}"
+                                                        BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="border" Property="Background" Value="#353560"/>
+                                                        <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -8814,6 +8842,24 @@
                                             <TextBlock Text="{loc:Str label_opens_the_mod_creator_with_a_step_by_step_wal}" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="{loc:Str btn_start_guide}" Click="BtnTutorialModding_Click"
+                                                Style="{StaticResource SmallPinkButton}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Report a Bug -->
+                                <Border Background="#1A1A32" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="🐞" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{loc:Str btn_report_bug}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{loc:Str bug_report_privacy_notice}" Foreground="#808080" FontSize="11" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Content="{loc:Str btn_report_bug}" Click="BtnTutorialReportBug_Click"
                                                 Style="{StaticResource SmallPinkButton}" VerticalAlignment="Center"/>
                                     </Grid>
                                 </Border>

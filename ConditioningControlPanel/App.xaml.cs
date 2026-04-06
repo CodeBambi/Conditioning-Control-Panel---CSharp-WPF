@@ -216,6 +216,7 @@ namespace ConditioningControlPanel
         public static LockdownService Lockdown { get; private set; } = null!;
         public static MantraService Mantra { get; private set; } = null!;
         public static ModService Mods { get; private set; } = null!;
+        public static BugReportService BugReport { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -709,6 +710,9 @@ namespace ConditioningControlPanel
             // Initialize Update service and check for updates in background
             Update = new UpdateService();
             _ = CheckForUpdatesInBackgroundAsync();
+
+            // Initialize bug report service (stateless, just holds an HttpClient)
+            BugReport = new BugReportService();
 
             // Wire up achievement popup BEFORE checking any achievements
             Achievements.AchievementUnlocked += OnAchievementUnlocked;

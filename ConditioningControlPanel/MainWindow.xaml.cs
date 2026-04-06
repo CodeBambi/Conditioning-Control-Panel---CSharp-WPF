@@ -15397,6 +15397,34 @@ namespace ConditioningControlPanel
             MainTutorialOverlay.Visibility = Visibility.Visible;
         }
 
+        private void BtnReportBug_Click(object sender, RoutedEventArgs e)
+        {
+            OpenBugReportWindow();
+        }
+
+        private void BtnTutorialReportBug_Click(object sender, RoutedEventArgs e)
+        {
+            // Close the tutorial overlay first, then open the bug report dialog
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Visible;
+            OpenBugReportWindow();
+        }
+
+        private void OpenBugReportWindow()
+        {
+            try
+            {
+                var dialog = new BugReportWindow { Owner = this };
+                dialog.ShowDialog();
+            }
+            catch (System.Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open BugReportWindow");
+                MessageBox.Show(this, Loc.Get("bug_report_error_toast") + "\n\n" + ex.Message,
+                    Loc.Get("bug_report_title"), MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void MainTutorial_Close(object sender, RoutedEventArgs e)
         {
             MainTutorialOverlay.Visibility = Visibility.Collapsed;
