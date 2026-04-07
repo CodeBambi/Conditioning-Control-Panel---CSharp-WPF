@@ -2785,7 +2785,21 @@ namespace ConditioningControlPanel
                         return; // Another app is in front, don't steal focus
                 }
 
-                // Defer activation to parent so Windows finishes current activation first
+                // Don't redirect activation when speech bubble is showing —
+                // redirecting brings parent to front, hiding the bubble behind it
+                if (SpeechBubble.Visibility == Visibility.Visible)
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (_isAttached && _tubeHandle != IntPtr.Zero)
+                            BringAttachedPairToFront();
+                    }), DispatcherPriority.Background);
+                    return;
+                }
+
+                // Defer activation to parent so Windows finishes current activation first.
+                // Include BringAttachedPairToFront in the same callback to avoid a double-deferral
+                // gap where the tube drops behind the parent between two Background dispatches.
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     try
@@ -2795,6 +2809,7 @@ namespace ConditioningControlPanel
                             && _parentWindow.WindowState != WindowState.Minimized)
                         {
                             _parentWindow.Activate();
+                            BringAttachedPairToFront();
                         }
                     }
                     catch { /* Window may be closing */ }
@@ -2836,8 +2851,21 @@ namespace ConditioningControlPanel
                 {
                     // Only refresh z-order when our app owns the foreground — don't steal focus
                     // from other apps. ParentWindow_Activated handles restoration when user returns.
+                    // Use process-ID check (not just parent/tube handle) so dialogs, flashes,
+                    // overlays, and other app windows also count as "our foreground".
                     var foreground = GetForegroundWindow();
+                    bool isOurProcess = false;
                     if (foreground == _parentHandle || foreground == _tubeHandle)
+                    {
+                        isOurProcess = true;
+                    }
+                    else if (foreground != IntPtr.Zero)
+                    {
+                        GetWindowThreadProcessId(foreground, out uint foregroundPid);
+                        uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                        isOurProcess = (foregroundPid == ourPid);
+                    }
+                    if (isOurProcess)
                     {
                         BringAttachedPairToFront();
                     }
