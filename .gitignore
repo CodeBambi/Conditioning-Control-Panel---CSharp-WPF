@@ -67,8 +67,7 @@ obj/
 *.user
 crash_log.txt
 
-# Patreon proxy server (deploy separately, contains sensitive config)
-patreon-proxy-server/
+# Server code lives in private repo (CC-Labs-llc/CCP-Server)
 ConditioningControlPanel_Release/
 *.zip
 ConditioningControlPanel_v4.1/

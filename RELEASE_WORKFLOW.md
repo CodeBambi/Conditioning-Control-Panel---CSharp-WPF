@@ -4,109 +4,89 @@ Quick reference for releasing new versions of Conditioning Control Panel.
 
 ---
 
-## Version Locations (Update ALL of these)
+## Recommended: Use the `/release` Skill
 
-### Code Files
-| File | Location | Example |
-|------|----------|---------|
-| `ConditioningControlPanel.csproj` | Line 11: `<Version>` | `<Version>5.5.8</Version>` |
-| `Services/UpdateService.cs` | Line ~25: `AppVersion` | `public const string AppVersion = "5.5.8";` |
-| `Services/UpdateService.cs` | Line ~31: `CurrentPatchNotes` | Update patch notes text |
-| `installer.iss` | Line 17: `MyAppVersion` | `#define MyAppVersion "5.5.8"` |
-| `build-installer.bat` | Line 10: `VERSION` | `set VERSION=5.5.8` |
-| `MainWindow.xaml` | Line ~741: `BtnUpdateAvailable` | `Content="🩷 v5.5.8 IS OUT! 🩷"` |
-| `MainWindow.xaml` | Line ~742: `ToolTip` | `ToolTip="v5.5.8 - [message]"` |
+The `/release` skill automates version bumping across all files and localization key creation:
 
-### GitHub Pages (docs/index.html)
-| Line | What to Update |
-|------|----------------|
-| ~854 | Download button URL and text: `Download vX.X.X` |
-| ~861 | Version banner: `vX.X.X Available Now` |
-| ~867-873 | Hero download button URL and text |
-
-Update the download URLs to point to the new release:
 ```
-https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/download/vX.X.X/ConditioningControlPanel-X.X.X-Setup.exe
+/release X.Y.Z "Release Subtitle"
 ```
 
-### Server Configuration
-| Location | Purpose |
-|----------|---------|
-| `codebambi-proxy.vercel.app/config/update-banner` | Server-side banner for users who haven't updated |
-
-Update the server endpoint. **Do NOT include a `url` field** — the update button should follow the normal in-app update flow, not link to GitHub:
-```json
-{
-  "enabled": true,
-  "version": "X.X.X",
-  "message": "UPDATE X.X.X is live! [brief description of changes].",
-  "url": ""
-}
-```
+This handles steps 1-2 below automatically. After running it, skip to step 3 (Build Installer).
 
 ---
 
-## Quick Release Steps
+## Manual Release Steps
 
 ### 1. Update All Version Locations
-Edit all the code locations listed above with the new version number.
 
-### 2. Build Installer (Inno Setup)
+| File | Location | What to Change |
+|------|----------|----------------|
+| `ConditioningControlPanel/ConditioningControlPanel.csproj` | Line 12: `<Version>` | `<Version>X.X.X</Version>` |
+| `ConditioningControlPanel/Services/UpdateService.cs` | Line 25: `AppVersion` | `public const string AppVersion = "X.X.X";` |
+| `ConditioningControlPanel/Services/UpdateService.cs` | Line 31+: `CurrentPatchNotes` | Full patch notes string |
+| `installer.iss` | Line 16: `MyAppVersion` | `#define MyAppVersion "X.X.X"` |
+| `build-installer.bat` | Line 10: `VERSION` | `set VERSION=X.X.X` |
+| `ConditioningControlPanel/MainWindow.xaml` | ~Line 1749: `BtnUpdateAvailable` | `Content="{loc:Str btn_vX_Y_Z_is_out}"` |
+| `ConditioningControlPanel/MainWindow.xaml` | ~Line 1750: `ToolTip` | `ToolTip="{loc:Str tooltip_vX_Y_Z_slug}"` |
+
+### 2. Add Localization Keys
+
+Add two new keys to each of the 9 JSON files in `ConditioningControlPanel/Localization/Languages/`:
+
+```json
+"btn_vX_Y_Z_is_out": "💖 vX.Y.Z IS OUT! 💖",
+"tooltip_vX_Y_Z_subtitle_slug": "vX.Y.Z - Release Subtitle",
+```
+
+Insert after the previous version's keys. Use English text for all languages (translations can come later; the fallback system handles it). Do not delete old version keys.
+
+Languages: `de`, `en`, `es`, `fr`, `ja`, `ko`, `pt-BR`, `ru`, `zh-CN`
+
+### 3. Build Installer
+
 ```batch
 cd C:\Projects\Conditioning-Control-Panel---CSharp-WPF
 build-installer.bat
 ```
-Output: `installer-output/ConditioningControlPanel-X.X.X-Setup.exe`
 
-### 3. Update GitHub Pages
-Edit `docs/index.html`:
-- Update version text in download buttons
-- Update download URLs to point to new release tag
-- Update the marquee banner text to briefly describe what's new in this version (not just "update now")
+This runs `dotnet publish` and then Inno Setup. Output: `installer-output/ConditioningControlPanel-X.X.X-Setup.exe`
+
+**Note:** The publish TFM is `net8.0-windows10.0.19041.0` (must match csproj). If the build fails with "Access denied", delete `%LOCALAPPDATA%\Temp\Velopack` and retry.
 
 ### 4. Commit & Push
+
 ```bash
 git add -A
-git commit -m "Bump to vX.X.X with [summary of changes]"
+git commit -m "Bump to vX.X.X — Release Subtitle"
 git push
 ```
 
+Or use the `/commit` skill.
+
 ### 5. Create GitHub Release
+
 1. Go to: https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/new
-2. Tag: `vX.X.X` (e.g., `v5.5.8`)
-3. Title: `vX.X.X - [Short Description]`
-4. Upload files:
-   - `installer-output/ConditioningControlPanel-X.X.X-Setup.exe`
-5. Write release notes (or copy from `CurrentPatchNotes`)
-6. Publish release
+2. Tag: `vX.X.X`
+3. Title: `vX.X.X — Release Subtitle`
+4. Upload: `installer-output/ConditioningControlPanel-X.X.X-Setup.exe`
+5. Paste patch notes from `CurrentPatchNotes` in UpdateService.cs
+6. Publish
 
-### 6. Update Server Marquee
-Update the in-app sliding marquee banner at `/config/marquee` with the new version and a brief description:
-```bash
-curl -X POST "https://codebambi-proxy.vercel.app/config/marquee" \
-  -H "Content-Type: application/json" \
-  -d '{"admin_token": "...", "message": "vX.X.X is here! [brief changes]. Update now from Settings!"}'
-```
+### 6. Update Server Marquee & Update Banner
 
-### 7. Update Server Update Banner
-Update the proxy server's `/config/update-banner` endpoint. **Do NOT set a `url`** — keep it empty so the update button follows the normal in-app flow:
-```bash
-curl -X POST "https://codebambi-proxy.vercel.app/config/update-banner" \
-  -H "Content-Type: application/json" \
-  -d '{"admin_token": "...", "enabled": true, "version": "X.X.X", "message": "UPDATE X.X.X is live! [brief changes].", "url": ""}'
-```
-This shows a banner to users on older versions who haven't updated.
+See the private repo `CC-Labs-llc/CCP-Server` for admin endpoint docs and curl examples.
 
 ---
 
 ## How Updates Work
 
-1. **UpdateService.cs** checks the server banner at `/config/update-banner`
+1. `UpdateService.cs` checks the server banner at `/config/update-banner` on startup
 2. Compares `AppVersion` constant with the banner version
-3. If newer version available, shows update button in the UI
+3. If a newer version is available, shows update button in the UI
 4. User clicks the button to download the new installer from GitHub
 
-**Important:** The `AppVersion` constant in UpdateService.cs is what the app uses to determine its current version. Always keep this in sync!
+The `AppVersion` constant in UpdateService.cs is what the app uses to determine its current version. Always keep it in sync with the csproj `<Version>`.
 
 ---
 
@@ -116,20 +96,24 @@ This shows a banner to users on older versions who haven't updated.
 - Check that `AppVersion` in UpdateService.cs matches the csproj version
 - Verify the GitHub release is published (not draft)
 - Update the server banner as a fallback notification
-- Verify download URLs in docs/index.html point to the correct release
+
+### Build errors
+- MSB3027 file lock errors: the app is running — close it before building
+- "Access denied" during Velopack: delete `%LOCALAPPDATA%\Temp\Velopack`
+- CA1416 platform warnings: safe to ignore for Windows-only app
 
 ---
 
-## File Checklist Before Release
+## Pre-Release Checklist
 
 ### Version Updates
-- [ ] `ConditioningControlPanel.csproj` - Version tag
-- [ ] `UpdateService.cs` - AppVersion constant
-- [ ] `UpdateService.cs` - CurrentPatchNotes
-- [ ] `installer.iss` - MyAppVersion
-- [ ] `build-installer.bat` - VERSION
-- [ ] `MainWindow.xaml` - BtnUpdateAvailable Content & ToolTip
-- [ ] `docs/index.html` - Download button text, URLs, and marquee banner description
+- [ ] `ConditioningControlPanel.csproj` — Version tag
+- [ ] `UpdateService.cs` — AppVersion constant
+- [ ] `UpdateService.cs` — CurrentPatchNotes
+- [ ] `installer.iss` — MyAppVersion
+- [ ] `build-installer.bat` — VERSION
+- [ ] `MainWindow.xaml` — BtnUpdateAvailable Content & ToolTip loc keys
+- [ ] Localization JSON files (9 files) — new btn + tooltip keys
 
 ### Build & Deploy
 - [ ] Installer built (`build-installer.bat`)
@@ -137,6 +121,5 @@ This shows a banner to users on older versions who haven't updated.
 - [ ] GitHub release created with installer uploaded
 
 ### Post-Release
-- [ ] Server marquee updated (`/config/marquee`) — version + brief description
-- [ ] Server update banner updated (`/config/update-banner`) — no URL, empty string
-- [ ] Verify GitHub Pages download links work
+- [ ] Server marquee updated (see private repo for admin docs)
+- [ ] Server update banner updated (see private repo for admin docs)
