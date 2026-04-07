@@ -17811,11 +17811,28 @@ namespace ConditioningControlPanel
 
         private void BtnManageMessages_Click(object sender, RoutedEventArgs e)
         {
+            var oldKeys = new HashSet<string>(App.Settings.Current.SubliminalPool.Keys);
+            var defaults = App.Mods?.GetDefaultSubliminalPool() ?? Models.BuiltInMods.BambiSleep.SubliminalPool ?? new Dictionary<string, bool>();
+
             var dialog = new TextEditorDialog("Subliminal Messages", App.Settings.Current.SubliminalPool);
             dialog.Owner = this;
 
             if (dialog.ShowDialog() == true && dialog.ResultData != null)
             {
+                // Track default triggers the user explicitly removed
+                var newKeys = new HashSet<string>(dialog.ResultData.Keys);
+                foreach (var key in oldKeys)
+                {
+                    if (!newKeys.Contains(key) && defaults.ContainsKey(key))
+                        App.Settings.Current.RemovedDefaultSubliminals.Add(key);
+                }
+
+                // If user re-adds a previously removed default, un-track it
+                foreach (var key in newKeys)
+                {
+                    App.Settings.Current.RemovedDefaultSubliminals.Remove(key);
+                }
+
                 App.Settings.Current.SubliminalPool = dialog.ResultData;
                 App.Settings.Save();
                 App.Logger?.Information("Subliminal pool updated: {Count} items", dialog.ResultData.Count);

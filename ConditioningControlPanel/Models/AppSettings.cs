@@ -692,6 +692,18 @@ namespace ConditioningControlPanel.Models
             set { _subliminalPool = value ?? new(); OnPropertyChanged(); }
         }
 
+        /// <summary>
+        /// Tracks default subliminal triggers the user explicitly removed,
+        /// so they don't get re-added on startup by MergeNewDefaultSubliminalTriggers.
+        /// </summary>
+        private HashSet<string> _removedDefaultSubliminals = new();
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public HashSet<string> RemovedDefaultSubliminals
+        {
+            get => _removedDefaultSubliminals;
+            set => _removedDefaultSubliminals = value ?? new();
+        }
+
         private string _subBackgroundColor = "#000000";
         public string SubBackgroundColor
         {

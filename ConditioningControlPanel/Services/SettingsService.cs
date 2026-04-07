@@ -166,6 +166,10 @@ namespace ConditioningControlPanel.Services
 
                 foreach (var trigger in defaults.Keys)
                 {
+                    // Skip triggers the user explicitly removed
+                    if (settings.RemovedDefaultSubliminals.Contains(trigger))
+                        continue;
+
                     if (!settings.SubliminalPool.ContainsKey(trigger))
                     {
                         // Add new triggers as enabled by default (matching default behavior)

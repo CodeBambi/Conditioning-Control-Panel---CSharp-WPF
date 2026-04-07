@@ -81,6 +81,7 @@ namespace ConditioningControlPanel
                 if (App.Mods != null)
                 {
                     App.Settings.Current.SubliminalPool = App.Mods.GetDefaultSubliminalPool();
+                    App.Settings.Current.RemovedDefaultSubliminals.Clear();
                     App.Settings.Current.LockCardPhrases = App.Mods.GetDefaultLockCardPhrases();
                     App.Settings.Current.CustomTriggers = App.Mods.GetDefaultCustomTriggers();
                 }
