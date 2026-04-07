@@ -25,6 +25,9 @@ namespace ConditioningControlPanel.Services
         private readonly string _audioPath;
         private string[]? _audioFilesCache;
         private DateTime _audioFilesCacheTime;
+        private string[]? _modAudioFilesCache;
+        private DateTime _modAudioFilesCacheTime;
+        private string? _modAudioCacheModId;
 
         private WaveOutEvent? _audioPlayer;
         private AudioFileReader? _audioFile;
@@ -346,16 +349,40 @@ namespace ConditioningControlPanel.Services
                 cleanText,                          // As-is
                 cleanText.ToUpper(),                // UPPERCASE
                 cleanText.ToLower(),                // lowercase
-                cleanText.Replace("'", "'"),        // Normalize curly apostrophe to straight
-                cleanText.Replace("'", "'"),        // Normalize straight apostrophe to curly
-                cleanText.ToUpper().Replace("'", "'"),
+                cleanText.Replace("\u2019", "'"),    // Normalize curly apostrophe to straight
+                cleanText.Replace("'", "\u2019"),    // Normalize straight apostrophe to curly
+                cleanText.ToUpper().Replace("\u2019", "'"),
             };
 
+            // Check active mod's audio directory first
+            var modAudioPath = GetModAudioPath();
+            if (modAudioPath != null)
+            {
+                var result = SearchAudioDirectory(modAudioPath, cleanText, textVariants, extensions, isModCache: true);
+                if (result != null) return result;
+            }
+
+            // Fall back to default sub_audio directory
+            return SearchAudioDirectory(_audioPath, cleanText, textVariants, extensions, isModCache: false);
+        }
+
+        private string? GetModAudioPath()
+        {
+            var modPath = App.Mods?.ActiveMod?.InstalledPath;
+            if (modPath == null) return null;
+
+            var modAudioDir = Path.Combine(modPath, "resources", "sounds", "flashes_audio");
+            return Directory.Exists(modAudioDir) ? modAudioDir : null;
+        }
+
+        private string? SearchAudioDirectory(string directory, string cleanText, string[] textVariants, string[] extensions, bool isModCache)
+        {
+            // Try exact filename match with case variants
             foreach (var textVar in textVariants)
             {
                 foreach (var ext in extensions)
                 {
-                    var path = Path.Combine(_audioPath, textVar + ext);
+                    var path = Path.Combine(directory, textVar + ext);
                     if (File.Exists(path)) return path;
                 }
             }
@@ -363,20 +390,35 @@ namespace ConditioningControlPanel.Services
             // Fallback: case-insensitive directory search (cached to avoid per-subliminal disk scan)
             try
             {
-                if (Directory.Exists(_audioPath))
+                if (Directory.Exists(directory))
                 {
-                    // Cache directory listing for 60 seconds
-                    if (_audioFilesCache == null || (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
+                    string[]? files;
+                    if (isModCache)
                     {
-                        _audioFilesCache = Directory.GetFiles(_audioPath);
-                        _audioFilesCacheTime = DateTime.UtcNow;
+                        var currentModId = App.Mods?.ActiveMod?.Id;
+                        if (_modAudioFilesCache == null || _modAudioCacheModId != currentModId ||
+                            (DateTime.UtcNow - _modAudioFilesCacheTime).TotalSeconds > 60)
+                        {
+                            _modAudioFilesCache = Directory.GetFiles(directory);
+                            _modAudioFilesCacheTime = DateTime.UtcNow;
+                            _modAudioCacheModId = currentModId;
+                        }
+                        files = _modAudioFilesCache;
                     }
-                    var files = _audioFilesCache;
-                    var normalizedText = cleanText.ToUpperInvariant().Replace("'", "'");
+                    else
+                    {
+                        if (_audioFilesCache == null || (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
+                        {
+                            _audioFilesCache = Directory.GetFiles(directory);
+                            _audioFilesCacheTime = DateTime.UtcNow;
+                        }
+                        files = _audioFilesCache;
+                    }
 
+                    var normalizedText = cleanText.ToUpperInvariant().Replace("\u2019", "'");
                     foreach (var file in files)
                     {
-                        var fileName = Path.GetFileNameWithoutExtension(file).ToUpperInvariant().Replace("'", "'");
+                        var fileName = Path.GetFileNameWithoutExtension(file).ToUpperInvariant().Replace("\u2019", "'");
                         if (fileName == normalizedText)
                         {
                             return file;
@@ -386,7 +428,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("Error searching audio directory: {Error}", ex.Message);
+                App.Logger?.Debug("Error searching audio directory {Dir}: {Error}", directory, ex.Message);
             }
 
             return null;

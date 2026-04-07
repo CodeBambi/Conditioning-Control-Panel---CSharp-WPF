@@ -22,45 +22,27 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.7.1";
+        public const string AppVersion = "5.7.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.7.1 — Stability & Anti-Cheat Update
+        public const string CurrentPatchNotes = @"v5.7.2 — Bug Report Update
 
-🛡️ ANTI-CHEAT
-• Fixed XP inflation exploit via local settings file editing
-• Time-proportional XP rate limiting across all sync endpoints
-• Client adopts server-authoritative XP after every sync
-• Startup merge rejects suspiciously high local XP
+✨ FEATURES
+• In-app bug report system — report bugs directly from the app with automatic log collection and privacy scrubbing
+• Bug report button added next to help button in tab row for easy access
+
+🎨 UI/UX
+• UI overhaul: refined dark theme with glass panel effects, improved typography, and updated color palette
 
 🔧 BUG FIXES
-• Fixed mod installation failing when temp and install paths are on different drives
-• Mod images now appear immediately without needing to reload
-• Fixed corner spiral overlay not displaying (broken resource path since v5.7.0)
-• Spiral overlay now enabled by default at Level 10
-• Fixed sparkle points from bubble pops not persisting after season reset
-• Lock card now force-steals keyboard focus to prevent keystrokes leaking into other apps
-• Fixed notification popups stealing keyboard focus and being draggable
-• Fixed minimize button hiding window to tray instead of minimizing
-• Fixed corrupted HTML entities in localization files
+• Fixed mod subliminal audio not playing (audio lookup now checks active mod's audio directory)
+• Fixed deleted subliminal messages reappearing after app restart
+• Fixed speech bubble getting hidden behind main window
 
-⚡ PERFORMANCE & STABILITY
-• Fixed race conditions, resource leaks, and state corruption (full code logic audit)
-• CPU optimization via DispatcherHelper adoption and animation management
-• Fixed fire-and-forget task crashes during shutdown
-• Removed dead code flagged by compiler warnings
-
-🔒 SECURITY
-• Security audit R13: fixed orphan scan DoS, Patreon API amplification, prototype pollution
-• HTTPS validation on content pack external links
-
-🌍 LOCALIZATION
-• Improved Russian translations (special thanks to piklop!)
-• Fixed duplicate keys in Spanish localization
-• Season: Airhead April";
+Season: Airhead April";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

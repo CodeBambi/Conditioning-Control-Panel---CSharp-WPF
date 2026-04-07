@@ -36,6 +36,9 @@ namespace ConditioningControlPanel.Services
         // Audio file search cache
         private string[]? _audioFilesCache;
         private DateTime _audioFilesCacheTime = DateTime.MinValue;
+        private string[]? _modAudioFilesCache;
+        private DateTime _modAudioFilesCacheTime = DateTime.MinValue;
+        private string? _modAudioCacheModId;
         private readonly string _audioPath;
 
         // Session awareness callback
@@ -168,6 +171,7 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Find a matching audio file for a keyword in the sub_audio folder.
         /// Uses the same logic as SubliminalService.FindLinkedAudio.
+        /// Checks active mod's flashes_audio/ directory first, then falls back to default sub_audio/.
         /// </summary>
         public string? FindLinkedAudio(string keyword)
         {
@@ -184,11 +188,29 @@ namespace ConditioningControlPanel.Services
                 cleanText.ToUpper().Replace("\u2019", "'"),
             };
 
+            // Check active mod's audio directory first
+            var modPath = App.Mods?.ActiveMod?.InstalledPath;
+            if (modPath != null)
+            {
+                var modAudioDir = Path.Combine(modPath, "resources", "sounds", "flashes_audio");
+                if (Directory.Exists(modAudioDir))
+                {
+                    var result = SearchAudioDirectory(modAudioDir, cleanText, textVariants, extensions, isModCache: true);
+                    if (result != null) return result;
+                }
+            }
+
+            // Fall back to default sub_audio directory
+            return SearchAudioDirectory(_audioPath, cleanText, textVariants, extensions, isModCache: false);
+        }
+
+        private string? SearchAudioDirectory(string directory, string cleanText, string[] textVariants, string[] extensions, bool isModCache)
+        {
             foreach (var textVar in textVariants)
             {
                 foreach (var ext in extensions)
                 {
-                    var path = Path.Combine(_audioPath, textVar + ext);
+                    var path = Path.Combine(directory, textVar + ext);
                     if (File.Exists(path)) return path;
                 }
             }
@@ -196,16 +218,33 @@ namespace ConditioningControlPanel.Services
             // Fallback: case-insensitive directory search (cached)
             try
             {
-                if (Directory.Exists(_audioPath))
+                if (Directory.Exists(directory))
                 {
-                    if (_audioFilesCache == null || (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
+                    string[]? files;
+                    if (isModCache)
                     {
-                        _audioFilesCache = Directory.GetFiles(_audioPath);
-                        _audioFilesCacheTime = DateTime.UtcNow;
+                        var currentModId = App.Mods?.ActiveMod?.Id;
+                        if (_modAudioFilesCache == null || _modAudioCacheModId != currentModId ||
+                            (DateTime.UtcNow - _modAudioFilesCacheTime).TotalSeconds > 60)
+                        {
+                            _modAudioFilesCache = Directory.GetFiles(directory);
+                            _modAudioFilesCacheTime = DateTime.UtcNow;
+                            _modAudioCacheModId = currentModId;
+                        }
+                        files = _modAudioFilesCache;
+                    }
+                    else
+                    {
+                        if (_audioFilesCache == null || (DateTime.UtcNow - _audioFilesCacheTime).TotalSeconds > 60)
+                        {
+                            _audioFilesCache = Directory.GetFiles(directory);
+                            _audioFilesCacheTime = DateTime.UtcNow;
+                        }
+                        files = _audioFilesCache;
                     }
 
                     var normalizedText = cleanText.ToUpperInvariant().Replace("\u2019", "'");
-                    foreach (var file in _audioFilesCache)
+                    foreach (var file in files)
                     {
                         var fileName = Path.GetFileNameWithoutExtension(file).ToUpperInvariant().Replace("\u2019", "'");
                         if (fileName == normalizedText)
@@ -215,7 +254,7 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("KeywordTriggerService: Error searching audio files: {Error}", ex.Message);
+                App.Logger?.Debug("KeywordTriggerService: Error searching audio files in {Dir}: {Error}", directory, ex.Message);
             }
 
             return null;
