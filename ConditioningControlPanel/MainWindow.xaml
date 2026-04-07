@@ -1838,6 +1838,7 @@
                         <ColumnDefinition Width="0.7*"/>
                         <ColumnDefinition Width="1.2*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <Button Grid.Column="0" x:Name="BtnAchievements" Tag="Achievements" Style="{StaticResource TabButton}"
                             Margin="2,0" Click="BtnAchievements_Click" ToolTip="{loc:Str tab_achievements}">
@@ -1938,6 +1939,22 @@
                             <ControlTemplate TargetType="Button">
                                 <Border Background="{DynamicResource PinkBrush}" CornerRadius="13" Width="26" Height="26" Cursor="Hand">
                                     <TextBlock Text="?" Foreground="White" FontWeight="Bold" FontSize="16"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Opacity" Value="0.85"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <Button x:Name="BtnMainBugReport" Grid.Column="7" Click="BtnReportBug_Click"
+                            Width="26" Height="26" ToolTip="{loc:Str btn_report_bug}" Margin="3,0">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Background="#3D3D60" CornerRadius="13" Width="26" Height="26" Cursor="Hand">
+                                    <TextBlock Text="🐛" FontSize="13" FontFamily="Segoe UI Emoji"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
