@@ -1699,6 +1699,10 @@ namespace ConditioningControlPanel.Services
                         // Reset attention tracking for retry
                         _hits = 0;
                         _spawnTimes.Clear();
+                        // Extend the stuck detection timeout to prevent InteractionQueue from
+                        // auto-completing Video during the retry gap, which would let queued
+                        // interactions (e.g. BubbleCount) start while the retry video plays.
+                        App.InteractionQueue?.ExtendTimeout(300);
                         PlayVideo(_retryPath!, _strictActive);
                     });
                 return;

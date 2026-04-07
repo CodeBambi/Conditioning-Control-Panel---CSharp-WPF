@@ -894,6 +894,7 @@ namespace ConditioningControlPanel
                 AvatarBorder.Margin = new Thickness(5, 100, 126 - dx, 210 + dy);
                 TitleBox.Margin = new Thickness(0, 0, 121 - dx, 180);
                 InputPanel.Margin = new Thickness(0, 0, 126 - dx, 520);
+                SpeechBubble.Margin = new Thickness(0, 0, 125 - dx, 550);
             }
             else
             {
@@ -902,6 +903,7 @@ namespace ConditioningControlPanel
                 AvatarBorder.Margin = new Thickness(5, 100, 426 - dx, 208 + dy);
                 TitleBox.Margin = new Thickness(0, 0, 416 - dx, 193);
                 InputPanel.Margin = new Thickness(0, 0, 426 - dx, 520);
+                SpeechBubble.Margin = new Thickness(0, 0, 425 - dx, 550);
             }
         }
 
@@ -1027,7 +1029,11 @@ namespace ConditioningControlPanel
 
                             // Reset bubble position to ensure correct placement after layout
                             // Anchored at bottom, grows upward. Margin = left, top, right, bottom
-                            SpeechBubble.Margin = new Thickness(0, 0, 125, 550);
+                            var initDx = _isAttached
+                                ? (App.Mods?.GetAvatarOffsetX() ?? 0)
+                                : (App.Mods?.GetAvatarDetachedOffsetX() ?? 0);
+                            var initRight = _isAttached ? 125 - initDx : 425 - initDx;
+                            SpeechBubble.Margin = new Thickness(0, 0, initRight, 550);
                         }), System.Windows.Threading.DispatcherPriority.Loaded);
 
             // Start fullscreen detection timer
@@ -2419,8 +2425,12 @@ namespace ConditioningControlPanel
             // Reset scroll position to top when new text is shown
             SpeechScroller?.ScrollToTop();
 
-            // Position bubble next to avatar — stays at a fixed position near the tube.
-            SpeechBubble.Margin = new Thickness(0, 0, 125, 550);
+            // Position bubble next to avatar — align with tube position based on attach state.
+            var bubbleDx = _isAttached
+                ? (App.Mods?.GetAvatarOffsetX() ?? 0)
+                : (App.Mods?.GetAvatarDetachedOffsetX() ?? 0);
+            var bubbleRight = _isAttached ? 125 - bubbleDx : 425 - bubbleDx;
+            SpeechBubble.Margin = new Thickness(0, 0, bubbleRight, 550);
         }
 
         /// <summary>
@@ -4165,6 +4175,12 @@ namespace ConditioningControlPanel
         private void OnCompanionSwitched(object? sender, Models.CompanionId newCompanion)
         {
             RefreshCompanionDisplay();
+
+            // Clear any queued speech so rapid cycling doesn't stack up greetings
+            _speechQueue.Clear();
+            _speechTimer?.Stop();
+            _speechDelayTimer?.Stop();
+            _isGiggling = false;
 
             var companionName = Models.CompanionDefinition.GetById(newCompanion).Name;
             companionName = App.Mods?.MakeModAware(companionName) ?? companionName;

@@ -20038,7 +20038,10 @@ namespace ConditioningControlPanel
                             var destDir = Path.Combine(newPacksFolder, guid);
                             if (!Directory.Exists(destDir))
                             {
-                                Directory.Move(sourceFolder, destDir);
+                                // Use copy+delete instead of Directory.Move to support
+                                // moving packs across different drive volumes
+                                CopyDirectoryRecursive(sourceFolder, destDir);
+                                Directory.Delete(sourceFolder, recursive: true);
                                 movedCount++;
                                 App.Logger?.Information("Moved pack '{PackName}' from {Source} to {Dest}", packName, sourceFolder, destDir);
                             }
@@ -20125,6 +20128,22 @@ namespace ConditioningControlPanel
                     MessageBoxImage.Information);
 
                 App.Logger?.Information("Custom assets path set to: {Path}", selectedPath);
+            }
+        }
+
+        /// <summary>
+        /// Recursively copies a directory. Works across drive volumes unlike Directory.Move.
+        /// </summary>
+        private static void CopyDirectoryRecursive(string sourceDir, string destinationDir)
+        {
+            Directory.CreateDirectory(destinationDir);
+            foreach (var file in Directory.GetFiles(sourceDir))
+            {
+                File.Copy(file, Path.Combine(destinationDir, Path.GetFileName(file)), overwrite: true);
+            }
+            foreach (var dir in Directory.GetDirectories(sourceDir))
+            {
+                CopyDirectoryRecursive(dir, Path.Combine(destinationDir, Path.GetFileName(dir)));
             }
         }
 

@@ -4,15 +4,15 @@
     <!-- Colors (central source) -->
     <Color x:Key="PinkColor">#FFFF69B4</Color>
     <Color x:Key="DarkPink">#FFFF1493</Color>
-    <Color x:Key="PanelBg">#FF252542</Color>
-    <Color x:Key="PanelBgTransparent">#B0252542</Color>
-    <Color x:Key="DarkerBg">#FF1A1A2E</Color>
-    <Color x:Key="SurfaceBg">#FF1E1E3A</Color>
-    <Color x:Key="TextLight">#FFE0E0E0</Color>
-    <Color x:Key="TextMuted">#FF808080</Color>
-    <Color x:Key="PanelAccent">#FF404060</Color>
-    <Color x:Key="PanelAccentHover">#FF505080</Color>
-    <Color x:Key="PreviewBg">#FF101020</Color>
+    <Color x:Key="PanelBg">#FF1C1C35</Color>
+    <Color x:Key="PanelBgTransparent">#C01C1C35</Color>
+    <Color x:Key="DarkerBg">#FF121220</Color>
+    <Color x:Key="SurfaceBg">#FF181830</Color>
+    <Color x:Key="TextLight">#FFF0F0F5</Color>
+    <Color x:Key="TextMuted">#FF6E6E88</Color>
+    <Color x:Key="PanelAccent">#FF2E2E4A</Color>
+    <Color x:Key="PanelAccentHover">#FF3A3A5C</Color>
+    <Color x:Key="PreviewBg">#FF0D0D18</Color>
 
     <Color x:Key="Danger">#FFE53935</Color>
     <Color x:Key="TransparentPink">#30FF69B4</Color>
@@ -36,14 +36,26 @@
     <!-- Added: alternate danger (used by Controls.xaml hover) -->
     <Color x:Key="DangerHover">#FFE84050</Color>
 
-    <!-- Accent-tinted dark backgrounds (computed at runtime from accent + base #1A1A2E) -->
-    <Color x:Key="AccentTintedBg">#FF352545</Color>
-    <Color x:Key="AccentTintedBgHover">#FF452555</Color>
-    <Color x:Key="AccentMidGradient">#FF2A1A35</Color>
+    <!-- Accent-tinted dark backgrounds -->
+    <Color x:Key="AccentTintedBg">#FF251A38</Color>
+    <Color x:Key="AccentTintedBgHover">#FF352548</Color>
+    <Color x:Key="AccentMidGradient">#FF1E1530</Color>
 
     <!-- 40% alpha accent for hover overlays -->
     <Color x:Key="TransparentPink40">#40FF69B4</Color>
     <!-- 50% alpha accent for selected overlays -->
     <Color x:Key="TransparentPink50">#50FF69B4</Color>
+
+    <!-- New: de-saturated accent for headers/labels -->
+    <Color x:Key="PinkSoft">#FFDF6BA0</Color>
+    <!-- New: vibrant accent for CTAs and interactive elements -->
+    <Color x:Key="PinkVibrant">#FFFF5CA8</Color>
+    <!-- New: glass-style card borders -->
+    <Color x:Key="GlassBorder">#20FFFFFF</Color>
+    <Color x:Key="GlassBorderHover">#30FFFFFF</Color>
+    <!-- New: elevated card surface -->
+    <Color x:Key="ElevatedSurface">#FF222240</Color>
+    <!-- New: quaternary text -->
+    <Color x:Key="TextDim">#FF505068</Color>
 
 </ResourceDictionary>

@@ -254,9 +254,31 @@ public class InteractionQueueService
                 return; // Not stuck anymore
             }
 
+            var stuckType = CurrentInteraction.Value;
             var activeDuration = DateTime.Now - _interactionStartTime;
             App.Logger?.Warning("InteractionQueue: STUCK INTERACTION DETECTED! {Type} has been active for {Duration:F1} minutes. Auto-recovering...",
-                CurrentInteraction, activeDuration.TotalMinutes);
+                stuckType, activeDuration.TotalMinutes);
+
+            // Force-cleanup the stuck service so its windows don't linger on screen
+            try
+            {
+                DispatcherHelper.RunOnUI(() =>
+                {
+                    switch (stuckType)
+                    {
+                        case InteractionType.Video:
+                            App.Video?.ForceCleanup();
+                            break;
+                        case InteractionType.BubbleCount:
+                            App.BubbleCount?.ForceCleanup();
+                            break;
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("InteractionQueue: Failed to force-cleanup stuck {Type}: {Error}", stuckType, ex.Message);
+            }
 
             // Force reset to recover
             CurrentInteraction = null;

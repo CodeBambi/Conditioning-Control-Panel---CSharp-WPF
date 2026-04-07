@@ -47,4 +47,16 @@
     <SolidColorBrush x:Key="TransparentPink40Brush" Color="{DynamicResource TransparentPink40}"/>
     <SolidColorBrush x:Key="TransparentPink50Brush" Color="{DynamicResource TransparentPink50}"/>
 
+    <!-- New: de-saturated accent for headers/labels -->
+    <SolidColorBrush x:Key="PinkSoftBrush" Color="{DynamicResource PinkSoft}"/>
+    <!-- New: vibrant accent for CTAs and interactive elements -->
+    <SolidColorBrush x:Key="PinkVibrantBrush" Color="{DynamicResource PinkVibrant}"/>
+    <!-- New: glass-style card borders -->
+    <SolidColorBrush x:Key="GlassBorderBrush" Color="{DynamicResource GlassBorder}"/>
+    <SolidColorBrush x:Key="GlassBorderHoverBrush" Color="{DynamicResource GlassBorderHover}"/>
+    <!-- New: elevated card surface -->
+    <SolidColorBrush x:Key="ElevatedSurfaceBrush" Color="{DynamicResource ElevatedSurface}"/>
+    <!-- New: quaternary text -->
+    <SolidColorBrush x:Key="TextDimBrush" Color="{DynamicResource TextDim}"/>
+
 </ResourceDictionary>

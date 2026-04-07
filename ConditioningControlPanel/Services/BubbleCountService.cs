@@ -301,6 +301,11 @@ public class BubbleCountService : IDisposable
         // Check if panic button was pressed during message
         if (!_isBusy) return;
 
+        // Extend the stuck detection timeout to prevent InteractionQueue from
+        // auto-completing BubbleCount during the retry gap, which would let queued
+        // interactions (e.g. Video) start while the retry game plays.
+        App.InteractionQueue?.ExtendTimeout(300);
+
         try
         {
             var settings = App.Settings.Current;
@@ -553,6 +558,20 @@ public class BubbleCountService : IDisposable
         CloseMessageWindows();
         App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
         App.Logger?.Debug("BubbleCountService: Busy state reset");
+    }
+
+    /// <summary>
+    /// Force cleanup all bubble count state and windows.
+    /// Called by InteractionQueue stuck detection to prevent lingering windows.
+    /// </summary>
+    public void ForceCleanup()
+    {
+        App.Logger?.Information("BubbleCountService: ForceCleanup called");
+        _isBusy = false;
+        _retryCount = 0;
+        CloseMessageWindows();
+        BubbleCountWindow.ForceCloseAll();
+        App.Bubbles?.Resume();
     }
 
     /// <summary>
