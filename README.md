@@ -217,7 +217,6 @@ Simply drop your files into the appropriate `assets/` subfolder:
 ## 📖 Documentation
 
 - [**Detailed Guide**](GUIDE.md) - Complete feature walkthrough
-- [**Avatar Integration**](ConditioningControlPanel/AVATAR_TUBE_INTEGRATION.md) - Technical avatar documentation
 
 ---
 
