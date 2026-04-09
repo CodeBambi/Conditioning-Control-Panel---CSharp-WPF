@@ -199,6 +199,10 @@ public class BubbleCountService : IDisposable
 
                     // Show the game on all monitors
                     BubbleCountWindow.ShowOnAllMonitors(videoPath, difficulty, settings.BubbleCountStrictLock, OnGameComplete);
+
+                    // Extend the stuck detection timeout to cover full video + counting phase
+                    var videoDuration = BubbleCountWindow.LastVideoDurationSeconds;
+                    App.InteractionQueue?.ExtendTimeout(videoDuration + 120);
                 }
                 catch (Exception ex)
                 {

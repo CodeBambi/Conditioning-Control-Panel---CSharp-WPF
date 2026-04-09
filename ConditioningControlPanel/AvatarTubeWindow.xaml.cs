@@ -4172,6 +4172,8 @@ namespace ConditioningControlPanel
         /// <summary>
         /// React to companion switch (v5.3).
         /// </summary>
+        private System.Windows.Threading.DispatcherTimer? _companionGreetingDebounce;
+
         private void OnCompanionSwitched(object? sender, Models.CompanionId newCompanion)
         {
             RefreshCompanionDisplay();
@@ -4182,10 +4184,21 @@ namespace ConditioningControlPanel
             _speechDelayTimer?.Stop();
             _isGiggling = false;
 
-            var companionName = Models.CompanionDefinition.GetById(newCompanion).Name;
-            companionName = App.Mods?.MakeModAware(companionName) ?? companionName;
-            var greeting = $"Hi! {companionName} is here now~";
-            Giggle(App.Mods?.MakeModAware(greeting) ?? greeting);
+            // Debounce: delay greeting so only the final companion in a rapid cycle gets one
+            _companionGreetingDebounce?.Stop();
+            _companionGreetingDebounce = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(600)
+            };
+            _companionGreetingDebounce.Tick += (_, _) =>
+            {
+                _companionGreetingDebounce.Stop();
+                var companionName = Models.CompanionDefinition.GetById(newCompanion).Name;
+                companionName = App.Mods?.MakeModAware(companionName) ?? companionName;
+                var greeting = $"Hi! {companionName} is here now~";
+                Giggle(App.Mods?.MakeModAware(greeting) ?? greeting);
+            };
+            _companionGreetingDebounce.Start();
         }
 
         /// <summary>

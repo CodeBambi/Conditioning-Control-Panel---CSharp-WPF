@@ -46,7 +46,7 @@
   "bug_report_include_log_checkbox": "Include recent activity log (last 100 lines)",
   "bug_report_preview_label": "Preview (exact payload sent to the server)",
   "bug_report_scrubber_count": "Redacted {0} paths, {1} emails, {2} tokens, {3} appdata refs.",
-  "bug_report_privacy_notice": "This report will be sent to the CCP maintainer's private bug tracker. Your message, the metadata shown above, and your scrubbed crash log will be uploaded. No Discord or Patreon identity is attached. The scrubber has redacted home paths, email addresses, and tokens it recognized — check the preview above to confirm. Your IP address is visible to our hosting provider for abuse prevention but is not stored with your report.",
+  "bug_report_privacy_notice": "This report will be sent to the CCP maintainer's private bug tracker. Your message, the metadata shown above, and your scrubbed crash log will be uploaded. No Discord or Patreon identity is attached. The scrubber has redacted home paths, email addresses, and tokens it recognized — check the preview below to confirm. Your IP address is visible to our hosting provider for abuse prevention but is not stored with your report.",
   "bug_report_send": "Send Report",
   "bug_report_cancel": "Cancel",
   "bug_report_success_toast": "Thanks! Your report was filed as {0}.",

@@ -657,6 +657,7 @@ namespace ConditioningControlPanel.Services
         {
             if (!Settings.Enabled || !Settings.VideoEnabled || _activeProvider == null || !_activeProvider.IsConnected)
                 return;
+            var provider = _activeProvider;
 
             _videoVibeCts?.Cancel();
             _videoVibeCts?.Dispose();
@@ -672,10 +673,10 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                while (!token.IsCancellationRequested && Settings.VideoEnabled)
+                while (!token.IsCancellationRequested && Settings.VideoEnabled && provider?.IsConnected == true)
                 {
                     // Send long duration command (30 sec) - will be overridden by target hits
-                    await _activeProvider.VibrateAsync(_currentVideoIntensity, 30000);
+                    await provider.VibrateAsync(_currentVideoIntensity, 30000);
 
                     // Check less frequently since intensity is constant
                     await Task.Delay(5000, token);

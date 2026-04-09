@@ -712,7 +712,7 @@ namespace ConditioningControlPanel.Services
                                 settings.PlayerXP = serverLevelXp;
                                 App.Settings?.Save();
                             }
-                            else if (localTotalXp > serverTotalXp + 5000)
+                            else if (localTotalXp > serverTotalXp + 25000)
                             {
                                 // Server clamped our XP significantly — force adopt to prevent exploit
                                 var serverLevel = v2Result.User.Level;

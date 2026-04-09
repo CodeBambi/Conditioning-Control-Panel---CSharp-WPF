@@ -15703,7 +15703,7 @@ namespace ConditioningControlPanel
         /// </summary>
         private void UpdateXPBarLoginState()
         {
-            var isLoggedIn = (App.Discord?.IsAuthenticated == true) || (App.Patreon?.IsAuthenticated == true);
+            var isLoggedIn = App.IsLoggedIn;
 
             if (XPBarLoginOverlay != null && XPBarContent != null)
             {
