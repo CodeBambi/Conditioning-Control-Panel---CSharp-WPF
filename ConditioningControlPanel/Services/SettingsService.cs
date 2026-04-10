@@ -14,6 +14,9 @@ namespace ConditioningControlPanel.Services
     {
         private readonly string _settingsPath;
         private long _lastBackupAttemptTicks = 0;
+        private System.Threading.Timer? _saveDebounceTimer;
+        private volatile bool _savePending;
+        private volatile bool _suppressCloudBackupPending;
 
         public AppSettings Current { get; private set; }
 
@@ -247,8 +250,41 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Debounced save — coalesces rapid calls into a single disk write after 500ms of quiet.
+        /// Use <see cref="SaveImmediate"/> for shutdown or other critical paths that must flush now.
+        /// </summary>
         public void Save(bool suppressCloudBackup = false)
         {
+            _savePending = true;
+            if (suppressCloudBackup)
+                _suppressCloudBackupPending = true;
+
+            _saveDebounceTimer?.Dispose();
+            _saveDebounceTimer = new System.Threading.Timer(_ =>
+            {
+                if (_savePending)
+                {
+                    _savePending = false;
+                    var suppress = _suppressCloudBackupPending;
+                    _suppressCloudBackupPending = false;
+                    SaveImmediate(suppress);
+                }
+            }, null, 500, Timeout.Infinite);
+        }
+
+        /// <summary>
+        /// Writes settings to disk immediately (no debounce). Called by the debounce timer,
+        /// on shutdown, and from RestoreFrom/Reset where the write must happen now.
+        /// </summary>
+        public void SaveImmediate(bool suppressCloudBackup = false)
+        {
+            // Cancel any pending debounce — we're flushing now
+            _savePending = false;
+            _suppressCloudBackupPending = false;
+            _saveDebounceTimer?.Dispose();
+            _saveDebounceTimer = null;
+
             try
             {
                 App.Logger?.Information("Settings.Save: ActivePackIds BEFORE serialize: [{Ids}]",
@@ -301,14 +337,14 @@ namespace ConditioningControlPanel.Services
         public void RestoreFrom(AppSettings settings)
         {
             Current = settings ?? throw new ArgumentNullException(nameof(settings));
-            Save();
+            SaveImmediate();
             App.Logger?.Information("Settings restored from external source");
         }
 
         public void Reset()
         {
             Current = new AppSettings();
-            Save();
+            SaveImmediate();
         }
     }
 }

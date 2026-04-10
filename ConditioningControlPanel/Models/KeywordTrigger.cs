@@ -6,6 +6,20 @@ using Newtonsoft.Json.Converters;
 
 namespace ConditioningControlPanel.Models
 {
+    /// <summary>
+    /// A single entry in the Awareness Engine's live pulse ring buffer.
+    /// Snapshots a trigger fire for display in the "Last Detected" feed.
+    /// </summary>
+    public class TriggerFireRecord
+    {
+        public string Keyword { get; set; } = "";
+        public string TriggerId { get; set; } = "";
+        public KeywordVisualEffect VisualEffect { get; set; }
+        /// <summary>Source that detected the match: "OCR", "Keyboard", "Text"</summary>
+        public string Source { get; set; } = "";
+        public DateTime FiredAt { get; set; }
+    }
+
     public enum KeywordMatchType
     {
         PlainText,

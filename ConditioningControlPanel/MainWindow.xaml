@@ -1542,6 +1542,13 @@
                             <TextBlock Text="{loc:Str tab_enhancements}" FontSize="11"/>
                         </StackPanel>
                     </Button>
+                    <Button x:Name="BtnAwareness" Tag="Awareness" Style="{StaticResource TabButton}"
+                            Margin="3,0" Click="BtnAwareness_Click" ToolTip="Awareness Engine — screen + typing awareness">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="👁" FontSize="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="Awareness" FontSize="11"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource TabButton}"
                             Margin="3,0" Click="BtnAssets_Click" ToolTip="{loc:Str tooltip_assets_packs}">
                         <StackPanel Orientation="Horizontal">
@@ -8301,6 +8308,215 @@
                     </StackPanel>
                 </Border>
             </Grid>
+        </ContentControl>
+
+        <!-- Awareness Engine Tab -->
+        <ContentControl x:Name="AwarenessTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid Margin="28,20,28,20" MaxWidth="980" HorizontalAlignment="Center">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/> <!-- Header -->
+                        <RowDefinition Height="Auto"/> <!-- Pulse -->
+                        <RowDefinition Height="Auto"/> <!-- Presets -->
+                        <RowDefinition Height="Auto"/> <!-- Sources + Safety (two columns) -->
+                        <RowDefinition Height="Auto"/> <!-- Advanced link -->
+                    </Grid.RowDefinitions>
+
+                    <!-- ==================== HEADER ==================== -->
+                    <Grid Grid.Row="0" Margin="0,0,0,22">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="👁" FontSize="34" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Awareness Engine" Foreground="White" FontSize="22" FontWeight="Bold"/>
+                            <TextBlock Text="She's watching your screen and your typing. React in real time."
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse x:Name="AwarenessStatusDot" Width="8" Height="8" Fill="#606060" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="TxtAwarenessStatus" Text="Off" Foreground="#A0A0A0"
+                                       FontSize="12" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                            <CheckBox x:Name="ChkAwarenessMaster" Style="{StaticResource ToggleStyle}"
+                                      VerticalAlignment="Center"
+                                      Checked="ChkAwarenessMaster_Changed" Unchecked="ChkAwarenessMaster_Changed"
+                                      ToolTip="Master switch: turns the Awareness Engine on or off"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ==================== LIVE PULSE ==================== -->
+                    <Border Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
+                            BorderThickness="1" CornerRadius="10" Padding="18,16" Margin="0,0,0,18">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,10">
+                                <TextBlock Text="LAST DETECTED" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtAwarenessFireCount" Text="" HorizontalAlignment="Right"
+                                           Foreground="{DynamicResource TextDimBrush}" FontSize="10"/>
+                            </Grid>
+                            <StackPanel x:Name="AwarenessPulseFeed">
+                                <!-- Empty state shown when no fires yet -->
+                                <TextBlock x:Name="TxtAwarenessPulseEmpty"
+                                           Text="Nothing yet. Enable the engine and she'll start noticing things."
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" FontStyle="Italic"
+                                           TextAlignment="Center" Margin="0,18,0,18"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ==================== PRESETS ==================== -->
+                    <StackPanel Grid.Row="2" Margin="0,0,0,18">
+                        <Grid Margin="4,0,4,10">
+                            <TextBlock Text="PRESETS" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="Coming soon — curated one-click packs"
+                                       HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"/>
+                        </Grid>
+                        <WrapPanel HorizontalAlignment="Stretch">
+                            <!-- Puppy Pet card -->
+                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
+                                    Cursor="Hand" Tag="puppy" MouseLeftButtonUp="AwarenessPresetCard_Click">
+                                <StackPanel>
+                                    <TextBlock Text="🐶" FontSize="26"/>
+                                    <TextBlock Text="Puppy Pet" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
+                                    <TextBlock Text='"good boy", "sit", "stay" → clicker + praise'
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
+                                               FontWeight="Bold" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Chastity Watcher card -->
+                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
+                                    Cursor="Hand" Tag="chastity" MouseLeftButtonUp="AwarenessPresetCard_Click">
+                                <StackPanel>
+                                    <TextBlock Text="🔒" FontSize="26"/>
+                                    <TextBlock Text="Chastity Watcher" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
+                                    <TextBlock Text="Porn detected → session time added &amp; avatar comment"
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
+                                               FontWeight="Bold" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Bimbo Reinforcement card -->
+                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
+                                    Cursor="Hand" Tag="bimbo" MouseLeftButtonUp="AwarenessPresetCard_Click">
+                                <StackPanel>
+                                    <TextBlock Text="💖" FontSize="26"/>
+                                    <TextBlock Text="Bimbo Reinforcement" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
+                                    <TextBlock Text='"smart", "focus" → subliminal flash of opposites'
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
+                                               FontWeight="Bold" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Trance Induction card -->
+                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
+                                    Cursor="Hand" Tag="trance" MouseLeftButtonUp="AwarenessPresetCard_Click">
+                                <StackPanel>
+                                    <TextBlock Text="🌀" FontSize="26"/>
+                                    <TextBlock Text="Trance Induction" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
+                                    <TextBlock Text='"relax", "deeper" → soft overlay pulse &amp; mantra'
+                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
+                                               FontWeight="Bold" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </WrapPanel>
+                    </StackPanel>
+
+                    <!-- ==================== SOURCES + SAFETY ==================== -->
+                    <Grid Grid.Row="3" Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Signal Sources -->
+                        <Border Grid.Column="0" Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
+                                BorderThickness="1" CornerRadius="10" Padding="18,14">
+                            <StackPanel>
+                                <TextBlock Text="SIGNAL SOURCES" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
+                                           Margin="0,0,0,10"/>
+                                <Grid Margin="0,4,0,8">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="🖵" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Screen OCR" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Reads words from what's on your screen"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkAwarenessOcr" Style="{StaticResource ToggleStyle}"
+                                              HorizontalAlignment="Right" VerticalAlignment="Center"
+                                              Checked="ChkAwarenessOcr_Changed" Unchecked="ChkAwarenessOcr_Changed"/>
+                                </Grid>
+                                <Grid Margin="0,4,0,4">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="⌨" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Keyboard" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Catches trigger words as you type them"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkAwarenessKeyboard" Style="{StaticResource ToggleStyle}"
+                                              HorizontalAlignment="Right" VerticalAlignment="Center"
+                                              Checked="ChkAwarenessKeyboard_Changed" Unchecked="ChkAwarenessKeyboard_Changed"/>
+                                </Grid>
+                                <TextBlock Text="More sources coming: browser URL, active window title, process"
+                                           Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"
+                                           Margin="0,10,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Safety -->
+                        <Border Grid.Column="2" Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
+                                BorderThickness="1" CornerRadius="10" Padding="18,14">
+                            <StackPanel>
+                                <TextBlock Text="SAFETY" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
+                                           Margin="0,0,0,10"/>
+                                <CheckBox x:Name="ChkAwarenessIgnoreOwnUi"
+                                          Foreground="White" FontSize="12" Margin="0,4,0,2"
+                                          Checked="ChkAwarenessIgnoreOwnUi_Changed" Unchecked="ChkAwarenessIgnoreOwnUi_Changed">
+                                    <TextBlock Text="Ignore CCP's own windows" FontWeight="SemiBold"/>
+                                </CheckBox>
+                                <TextBlock Text="OCR skips words inside Control Panel, avatar bubbles, and subliminal flashes — so she won't react to her own voice."
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,10"/>
+                                <CheckBox x:Name="ChkAwarenessLoopProtection"
+                                          Foreground="White" FontSize="12" Margin="0,4,0,2"
+                                          Checked="ChkAwarenessLoopProtection_Changed" Unchecked="ChkAwarenessLoopProtection_Changed">
+                                    <TextBlock Text="Loop protection" FontWeight="SemiBold"/>
+                                </CheckBox>
+                                <TextBlock Text="After a trigger fires, its keyword is muted for a few seconds so the reaction can't re-arm it."
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- ==================== ADVANCED LINK ==================== -->
+                    <Grid Grid.Row="4" Margin="0,0,0,0">
+                        <TextBlock HorizontalAlignment="Center">
+                            <Hyperlink x:Name="LnkAwarenessAdvanced"
+                                       Foreground="{DynamicResource PinkBrush}"
+                                       TextDecorations="Underline"
+                                       Click="LnkAwarenessAdvanced_Click">
+                                <Run Text="Customize individual triggers (advanced) →"/>
+                            </Hyperlink>
+                        </TextBlock>
+                    </Grid>
+                </Grid>
+            </ScrollViewer>
         </ContentControl>
 
         <!-- Global Bottom Bar: Start / Save / Exit (Always visible) -->

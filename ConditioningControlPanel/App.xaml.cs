@@ -323,6 +323,92 @@ namespace ConditioningControlPanel
             }
         }
 
+        // --- CCP window rect cache (used by Awareness Engine self-exclusion) ---
+        private static System.Drawing.Rectangle[]? _cachedCcpWindowRects;
+        private static DateTime _ccpWindowRectsCacheTime = DateTime.MinValue;
+        private static readonly TimeSpan CcpWindowRectsCacheDuration = TimeSpan.FromMilliseconds(250);
+        private static readonly object _ccpWindowRectsLock = new();
+
+        /// <summary>
+        /// Returns screen rectangles of all currently visible CCP-owned windows
+        /// (MainWindow, avatar, overlays, dialogs). Used by ScreenOcrService to
+        /// drop OCR word hits that fall inside our own UI, preventing feedback loops.
+        /// Cached for a short interval to stay cheap under per-scan filtering.
+        /// </summary>
+        public static System.Drawing.Rectangle[] GetCcpWindowRectsCached()
+        {
+            lock (_ccpWindowRectsLock)
+            {
+                if (_cachedCcpWindowRects != null &&
+                    DateTime.Now - _ccpWindowRectsCacheTime <= CcpWindowRectsCacheDuration)
+                {
+                    return _cachedCcpWindowRects;
+                }
+
+                var rects = new System.Collections.Generic.List<System.Drawing.Rectangle>();
+                try
+                {
+                    // Must run on the UI thread to enumerate Application.Current.Windows safely.
+                    var dispatcher = Current?.Dispatcher;
+                    if (dispatcher == null || dispatcher.HasShutdownStarted)
+                    {
+                        _cachedCcpWindowRects = Array.Empty<System.Drawing.Rectangle>();
+                        _ccpWindowRectsCacheTime = DateTime.Now;
+                        return _cachedCcpWindowRects;
+                    }
+
+                    dispatcher.Invoke(() =>
+                    {
+                        foreach (var w in Current!.Windows.OfType<Window>())
+                        {
+                            try
+                            {
+                                if (!w.IsVisible) continue;
+                                if (w.WindowState == WindowState.Minimized) continue;
+
+                                // Convert logical WPF units (Left/Top/Width/Height) to pixel rect.
+                                var src = PresentationSource.FromVisual(w);
+                                double scaleX = 1.0, scaleY = 1.0;
+                                if (src?.CompositionTarget != null)
+                                {
+                                    scaleX = src.CompositionTarget.TransformToDevice.M11;
+                                    scaleY = src.CompositionTarget.TransformToDevice.M22;
+                                }
+
+                                double left = w.Left;
+                                double top = w.Top;
+                                double width = w.ActualWidth > 0 ? w.ActualWidth : w.Width;
+                                double height = w.ActualHeight > 0 ? w.ActualHeight : w.Height;
+
+                                if (double.IsNaN(left) || double.IsNaN(top) ||
+                                    double.IsNaN(width) || double.IsNaN(height) ||
+                                    width <= 0 || height <= 0)
+                                    continue;
+
+                                var rect = new System.Drawing.Rectangle(
+                                    (int)(left * scaleX),
+                                    (int)(top * scaleY),
+                                    (int)(width * scaleX),
+                                    (int)(height * scaleY));
+
+                                if (rect.Width > 0 && rect.Height > 0)
+                                    rects.Add(rect);
+                            }
+                            catch { /* skip malformed window */ }
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Logger?.Debug("GetCcpWindowRectsCached failed: {Error}", ex.Message);
+                }
+
+                _cachedCcpWindowRects = rects.ToArray();
+                _ccpWindowRectsCacheTime = DateTime.Now;
+                return _cachedCcpWindowRects;
+            }
+        }
+
         /// <summary>
         /// Flag to indicate if an update dialog is currently being shown.
         /// Used to delay tutorial until update is handled.
@@ -2099,7 +2185,8 @@ Application State:
 
             // Save settings FIRST (before cloud sync) to persist the user's current local state.
             // This prevents cloud sync from overwriting local values with stale data before save.
-            Settings?.Save();
+            // Use SaveImmediate to flush any pending debounced writes and ensure final state is on disk.
+            Settings?.SaveImmediate();
 
             // Sync profile to cloud on exit (short timeout to avoid blocking shutdown)
             if (ProfileSync?.IsSyncEnabled == true)

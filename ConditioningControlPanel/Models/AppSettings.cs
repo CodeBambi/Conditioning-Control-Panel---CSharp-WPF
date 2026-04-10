@@ -2813,6 +2813,44 @@ namespace ConditioningControlPanel.Models
             set { _keywordTriggers = value ?? new List<KeywordTrigger>(); OnPropertyChanged(); }
         }
 
+        // --- Awareness Engine safety ---
+
+        private bool _awarenessIgnoreOwnUi = true;
+        /// <summary>
+        /// When true, OCR word hits that fall inside any CCP window (MainWindow, avatar,
+        /// subliminal flashes, highlight overlays, dialogs) are discarded before matching.
+        /// Prevents the app from reacting to its own output.
+        /// </summary>
+        [JsonProperty("awarenessIgnoreOwnUi")]
+        public bool AwarenessIgnoreOwnUi
+        {
+            get => _awarenessIgnoreOwnUi;
+            set { _awarenessIgnoreOwnUi = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessLoopProtectionEnabled = true;
+        /// <summary>
+        /// When true, a keyword that has just fired a trigger is temporarily muted
+        /// across all sources so the trigger's own output cannot re-arm it.
+        /// </summary>
+        [JsonProperty("awarenessLoopProtectionEnabled")]
+        public bool AwarenessLoopProtectionEnabled
+        {
+            get => _awarenessLoopProtectionEnabled;
+            set { _awarenessLoopProtectionEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _awarenessLoopProtectionMs = 5000;
+        /// <summary>
+        /// Duration (ms) a keyword stays muted after firing, when loop protection is on.
+        /// </summary>
+        [JsonProperty("awarenessLoopProtectionMs")]
+        public int AwarenessLoopProtectionMs
+        {
+            get => _awarenessLoopProtectionMs;
+            set { _awarenessLoopProtectionMs = Math.Clamp(value, 500, 30000); OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Companion Phrase Manager

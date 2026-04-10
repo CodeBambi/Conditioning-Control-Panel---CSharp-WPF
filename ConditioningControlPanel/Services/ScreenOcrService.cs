@@ -129,10 +129,36 @@ namespace ConditioningControlPanel.Services
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher == null || dispatcher.HasShutdownStarted) return;
 
+            // Self-exclusion: drop any OCR hits that fall inside our own UI so the app
+            // cannot react to its own output (subliminal flashes, avatar bubbles, the
+            // keyword editor textbox, etc.). Controlled by AwarenessIgnoreOwnUi setting.
+            var filtered = words;
+            if (App.Settings?.Current?.AwarenessIgnoreOwnUi == true && words.Count > 0)
+            {
+                var ccpRects = App.GetCcpWindowRectsCached();
+                if (ccpRects.Length > 0)
+                {
+                    filtered = new List<OcrWordHit>(words.Count);
+                    foreach (var w in words)
+                    {
+                        bool insideCcp = false;
+                        for (int i = 0; i < ccpRects.Length; i++)
+                        {
+                            if (ccpRects[i].IntersectsWith(w.ScreenRect))
+                            {
+                                insideCcp = true;
+                                break;
+                            }
+                        }
+                        if (!insideCcp) filtered.Add(w);
+                    }
+                }
+            }
+
             await dispatcher.InvokeAsync(() =>
             {
                 if (_disposed) return;
-                App.KeywordTriggers?.CheckOcrWords(words);
+                App.KeywordTriggers?.CheckOcrWords(filtered);
             });
         }
 

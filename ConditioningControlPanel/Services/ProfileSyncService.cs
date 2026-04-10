@@ -514,12 +514,14 @@ namespace ConditioningControlPanel.Services
                         }
                         else if (v2Result?.SkillPoints.HasValue == true)
                         {
-                            // Server-authoritative: always accept server's skill_points value
-                            if (v2Result.SkillPoints.Value != settings.SkillPoints)
+                            // Take max of server/local — skill points only increase (level-ups, bubble pops)
+                            // so the higher value is always correct; prevents stale server value overwriting local level-up awards
+                            var maxPoints = Math.Max(v2Result.SkillPoints.Value, settings.SkillPoints);
+                            if (maxPoints != settings.SkillPoints)
                             {
-                                App.Logger?.Information("V2 Sync: Skill points server={Server}, local={Local} — accepting server value",
-                                    v2Result.SkillPoints.Value, settings.SkillPoints);
-                                settings.SkillPoints = v2Result.SkillPoints.Value;
+                                App.Logger?.Information("V2 Sync: Skill points server={Server}, local={Local} — taking max ({Max})",
+                                    v2Result.SkillPoints.Value, settings.SkillPoints, maxPoints);
+                                settings.SkillPoints = maxPoints;
                                 App.Settings?.Save();
                             }
                         }
@@ -1295,14 +1297,15 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Merge skill tree data - server-authoritative: always accept server value
+            // Merge skill tree data - take max of server/local (skill points only increase)
             if (cloudProfile.SkillPoints.HasValue)
             {
-                if (cloudProfile.SkillPoints.Value != settings.SkillPoints)
+                var maxPoints = Math.Max(cloudProfile.SkillPoints.Value, settings.SkillPoints);
+                if (maxPoints != settings.SkillPoints)
                 {
-                    App.Logger?.Information("Skill tree sync: Accepting server skill points ({Server}), local was ({Local})",
-                        cloudProfile.SkillPoints.Value, settings.SkillPoints);
-                    settings.SkillPoints = cloudProfile.SkillPoints.Value;
+                    App.Logger?.Information("Skill tree sync: Skill points server={Server}, local={Local} — taking max ({Max})",
+                        cloudProfile.SkillPoints.Value, settings.SkillPoints, maxPoints);
+                    settings.SkillPoints = maxPoints;
                     needsSave = true;
                 }
             }
@@ -1566,25 +1569,41 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var requestData = new
+                var requestBody = JsonConvert.SerializeObject(new
                 {
                     unified_id = unifiedId,
                     skill_id = skillId
-                };
+                });
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/purchase-skill");
                 AddAuthHeader(request);
-                request.Content = new StringContent(
-                    JsonConvert.SerializeObject(requestData),
-                    Encoding.UTF8,
-                    "application/json"
-                );
+                request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    await HandleUnauthorizedAsync(response);
+                    // On 401, attempt auth recovery and retry once if token was restored
+                    if (await HandleUnauthorizedAsync(response) && !string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
+                    {
+                        App.Logger?.Information("Skill purchase: retrying after auth token recovery");
+                        var retryRequest = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/purchase-skill");
+                        AddAuthHeader(retryRequest);
+                        retryRequest.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+                        response = await _httpClient.SendAsync(retryRequest);
+                        json = await response.Content.ReadAsStringAsync();
+                    }
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Show user-friendly message for auth failures instead of raw server error
+                    if (response.StatusCode == HttpStatusCode.Unauthorized)
+                    {
+                        App.Logger?.Warning("Skill purchase failed: auth token invalid/missing after recovery attempt");
+                        return (false, "Your session has expired. Please log in again from Settings to purchase enhancements.");
+                    }
+
                     string errorMsg;
                     try
                     {

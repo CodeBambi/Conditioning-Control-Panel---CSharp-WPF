@@ -574,13 +574,17 @@ namespace ConditioningControlPanel
                         outputDevice.Init(audioFile);
                         outputDevice.PlaybackStopped += (s, e) =>
                         {
-                            outputDevice.Dispose();
-                            audioFile.Dispose();
-                            if (_levelUpSoundDevice == outputDevice)
+                            try
                             {
-                                _levelUpSoundDevice = null;
-                                _levelUpSoundFile = null;
+                                outputDevice.Dispose();
+                                audioFile.Dispose();
+                                if (_levelUpSoundDevice == outputDevice)
+                                {
+                                    _levelUpSoundDevice = null;
+                                    _levelUpSoundFile = null;
+                                }
                             }
+                            catch (Exception) { }
                         };
 
                         _levelUpSoundDevice = outputDevice;
@@ -2823,6 +2827,11 @@ namespace ConditioningControlPanel
             ShowTab("patreon");
         }
 
+        private void BtnAwareness_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("awareness");
+        }
+
         #region Unified Login
 
         /// <summary>
@@ -3640,6 +3649,7 @@ namespace ConditioningControlPanel
             DiscordTab.Visibility = Visibility.Collapsed;
             EnhancementsTab.Visibility = Visibility.Collapsed;
             LabTab.Visibility = Visibility.Collapsed;
+            AwarenessTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive
             var inactiveStyle = FindResource("TabButton") as Style;
@@ -3654,6 +3664,7 @@ namespace ConditioningControlPanel
             BtnLeaderboard.Style = inactiveStyle;
             BtnLab.Style = inactiveStyle;
             BtnOpenAssetsTop.Style = inactiveStyle;
+            BtnAwareness.Style = inactiveStyle;
             // BtnPatreonExclusives keeps its inline Patreon red style defined in XAML
 
             switch (tab)
@@ -3753,6 +3764,13 @@ namespace ConditioningControlPanel
                     AnimateTabIn(DiscordTab);
                     // BtnDiscordTab keeps its inline Discord blue style defined in XAML
                     UpdateDiscordTabUI();
+                    break;
+
+                case "awareness":
+                    AwarenessTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(AwarenessTab);
+                    BtnAwareness.Style = activeStyle;
+                    SyncAwarenessTabUI();
                     break;
 
             }
@@ -7218,6 +7236,349 @@ namespace ConditioningControlPanel
 
             border.Child = mainStack;
             return border;
+        }
+
+        #endregion
+
+        #region Awareness Engine Tab
+
+        private bool _awarenessSubscribed;
+
+        /// <summary>
+        /// Called each time the Awareness tab is opened. Loads current settings
+        /// into the toggles, refreshes the pulse feed, and subscribes to fire events.
+        /// </summary>
+        private void SyncAwarenessTabUI()
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            _isLoading = true;
+            try
+            {
+                bool masterOn = settings.KeywordTriggersEnabled;
+                if (ChkAwarenessMaster != null) ChkAwarenessMaster.IsChecked = masterOn;
+                if (ChkAwarenessOcr != null) ChkAwarenessOcr.IsChecked = settings.ScreenOcrEnabled;
+                if (ChkAwarenessKeyboard != null) ChkAwarenessKeyboard.IsChecked = settings.KeywordTriggersEnabled;
+                if (ChkAwarenessIgnoreOwnUi != null) ChkAwarenessIgnoreOwnUi.IsChecked = settings.AwarenessIgnoreOwnUi;
+                if (ChkAwarenessLoopProtection != null) ChkAwarenessLoopProtection.IsChecked = settings.AwarenessLoopProtectionEnabled;
+
+                UpdateAwarenessStatusIndicator(masterOn);
+            }
+            finally
+            {
+                _isLoading = false;
+            }
+
+            // Subscribe once to fire events so the feed refreshes live while the tab is open.
+            if (!_awarenessSubscribed && App.KeywordTriggers != null)
+            {
+                App.KeywordTriggers.TriggerFired += OnAwarenessTriggerFired;
+                _awarenessSubscribed = true;
+            }
+
+            RefreshAwarenessPulseFeed();
+        }
+
+        private void OnAwarenessTriggerFired(object? sender, KeywordTrigger trigger)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+            dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (AwarenessTab?.Visibility == Visibility.Visible)
+                    RefreshAwarenessPulseFeed();
+            }));
+        }
+
+        private void RefreshAwarenessPulseFeed()
+        {
+            if (AwarenessPulseFeed == null) return;
+
+            var fires = App.KeywordTriggers?.GetRecentFires();
+            AwarenessPulseFeed.Children.Clear();
+
+            if (fires == null || fires.Count == 0)
+            {
+                if (TxtAwarenessPulseEmpty == null)
+                {
+                    var empty = new TextBlock
+                    {
+                        Text = "Nothing yet. Enable the engine and she'll start noticing things.",
+                        Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
+                        FontSize = 12,
+                        FontStyle = FontStyles.Italic,
+                        TextAlignment = TextAlignment.Center,
+                        Margin = new Thickness(0, 18, 0, 18)
+                    };
+                    AwarenessPulseFeed.Children.Add(empty);
+                }
+                else
+                {
+                    AwarenessPulseFeed.Children.Add(TxtAwarenessPulseEmpty);
+                }
+                if (TxtAwarenessFireCount != null) TxtAwarenessFireCount.Text = "";
+                return;
+            }
+
+            // Show up to 5 most recent fires
+            int shown = 0;
+            foreach (var f in fires)
+            {
+                if (shown >= 5) break;
+                AwarenessPulseFeed.Children.Add(BuildPulseRow(f));
+                shown++;
+            }
+
+            if (TxtAwarenessFireCount != null)
+                TxtAwarenessFireCount.Text = fires.Count == 1 ? "1 fire today" : $"{fires.Count} fires today";
+        }
+
+        private Border BuildPulseRow(TriggerFireRecord f)
+        {
+            var row = new Border
+            {
+                Background = (System.Windows.Media.Brush)FindResource("DarkerBgBrush"),
+                BorderBrush = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2A2A40")),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // Pink accent bar
+            var dot = new System.Windows.Shapes.Rectangle
+            {
+                Width = 3,
+                Height = 16,
+                Fill = (System.Windows.Media.Brush)FindResource("PinkBrush"),
+                VerticalAlignment = VerticalAlignment.Center,
+                RadiusX = 1.5,
+                RadiusY = 1.5
+            };
+            Grid.SetColumn(dot, 0);
+            grid.Children.Add(dot);
+
+            // Quote marks around the keyword
+            var keywordBlock = new TextBlock
+            {
+                Text = $"\"{f.Keyword}\"",
+                Foreground = System.Windows.Media.Brushes.White,
+                FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(10, 0, 0, 0)
+            };
+            Grid.SetColumn(keywordBlock, 1);
+            grid.Children.Add(keywordBlock);
+
+            // Source chip
+            var sourceChip = new Border
+            {
+                Background = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2A2A4A")),
+                CornerRadius = new CornerRadius(3),
+                Padding = new Thickness(6, 2, 6, 2),
+                Margin = new Thickness(10, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            sourceChip.Child = new TextBlock
+            {
+                Text = f.Source.ToUpperInvariant(),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextDimBrush"),
+                FontSize = 9,
+                FontWeight = FontWeights.Bold
+            };
+            Grid.SetColumn(sourceChip, 3);
+            grid.Children.Add(sourceChip);
+
+            // Time ago
+            var timeBlock = new TextBlock
+            {
+                Text = FormatTimeAgo(f.FiredAt),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(10, 0, 0, 0)
+            };
+            Grid.SetColumn(timeBlock, 4);
+            grid.Children.Add(timeBlock);
+
+            row.Child = grid;
+            return row;
+        }
+
+        private static string FormatTimeAgo(DateTime t)
+        {
+            var delta = DateTime.Now - t;
+            if (delta.TotalSeconds < 10) return "just now";
+            if (delta.TotalSeconds < 60) return $"{(int)delta.TotalSeconds}s ago";
+            if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes}m ago";
+            if (delta.TotalHours < 24) return $"{(int)delta.TotalHours}h ago";
+            return t.ToString("HH:mm");
+        }
+
+        private void UpdateAwarenessStatusIndicator(bool on)
+        {
+            if (AwarenessStatusDot == null || TxtAwarenessStatus == null) return;
+            if (on)
+            {
+                AwarenessStatusDot.Fill = (System.Windows.Media.Brush)FindResource("PinkBrush");
+                TxtAwarenessStatus.Text = "Live";
+                TxtAwarenessStatus.Foreground = (System.Windows.Media.Brush)FindResource("PinkBrush");
+            }
+            else
+            {
+                AwarenessStatusDot.Fill = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#606060"));
+                TxtAwarenessStatus.Text = "Off";
+                TxtAwarenessStatus.Foreground = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A0A0A0"));
+            }
+        }
+
+        private void ChkAwarenessMaster_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            bool on = ChkAwarenessMaster?.IsChecked == true;
+
+            if (on && !KeywordTriggerService.HasAccess())
+            {
+                _isLoading = true;
+                try { ChkAwarenessMaster!.IsChecked = false; }
+                finally { _isLoading = false; }
+                MessageBox.Show(
+                    Loc.Get("msg_keyword_triggers_patreon_only"),
+                    Loc.Get("title_patreon_feature"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            if (on)
+            {
+                settings.KeywordTriggersEnabled = true;
+                App.KeywordTriggers?.Start();
+                _keyboardHook?.Start();
+                if (settings.ScreenOcrEnabled)
+                    App.ScreenOcr?.Start();
+            }
+            else
+            {
+                settings.KeywordTriggersEnabled = false;
+                App.KeywordTriggers?.Stop();
+                App.ScreenOcr?.Stop();
+                if (settings.PanicKeyEnabled != true)
+                    _keyboardHook?.Stop();
+            }
+
+            // Keep the sub-toggle in sync with master so the UI reads consistently.
+            _isLoading = true;
+            try
+            {
+                if (ChkAwarenessKeyboard != null) ChkAwarenessKeyboard.IsChecked = on;
+            }
+            finally { _isLoading = false; }
+
+            UpdateAwarenessStatusIndicator(on);
+            UpdateKeywordTriggersButtonState();
+            App.Settings?.Save();
+        }
+
+        private void ChkAwarenessOcr_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            bool on = ChkAwarenessOcr?.IsChecked == true;
+
+            if (on && !KeywordTriggerService.HasAccess())
+            {
+                _isLoading = true;
+                try { ChkAwarenessOcr!.IsChecked = false; }
+                finally { _isLoading = false; }
+                MessageBox.Show(
+                    Loc.Get("msg_screen_ocr_patreon_only"),
+                    Loc.Get("title_patreon_feature"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            settings.ScreenOcrEnabled = on;
+
+            if (on && settings.KeywordTriggersEnabled)
+                App.ScreenOcr?.Start();
+            else
+                App.ScreenOcr?.Stop();
+
+            // Mirror into the legacy Exclusives OCR checkbox so both screens agree.
+            if (ChkScreenOcrEnabled != null && ChkScreenOcrEnabled.IsChecked != on)
+            {
+                _isLoading = true;
+                try { ChkScreenOcrEnabled.IsChecked = on; }
+                finally { _isLoading = false; }
+            }
+
+            App.Settings?.Save();
+        }
+
+        private void ChkAwarenessKeyboard_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            bool on = ChkAwarenessKeyboard?.IsChecked == true;
+
+            // Keyboard is the primary KeywordTriggersEnabled signal today — reuse master logic.
+            if (ChkAwarenessMaster != null && ChkAwarenessMaster.IsChecked != on)
+            {
+                ChkAwarenessMaster.IsChecked = on; // triggers ChkAwarenessMaster_Changed
+            }
+        }
+
+        private void ChkAwarenessIgnoreOwnUi_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            settings.AwarenessIgnoreOwnUi = ChkAwarenessIgnoreOwnUi?.IsChecked == true;
+            App.Settings?.Save();
+        }
+
+        private void ChkAwarenessLoopProtection_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            settings.AwarenessLoopProtectionEnabled = ChkAwarenessLoopProtection?.IsChecked == true;
+            App.Settings?.Save();
+        }
+
+        private void AwarenessPresetCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Placeholder: preset packs are not wired yet. Surface a friendly notice
+            // so the cards feel alive without claiming functionality we haven't shipped.
+            MessageBox.Show(
+                "Preset packs are coming in the next update. For now, you can build your own triggers from the advanced editor below.",
+                "Coming soon",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        private void LnkAwarenessAdvanced_Click(object sender, RoutedEventArgs e)
+        {
+            // Jump to the existing power-user editor in the Exclusives tab.
+            ShowTab("patreon");
         }
 
         #endregion

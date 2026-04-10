@@ -53,6 +53,79 @@ namespace ConditioningControlPanel.Services
         /// <summary>Fired when a keyword trigger activates</summary>
         public event EventHandler<KeywordTrigger>? TriggerFired;
 
+        // --- Awareness Engine: loop protection (temporal mute) ---
+        // Maps lowercase keyword → UTC time when the mute expires. Muted keywords are
+        // skipped across ALL sources (OCR / keyboard / clipboard) so a trigger's own
+        // output (flash text, bubble, spoken word) cannot re-arm it.
+        private readonly Dictionary<string, DateTime> _mutedKeywords = new(StringComparer.OrdinalIgnoreCase);
+        private readonly object _muteLock = new();
+
+        // --- Awareness Engine: live pulse ring buffer ---
+        // Bounded history of recent trigger fires for the Awareness tab pulse feed.
+        private const int PulseBufferCapacity = 20;
+        private readonly LinkedList<TriggerFireRecord> _recentFires = new();
+        private readonly object _recentFiresLock = new();
+
+        /// <summary>
+        /// Snapshot of the most recent trigger fires, newest first. Used by the
+        /// Awareness tab's "Last Detected" pulse feed.
+        /// </summary>
+        public IReadOnlyList<TriggerFireRecord> GetRecentFires()
+        {
+            lock (_recentFiresLock)
+            {
+                return _recentFires.ToArray();
+            }
+        }
+
+        private bool IsKeywordMuted(string keyword)
+        {
+            if (string.IsNullOrEmpty(keyword)) return false;
+            var settings = App.Settings?.Current;
+            if (settings == null || !settings.AwarenessLoopProtectionEnabled) return false;
+
+            lock (_muteLock)
+            {
+                if (_mutedKeywords.TryGetValue(keyword, out var expiresAt))
+                {
+                    if (DateTime.UtcNow < expiresAt) return true;
+                    _mutedKeywords.Remove(keyword);
+                }
+                return false;
+            }
+        }
+
+        private void RecordFire(KeywordTrigger trigger, string source)
+        {
+            // 1. Temporal mute — suppress this exact keyword for a short window across all sources.
+            var settings = App.Settings?.Current;
+            if (settings != null && settings.AwarenessLoopProtectionEnabled &&
+                !string.IsNullOrEmpty(trigger.Keyword))
+            {
+                var muteMs = settings.AwarenessLoopProtectionMs;
+                lock (_muteLock)
+                {
+                    _mutedKeywords[trigger.Keyword] = DateTime.UtcNow.AddMilliseconds(muteMs);
+                }
+            }
+
+            // 2. Live pulse ring buffer — newest entry at the front, drop oldest past capacity.
+            var record = new TriggerFireRecord
+            {
+                Keyword = trigger.Keyword,
+                TriggerId = trigger.Id,
+                VisualEffect = trigger.VisualEffect,
+                Source = source,
+                FiredAt = DateTime.Now
+            };
+            lock (_recentFiresLock)
+            {
+                _recentFires.AddFirst(record);
+                while (_recentFires.Count > PulseBufferCapacity)
+                    _recentFires.RemoveLast();
+            }
+        }
+
         #endregion
 
         #region Constructor
@@ -343,6 +416,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (!trigger.Enabled || string.IsNullOrEmpty(trigger.Keyword)) continue;
                 if (trigger.MatchType == KeywordMatchType.Regex) continue;
+                if (IsKeywordMuted(trigger.Keyword)) continue; // loop protection
 
                 var words = FindMatchedWords(trigger.Keyword, allWords);
                 if (words != null && words.Count > 0)
@@ -435,6 +509,7 @@ namespace ConditioningControlPanel.Services
             // 7. Highlight new words + fire effects once
             effectTrigger.LastTriggeredAt = DateTime.Now;
             _lastGlobalTriggerTime = DateTime.Now;
+            RecordFire(effectTrigger, "OCR");
             _ = DispatchResponseAsync(effectTrigger, newWords);
             TriggerFired?.Invoke(this, effectTrigger);
         }
@@ -462,6 +537,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (!trigger.Enabled || string.IsNullOrEmpty(trigger.Keyword)) continue;
                 if (trigger.IsOnCooldown) continue;
+                if (IsKeywordMuted(trigger.Keyword)) continue; // loop protection
 
                 bool matched = trigger.MatchType == KeywordMatchType.Regex
                     ? TryRegexMatch(text, trigger.Keyword)
@@ -473,6 +549,7 @@ namespace ConditioningControlPanel.Services
                     _lastGlobalTriggerTime = now;
 
                     App.Logger?.Information("Keyword trigger fired (text): '{Keyword}'", trigger.Keyword);
+                    RecordFire(trigger, "Text");
                     _ = DispatchResponseAsync(trigger);
                     TriggerFired?.Invoke(this, trigger);
                     break;
@@ -546,6 +623,7 @@ namespace ConditioningControlPanel.Services
             {
                 if (!trigger.Enabled || string.IsNullOrEmpty(trigger.Keyword)) continue;
                 if (trigger.IsOnCooldown) continue;
+                if (IsKeywordMuted(trigger.Keyword)) continue; // loop protection
 
                 bool matched = false;
 
@@ -566,6 +644,7 @@ namespace ConditioningControlPanel.Services
                     _buffer.Clear(); // Prevent re-triggering on same text
 
                     App.Logger?.Information("Keyword trigger fired: '{Keyword}'", trigger.Keyword);
+                    RecordFire(trigger, "Keyboard");
 
                     // Dispatch response asynchronously
                     _ = DispatchResponseAsync(trigger);
