@@ -11019,31 +11019,103 @@ namespace ConditioningControlPanel
             return result;
         }
         
-        // --- TEMP velvet-mosaic pilot: Spiral feature card. Removed in Phase 5. ---
-        private void PilotSpiralCard_Click(object sender, RoutedEventArgs e)
+        // --- velvet-mosaic: dashboard feature card click dispatcher ----------
+
+        private void ShowFeaturePopup(System.Windows.Controls.UserControl content, string title,
+                                      System.Windows.Media.ImageSource? icon = null, string? glyph = null,
+                                      int lockLevel = 0)
         {
-            var unlocked = App.Settings?.Current?.IsLevelUnlocked(10) ?? false;
-            if (!unlocked)
+            if (lockLevel > 0 && App.Settings?.Current?.IsLevelUnlocked(lockLevel) != true)
             {
                 MessageBox.Show(
-                    Localization.Loc.Get("label_reach_level_10_to_unlock"),
-                    Localization.Loc.Get("label_spiral_overlay"),
+                    Localization.Loc.GetF("label_reach_level_0_to_unlock", lockLevel),
+                    title,
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return;
             }
 
-            var content = new Features.SpiralFeatureControl();
-            var popup = new Features.FeaturePopupWindow(
-                content,
-                Localization.Loc.Get("label_spiral_overlay"),
-                icon: null,
-                glyph: "🌀")
+            var popup = new Features.FeaturePopupWindow(content, title, icon, glyph)
             {
                 Owner = this
             };
             popup.ShowDialog();
         }
+
+        private void CardFlash_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.FlashFeatureControl(),
+                Localization.Loc.Get("section_flash_images"),
+                CardFlash.Icon);
+
+        private void CardVisuals_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.VisualsFeatureControl(),
+                Localization.Loc.Get("section_visuals"),
+                glyph: "👁");
+
+        private void CardVideo_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.VideoFeatureControl(),
+                Localization.Loc.Get("section_mandatory_video"),
+                CardVideo.Icon);
+
+        private void CardSubliminal_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.SubliminalFeatureControl(),
+                Localization.Loc.Get("section_subliminals_2"),
+                CardSubliminal.Icon);
+
+        private void CardSpiral_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.SpiralFeatureControl(),
+                Localization.Loc.Get("label_spiral_overlay"),
+                CardSpiral.Icon, lockLevel: 10);
+
+        private void CardPinkFilter_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.PinkFilterFeatureControl(),
+                Localization.Loc.Get("label_pink_filter"),
+                CardPinkFilter.Icon, lockLevel: 10);
+
+        private void CardBubblePop_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.BubblePopFeatureControl(),
+                Localization.Loc.Get("label_bubble_pop"),
+                CardBubblePop.Icon, lockLevel: 20);
+
+        private void CardLockCard_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.LockCardFeatureControl(),
+                Localization.Loc.Get("label_lock_card"),
+                CardLockCard.Icon, lockLevel: 35);
+
+        private void CardBubbleCount_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.BubbleCountFeatureControl(),
+                Localization.Loc.Get("label_bubble_count"),
+                CardBubbleCount.Icon, lockLevel: 50);
+
+        private void CardBouncingText_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.BouncingTextFeatureControl(),
+                Localization.Loc.Get("label_bouncing_text"),
+                CardBouncingText.Icon, lockLevel: 60);
+
+        private void CardMindWipe_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.MindWipeFeatureControl(),
+                Localization.Loc.Get("label_mind_wipe"),
+                CardMindWipe.Icon, lockLevel: 75);
+
+        private void CardSystem_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.SystemFeatureControl(),
+                Localization.Loc.Get("section_system"),
+                glyph: "⚙");
+
+        private void VelvetBtnScheduler_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.SchedulerFeatureControl(),
+                Localization.Loc.Get("section_scheduler"),
+                glyph: "📅");
+
+        private void VelvetBtnAppInfo_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.AppInfoFeatureControl(),
+                Localization.Loc.Get("label_app_info"),
+                glyph: "ℹ");
+
+        private void VelvetBtnRamp_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.IntensityRampFeatureControl(),
+                Localization.Loc.Get("section_intensity_ramp"),
+                glyph: "📈");
 
         private void BtnStartSession_Click(object sender, RoutedEventArgs e)
         {
@@ -15621,6 +15693,17 @@ namespace ConditioningControlPanel
 
         private void SaveSettings()
         {
+            // velvet-mosaic: feature popups write to App.Settings.Current on every edit,
+            // so the settings object is already the source of truth. The legacy dashboard
+            // controls (now inside LegacyDashboardHost, Collapsed) can be stale. Re-sync
+            // them from settings before this method reads them, otherwise stale control
+            // values would clobber the popup changes.
+            var wasLoading = _isLoading;
+            _isLoading = true;
+            try { LoadSettings(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "SaveSettings: legacy control refresh failed"); }
+            finally { _isLoading = wasLoading; }
+
             var s = App.Settings.Current;
 
             // Flash
@@ -16518,8 +16601,9 @@ namespace ConditioningControlPanel
                 var level10Unlocked = App.Settings?.Current?.IsLevelUnlocked(10) ?? false;
                 if (SpiralLocked != null) SpiralLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (SpiralUnlocked != null) SpiralUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                // TEMP velvet-mosaic pilot: mirror lock state on the Spiral feature card.
-                if (PilotSpiralCard != null) PilotSpiralCard.IsLocked = !level10Unlocked;
+                // velvet-mosaic: mirror lock state on the dashboard feature cards.
+                if (CardSpiral != null) CardSpiral.IsLocked = !level10Unlocked;
+                if (CardPinkFilter != null) CardPinkFilter.IsLocked = !level10Unlocked;
                 if (PinkFilterLocked != null) PinkFilterLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (PinkFilterUnlocked != null) PinkFilterUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
 
@@ -16531,30 +16615,35 @@ namespace ConditioningControlPanel
                 if (BubblesLocked != null) BubblesLocked.Visibility = level20Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (BubblesUnlocked != null) BubblesUnlocked.Visibility = level20Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (BubblePopFeatureImage != null) SetFeatureImageBlur(BubblePopFeatureImage, !level20Unlocked);
+                if (CardBubblePop != null) CardBubblePop.IsLocked = !level20Unlocked;
 
                 // Level 35 unlocks: Lock Card
                 var level35Unlocked = App.Settings?.Current?.IsLevelUnlocked(35) ?? false;
                 if (LockCardLocked != null) LockCardLocked.Visibility = level35Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (LockCardUnlocked != null) LockCardUnlocked.Visibility = level35Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (LockCardFeatureImage != null) SetFeatureImageBlur(LockCardFeatureImage, !level35Unlocked);
+                if (CardLockCard != null) CardLockCard.IsLocked = !level35Unlocked;
 
                 // Level 50 unlocks: Bubble Count Game
                 var level50Unlocked = App.Settings?.Current?.IsLevelUnlocked(50) ?? false;
                 if (Level50Locked != null) Level50Locked.Visibility = level50Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (Level50Unlocked != null) Level50Unlocked.Visibility = level50Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (BubbleCountFeatureImage != null) SetFeatureImageBlur(BubbleCountFeatureImage, !level50Unlocked);
+                if (CardBubbleCount != null) CardBubbleCount.IsLocked = !level50Unlocked;
 
                 // Level 60 unlocks: Bouncing Text
                 var level60Unlocked = App.Settings?.Current?.IsLevelUnlocked(60) ?? false;
                 if (Level60Locked != null) Level60Locked.Visibility = level60Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (Level60Unlocked != null) Level60Unlocked.Visibility = level60Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (BouncingTextFeatureImage != null) SetFeatureImageBlur(BouncingTextFeatureImage, !level60Unlocked);
+                if (CardBouncingText != null) CardBouncingText.IsLocked = !level60Unlocked;
 
                 // Level 75 unlocks: Mind Wipe
                 var level75Unlocked = App.Settings?.Current?.IsLevelUnlocked(75) ?? false;
                 if (MindWipeLocked != null) MindWipeLocked.Visibility = level75Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (MindWipeUnlocked != null) MindWipeUnlocked.Visibility = level75Unlocked ? Visibility.Visible : Visibility.Collapsed;
                 if (MindWipeFeatureImage != null) SetFeatureImageBlur(MindWipeFeatureImage, !level75Unlocked);
+                if (CardMindWipe != null) CardMindWipe.IsLocked = !level75Unlocked;
 
                 // Level 70 unlocks: Brain Drain
                 var level70Unlocked = App.Settings?.Current?.IsLevelUnlocked(70) ?? false;

@@ -1989,30 +1989,120 @@
         <ContentControl x:Name="SettingsTab" Grid.Row="4" Margin="10,5,10,2" Template="{StaticResource AnimatedTabBackground}">
             <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="330"/>
-                <ColumnDefinition Width="360"/>
+                <ColumnDefinition Width="560"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
+
+            <!-- ============================================================ -->
+            <!-- VELVET MOSAIC DASHBOARD - 4x4 feature card grid (col 0)       -->
+            <!-- ============================================================ -->
+            <Grid Grid.Column="0" Grid.Row="0" x:Name="VelvetFeatureGrid" Margin="5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Row 1: Dashboard features -->
+                <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash"
+                                      Title="Flash Images"
+                                      Icon="pack://application:,,,/Resources/features/flash.png"
+                                      Click="CardFlash_Click"/>
+                <features:FeatureCard Grid.Row="0" Grid.Column="1" x:Name="CardVisuals"
+                                      Title="Visuals"
+                                      Glyph="👁"
+                                      Click="CardVisuals_Click"/>
+                <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardVideo"
+                                      Title="Mandatory Video"
+                                      Icon="pack://application:,,,/Resources/features/mandatory_videos.png"
+                                      Click="CardVideo_Click"/>
+                <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardSubliminal"
+                                      Title="Subliminals"
+                                      Icon="pack://application:,,,/Resources/features/subliminal.png"
+                                      Click="CardSubliminal_Click"/>
+
+                <!-- Row 2: Progression tier 1 -->
+                <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardSpiral"
+                                      Title="Spiral Overlay"
+                                      Icon="pack://application:,,,/Resources/features/spiral_overlay.png"
+                                      LockLevel="10"
+                                      Click="CardSpiral_Click"/>
+                <features:FeatureCard Grid.Row="1" Grid.Column="1" x:Name="CardPinkFilter"
+                                      Title="Pink Filter"
+                                      Icon="pack://application:,,,/Resources/features/Pink_filter.png"
+                                      LockLevel="10"
+                                      Click="CardPinkFilter_Click"/>
+                <features:FeatureCard Grid.Row="1" Grid.Column="2" x:Name="CardBubblePop"
+                                      Title="Bubble Pop"
+                                      Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
+                                      LockLevel="20"
+                                      Click="CardBubblePop_Click"/>
+                <features:FeatureCard Grid.Row="1" Grid.Column="3" x:Name="CardLockCard"
+                                      Title="Lock Card"
+                                      Icon="pack://application:,,,/Resources/features/Phrase_Lock.png"
+                                      LockLevel="35"
+                                      Click="CardLockCard_Click"/>
+
+                <!-- Row 3-4: Logo (2x2) + Bouncing/Mind + System/BubbleCount -->
+                <Border Grid.Row="2" Grid.RowSpan="2" Grid.Column="0" Grid.ColumnSpan="2"
+                        Background="#01000000" Margin="6"
+                        Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
+                        ToolTip="{loc:Str tooltip_click_me_rapidly}">
+                    <Border CornerRadius="12" ClipToBounds="True">
+                        <Image x:Name="ImgLogo" Stretch="Uniform"
+                               HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Border>
+                </Border>
+
+                <features:FeatureCard Grid.Row="2" Grid.Column="2" x:Name="CardBouncingText"
+                                      Title="Bouncing Text"
+                                      Icon="pack://application:,,,/Resources/features/bouncing_text.png"
+                                      LockLevel="60"
+                                      Click="CardBouncingText_Click"/>
+                <features:FeatureCard Grid.Row="2" Grid.Column="3" x:Name="CardMindWipe"
+                                      Title="Mind Wipe"
+                                      Icon="pack://application:,,,/Resources/features/Mind_Wipers.png"
+                                      LockLevel="75"
+                                      Click="CardMindWipe_Click"/>
+
+                <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardSystem"
+                                      Title="System"
+                                      Glyph="⚙"
+                                      Click="CardSystem_Click"/>
+                <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardBubbleCount"
+                                      Title="Bubble Count"
+                                      Icon="pack://application:,,,/Resources/features/Bubble_count.png"
+                                      LockLevel="50"
+                                      Click="CardBubbleCount_Click"/>
+            </Grid>
+
+            <!-- ============================================================ -->
+            <!-- LEGACY DASHBOARD HOST - kept collapsed to preserve x:Names   -->
+            <!-- referenced by MainWindow.xaml.cs until the full rewire is    -->
+            <!-- complete. Phase 6+ will delete this block.                   -->
+            <!-- ============================================================ -->
+            <Grid x:Name="LegacyDashboardHost" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="330"/>
+                <ColumnDefinition Width="360"/>
+            </Grid.ColumnDefinitions>
 
             <!-- LEFT COLUMN -->
             <ScrollViewer Grid.Column="0" Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="5">
                 <StackPanel>
-
-                    <!-- TEMP velvet-mosaic pilot: Spiral feature card. Removed in Phase 5. -->
-                    <Grid x:Name="VelvetMosaicPilotRow" Height="120" Margin="0,0,0,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <features:FeatureCard x:Name="PilotSpiralCard"
-                                              Title="Spiral Overlay"
-                                              Glyph="🌀"
-                                              LockLevel="10"
-                                              Click="PilotSpiralCard_Click"/>
-                    </Grid>
 
                     <!-- Flash Images Section -->
                     <Border x:Name="FlashSection" CornerRadius="12" Padding="10,6" Margin="0,0,0,6"
@@ -2159,16 +2249,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Logo (Clickable for Neon Obsession achievement + Easter Egg) -->
-                    <Border Background="#01000000" Padding="0" Height="234" Margin="0,0,0,8"
-                            Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
-                            ToolTip="{loc:Str tooltip_click_me_rapidly}">
-                        <Border CornerRadius="20" ClipToBounds="True">
-                            <Image x:Name="ImgLogo" Stretch="Uniform"
-                                   HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                                   RenderOptions.BitmapScalingMode="HighQuality"/>
-                        </Border>
-                    </Border>
+                    <!-- Legacy Logo removed — velvet-mosaic grid owns the live ImgLogo. -->
 
                 </StackPanel>
             </ScrollViewer>
@@ -2421,9 +2502,11 @@
                     </Border>
                 </StackPanel>
             </ScrollViewer>
+            </Grid>
+            <!-- /LegacyDashboardHost -->
 
-            <!-- RIGHT COLUMN -->
-            <Grid Grid.Column="2" Grid.Row="0" Margin="5">
+            <!-- RIGHT HALF (was col 2, now col 1 — Browser / Audio / Quick Links) -->
+            <Grid Grid.Column="1" Grid.Row="0" Margin="5">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -2830,8 +2913,98 @@
                 </Grid>
             </Grid>
 
-            <!-- Scrolling Marquee Banner - spans all columns -->
-            <Border x:Name="MarqueeBanner" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+            <!-- ============================================================ -->
+            <!-- VELVET MOSAIC HELPER BUTTON ROW - full width, under both     -->
+            <!-- the feature grid AND the right half.                         -->
+            <!-- ============================================================ -->
+            <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" x:Name="VelvetHelperButtonRow"
+                  Height="100" Margin="5,8,5,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" x:Name="VelvetBtnScheduler"
+                        Click="VelvetBtnScheduler_Click"
+                        Cursor="Hand" FontSize="16" FontWeight="Bold">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="b"
+                                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="14">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="📅" FontSize="22" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{loc:Str section_scheduler}" Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                    <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
+                <Button Grid.Column="2" x:Name="VelvetBtnAppInfo"
+                        Click="VelvetBtnAppInfo_Click"
+                        Cursor="Hand" FontSize="16" FontWeight="Bold">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="b"
+                                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="14">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="ℹ" FontSize="22" VerticalAlignment="Center" Margin="0,0,10,0"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                    <TextBlock Text="{loc:Str label_app_info}" Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                    <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
+                <Button Grid.Column="4" x:Name="VelvetBtnRamp"
+                        Click="VelvetBtnRamp_Click"
+                        Cursor="Hand" FontSize="16" FontWeight="Bold">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="b"
+                                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="14">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="📈" FontSize="22" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <TextBlock Text="{loc:Str section_intensity_ramp}" Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                    <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+
+            <!-- Scrolling Marquee Banner - row 2, spans both columns -->
+            <Border x:Name="MarqueeBanner" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                     Background="#1A0A1A" BorderBrush="{DynamicResource DarkPinkBrush}" BorderThickness="2"
                     CornerRadius="8" Height="48" Margin="5,5,5,0" ClipToBounds="True">
                 <Border.Effect>
