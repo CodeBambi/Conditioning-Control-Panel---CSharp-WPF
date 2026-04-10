@@ -1459,13 +1459,8 @@
                             <TextBlock Text="{loc:Str tab_presets}" FontSize="11"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="BtnProgression" Tag="Progression" Style="{StaticResource TabButton}"
-                            Margin="3,0" Click="BtnProgression_Click" ToolTip="{loc:Str tooltip_level_progression}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📊" FontSize="12" Margin="0,0,4,0"/>
-                            <TextBlock Text="{loc:Str tab_progression}" FontSize="11"/>
-                        </StackPanel>
-                    </Button>
+                    <!-- BtnProgression removed in velvet-mosaic phase 6 — progression features
+                         are now cards on the main Dashboard instead of a separate tab. -->
                     <Button x:Name="BtnQuests" Tag="Quests" Style="{StaticResource TabButton}"
                             Margin="3,0" Click="BtnQuests_Click" ToolTip="{loc:Str tooltip_daily_weekly_quests}">
                         <StackPanel Orientation="Horizontal">

@@ -1779,10 +1779,8 @@ namespace ConditioningControlPanel
             RefreshPresetsList();
         }
 
-        private void BtnProgression_Click(object sender, RoutedEventArgs e)
-        {
-            ShowTab("progression");
-        }
+        // BtnProgression handler removed in velvet-mosaic phase 6 — the Progression
+        // tab no longer has a header button; its features live on the Dashboard now.
 
         private void BtnQuests_Click(object sender, RoutedEventArgs e)
         {
@@ -3704,7 +3702,6 @@ namespace ConditioningControlPanel
             var activeStyle = FindResource("TabButtonActive") as Style;
             BtnSettings.Style = inactiveStyle;
             BtnPresets.Style = inactiveStyle;
-            BtnProgression.Style = inactiveStyle;
             BtnQuests.Style = inactiveStyle;
             BtnEnhancements.Style = inactiveStyle;
             BtnAchievements.Style = inactiveStyle;
@@ -3729,21 +3726,13 @@ namespace ConditioningControlPanel
                     BtnPresets.Style = activeStyle;
                     break;
 
+                // "progression" tab removed in velvet-mosaic phase 6 — its content
+                // is now on the Dashboard. Legacy callers (e.g. older tutorial steps)
+                // that request ShowTab("progression") fall through to the Dashboard.
                 case "progression":
-                    App.Logger?.Debug("ShowTab: Attempting to make ProgressionTab visible.");
-                    try
-                    {
-                        ProgressionTab.Visibility = Visibility.Visible;
-                        AnimateTabIn(ProgressionTab);
-                        RestartSkillTreeAnimations();
-                        App.Logger?.Debug("ShowTab: ProgressionTab visibility set to Visible.");
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Error("ShowTab: Error making ProgressionTab visible: {Error}", ex.Message);
-                        throw;
-                    }
-                    BtnProgression.Style = activeStyle;
+                    SettingsTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(SettingsTab);
+                    BtnSettings.Style = activeStyle;
                     break;
 
                 case "quests":
