@@ -407,6 +407,14 @@ namespace ConditioningControlPanel
 
             // Initialize browser when window is loaded
             Loaded += MainWindow_Loaded;
+
+            // velvet-mosaic: highlight dashboard cards whose feature is enabled, and
+            // keep them in sync when settings change anywhere else.
+            Loaded += (_, __) => RefreshFeatureCardActiveStates();
+            if (App.Settings?.Current is System.ComponentModel.INotifyPropertyChanged settingsInpc)
+            {
+                settingsInpc.PropertyChanged += OnSettingsPropertyChangedForCards;
+            }
         }
 
         private void OnXPChanged(object? sender, double xp)
@@ -11019,6 +11027,42 @@ namespace ConditioningControlPanel
             return result;
         }
         
+        // --- velvet-mosaic: highlight feature cards whose feature is enabled ---
+
+        private void RefreshFeatureCardActiveStates()
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            if (CardFlash != null) CardFlash.IsActive = s.FlashEnabled;
+            if (CardVideo != null) CardVideo.IsActive = s.MandatoryVideosEnabled;
+            if (CardSubliminal != null) CardSubliminal.IsActive = s.SubliminalEnabled;
+            if (CardSpiral != null) CardSpiral.IsActive = s.SpiralEnabled;
+            if (CardPinkFilter != null) CardPinkFilter.IsActive = s.PinkFilterEnabled;
+            if (CardBubblePop != null) CardBubblePop.IsActive = s.BubblesEnabled;
+            if (CardLockCard != null) CardLockCard.IsActive = s.LockCardEnabled;
+            if (CardBubbleCount != null) CardBubbleCount.IsActive = s.BubbleCountEnabled;
+            if (CardBouncingText != null) CardBouncingText.IsActive = s.BouncingTextEnabled;
+            if (CardMindWipe != null) CardMindWipe.IsActive = s.MindWipeEnabled;
+            // Visuals and System cards have no single "enabled" toggle; they stay neutral.
+        }
+
+        private void OnSettingsPropertyChangedForCards(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Models.AppSettings.FlashEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.MandatoryVideosEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.SubliminalEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.SpiralEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.PinkFilterEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.BubblesEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.LockCardEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.BubbleCountEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.BouncingTextEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.MindWipeEnabled))
+            {
+                Dispatcher.BeginInvoke(new Action(RefreshFeatureCardActiveStates));
+            }
+        }
+
         // --- velvet-mosaic: dashboard feature card click dispatcher ----------
 
         private void ShowFeaturePopup(System.Windows.Controls.UserControl content, string title,

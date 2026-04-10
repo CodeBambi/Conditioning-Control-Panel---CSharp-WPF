@@ -15,7 +15,7 @@
             <ScaleTransform x:Name="RootScale" ScaleX="1" ScaleY="1"/>
         </Border.RenderTransform>
         <Border.Effect>
-            <DropShadowEffect x:Name="RootGlow"
+            <DropShadowEffect x:Name="ActiveGlow"
                               Color="{DynamicResource PinkColor}"
                               BlurRadius="18"
                               ShadowDepth="0"
@@ -31,9 +31,7 @@
                         <DoubleAnimation Storyboard.TargetName="RootScale"
                                          Storyboard.TargetProperty="ScaleY"
                                          To="1.03" Duration="0:0:0.15"/>
-                        <DoubleAnimation Storyboard.TargetName="RootGlow"
-                                         Storyboard.TargetProperty="Opacity"
-                                         To="0.55" Duration="0:0:0.15"/>
+                        <!-- hover glow handled by ActiveGlow if the card is active -->
                     </Storyboard>
                 </BeginStoryboard>
             </EventTrigger>
@@ -46,9 +44,7 @@
                         <DoubleAnimation Storyboard.TargetName="RootScale"
                                          Storyboard.TargetProperty="ScaleY"
                                          To="1" Duration="0:0:0.15"/>
-                        <DoubleAnimation Storyboard.TargetName="RootGlow"
-                                         Storyboard.TargetProperty="Opacity"
-                                         To="0" Duration="0:0:0.2"/>
+                        <!-- leave ActiveGlow alone on mouseleave -->
                     </Storyboard>
                 </BeginStoryboard>
             </EventTrigger>
@@ -95,6 +91,14 @@
                            FontSize="12"
                            FontWeight="SemiBold"/>
             </Grid>
+
+            <!-- Active overlay: pink ring when the underlying feature is enabled -->
+            <Border x:Name="ActiveBorder"
+                    BorderBrush="{DynamicResource PinkBrush}"
+                    BorderThickness="2"
+                    CornerRadius="12"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed"/>
 
             <!-- Locked overlay -->
             <Border x:Name="LockedOverlay"

@@ -31,6 +31,10 @@ namespace ConditioningControlPanel.Features
             DependencyProperty.Register(nameof(IsLocked), typeof(bool), typeof(FeatureCard),
                 new PropertyMetadata(false, OnLockStateChanged));
 
+        public static readonly DependencyProperty IsActiveProperty =
+            DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(FeatureCard),
+                new PropertyMetadata(false, OnActiveStateChanged));
+
         public static readonly RoutedEvent ClickEvent =
             EventManager.RegisterRoutedEvent(nameof(Click), RoutingStrategy.Bubble,
                 typeof(RoutedEventHandler), typeof(FeatureCard));
@@ -64,6 +68,16 @@ namespace ConditioningControlPanel.Features
         {
             get => (bool)GetValue(IsLockedProperty);
             set => SetValue(IsLockedProperty, value);
+        }
+
+        /// <summary>
+        /// Highlights the card with a pink glow + border when the underlying
+        /// feature is enabled in settings.
+        /// </summary>
+        public bool IsActive
+        {
+            get => (bool)GetValue(IsActiveProperty);
+            set => SetValue(IsActiveProperty, value);
         }
 
         public event RoutedEventHandler Click
@@ -121,6 +135,11 @@ namespace ConditioningControlPanel.Features
             if (d is FeatureCard c) c.ApplyLockState();
         }
 
+        private static void OnActiveStateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is FeatureCard c) c.ApplyActiveState();
+        }
+
         private void ApplyLockState()
         {
             if (IsLocked)
@@ -134,6 +153,16 @@ namespace ConditioningControlPanel.Features
                 LockedOverlay.Visibility = Visibility.Collapsed;
                 ContentRoot.Opacity = 1.0;
             }
+            ApplyActiveState();
+        }
+
+        private void ApplyActiveState()
+        {
+            // Active state is suppressed while the card is locked — a locked feature
+            // can't really be "on" even if the underlying setting is true.
+            var showActive = IsActive && !IsLocked;
+            ActiveBorder.Visibility = showActive ? Visibility.Visible : Visibility.Collapsed;
+            ActiveGlow.Opacity = showActive ? 0.55 : 0.0;
         }
 
         private void OnClick(object sender, MouseButtonEventArgs e)
