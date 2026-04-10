@@ -1989,7 +1989,7 @@
         <ContentControl x:Name="SettingsTab" Grid.Row="4" Margin="10,5,10,2" Template="{StaticResource AnimatedTabBackground}">
             <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="560"/>
+                <ColumnDefinition Width="640"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
@@ -2763,22 +2763,29 @@
                                 <TextBlock x:Name="TxtDuck" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="80%" FontSize="10"/>
                             </Grid>
 
-                            <!-- Exclude BambiCloud from ducking -->
-                            <CheckBox x:Name="ChkExcludeBambiCloudDucking" Margin="0,4,0,0"
-                                      Content="{loc:Str setting_don_t_duck_browser}"
-                                      IsChecked="True"
-                                      Checked="ChkExcludeBambiCloudDucking_Changed"
-                                      Unchecked="ChkExcludeBambiCloudDucking_Changed"
-                                      ToolTip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}"
-                                      Foreground="{DynamicResource PinkBrush}" FontSize="9"/>
-
-                            <!-- Audio Diagnostics -->
-                            <Button x:Name="BtnTestAudio" Content="Test Audio" Margin="0,6,0,0"
-                                    Click="BtnTestAudio_Click"
-                                    ToolTip="Play a test sound and show audio diagnostics. Use this if audio isn't working."
-                                    Background="#33FF69B4" Foreground="White" FontSize="9" Padding="8,3"
-                                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
-                                    HorizontalAlignment="Left"/>
+                            <!-- Don't-duck-browser toggle + Audio Test on the same row -->
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <CheckBox Grid.Column="0"
+                                          x:Name="ChkExcludeBambiCloudDucking"
+                                          VerticalAlignment="Center"
+                                          Content="{loc:Str setting_don_t_duck_browser}"
+                                          IsChecked="True"
+                                          Checked="ChkExcludeBambiCloudDucking_Changed"
+                                          Unchecked="ChkExcludeBambiCloudDucking_Changed"
+                                          ToolTip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}"
+                                          Foreground="{DynamicResource PinkBrush}" FontSize="9"/>
+                                <Button Grid.Column="1"
+                                        x:Name="BtnTestAudio" Content="Test Audio"
+                                        Click="BtnTestAudio_Click"
+                                        ToolTip="Play a test sound and show audio diagnostics. Use this if audio isn't working."
+                                        Background="#33FF69B4" Foreground="White" FontSize="9" Padding="8,3"
+                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
+                                        VerticalAlignment="Center"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
 
@@ -2918,7 +2925,7 @@
             <!-- the feature grid AND the right half.                         -->
             <!-- ============================================================ -->
             <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" x:Name="VelvetHelperButtonRow"
-                  Height="100" Margin="5,8,5,0">
+                  Height="30" Margin="5,4,5,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="10"/>
@@ -2928,7 +2935,7 @@
                 </Grid.ColumnDefinitions>
                 <Button Grid.Column="0" x:Name="VelvetBtnScheduler"
                         Click="VelvetBtnScheduler_Click"
-                        Cursor="Hand" FontSize="16" FontWeight="Bold">
+                        Cursor="Hand" FontSize="12" FontWeight="Bold">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="b"
@@ -2937,7 +2944,7 @@
                                     BorderThickness="1"
                                     CornerRadius="14">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="📅" FontSize="22" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <TextBlock Text="📅" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBlock Text="{loc:Str section_scheduler}" Foreground="White" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
@@ -2953,7 +2960,7 @@
 
                 <Button Grid.Column="2" x:Name="VelvetBtnAppInfo"
                         Click="VelvetBtnAppInfo_Click"
-                        Cursor="Hand" FontSize="16" FontWeight="Bold">
+                        Cursor="Hand" FontSize="12" FontWeight="Bold">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="b"
@@ -2962,7 +2969,7 @@
                                     BorderThickness="1"
                                     CornerRadius="14">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="ℹ" FontSize="22" VerticalAlignment="Center" Margin="0,0,10,0"
+                                    <TextBlock Text="ℹ" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"
                                                Foreground="{DynamicResource PinkBrush}"/>
                                     <TextBlock Text="{loc:Str label_app_info}" Foreground="White" VerticalAlignment="Center"/>
                                 </StackPanel>
@@ -2979,7 +2986,7 @@
 
                 <Button Grid.Column="4" x:Name="VelvetBtnRamp"
                         Click="VelvetBtnRamp_Click"
-                        Cursor="Hand" FontSize="16" FontWeight="Bold">
+                        Cursor="Hand" FontSize="12" FontWeight="Bold">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="b"
@@ -2988,7 +2995,7 @@
                                     BorderThickness="1"
                                     CornerRadius="14">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="📈" FontSize="22" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <TextBlock Text="📈" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                     <TextBlock Text="{loc:Str section_intensity_ramp}" Foreground="White" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
