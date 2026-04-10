@@ -1,0 +1,188 @@
+using System;
+using System.ComponentModel;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using ConditioningControlPanel.Localization;
+
+namespace ConditioningControlPanel.Features
+{
+    public partial class LockCardFeatureControl : UserControl
+    {
+        private const int UnlockLevel = 35;
+        private bool _isLoading;
+
+        public LockCardFeatureControl()
+        {
+            InitializeComponent();
+            Loaded += OnLoaded;
+            Unloaded += OnUnloaded;
+        }
+
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            LoadFromSettings();
+            RefreshLockState();
+            if (App.Settings?.Current is INotifyPropertyChanged inpc)
+                inpc.PropertyChanged += OnSettingsPropertyChanged;
+            if (App.Progression != null)
+                App.Progression.LevelUp += OnLevelUp;
+        }
+
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current is INotifyPropertyChanged inpc)
+                inpc.PropertyChanged -= OnSettingsPropertyChanged;
+            if (App.Progression != null)
+                App.Progression.LevelUp -= OnLevelUp;
+        }
+
+        private void LoadFromSettings()
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            _isLoading = true;
+            try
+            {
+                ChkEnable.IsChecked = s.LockCardEnabled;
+                SliderFreq.Value = s.LockCardFrequency;
+                TxtFreq.Text = s.LockCardFrequency.ToString();
+                SliderRepeats.Value = s.LockCardRepeats;
+                TxtRepeats.Text = $"{s.LockCardRepeats}x";
+                ChkStrict.IsChecked = s.LockCardStrict;
+            }
+            finally { _isLoading = false; }
+        }
+
+        private void RefreshLockState()
+        {
+            var unlocked = App.Settings?.Current?.IsLevelUnlocked(UnlockLevel) ?? false;
+            LockedPanel.Visibility = unlocked ? Visibility.Collapsed : Visibility.Visible;
+            UnlockedPanel.Visibility = unlocked ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Models.AppSettings.LockCardEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.LockCardFrequency) ||
+                e.PropertyName == nameof(Models.AppSettings.LockCardRepeats) ||
+                e.PropertyName == nameof(Models.AppSettings.LockCardStrict))
+            {
+                Dispatcher.BeginInvoke(new Action(LoadFromSettings));
+            }
+            else if (e.PropertyName == nameof(Models.AppSettings.PlayerLevel) ||
+                     e.PropertyName == nameof(Models.AppSettings.HighestLevelEver))
+            {
+                Dispatcher.BeginInvoke(new Action(RefreshLockState));
+            }
+        }
+
+        private void OnLevelUp(object? sender, int newLevel) =>
+            Dispatcher.BeginInvoke(new Action(RefreshLockState));
+
+        private void ChkEnable_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.LockCardEnabled = ChkEnable.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        private void SliderFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtFreq.Text = v.ToString();
+            s.LockCardFrequency = v;
+            App.Settings?.Save();
+        }
+
+        private void SliderRepeats_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtRepeats.Text = $"{v}x";
+            s.LockCardRepeats = v;
+            App.Settings?.Save();
+        }
+
+        private void ChkStrict_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            var on = ChkStrict.IsChecked ?? false;
+            if (on)
+            {
+                var owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+                var confirmed = WarningDialog.ShowDoubleWarning(owner,
+                    "Strict Lock Card",
+                    "• You will NOT be able to escape lock cards with ESC\n" +
+                    "• You MUST type the phrase the required number of times\n" +
+                    "• This can be very restrictive!");
+
+                if (!confirmed)
+                {
+                    ChkStrict.Checked -= ChkStrict_Changed;
+                    ChkStrict.Unchecked -= ChkStrict_Changed;
+                    ChkStrict.IsChecked = false;
+                    ChkStrict.Checked += ChkStrict_Changed;
+                    ChkStrict.Unchecked += ChkStrict_Changed;
+                    return;
+                }
+            }
+
+            s.LockCardStrict = on;
+            App.Settings?.Save();
+        }
+
+        private void BtnManagePhrases_Click(object sender, RoutedEventArgs e)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var editor = new TextEditorDialog("Lock Card Phrases", s.LockCardPhrases)
+            {
+                Owner = Window.GetWindow(this) ?? Application.Current.MainWindow
+            };
+            if (editor.ShowDialog() == true && editor.ResultData != null)
+            {
+                s.LockCardPhrases = editor.ResultData;
+                App.Settings?.Save();
+                App.Logger?.Information("Lock card phrases updated: {Count} items", editor.ResultData.Count);
+            }
+        }
+
+        private void BtnTest_Click(object sender, RoutedEventArgs e)
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            var enabledPhrases = s.LockCardPhrases.Where(p => p.Value).Select(p => p.Key).ToList();
+            if (enabledPhrases.Count == 0)
+            {
+                MessageBox.Show(
+                    Loc.Get("msg_no_phrases_enabled_add_some_phrases_first"),
+                    "No Phrases",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+            App.LockCard?.TestLockCard();
+        }
+
+        private void BtnColorSettings_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new LockCardColorDialog
+            {
+                Owner = Window.GetWindow(this) ?? Application.Current.MainWindow
+            };
+            dialog.ShowDialog();
+        }
+    }
+}

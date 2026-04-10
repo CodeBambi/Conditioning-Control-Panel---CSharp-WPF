@@ -1,0 +1,68 @@
+<UserControl x:Class="ConditioningControlPanel.Features.PinkFilterFeatureControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+
+    <Grid>
+        <!-- Locked -->
+        <StackPanel x:Name="LockedPanel" Visibility="Collapsed">
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="20,24">
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource PinkBrush}"/>
+                    <TextBlock Text="{loc:Str label_pink_filter}"
+                               Foreground="White" FontSize="18" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" Margin="0,12,0,4"/>
+                    <TextBlock Text="{loc:Str label_reach_level_10_to_unlock}"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="13" TextAlignment="Center" TextWrapping="Wrap"
+                               HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- Unlocked -->
+        <StackPanel x:Name="UnlockedPanel" Visibility="Collapsed">
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str btn_enable}" Foreground="White" FontSize="14" FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_apply_pink_color_filter_to_all_monitors}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkEnable"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkEnable_Changed" Unchecked="ChkEnable_Changed"/>
+                </Grid>
+            </Border>
+
+            <Border Background="{DynamicResource SurfaceBgBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="1" CornerRadius="10" Padding="16,14">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <TextBlock Text="{loc:Str setting_opacity}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtOpacity" Text="10%" HorizontalAlignment="Right"
+                                   Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
+                    </Grid>
+                    <Slider x:Name="SliderOpacity" Minimum="5" Maximum="50" Value="10"
+                            ValueChanged="SliderOpacity_Changed"/>
+                    <TextBlock Text="{loc:Str tooltip_filter_opacity_5_50}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                               TextWrapping="Wrap" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Grid>
+</UserControl>
