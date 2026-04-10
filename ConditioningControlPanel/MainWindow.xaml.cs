@@ -757,6 +757,46 @@ namespace ConditioningControlPanel
             }
         }
 
+        // ---- velvet-mosaic: internal wrappers called by popup feature UserControls ----
+        // These delegate complex system-level operations (assets, panic key, offline mode,
+        // no-panic) to the existing private handlers so the popup doesn't duplicate logic.
+
+        internal void RequestPickAssetsFolder()
+        {
+            BtnPickAssetsFolder_Click(this, new RoutedEventArgs());
+        }
+
+        internal void RequestBeginPanicKeyCapture()
+        {
+            BtnPanicKey_Click(this, new RoutedEventArgs());
+        }
+
+        internal void RequestToggleOfflineMode(bool enable)
+        {
+            // Drive the existing handler via the legacy checkbox so the two-way sync logic
+            // (UpdateOfflineModeUI, login button disable, etc.) runs exactly once.
+            if (ChkOfflineMode == null) return;
+            if ((ChkOfflineMode.IsChecked ?? false) == enable) return;
+            ChkOfflineMode.IsChecked = enable;
+        }
+
+        internal void RequestToggleNoPanic(bool disablePanic)
+        {
+            if (ChkNoPanic == null) return;
+            if ((ChkNoPanic.IsChecked ?? false) == disablePanic) return;
+            ChkNoPanic.IsChecked = disablePanic;
+        }
+
+        internal bool RequestToggleWindowsStartup(bool enable)
+        {
+            // Drive the existing handler via the legacy checkbox so the combined-with-hidden
+            // warning runs. Return the final state reflected on the checkbox.
+            if (ChkWinStart == null) return StartupManager.IsRegistered();
+            if ((ChkWinStart.IsChecked ?? false) == enable) return enable;
+            ChkWinStart.IsChecked = enable;
+            return ChkWinStart.IsChecked ?? false;
+        }
+
         private void LoadLogo()
         {
             try

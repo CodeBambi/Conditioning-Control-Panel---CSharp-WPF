@@ -1,0 +1,192 @@
+<UserControl x:Class="ConditioningControlPanel.Features.SystemFeatureControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+
+    <StackPanel>
+        <!-- Toggle grid -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+            <StackPanel>
+                <Grid Margin="0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str setting_multi_mon}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_show_content_on_all_connected_monitors_2_3_or}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkMultiMon"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkMultiMon_Changed" Unchecked="ChkMultiMon_Changed"/>
+                </Grid>
+                <Grid Margin="0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str setting_win_start}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_launch_automatically_when_windows_starts}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkWinStart"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkWinStart_Changed" Unchecked="ChkWinStart_Changed"/>
+                </Grid>
+                <Grid Margin="0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str setting_vid_launch}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_play_a_mandatory_video_when_app_opens}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkVidLaunch"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkVidLaunch_Changed" Unchecked="ChkVidLaunch_Changed"/>
+                </Grid>
+                <Grid Margin="0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str setting_auto_run}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_start_the_engine_automatically_on_launch}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkAutoRun"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkAutoRun_Changed" Unchecked="ChkAutoRun_Changed"/>
+                </Grid>
+                <Grid Margin="0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str setting_start_hidden}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_start_minimized_to_system_tray}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkStartHidden"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkStartHidden_Changed" Unchecked="ChkStartHidden_Changed"/>
+                </Grid>
+                <Grid Margin="0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str setting_no_panic}" Foreground="#FF6B6B" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_danger_completely_disables_panic_key_you_won}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkNoPanic"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkNoPanic_Changed" Unchecked="ChkNoPanic_Changed"/>
+                </Grid>
+                <Grid Margin="0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str setting_offline_mode}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="{loc:Str tooltip_disable_all_network_features_updates_ai_leade}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" x:Name="ChkOfflineMode"
+                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                              Checked="ChkOfflineMode_Changed" Unchecked="ChkOfflineMode_Changed"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Startup video picker -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+            <StackPanel>
+                <TextBlock Text="{loc:Str label_startup_video}" Foreground="White" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" x:Name="TxtStartupVideo"
+                               Text="{loc:Str label_random}"
+                               Foreground="{DynamicResource PinkBrush}" FontSize="12"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                    <Button Grid.Column="1" Content="📁" Width="36"
+                            Style="{StaticResource OutlineButton}"
+                            Padding="6,4" Margin="6,0,0,0"
+                            Click="BtnSelectStartupVideo_Click"
+                            ToolTip="{loc:Str tooltip_browse_for_startup_video}"/>
+                    <Button Grid.Column="2" Content="✕" Width="36"
+                            Style="{StaticResource OutlineButton}"
+                            Padding="6,4" Margin="4,0,0,0"
+                            Click="BtnClearStartupVideo_Click"
+                            ToolTip="{loc:Str tooltip_clear_selection_use_random}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Assets folder -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Content="📁 Pick Folder"
+                        Style="{StaticResource OutlineButton}"
+                        Click="BtnPickAssets_Click"
+                        ToolTip="{loc:Str tooltip_set_custom_assets_folder}"/>
+                <Button Grid.Column="2" Content="{loc:Str btn_assets}"
+                        Style="{StaticResource OutlineButton}"
+                        Click="BtnOpenAssets_Click"
+                        ToolTip="{loc:Str tooltip_open_assets_folder_images_videos_sounds}"/>
+            </Grid>
+        </Border>
+
+        <!-- Panic key -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:Str btn_escape}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                    <TextBlock Text="{loc:Str tooltip_click_to_change_panic_key}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" x:Name="BtnPanicKey"
+                        Style="{StaticResource OutlineButton}"
+                        Padding="12,6" Click="BtnPanicKey_Click"/>
+            </Grid>
+        </Border>
+    </StackPanel>
+</UserControl>
