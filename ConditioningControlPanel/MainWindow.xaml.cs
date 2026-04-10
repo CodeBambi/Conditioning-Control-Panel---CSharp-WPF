@@ -10979,6 +10979,32 @@ namespace ConditioningControlPanel
             return result;
         }
         
+        // --- TEMP velvet-mosaic pilot: Spiral feature card. Removed in Phase 5. ---
+        private void PilotSpiralCard_Click(object sender, RoutedEventArgs e)
+        {
+            var unlocked = App.Settings?.Current?.IsLevelUnlocked(10) ?? false;
+            if (!unlocked)
+            {
+                MessageBox.Show(
+                    Localization.Loc.Get("label_reach_level_10_to_unlock"),
+                    Localization.Loc.Get("label_spiral_overlay"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            var content = new Features.SpiralFeatureControl();
+            var popup = new Features.FeaturePopupWindow(
+                content,
+                Localization.Loc.Get("label_spiral_overlay"),
+                icon: null,
+                glyph: "🌀")
+            {
+                Owner = this
+            };
+            popup.ShowDialog();
+        }
+
         private void BtnStartSession_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedSession == null || !_selectedSession.IsAvailable) return;
@@ -16452,6 +16478,8 @@ namespace ConditioningControlPanel
                 var level10Unlocked = App.Settings?.Current?.IsLevelUnlocked(10) ?? false;
                 if (SpiralLocked != null) SpiralLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (SpiralUnlocked != null) SpiralUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                // TEMP velvet-mosaic pilot: mirror lock state on the Spiral feature card.
+                if (PilotSpiralCard != null) PilotSpiralCard.IsLocked = !level10Unlocked;
                 if (PinkFilterLocked != null) PinkFilterLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (PinkFilterUnlocked != null) PinkFilterUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
 
