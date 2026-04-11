@@ -1,0 +1,93 @@
+{
+  "id": "builtin.chastity",
+  "name": "Chastity Watcher",
+  "icon": "🔒",
+  "description": "Temptation words → avatar comment + (stubbed) lock time",
+  "longDescription": "She notices when you slip toward temptation. Detects common chastity/edge/porn keywords, comments in character, and is wired up for future Chaster integration (action stubbed for now — see roadmap).",
+  "author": "Built-in",
+  "version": 2,
+  "isBuiltIn": true,
+  "requiresAi": true,
+  "avatarPromptTemplate": "You're her strict keyholder. She just encountered the word '{keyword}'. Tease or scold her, in character, one sentence.",
+  "phrasePools": [ "ChastityShame" ],
+  "cannedPhrases": {
+    "ChastityShame": [
+      "Caught.",
+      "Naughty. That's going on the record.",
+      "*tsk*",
+      "I saw that, pet.",
+      "Don't even think about it.",
+      "The lock stays on, love.",
+      "Every glance adds another day.",
+      "Good pets don't read those words.",
+      "*jingles the key*",
+      "You want it that badly? Keep watching."
+    ]
+  },
+  "triggers": [
+    {
+      "keyword": "edge",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 45,
+      "visualEffect": "HighlightOnly",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 75, "playCount": 1, "duckSystemAudio": true },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
+        { "type": "Highlight" },
+        { "type": "ChasterAddTime", "minutes": 5 }
+      ]
+    },
+    {
+      "keyword": "cum",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 60,
+      "visualEffect": "HighlightOnly",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 75, "playCount": 1, "duckSystemAudio": true },
+        { "type": "AvatarComment", "promptTemplate": "She just encountered the word '{keyword}'. Remind her she's locked, in character, one sentence.", "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
+        { "type": "Highlight" },
+        { "type": "ChasterAddTime", "minutes": 10 }
+      ]
+    },
+    {
+      "keyword": "porn",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 60,
+      "visualEffect": "HighlightOnly",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 75, "playCount": 1, "duckSystemAudio": true },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
+        { "type": "Highlight" },
+        { "type": "ChasterAddTime", "minutes": 5 }
+      ]
+    },
+    {
+      "keyword": "orgasm",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 60,
+      "visualEffect": "HighlightOnly",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 75, "playCount": 1, "duckSystemAudio": true },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
+        { "type": "Highlight" },
+        { "type": "ChasterAddTime", "minutes": 10 }
+      ]
+    },
+    {
+      "keyword": "release",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 60,
+      "visualEffect": "HighlightOnly",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 75, "playCount": 1, "duckSystemAudio": true },
+        { "type": "AvatarComment", "promptTemplate": "She just thought about 'release'. Remind her the key belongs to you, one line, in character.", "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
+        { "type": "Highlight" }
+      ]
+    }
+  ]
+}

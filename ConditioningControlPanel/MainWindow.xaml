@@ -2032,22 +2032,18 @@
                 <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardSpiral"
                                       Title="Spiral Overlay"
                                       Icon="pack://application:,,,/Resources/features/spiral_overlay.png"
-                                      LockLevel="10"
                                       Click="CardSpiral_Click"/>
                 <features:FeatureCard Grid.Row="1" Grid.Column="1" x:Name="CardPinkFilter"
                                       Title="Pink Filter"
                                       Icon="pack://application:,,,/Resources/features/Pink_filter.png"
-                                      LockLevel="10"
                                       Click="CardPinkFilter_Click"/>
                 <features:FeatureCard Grid.Row="1" Grid.Column="2" x:Name="CardBubblePop"
                                       Title="Bubble Pop"
                                       Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
-                                      LockLevel="20"
                                       Click="CardBubblePop_Click"/>
                 <features:FeatureCard Grid.Row="1" Grid.Column="3" x:Name="CardLockCard"
                                       Title="Lock Card"
                                       Icon="pack://application:,,,/Resources/features/Phrase_Lock.png"
-                                      LockLevel="35"
                                       Click="CardLockCard_Click"/>
 
                 <!-- Row 3-4: Logo (2x2) + Bouncing/Mind + System/BubbleCount -->
@@ -2065,12 +2061,10 @@
                 <features:FeatureCard Grid.Row="2" Grid.Column="2" x:Name="CardBouncingText"
                                       Title="Bouncing Text"
                                       Icon="pack://application:,,,/Resources/features/bouncing_text.png"
-                                      LockLevel="60"
                                       Click="CardBouncingText_Click"/>
                 <features:FeatureCard Grid.Row="2" Grid.Column="3" x:Name="CardMindWipe"
                                       Title="Mind Wipe"
                                       Icon="pack://application:,,,/Resources/features/Mind_Wipers.png"
-                                      LockLevel="75"
                                       Click="CardMindWipe_Click"/>
 
                 <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardSystem"
@@ -2080,7 +2074,6 @@
                 <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardBubbleCount"
                                       Title="Bubble Count"
                                       Icon="pack://application:,,,/Resources/features/Bubble_count.png"
-                                      LockLevel="50"
                                       Click="CardBubbleCount_Click"/>
             </Grid>
 
@@ -8496,67 +8489,41 @@
                         <Grid Margin="4,0,4,10">
                             <TextBlock Text="PRESETS" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
                                        VerticalAlignment="Center"/>
-                            <TextBlock Text="Coming soon — curated one-click packs"
+                            <TextBlock Text="One-click packs — click any card to preview or install"
                                        HorizontalAlignment="Right"
                                        Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"/>
                         </Grid>
-                        <WrapPanel HorizontalAlignment="Stretch">
-                            <!-- Puppy Pet card -->
-                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
-                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
-                                    Cursor="Hand" Tag="puppy" MouseLeftButtonUp="AwarenessPresetCard_Click">
-                                <StackPanel>
-                                    <TextBlock Text="🐶" FontSize="26"/>
-                                    <TextBlock Text="Puppy Pet" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
-                                    <TextBlock Text='"good boy", "sit", "stay" → clicker + praise'
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
-                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                               FontWeight="Bold" Margin="0,8,0,0"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Chastity Watcher card -->
-                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
-                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
-                                    Cursor="Hand" Tag="chastity" MouseLeftButtonUp="AwarenessPresetCard_Click">
-                                <StackPanel>
-                                    <TextBlock Text="🔒" FontSize="26"/>
-                                    <TextBlock Text="Chastity Watcher" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
-                                    <TextBlock Text="Porn detected → session time added &amp; avatar comment"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
-                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                               FontWeight="Bold" Margin="0,8,0,0"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Bimbo Reinforcement card -->
-                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
-                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
-                                    Cursor="Hand" Tag="bimbo" MouseLeftButtonUp="AwarenessPresetCard_Click">
-                                <StackPanel>
-                                    <TextBlock Text="💖" FontSize="26"/>
-                                    <TextBlock Text="Bimbo Reinforcement" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
-                                    <TextBlock Text='"smart", "focus" → subliminal flash of opposites'
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
-                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                               FontWeight="Bold" Margin="0,8,0,0"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Trance Induction card -->
-                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
-                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
-                                    Cursor="Hand" Tag="trance" MouseLeftButtonUp="AwarenessPresetCard_Click">
-                                <StackPanel>
-                                    <TextBlock Text="🌀" FontSize="26"/>
-                                    <TextBlock Text="Trance Induction" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
-                                    <TextBlock Text='"relax", "deeper" → soft overlay pulse &amp; mantra'
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
-                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                               FontWeight="Bold" Margin="0,8,0,0"/>
-                                </StackPanel>
-                            </Border>
-                        </WrapPanel>
+                        <ItemsControl x:Name="AwarenessPresetItems">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel HorizontalAlignment="Stretch"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                                            CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="150"
+                                            Cursor="Hand" Tag="{Binding Id}" MouseLeftButtonUp="AwarenessPresetCard_Click">
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Icon}" FontSize="26"/>
+                                                <Border Background="#2A1A3E" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                                        CornerRadius="4" Padding="5,1" Margin="8,4,0,0" VerticalAlignment="Center"
+                                                        Visibility="{Binding RequiresAi, Converter={StaticResource BoolToVisibility}}">
+                                                    <TextBlock Text="AI" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Name}" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
+                                            <TextBlock Text="{Binding Description}"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                            <TextBlock Text="✓ Installed" Foreground="{DynamicResource PinkBrush}" FontSize="10"
+                                                       FontWeight="Bold" Margin="0,8,0,0"
+                                                       Visibility="{Binding MasterEnabled, Converter={StaticResource BoolToVisibility}}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
 
                     <!-- ==================== SOURCES + SAFETY ==================== -->
@@ -8624,7 +8591,57 @@
                                     <TextBlock Text="Loop protection" FontWeight="SemiBold"/>
                                 </CheckBox>
                                 <TextBlock Text="After a trigger fires, its keyword is muted for a few seconds so the reaction can't re-arm it."
-                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,0"/>
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,10"/>
+
+                                <!-- On-screen highlight: toggle + color picker. The highlight overlay
+                                     draws a glowing box around OCR-matched words on your screen. -->
+                                <CheckBox x:Name="ChkAwarenessHighlight"
+                                          Foreground="White" FontSize="12" Margin="0,4,0,2"
+                                          Checked="ChkAwarenessHighlight_Changed" Unchecked="ChkAwarenessHighlight_Changed">
+                                    <TextBlock Text="Highlight matched words on screen" FontWeight="SemiBold"/>
+                                </CheckBox>
+                                <TextBlock Text="Draws a glowing box around OCR-detected trigger words. Pick the glow color below."
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,6"/>
+                                <StackPanel x:Name="AwarenessHighlightColorPanel" Orientation="Horizontal" Margin="22,0,0,0">
+                                    <TextBlock Text="Color:" Foreground="#A0A0B8" FontSize="10"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Border x:Name="SwatchHighlightPink" Width="22" Height="22" CornerRadius="3"
+                                            Background="#FF69B4" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,4,0" Cursor="Hand" Tag="#FF69B4"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <Border x:Name="SwatchHighlightCyan" Width="22" Height="22" CornerRadius="3"
+                                            Background="#00E5FF" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,4,0" Cursor="Hand" Tag="#00E5FF"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <Border x:Name="SwatchHighlightLime" Width="22" Height="22" CornerRadius="3"
+                                            Background="#9DFF00" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,4,0" Cursor="Hand" Tag="#9DFF00"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <Border x:Name="SwatchHighlightOrange" Width="22" Height="22" CornerRadius="3"
+                                            Background="#FF8A00" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,4,0" Cursor="Hand" Tag="#FF8A00"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <Border x:Name="SwatchHighlightViolet" Width="22" Height="22" CornerRadius="3"
+                                            Background="#B388FF" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,4,0" Cursor="Hand" Tag="#B388FF"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <Border x:Name="SwatchHighlightWhite" Width="22" Height="22" CornerRadius="3"
+                                            Background="#FFFFFF" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,8,0" Cursor="Hand" Tag="#FFFFFF"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <TextBox x:Name="TxtAwarenessHighlightHex" Width="74" FontSize="10"
+                                             Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
+                                             Padding="4,3" VerticalAlignment="Center"
+                                             ToolTip="Custom hex color (e.g. #FF00AA)"
+                                             LostFocus="TxtAwarenessHighlightHex_LostFocus"
+                                             KeyDown="TxtAwarenessHighlightHex_KeyDown"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ChkAwarenessHighlightVisibleInCapture"
+                                          Content="Visible in screen capture / streams"
+                                          Foreground="#A0A0A0" FontSize="10" Margin="22,6,0,0"
+                                          Checked="ChkAwarenessHighlightVisibleInCapture_Changed"
+                                          Unchecked="ChkAwarenessHighlightVisibleInCapture_Changed"
+                                          ToolTip="Turn off to hide highlights from OBS / recordings (default). Turn on if highlights don't show on-screen at all — some GPU drivers hide WDA_EXCLUDEFROMCAPTURE windows."/>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -8636,7 +8653,7 @@
                                        Foreground="{DynamicResource PinkBrush}"
                                        TextDecorations="Underline"
                                        Click="LnkAwarenessAdvanced_Click">
-                                <Run Text="Customize individual triggers (advanced) →"/>
+                                <Run x:Name="LnkAwarenessAdvancedText" Text="Customize individual triggers (advanced) →"/>
                             </Hyperlink>
                         </TextBlock>
                     </Grid>

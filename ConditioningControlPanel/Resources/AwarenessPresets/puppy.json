@@ -1,0 +1,105 @@
+{
+  "id": "builtin.puppy",
+  "name": "Puppy Pet",
+  "icon": "🐶",
+  "description": "\"good boy\", \"sit\", \"stay\" — clicker + praise",
+  "longDescription": "Turns common pet-play praise words into positive reinforcement. Pairs a soft clicker cue with a short companion comment and a sprinkle of XP. Works great paired with the Screen OCR source so she catches what you're reading, not just what you type.",
+  "author": "Built-in",
+  "version": 2,
+  "isBuiltIn": true,
+  "requiresAi": false,
+  "avatarPromptTemplate": "You're her puppy owner/trainer. She just said or read the word '{keyword}'. Praise or cue her, in character, in one short sentence.",
+  "phrasePools": [ "PuppyPraise" ],
+  "cannedPhrases": {
+    "PuppyPraise": [
+      "Gooood boy~",
+      "Such a well-trained pup",
+      "*scratches behind your ears*",
+      "Yes, exactly like that.",
+      "Good puppy. Keep going.",
+      "That's my obedient little pet.",
+      "Roll over for me~",
+      "Sit. Stay. Perfect.",
+      "You're learning so fast.",
+      "*soft clicker*",
+      "Gentle, pup. Gentle.",
+      "Every treat you earn is another step deeper."
+    ]
+  },
+  "triggers": [
+    {
+      "keyword": "good boy",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 20,
+      "visualEffect": "HighlightOnly",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+{ "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
+        { "type": "Highlight" },
+        { "type": "Haptic", "intensity": 0.3 }
+      ]
+    },
+    {
+      "keyword": "good girl",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 20,
+      "visualEffect": "HighlightOnly",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+{ "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
+        { "type": "Highlight" },
+        { "type": "Haptic", "intensity": 0.3 }
+      ]
+    },
+    {
+      "keyword": "good pup",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 20,
+      "visualEffect": "HighlightOnly",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+{ "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "sit",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 30,
+      "visualEffect": "HighlightOnly",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "AvatarComment", "promptTemplate": "The word 'sit' just appeared. Give her a short, firm sit cue in character.", "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "stay",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 30,
+      "visualEffect": "HighlightOnly",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "AvatarComment", "promptTemplate": "The word 'stay' just appeared. Tell her to hold still, in character, one line.", "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "heel",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 30,
+      "visualEffect": "HighlightOnly",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    }
+  ]
+}

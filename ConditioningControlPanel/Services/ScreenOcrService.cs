@@ -139,6 +139,7 @@ namespace ConditioningControlPanel.Services
                 if (ccpRects.Length > 0)
                 {
                     filtered = new List<OcrWordHit>(words.Count);
+                    int dropped = 0;
                     foreach (var w in words)
                     {
                         bool insideCcp = false;
@@ -151,6 +152,24 @@ namespace ConditioningControlPanel.Services
                             }
                         }
                         if (!insideCcp) filtered.Add(w);
+                        else dropped++;
+                    }
+
+                    // Diagnostic: log how many hits got dropped + the CCP rects
+                    // being used to filter, so over-aggressive filtering is visible.
+                    if (App.Logger != null && dropped > 0)
+                    {
+                        var rectSb = new System.Text.StringBuilder();
+                        for (int i = 0; i < ccpRects.Length; i++)
+                        {
+                            if (i > 0) rectSb.Append(' ');
+                            var r = ccpRects[i];
+                            rectSb.Append('(').Append(r.X).Append(',').Append(r.Y)
+                                  .Append(' ').Append(r.Width).Append('x').Append(r.Height).Append(')');
+                        }
+                        App.Logger.Information(
+                            "OCR self-exclusion: dropped {Dropped}/{Total} words inside {N} CCP rect(s): {Rects}",
+                            dropped, words.Count, ccpRects.Length, rectSb.ToString());
                     }
                 }
             }
