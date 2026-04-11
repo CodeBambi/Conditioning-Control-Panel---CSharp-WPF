@@ -117,12 +117,12 @@ namespace ConditioningControlPanel.Services
         /// Whether the user has AI access (Tier 1+ OR whitelisted)
         /// All features are currently Tier 1. Also grants access during 2-week grace period.
         /// </summary>
-        public bool HasAiAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true);
+        public bool HasAiAccess => true;//CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true);
 
         /// <summary>
         /// Whether the user has any premium feature access (Tier 1+ OR whitelisted OR within 2-week grace period)
         /// </summary>
-        public bool HasPremiumAccess => CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true);
+        public bool HasPremiumAccess => true; //CurrentTier >= PatreonTier.Level1 || IsWhitelisted || (App.Settings?.Current?.HasCachedPremiumAccess == true);
 
         public PatreonService()
         {

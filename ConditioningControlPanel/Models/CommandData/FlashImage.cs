@@ -5,4 +5,4 @@ public record FlashImage(
     int Duration,
     int Size,
     int Opacity
-): AICommandData;
+): IAiCommandData;

@@ -4,11 +4,11 @@ using ConditioningControlPanel.Models.CommandData;
 
 namespace ConditioningControlPanel.Models;
 
-public class AICommand
+public class AiCommandData
 {
     [property: JsonPropertyName("command")] public AICommandType Command { get; set; }
-    [property: JsonPropertyName("data")] public AICommandData? Data { get; set; }
-    public static AICommand? ParseCommand(string json)
+    [property: JsonPropertyName("data")] public IAiCommandData? Data { get; set; }
+    public static AiCommandData? ParseCommand(string json)
     {
         var options = new JsonSerializerOptions
         {
@@ -18,8 +18,8 @@ public class AICommand
         };
         try
         {
-            options.Converters.Add(new AICommandConverter());
-            return JsonSerializer.Deserialize<AICommand>(json, options);
+            options.Converters.Add(new AiCommandConverter());
+            return JsonSerializer.Deserialize<AiCommandData>(json, options);
         }
         catch (Exception e)
         {
@@ -30,19 +30,19 @@ public class AICommand
     }
 }
 
-public class AICommandConverter : JsonConverter<AICommand>
+public class AiCommandConverter : JsonConverter<AiCommandData>
 {
-    public override AICommand? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override AiCommandData? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.String)
         {
             var stringTypeStr = reader.GetString();
             if (Enum.TryParse<AICommandType>(stringTypeStr, true, out var stringCommandType))
             {
-                return new AICommand { Command = stringCommandType };
+                return new AiCommandData { Command = stringCommandType };
             }
 
-            return new AICommand { Command = AICommandType.none };
+            return new AiCommandData { Command = AICommandType.none };
         }
 
         using var doc = JsonDocument.ParseValue(ref reader);
@@ -57,7 +57,7 @@ public class AICommandConverter : JsonConverter<AICommand>
             commandType = AICommandType.none;
 
         // Deserialize DATA based on command type
-        AICommandData? data = null;
+        IAiCommandData? data = null;
 
         if (root.TryGetProperty("data", out var dataProp))
         {
@@ -73,19 +73,19 @@ public class AICommandConverter : JsonConverter<AICommand>
                 AICommandType.spiral    => dataProp.Deserialize<SpiralPinkFiler>(options),
                 AICommandType.subliminal    => dataProp.Deserialize<Subliminal>(options),
                 AICommandType.bounce    => dataProp.Deserialize<Bounce>(options),
-                AICommandType.haptic    => dataProp.Deserialize<HapticCommand>(options),
+                AICommandType.haptic    => dataProp.Deserialize<HapticCommandData>(options),
                 _ => null
             };
         }
 
-        return new AICommand
+        return new AiCommandData
         {
             Command = commandType,
             Data = data
         };
     }
 
-    public override void Write(Utf8JsonWriter writer, AICommand value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, AiCommandData value, JsonSerializerOptions options)
     {
         writer.WriteStartObject();
         writer.WriteString("command", value.Command.ToString());

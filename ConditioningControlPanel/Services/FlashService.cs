@@ -173,7 +173,7 @@ namespace ConditioningControlPanel.Services
         /// Trigger a one-shot flash that works even when service is not running.
         /// Used by Autonomy Mode to trigger flashes independently of engine state.
         /// </summary>
-        public void TriggerFlashOnce(int? amount = null, int? duration = null, int? opacity = null, int? size = null)
+        public void TriggerFlashOnce(int? amount = null, int? duration = null, int? size = null)
         {
             if (_isBusy)
             {
@@ -196,7 +196,7 @@ namespace ConditioningControlPanel.Services
             // Start heartbeat timer for animation and fade management
             _heartbeatTimer?.Start();
 
-            Task.Run(() => LoadAndShowImages(amount, duration, opacity, size));
+            Task.Run(() => LoadAndShowImages(amount, duration, size));
         }
 
         public void LoadAssets()
@@ -270,13 +270,11 @@ namespace ConditioningControlPanel.Services
 
         #region Image Loading
 
-        private async void LoadAndShowImages(int? amount = null, int? duration = null, int? opacity = null, int? size = null)
+        private async void LoadAndShowImages(int? amount = null, int? duration = null, int? size = null)
         {
             try
             {
                 var settings = App.Settings.Current;
-                settings.FlashOpacity = opacity ?? settings.FlashOpacity;
-                settings.FlashDuration = duration ?? settings.FlashDuration;
                 var images = GetNextImages(settings.SimultaneousImages);
                 if (amount != null)
                     images = GetNextImages(amount.Value);
@@ -335,7 +333,7 @@ namespace ConditioningControlPanel.Services
                 // Show on UI thread - pass sound path only ONCE
                 await DispatcherHelper.RunOnUIAsync(() =>
                 {
-                    ShowImages(loadedImages, soundPath, false);
+                    ShowImages(loadedImages, soundPath, false, null, 0, duration);
                 });
             }
             catch (Exception ex)

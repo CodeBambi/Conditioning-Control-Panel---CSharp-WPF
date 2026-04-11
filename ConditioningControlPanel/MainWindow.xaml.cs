@@ -663,6 +663,9 @@ namespace ConditioningControlPanel
             _panicPressCount++;
             _lastPanicTime = now;
             
+            // ALWAYS cancel AI commands on ANY panic key press
+            App.Commands?.CancelAllCommands();
+            
             if (_isRunning)
             {
                 // First press while running: stop engine, pause session if active

@@ -5,4 +5,4 @@ namespace ConditioningControlPanel.Models.CommandData;
 public record Bounce(
     List<string> Words,
     [property: JsonPropertyName("On")] bool On
-): AICommandData;
+): IAiCommandData;

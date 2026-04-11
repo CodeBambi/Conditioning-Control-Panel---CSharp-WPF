@@ -2,8 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace ConditioningControlPanel.Models.CommandData;
 
-public record HapticCommand 
+public record HapticCommandData 
 (
      double Intensity,
     int Duration
-) : AICommandData;
+) : IAiCommandData;

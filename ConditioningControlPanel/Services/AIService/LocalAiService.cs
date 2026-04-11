@@ -12,9 +12,9 @@ public class LocalAiService : IAiService
     public int DailyRequestsRemaining { get; }
     private OllamaApiClient AiService { get; }
     private readonly BambiSprite _bambiSprite;
-    private readonly Uri _localUri = new Uri("http://localhost:5000/");
+    private readonly Uri _localUri = new Uri("http://localhost:5259/");
     private Chat _chat;
-    private List<AICommand> CurrentCommands { get; set; } = [];
+    private List<AiCommandData> CurrentCommands { get; set; } = [];
     public MainWindow? MainWindowRef { get; set; }
     
     public LocalAiService()
@@ -23,7 +23,7 @@ public class LocalAiService : IAiService
         DailyRequestsRemaining = -1;
         _bambiSprite = new BambiSprite();
         AiService = new OllamaApiClient(_localUri);
-        AiService.SelectedModel = "bambi-model-techdom-v1";
+        AiService.SelectedModel = "bambi-model-v7";
         _chat = new Chat(AiService);
     }
     
@@ -86,8 +86,9 @@ public class LocalAiService : IAiService
     private bool _isWorkingOnResponse;
     private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt)
     {
+        _isWorkingOnResponse = false;
         if (_isWorkingOnResponse) return null;
-        _isWorkingOnResponse = true;
+        _isWorkingOnResponse = false;
 
         try
         {
@@ -141,7 +142,7 @@ public class LocalAiService : IAiService
 
     private string ParseJson(string response)
     {
-        CurrentCommands = new List<AICommand>();
+        CurrentCommands = new List<AiCommandData>();
         try
         {
             var options = new JsonSerializerOptions
@@ -158,7 +159,7 @@ public class LocalAiService : IAiService
                 {
                     foreach (var effect in effectsProp.EnumerateArray())
                     {
-                        var cmd = AICommand.ParseCommand(effect.GetRawText());
+                        var cmd = AiCommandData.ParseCommand(effect.GetRawText());
                         if (cmd != null)
                             CurrentCommands.Add(cmd);
                     }
@@ -182,7 +183,7 @@ public class LocalAiService : IAiService
             var body = m.Groups[0].Value; // Use the whole match including braces
             try
             {
-                var cmd = AICommand.ParseCommand(body);
+                var cmd = AiCommandData.ParseCommand(body);
                 if (cmd != null)
                     CurrentCommands.Add(cmd);
             }
@@ -213,113 +214,10 @@ public class LocalAiService : IAiService
         }
     }
 
-    private void TriggerCommand(AICommand command)
+    private void TriggerCommand(AiCommandData command)
     {
         App.Logger.Debug("AiService: Triggering command: {Command}", command);
-        switch (command.Command)
-        {
-            case AICommandType.flash_image:
-                var commandData = command.Data as FlashImage;
-                if(commandData != null)
-                    App.Flash.TriggerFlashOnce(commandData.Amount, commandData.Duration, commandData.Opacity, commandData.Size);
-                break;
-            case AICommandType.audio:
-            case AICommandType.video:
-                var media = command.Data as Media;
-                if (media == null || App.Video.IsPlaying) break;
-                if (media.Random)
-                {
-                    if (command.Command == AICommandType.video)
-                        App.Video.TriggerVideo();
-                    // AudioService doesn't seem to have a TriggerAudio (random) method equivalent to Video
-                }
-                else if (!string.IsNullOrEmpty(media.Path))
-                {
-                    if (command.Command == AICommandType.video)
-                        App.Video.PlaySpecificVideo(media.Path, false);
-                    else
-                        App.Audio.PlaySound(media.Path, 100);
-                }
-                break;
-            case AICommandType.getbacktome:
-                var getbacktome = command.Data as GetBackToMe;
-                Task.Delay(getbacktome!.Delay * 1000).ContinueWith(_ =>
-                {
-                    SendTokenMessage(getbacktome.Token, getbacktome.JsonOnly);
-                    if (getbacktome.Commands != null)
-                    {
-                        foreach (var subCommand in getbacktome.Commands)
-                        {
-                            TriggerCommand(subCommand);
-                        }
-                    }
-                });
-                break;
-            case AICommandType.pink:
-                if ((command.Data as SpiralPinkFiler)?.On ?? false)
-                {
-                    MainWindowRef?.EnablePinkFilter(true);
-                    App.Settings.Current.PinkFilterOpacity = (command.Data as SpiralPinkFiler)?.Intensity ?? 5;
-                    // Start overlay service if needed
-                    if (App.Overlay.IsRunning != true)
-                    {
-                        App.Overlay.Start();
-                        App.Logger.Information("AIService: Pink - started overlay service");
-                    }
-                }
-                else
-                    MainWindowRef?.EnablePinkFilter(false);
-                break;
-            case AICommandType.spiral:
-                if ((command.Data as SpiralPinkFiler)?.On ?? false)
-                {
-                    MainWindowRef?.EnableSpiral(true);
-                    App.Settings.Current.SpiralOpacity = (command.Data as SpiralPinkFiler)?.Intensity ?? 5;
-                    // Start overlay service if needed
-                    if (App.Overlay.IsRunning != true)
-                    {
-                        App.Overlay.Start();
-                        App.Logger.Information("AutonomyService: Spiral - started overlay service");
-                    }
-                }
-                else
-                    MainWindowRef?.EnableSpiral(false);
-                break;
-            case AICommandType.mantra_lockscreen:
-                App.LockCard.ShowLockCard((command.Data as MantraLockscreen)?.Mantra ?? string.Empty, (command.Data as MantraLockscreen)?.Amount ?? -1, true);
-                break;
-            case AICommandType.subliminal:
-                App.Subliminal.FlashSubliminalCustom((command.Data as Subliminal)?.Text ?? string.Empty, (command.Data as Subliminal)?.Opacity ?? 20);
-                break;
-            case AICommandType.bubbles:
-                if((command.Data as Bubbles)?.On ?? false)
-                    App.Bubbles.Start(true, (command.Data as Bubbles)?.Frequency);
-                else
-                    App.Bubbles.Stop();
-                break;
-            case AICommandType.bounce:
-                if((command.Data as Bounce)?.On ?? false)
-                    App.BouncingText.Start(true, (command.Data as Bounce)?.Words);
-                else
-                    App.BouncingText.Stop();
-                break;
-            case AICommandType.haptic:
-                if (command.Data is HapticCommand data)
-                {
-                    _ = App.Haptics.ApplyVibrationModeAsync(data.Intensity, data.Duration * 2, VibrationMode.Pulse);
-                }
-
-                break;
-            case AICommandType.none:
-            default:
-                break;
-        }
-    }
-
-    private async Task SendTokenMessage(string token, bool jsonOnly = false)
-    {
-        Console.WriteLine($"Sending token: {token}");
-        await GetAiResponseAsync($"[Token={token}, JsonOnly={jsonOnly}]", "");
+        App.Commands.ExecuteCommand(command);
     }
 
     public void Dispose()

@@ -3,7 +3,8 @@ namespace ConditioningControlPanel.Models.CommandData;
 public record GetBackToMe(
     int Delay,
     string Token, 
-    List<AICommand>? Commands, 
+    List<AiCommandData>? Commands, 
     string? Text, 
-    bool JsonOnly 
-): AICommandData;
+    bool JsonOnly,
+    bool Stop = false
+): IAiCommandData;

@@ -1,6 +1,6 @@
 namespace ConditioningControlPanel.Models.CommandData;
 
-public interface AICommandData
+public interface IAiCommandData
 {
     
 }

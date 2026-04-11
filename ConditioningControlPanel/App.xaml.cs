@@ -8,6 +8,7 @@ using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.AIService;
+using ConditioningControlPanel.Services.Commands;
 using Serilog;
 using Velopack;
 
@@ -182,6 +183,7 @@ namespace ConditioningControlPanel
         public static QuestService Quests { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
         public static IAiService Ai { get; private set; } = null!;
+        public static IAiCommandService Commands { get; private set; } = null!;
         public static WindowAwarenessService WindowAwareness { get; private set; } = null!;
         public static PatreonService Patreon { get; private set; } = null!;
         public static UpdateService Update { get; private set; } = null!;
@@ -642,6 +644,7 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.85, "Initializing companion...");
             Ai = new LocalAiService();
+            Commands = new AiCommandService();
             WindowAwareness = new WindowAwarenessService();
             Patreon = new PatreonService();
             ProfileSync = new ProfileSyncService();
