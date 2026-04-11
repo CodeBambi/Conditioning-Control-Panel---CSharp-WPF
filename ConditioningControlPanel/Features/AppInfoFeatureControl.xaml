@@ -1,0 +1,37 @@
+<UserControl x:Class="ConditioningControlPanel.Features.AppInfoFeatureControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+
+    <StackPanel>
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="20,20" Margin="0,0,0,10">
+            <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="{loc:Str label_app_info}"
+                           Foreground="{DynamicResource PinkBrush}"
+                           FontSize="20" FontWeight="Bold"
+                           HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBlock x:Name="TxtVersion" Text=""
+                           Foreground="White"
+                           FontSize="14"
+                           HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                <TextBlock x:Name="TxtProduct" Text=""
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="11"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <Button x:Name="BtnCheckUpdates" Content="{loc:Str btn_check_updates}"
+                Style="{StaticResource OutlineButton}"
+                Padding="14,12" FontSize="14"
+                Click="BtnCheckUpdates_Click"
+                Margin="0,0,0,8"/>
+
+        <Button x:Name="BtnReportBug" Content="{loc:Str btn_report_bug}"
+                Style="{StaticResource OutlineButton}"
+                Padding="14,12" FontSize="14"
+                Click="BtnReportBug_Click"/>
+    </StackPanel>
+</UserControl>

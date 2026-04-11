@@ -45,13 +45,6 @@ public class BubbleService : IDisposable
 
         var settings = App.Settings.Current;
 
-        // Check level requirement unless bypassed (e.g., during sessions)
-        if (!bypassLevelCheck && !settings.IsLevelUnlocked(20))
-        {
-            App.Logger?.Information("BubbleService: Level {Level} is below 20, bubbles not available", settings.PlayerLevel);
-            return;
-        }
-
         _isRunning = true;
 
         _assetsPath = App.UserAssetsPath;

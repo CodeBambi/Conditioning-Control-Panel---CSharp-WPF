@@ -139,12 +139,6 @@ public class OverlayService : IDisposable
         {
             var settings = App.Settings.Current;
 
-            if (!BypassLevelCheck && !settings.IsLevelUnlocked(10))
-            {
-                App.Logger?.Information("OverlayService: Level {Level} is below 10, overlays not available", settings.PlayerLevel);
-                return;
-            }
-
             if (settings.PinkFilterEnabled)
             {
                 StartPinkFilter();
@@ -349,14 +343,6 @@ public class OverlayService : IDisposable
     private void UpdateOverlays(object? sender, EventArgs e)
     {
         var settings = App.Settings.Current;
-
-        if (!BypassLevelCheck && !settings.IsLevelUnlocked(10))
-        {
-            StopPinkFilter();
-            StopSpiral();
-            StopBrainDrainBlur();
-            return;
-        }
 
         if (settings.PinkFilterEnabled && _pinkFilterWindows.Count == 0)
         {

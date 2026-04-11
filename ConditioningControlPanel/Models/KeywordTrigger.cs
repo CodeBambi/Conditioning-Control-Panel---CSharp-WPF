@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Newtonsoft.Json;
@@ -18,6 +19,17 @@ namespace ConditioningControlPanel.Models
         /// <summary>Source that detected the match: "OCR", "Keyboard", "Text"</summary>
         public string Source { get; set; } = "";
         public DateTime FiredAt { get; set; }
+
+        /// <summary>
+        /// Snapshot of the action types that ran for this fire, captured at
+        /// fire time. Used by the "Last Detected" pulse feed to draw per-action
+        /// icon chips with tooltips. Format is one entry per action:
+        ///   "PlayAudio", "Highlight", "Haptic", "AddXp:5", "AvatarComment",
+        ///   "VisualEffect:ImageFlash", "VisualEffect:ExactSubliminal", etc.
+        /// Stored as strings (not live action references) so the feed survives
+        /// preset uninstalls and later trigger edits.
+        /// </summary>
+        public List<string> ActionKeys { get; set; } = new();
     }
 
     public enum KeywordMatchType
@@ -168,6 +180,23 @@ namespace ConditioningControlPanel.Models
         {
             get => _xpAward;
             set { _xpAward = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        // --- Composable action list (Phase 1 refactor) ---
+        //
+        // When non-empty, KeywordTriggerService dispatches by iterating this list, which
+        // allows a trigger to combine audio + visual + avatar comment + xp in a single
+        // fire. When empty (legacy save / defensive fallback), the service falls back to
+        // the flat fields above so older data keeps working. SettingsService synthesizes
+        // this list on load for any trigger that doesn't have one, and the Exclusives
+        // editor calls RebuildActionsFromFlatFields after each edit to keep them in sync.
+
+        private List<KeywordAction> _actions = new();
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<KeywordAction> Actions
+        {
+            get => _actions;
+            set { _actions = value ?? new List<KeywordAction>(); OnPropertyChanged(); }
         }
 
         /// <summary>Last time this trigger fired (runtime only, not persisted)</summary>

@@ -407,6 +407,14 @@ namespace ConditioningControlPanel
 
             // Initialize browser when window is loaded
             Loaded += MainWindow_Loaded;
+
+            // velvet-mosaic: highlight dashboard cards whose feature is enabled, and
+            // keep them in sync when settings change anywhere else.
+            Loaded += (_, __) => RefreshFeatureCardActiveStates();
+            if (App.Settings?.Current is System.ComponentModel.INotifyPropertyChanged settingsInpc)
+            {
+                settingsInpc.PropertyChanged += OnSettingsPropertyChangedForCards;
+            }
         }
 
         private void OnXPChanged(object? sender, double xp)
@@ -426,7 +434,7 @@ namespace ConditioningControlPanel
 
                 // Start autonomy if it was enabled but couldn't start earlier (Patreon wasn't validated yet)
                 var s = App.Settings?.Current;
-                if (s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven && s.IsLevelUnlocked(100)
+                if (s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven
                     && App.Autonomy?.IsEnabled != true)
                 {
                     var hasAccess = s.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
@@ -755,6 +763,46 @@ namespace ConditioningControlPanel
                 var currentKey = App.Settings.Current.PanicKey;
                 BtnPanicKey.Content = _isCapturingPanicKey ? "Press any key..." : $"🔑 {currentKey}";
             }
+        }
+
+        // ---- velvet-mosaic: internal wrappers called by popup feature UserControls ----
+        // These delegate complex system-level operations (assets, panic key, offline mode,
+        // no-panic) to the existing private handlers so the popup doesn't duplicate logic.
+
+        internal void RequestPickAssetsFolder()
+        {
+            BtnPickAssetsFolder_Click(this, new RoutedEventArgs());
+        }
+
+        internal void RequestBeginPanicKeyCapture()
+        {
+            BtnPanicKey_Click(this, new RoutedEventArgs());
+        }
+
+        internal void RequestToggleOfflineMode(bool enable)
+        {
+            // Drive the existing handler via the legacy checkbox so the two-way sync logic
+            // (UpdateOfflineModeUI, login button disable, etc.) runs exactly once.
+            if (ChkOfflineMode == null) return;
+            if ((ChkOfflineMode.IsChecked ?? false) == enable) return;
+            ChkOfflineMode.IsChecked = enable;
+        }
+
+        internal void RequestToggleNoPanic(bool disablePanic)
+        {
+            if (ChkNoPanic == null) return;
+            if ((ChkNoPanic.IsChecked ?? false) == disablePanic) return;
+            ChkNoPanic.IsChecked = disablePanic;
+        }
+
+        internal bool RequestToggleWindowsStartup(bool enable)
+        {
+            // Drive the existing handler via the legacy checkbox so the combined-with-hidden
+            // warning runs. Return the final state reflected on the checkbox.
+            if (ChkWinStart == null) return StartupManager.IsRegistered();
+            if ((ChkWinStart.IsChecked ?? false) == enable) return enable;
+            ChkWinStart.IsChecked = enable;
+            return ChkWinStart.IsChecked ?? false;
         }
 
         private void LoadLogo()
@@ -1731,10 +1779,8 @@ namespace ConditioningControlPanel
             RefreshPresetsList();
         }
 
-        private void BtnProgression_Click(object sender, RoutedEventArgs e)
-        {
-            ShowTab("progression");
-        }
+        // BtnProgression handler removed in velvet-mosaic phase 6 — the Progression
+        // tab no longer has a header button; its features live on the Dashboard now.
 
         private void BtnQuests_Click(object sender, RoutedEventArgs e)
         {
@@ -3656,7 +3702,6 @@ namespace ConditioningControlPanel
             var activeStyle = FindResource("TabButtonActive") as Style;
             BtnSettings.Style = inactiveStyle;
             BtnPresets.Style = inactiveStyle;
-            BtnProgression.Style = inactiveStyle;
             BtnQuests.Style = inactiveStyle;
             BtnEnhancements.Style = inactiveStyle;
             BtnAchievements.Style = inactiveStyle;
@@ -3681,21 +3726,13 @@ namespace ConditioningControlPanel
                     BtnPresets.Style = activeStyle;
                     break;
 
+                // "progression" tab removed in velvet-mosaic phase 6 — its content
+                // is now on the Dashboard. Legacy callers (e.g. older tutorial steps)
+                // that request ShowTab("progression") fall through to the Dashboard.
                 case "progression":
-                    App.Logger?.Debug("ShowTab: Attempting to make ProgressionTab visible.");
-                    try
-                    {
-                        ProgressionTab.Visibility = Visibility.Visible;
-                        AnimateTabIn(ProgressionTab);
-                        RestartSkillTreeAnimations();
-                        App.Logger?.Debug("ShowTab: ProgressionTab visibility set to Visible.");
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Error("ShowTab: Error making ProgressionTab visible: {Error}", ex.Message);
-                        throw;
-                    }
-                    BtnProgression.Style = activeStyle;
+                    SettingsTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(SettingsTab);
+                    BtnSettings.Style = activeStyle;
                     break;
 
                 case "quests":
@@ -4728,7 +4765,6 @@ namespace ConditioningControlPanel
                 var companionId = (Models.CompanionId)i;
                 var def = Models.CompanionDefinition.GetById(companionId);
                 var progress = App.Companion.GetProgress(companionId);
-                var isUnlocked = App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false;
 
                 // Hide companion card if the active mod doesn't support this avatar set
                 if (App.Mods?.IsCompanionSupported(companionId) == false)
@@ -4743,11 +4779,8 @@ namespace ConditioningControlPanel
                 var companionName = def.GetDisplayName(isSlutMode);
                 nameTexts[i].Text = App.Mods?.MakeModAware(companionName) ?? companionName;
 
-                // Update level text - show required level if locked
-                if (isUnlocked)
-                    levelTexts[i].Text = progress.IsMaxLevel ? "MAX" : $"Lv.{progress.Level}";
-                else
-                    levelTexts[i].Text = $"Lv.{def.RequiredLevel}";
+                // All companions are unlocked from level 1
+                levelTexts[i].Text = progress.IsMaxLevel ? "MAX" : $"Lv.{progress.Level}";
 
                 // Highlight active companion with colored border
                 var isActive = companionId == activeId;
@@ -4756,9 +4789,9 @@ namespace ConditioningControlPanel
                     ? new System.Windows.Media.SolidColorBrush(color)
                     : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Transparent);
 
-                // Update lock visibility based on player level
-                lockTexts[i].Visibility = isUnlocked ? Visibility.Collapsed : Visibility.Visible;
-                cards[i].Opacity = isUnlocked ? 1.0 : 0.5;
+                // Companion lock visuals removed — every companion is available from level 1.
+                lockTexts[i].Visibility = Visibility.Collapsed;
+                cards[i].Opacity = 1.0;
             }
 
             // Update active companion details
@@ -4977,18 +5010,6 @@ namespace ConditioningControlPanel
 
             var companionId = (Models.CompanionId)companionIndex;
             var def = Models.CompanionDefinition.GetById(companionId);
-            var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
-
-            // Check level requirement using IsLevelUnlocked (respects OG unlock toggle)
-            if (!(App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false))
-            {
-                System.Windows.MessageBox.Show(
-                    Loc.GetF("msg_companion_level_required", def.Name, def.RequiredLevel, playerLevel),
-                    Loc.Get("dialog_level_required"),
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-                return;
-            }
 
             // Switch companion
             if (App.Companion?.SwitchCompanion(companionId) == true)
@@ -6864,6 +6885,7 @@ namespace ConditioningControlPanel
                 XPAward = 10
             };
 
+            KeywordTriggerService.RebuildActionsFromFlatFields(newTrigger);
             triggers.Add(newTrigger);
             App.Settings.Save();
             RefreshKeywordTriggerList();
@@ -6937,6 +6959,7 @@ namespace ConditioningControlPanel
                     trigger.AudioFilePath = App.KeywordTriggers?.FindLinkedAudio(txt.Text);
                 }
 
+                KeywordTriggerService.RebuildActionsFromFlatFields(trigger);
                 App.Settings.Save();
             }
         }
@@ -6959,6 +6982,7 @@ namespace ConditioningControlPanel
             if (dlg.ShowDialog() == true)
             {
                 trigger.AudioFilePath = dlg.FileName;
+                KeywordTriggerService.RebuildActionsFromFlatFields(trigger);
                 App.Settings.Save();
                 RefreshKeywordTriggerList();
             }
@@ -6975,6 +6999,7 @@ namespace ConditioningControlPanel
             if (trigger != null)
             {
                 trigger.VisualEffect = (KeywordVisualEffect)cmb.SelectedIndex;
+                KeywordTriggerService.RebuildActionsFromFlatFields(trigger);
                 App.Settings.Save();
             }
         }
@@ -7005,6 +7030,7 @@ namespace ConditioningControlPanel
             if (trigger != null)
             {
                 trigger.AudioVolume = (int)slider.Value;
+                KeywordTriggerService.RebuildActionsFromFlatFields(trigger);
                 App.Settings.Save();
             }
         }
@@ -7020,6 +7046,7 @@ namespace ConditioningControlPanel
             if (trigger != null)
             {
                 trigger.HapticEnabled = chk.IsChecked == true;
+                KeywordTriggerService.RebuildActionsFromFlatFields(trigger);
                 App.Settings.Save();
             }
         }
@@ -7035,6 +7062,7 @@ namespace ConditioningControlPanel
             if (trigger != null)
             {
                 trigger.DuckAudio = chk.IsChecked == true;
+                KeywordTriggerService.RebuildActionsFromFlatFields(trigger);
                 App.Settings.Save();
             }
         }
@@ -7047,8 +7075,13 @@ namespace ConditioningControlPanel
             var triggers = App.Settings?.Current?.KeywordTriggers;
             if (triggers == null) return;
 
+            // Filter out preset clones (Id prefix "preset:") — those are managed
+            // via their own preset detail dialogs on the Awareness tab. The
+            // Exclusives trigger list is for user-authored custom triggers only,
+            // so installing/uninstalling a preset pack never pollutes this list.
             foreach (var trigger in triggers)
             {
+                if (trigger?.Id?.StartsWith("preset:", StringComparison.Ordinal) == true) continue;
                 var row = CreateKeywordTriggerRow(trigger);
                 KeywordTriggerListPanel.Children.Add(row);
             }
@@ -7262,6 +7295,9 @@ namespace ConditioningControlPanel
                 if (ChkAwarenessKeyboard != null) ChkAwarenessKeyboard.IsChecked = settings.KeywordTriggersEnabled;
                 if (ChkAwarenessIgnoreOwnUi != null) ChkAwarenessIgnoreOwnUi.IsChecked = settings.AwarenessIgnoreOwnUi;
                 if (ChkAwarenessLoopProtection != null) ChkAwarenessLoopProtection.IsChecked = settings.AwarenessLoopProtectionEnabled;
+                if (ChkAwarenessHighlight != null) ChkAwarenessHighlight.IsChecked = settings.KeywordHighlightEnabled;
+                if (ChkAwarenessHighlightVisibleInCapture != null) ChkAwarenessHighlightVisibleInCapture.IsChecked = settings.OcrHighlightVisibleInCapture;
+                SyncAwarenessHighlightSwatchUi();
 
                 UpdateAwarenessStatusIndicator(masterOn);
             }
@@ -7277,7 +7313,38 @@ namespace ConditioningControlPanel
                 _awarenessSubscribed = true;
             }
 
+            // Subscribe once to preset install/uninstall events so the Exclusives
+            // trigger list and the Awareness preset cards both stay in sync with
+            // whatever the user does in a preset detail dialog, regardless of
+            // which tab they're on when the change happens.
+            if (!_presetsChangedSubscribed && App.KeywordPresets != null)
+            {
+                App.KeywordPresets.PresetsChanged += OnPresetsChanged;
+                _presetsChangedSubscribed = true;
+            }
+
             RefreshAwarenessPulseFeed();
+            RefreshAwarenessPresetCards();
+        }
+
+        private bool _presetsChangedSubscribed;
+
+        private void OnPresetsChanged(object? sender, EventArgs e)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+            dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    RefreshKeywordTriggerList();     // Exclusives trigger list — drops removed preset clones
+                    RefreshAwarenessPresetCards();   // Awareness tab card highlights
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("OnPresetsChanged refresh failed: {Error}", ex.Message);
+                }
+            }));
         }
 
         private void OnAwarenessTriggerFired(object? sender, KeywordTrigger trigger)
@@ -7348,11 +7415,12 @@ namespace ConditioningControlPanel
             };
 
             var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });   // 0 accent bar
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });     // 1 keyword
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });     // 2 action chips
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // 3 filler
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });     // 4 source chip
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });     // 5 time
 
             // Pink accent bar
             var dot = new System.Windows.Shapes.Rectangle
@@ -7380,6 +7448,12 @@ namespace ConditioningControlPanel
             Grid.SetColumn(keywordBlock, 1);
             grid.Children.Add(keywordBlock);
 
+            // Action chip strip — one small emoji per action the trigger fired,
+            // with a tooltip explaining what the action does on hover.
+            var chipStrip = BuildActionChipStrip(f.ActionKeys);
+            Grid.SetColumn(chipStrip, 2);
+            grid.Children.Add(chipStrip);
+
             // Source chip
             var sourceChip = new Border
             {
@@ -7397,7 +7471,7 @@ namespace ConditioningControlPanel
                 FontSize = 9,
                 FontWeight = FontWeights.Bold
             };
-            Grid.SetColumn(sourceChip, 3);
+            Grid.SetColumn(sourceChip, 4);
             grid.Children.Add(sourceChip);
 
             // Time ago
@@ -7409,11 +7483,95 @@ namespace ConditioningControlPanel
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(10, 0, 0, 0)
             };
-            Grid.SetColumn(timeBlock, 4);
+            Grid.SetColumn(timeBlock, 5);
             grid.Children.Add(timeBlock);
 
             row.Child = grid;
             return row;
+        }
+
+        /// <summary>
+        /// Builds a horizontal row of small emoji "chip" icons representing every
+        /// action the trigger fired. Each chip has a tooltip that explains what
+        /// the action does when hovered. The emoji/tooltip map is kept in
+        /// <see cref="GetActionChipDisplay"/> so it can be extended as new
+        /// action types are added.
+        /// </summary>
+        private StackPanel BuildActionChipStrip(List<string> actionKeys)
+        {
+            var strip = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, 0, 0)
+            };
+
+            if (actionKeys == null || actionKeys.Count == 0) return strip;
+
+            foreach (var key in actionKeys)
+            {
+                var (icon, tooltip) = GetActionChipDisplay(key);
+                if (string.IsNullOrEmpty(icon)) continue;
+
+                var chip = new TextBlock
+                {
+                    Text = icon,
+                    FontSize = 13,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 4, 0),
+                    ToolTip = tooltip,
+                };
+                // Surface the tooltip after a short hover delay.
+                ToolTipService.SetInitialShowDelay(chip, 200);
+                ToolTipService.SetBetweenShowDelay(chip, 0);
+
+                strip.Children.Add(chip);
+            }
+
+            return strip;
+        }
+
+        /// <summary>
+        /// Returns the (emoji, tooltip) display pair for a fire-record action key.
+        /// Keys come from <c>KeywordTriggerService.BuildActionKeySnapshot</c> and
+        /// look like <c>"PlayAudio"</c>, <c>"VisualEffect:ImageFlash"</c>, <c>"AddXp:5"</c>.
+        /// Returns empty values for unknown keys so the chip strip silently skips them.
+        /// </summary>
+        private static (string icon, string tooltip) GetActionChipDisplay(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return ("", "");
+
+            // Parse leading discriminator and optional ":argument"
+            var colon = key.IndexOf(':');
+            var type = colon < 0 ? key : key.Substring(0, colon);
+            var arg = colon < 0 ? "" : key.Substring(colon + 1);
+
+            return type switch
+            {
+                "PlayAudio"      => ("🔊", "Plays an audio clip when the word is detected"),
+                "Highlight"      => ("👁", "Draws a glowing box around the matched word on screen (OCR matches only)"),
+                "Haptic"         => ("💥", "Fires a haptic vibration pattern on connected devices"),
+                // "AddXp" intentionally omitted — progression XP is an internal mechanic,
+                // not a user-facing trigger effect.
+                "AvatarComment"  => ("💬", "Makes the avatar comment on the matched word (AI + canned fallback)"),
+                "ExtendSession"  => ("⏱", string.IsNullOrEmpty(arg)
+                                        ? "Extends the current session"
+                                        : $"Extends the current session by {arg} minutes"),
+                "ChasterAddTime" => ("🔒", string.IsNullOrEmpty(arg)
+                                        ? "Adds time to the Chaster lock"
+                                        : $"Adds {arg} minutes to the Chaster lock"),
+                "VisualEffect"   => arg switch
+                {
+                    "SubliminalFlash" => ("✨", "Flashes a random word from your subliminal pool"),
+                    "ExactSubliminal" => ("🔤", "Flashes the matched keyword itself as subliminal text"),
+                    "ImageFlash"      => ("⚡", "Fires a flash burst image when the word is detected"),
+                    "OverlayPulse"    => ("🌫", "Briefly intensifies the screen overlay"),
+                    "MindWipe"        => ("🧠", "Triggers the MindWipe effect"),
+                    "Bubbles"         => ("🫧", "Spawns bubbles on screen"),
+                    _                 => ("✨", $"Fires visual effect: {arg}"),
+                },
+                _ => ("", ""),
+            };
         }
 
         private static string FormatTimeAgo(DateTime t)
@@ -7564,20 +7722,187 @@ namespace ConditioningControlPanel
             App.Settings?.Save();
         }
 
+        // ---- Awareness tab: on-screen keyword highlight toggle + color picker ----
+
+        private void ChkAwarenessHighlight_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            settings.KeywordHighlightEnabled = ChkAwarenessHighlight?.IsChecked == true;
+            App.Settings?.Save();
+
+            // Keep the Exclusives-tab mirror checkbox in sync so both UIs agree.
+            if (ChkKeywordHighlightEnabled != null && ChkKeywordHighlightEnabled.IsChecked != settings.KeywordHighlightEnabled)
+                ChkKeywordHighlightEnabled.IsChecked = settings.KeywordHighlightEnabled;
+
+            SyncAwarenessHighlightSwatchUi();
+        }
+
+        private void ChkAwarenessHighlightVisibleInCapture_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            settings.OcrHighlightVisibleInCapture = ChkAwarenessHighlightVisibleInCapture?.IsChecked == true;
+            App.Settings?.Save();
+
+            // Flip display affinity on all existing overlay windows immediately.
+            App.KeywordHighlight?.RefreshCaptureVisibility();
+
+            // Mirror the Exclusives-tab checkbox so both stay in agreement.
+            if (ChkHighlightVisibleInCapture != null && ChkHighlightVisibleInCapture.IsChecked != settings.OcrHighlightVisibleInCapture)
+                ChkHighlightVisibleInCapture.IsChecked = settings.OcrHighlightVisibleInCapture;
+        }
+
+        private void AwarenessHighlightSwatch_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement fe) return;
+            var hex = fe.Tag?.ToString();
+            if (string.IsNullOrEmpty(hex)) return;
+            ApplyAwarenessHighlightColor(hex);
+        }
+
+        private void TxtAwarenessHighlightHex_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            ApplyAwarenessHighlightColor(TxtAwarenessHighlightHex?.Text);
+        }
+
+        private void TxtAwarenessHighlightHex_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                ApplyAwarenessHighlightColor(TxtAwarenessHighlightHex?.Text);
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// Validates a hex color string and writes it to settings. Silently no-ops
+        /// on malformed input so a half-typed value in the textbox doesn't wipe
+        /// the user's previously-set color.
+        /// </summary>
+        private void ApplyAwarenessHighlightColor(string? hex)
+        {
+            if (string.IsNullOrWhiteSpace(hex)) return;
+            var trimmed = hex.Trim();
+            if (!trimmed.StartsWith('#')) trimmed = "#" + trimmed;
+
+            try
+            {
+                var obj = System.Windows.Media.ColorConverter.ConvertFromString(trimmed);
+                if (obj is not System.Windows.Media.Color) return;
+            }
+            catch { return; }
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            settings.KeywordHighlightColor = trimmed;
+            App.Settings?.Save();
+
+            SyncAwarenessHighlightSwatchUi();
+        }
+
+        /// <summary>
+        /// Refreshes the swatch row and hex textbox from current settings so the
+        /// UI reflects any change (from load, swatch click, or the Exclusives tab).
+        /// </summary>
+        private void SyncAwarenessHighlightSwatchUi()
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            if (TxtAwarenessHighlightHex != null)
+                TxtAwarenessHighlightHex.Text = settings.KeywordHighlightColor;
+
+            // Dim all swatches then re-highlight the selected one so the user
+            // can see which preset (if any) matches their current color.
+            var selected = settings.KeywordHighlightColor?.ToUpperInvariant() ?? "";
+            foreach (var swatch in new[] {
+                SwatchHighlightPink, SwatchHighlightCyan, SwatchHighlightLime,
+                SwatchHighlightOrange, SwatchHighlightViolet, SwatchHighlightWhite })
+            {
+                if (swatch == null) continue;
+                var tag = swatch.Tag?.ToString()?.ToUpperInvariant() ?? "";
+                swatch.BorderBrush = tag == selected
+                    ? System.Windows.Media.Brushes.White
+                    : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x3A, 0x3A, 0x5A));
+                swatch.BorderThickness = tag == selected ? new Thickness(2) : new Thickness(1);
+            }
+        }
+
         private void AwarenessPresetCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            // Placeholder: preset packs are not wired yet. Surface a friendly notice
-            // so the cards feel alive without claiming functionality we haven't shipped.
-            MessageBox.Show(
-                "Preset packs are coming in the next update. For now, you can build your own triggers from the advanced editor below.",
-                "Coming soon",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            if (sender is not FrameworkElement fe) return;
+            var presetId = fe.Tag?.ToString();
+            if (string.IsNullOrEmpty(presetId)) return;
+
+            var preset = App.KeywordPresets?.GetPreset(presetId);
+            if (preset == null) return;
+
+            var dlg = new AwarenessPresetDetailDialog(preset) { Owner = this };
+            dlg.ShowDialog();
+
+            if (dlg.Changed)
+                RefreshAwarenessPresetCards();
+        }
+
+        /// <summary>
+        /// Rebinds the Awareness tab preset card grid from the current preset service state.
+        /// Called on tab open and after any install/uninstall so the "installed" pip updates.
+        /// </summary>
+        public void RefreshAwarenessPresetCards()
+        {
+            if (AwarenessPresetItems == null) return;
+            var presets = App.KeywordPresets?.VisiblePresets;
+            // Reassign to force re-bind even if the underlying list reference didn't change
+            AwarenessPresetItems.ItemsSource = null;
+            AwarenessPresetItems.ItemsSource = presets;
+
+            UpdateAwarenessAdvancedLinkText();
+        }
+
+        /// <summary>
+        /// The "Customize individual triggers" hyperlink relabels itself based on
+        /// whether any built-in preset is installed: "Customize installed presets →"
+        /// when at least one is installed, or the plain "advanced editor" fallback
+        /// when none are, which also flips the click target to the Exclusives tab.
+        /// </summary>
+        private void UpdateAwarenessAdvancedLinkText()
+        {
+            if (LnkAwarenessAdvancedText == null) return;
+            LnkAwarenessAdvancedText.Text = GetMostRecentlyInstalledPreset() != null
+                ? "Customize installed presets →"
+                : "Advanced editor →";
+        }
+
+        /// <summary>
+        /// Returns the preset to open when the user clicks the Awareness "customize"
+        /// hyperlink. Tie-break: first visible preset whose MasterEnabled is true.
+        /// Returns null when no preset is installed.
+        /// </summary>
+        private KeywordTriggerPreset? GetMostRecentlyInstalledPreset()
+        {
+            var presets = App.KeywordPresets?.VisiblePresets;
+            if (presets == null) return null;
+            return presets.FirstOrDefault(p => p?.MasterEnabled == true);
         }
 
         private void LnkAwarenessAdvanced_Click(object sender, RoutedEventArgs e)
         {
-            // Jump to the existing power-user editor in the Exclusives tab.
+            // Prefer opening the installed preset's inline editor dialog.
+            var installed = GetMostRecentlyInstalledPreset();
+            if (installed != null)
+            {
+                var dlg = new AwarenessPresetDetailDialog(installed) { Owner = this };
+                dlg.ShowDialog();
+                if (dlg.Changed)
+                    RefreshAwarenessPresetCards();
+                return;
+            }
+
+            // No preset installed — fall back to the Exclusives tab power-user editor.
             ShowTab("patreon");
         }
 
@@ -10380,137 +10705,7 @@ namespace ConditioningControlPanel
         private void SetHelpContent(Button helpButton, string sectionId)
         {
             var content = Services.HelpContentService.GetContent(sectionId);
-            helpButton.ToolTip = CreateHelpTooltip(content);
-        }
-
-        private ToolTip CreateHelpTooltip(Models.HelpContent content)
-        {
-            var tooltip = new ToolTip
-            {
-                Style = (Style)FindResource("HelpTooltipStyle"),
-                Content = BuildHelpContentPanel(content)
-            };
-            return tooltip;
-        }
-
-        private StackPanel BuildHelpContentPanel(Models.HelpContent content)
-        {
-            var panel = new StackPanel { MaxWidth = 360 };
-
-            // Header
-            var header = new Border
-            {
-                Background = new SolidColorBrush(Color.FromRgb(26, 26, 50)),
-                Padding = new Thickness(12, 10, 12, 10),
-                CornerRadius = new CornerRadius(8, 8, 0, 0)
-            };
-            var headerStack = new StackPanel { Orientation = Orientation.Horizontal };
-            headerStack.Children.Add(new TextBlock
-            {
-                Text = content.Icon,
-                FontSize = 18,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 10, 0)
-            });
-            headerStack.Children.Add(new TextBlock
-            {
-                Text = content.Title,
-                Foreground = (Brush)FindResource("PinkBrush"),
-                FontSize = 14,
-                FontWeight = FontWeights.Bold,
-                VerticalAlignment = VerticalAlignment.Center
-            });
-            header.Child = headerStack;
-            panel.Children.Add(header);
-
-            // "What It Does" section
-            var whatSection = new StackPanel { Margin = new Thickness(12, 12, 12, 8) };
-            whatSection.Children.Add(new TextBlock
-            {
-                Text = "What It Does",
-                Foreground = (Brush)FindResource("PinkBrush"),
-                FontSize = 11,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(0, 0, 0, 4)
-            });
-            whatSection.Children.Add(new TextBlock
-            {
-                Text = content.WhatItDoes,
-                Foreground = new SolidColorBrush(Color.FromRgb(208, 208, 208)),
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
-                LineHeight = 18
-            });
-            panel.Children.Add(whatSection);
-
-            // Tips section (if any)
-            if (content.HasTips)
-            {
-                var tipsSection = new StackPanel { Margin = new Thickness(12, 0, 12, 8) };
-                tipsSection.Children.Add(new TextBlock
-                {
-                    Text = "\uD83D\uDCA1 Tips",
-                    Foreground = new SolidColorBrush(Color.FromRgb(255, 215, 0)),
-                    FontSize = 11,
-                    FontWeight = FontWeights.Bold,
-                    Margin = new Thickness(0, 0, 0, 4)
-                });
-                foreach (var tip in content.Tips)
-                {
-                    var tipRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
-                    tipRow.Children.Add(new TextBlock
-                    {
-                        Text = "\u2022",
-                        Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 144)),
-                        Margin = new Thickness(0, 0, 6, 0),
-                        FontSize = 12
-                    });
-                    tipRow.Children.Add(new TextBlock
-                    {
-                        Text = tip,
-                        Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
-                        FontSize = 11,
-                        TextWrapping = TextWrapping.Wrap,
-                        MaxWidth = 310
-                    });
-                    tipsSection.Children.Add(tipRow);
-                }
-                panel.Children.Add(tipsSection);
-            }
-
-            // "How It Works" section (if any)
-            if (content.HasHowItWorks)
-            {
-                var howBorder = new Border
-                {
-                    Background = new SolidColorBrush(Color.FromArgb(21, 255, 255, 255)),
-                    Margin = new Thickness(12, 4, 12, 12),
-                    Padding = new Thickness(10),
-                    CornerRadius = new CornerRadius(6)
-                };
-                var howStack = new StackPanel();
-                howStack.Children.Add(new TextBlock
-                {
-                    Text = "\u2699 How It Works",
-                    Foreground = new SolidColorBrush(Color.FromRgb(144, 144, 144)),
-                    FontSize = 10,
-                    FontWeight = FontWeights.Bold,
-                    Margin = new Thickness(0, 0, 0, 4)
-                });
-                howStack.Children.Add(new TextBlock
-                {
-                    Text = content.HowItWorks,
-                    Foreground = new SolidColorBrush(Color.FromRgb(136, 136, 136)),
-                    FontSize = 10,
-                    TextWrapping = TextWrapping.Wrap,
-                    LineHeight = 14,
-                    FontStyle = FontStyles.Italic
-                });
-                howBorder.Child = howStack;
-                panel.Children.Add(howBorder);
-            }
-
-            return panel;
+            helpButton.ToolTip = Services.HelpTooltipBuilder.Build(content, this);
         }
 
         #endregion
@@ -10979,24 +11174,138 @@ namespace ConditioningControlPanel
             return result;
         }
         
+        // --- velvet-mosaic: highlight feature cards whose feature is enabled ---
+
+        private void RefreshFeatureCardActiveStates()
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            if (CardFlash != null) CardFlash.IsActive = s.FlashEnabled;
+            if (CardVideo != null) CardVideo.IsActive = s.MandatoryVideosEnabled;
+            if (CardSubliminal != null) CardSubliminal.IsActive = s.SubliminalEnabled;
+            if (CardSpiral != null) CardSpiral.IsActive = s.SpiralEnabled;
+            if (CardPinkFilter != null) CardPinkFilter.IsActive = s.PinkFilterEnabled;
+            if (CardBubblePop != null) CardBubblePop.IsActive = s.BubblesEnabled;
+            if (CardLockCard != null) CardLockCard.IsActive = s.LockCardEnabled;
+            if (CardBubbleCount != null) CardBubbleCount.IsActive = s.BubbleCountEnabled;
+            if (CardBouncingText != null) CardBouncingText.IsActive = s.BouncingTextEnabled;
+            if (CardMindWipe != null) CardMindWipe.IsActive = s.MindWipeEnabled;
+            // Visuals and System cards have no single "enabled" toggle; they stay neutral.
+        }
+
+        private void OnSettingsPropertyChangedForCards(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(Models.AppSettings.FlashEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.MandatoryVideosEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.SubliminalEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.SpiralEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.PinkFilterEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.BubblesEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.LockCardEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.BubbleCountEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.BouncingTextEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.MindWipeEnabled))
+            {
+                Dispatcher.BeginInvoke(new Action(RefreshFeatureCardActiveStates));
+            }
+        }
+
+        // --- velvet-mosaic: dashboard feature card click dispatcher ----------
+
+        private void ShowFeaturePopup(System.Windows.Controls.UserControl content, string title,
+                                      System.Windows.Media.ImageSource? icon = null, string? glyph = null)
+        {
+            var popup = new Features.FeaturePopupWindow(content, title, icon, glyph)
+            {
+                Owner = this
+            };
+            popup.ShowDialog();
+        }
+
+        private void CardFlash_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.FlashFeatureControl(),
+                Localization.Loc.Get("section_flash_images"),
+                CardFlash.Icon);
+
+        private void CardVisuals_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.VisualsFeatureControl(),
+                Localization.Loc.Get("section_visuals"),
+                glyph: "👁");
+
+        private void CardVideo_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.VideoFeatureControl(),
+                Localization.Loc.Get("section_mandatory_video"),
+                CardVideo.Icon);
+
+        private void CardSubliminal_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.SubliminalFeatureControl(),
+                Localization.Loc.Get("section_subliminals_2"),
+                CardSubliminal.Icon);
+
+        private void CardSpiral_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.SpiralFeatureControl(),
+                Localization.Loc.Get("label_spiral_overlay"),
+                CardSpiral.Icon);
+
+        private void CardPinkFilter_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.PinkFilterFeatureControl(),
+                Localization.Loc.Get("label_pink_filter"),
+                CardPinkFilter.Icon);
+
+        private void CardBubblePop_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.BubblePopFeatureControl(),
+                Localization.Loc.Get("label_bubble_pop"),
+                CardBubblePop.Icon);
+
+        private void CardLockCard_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.LockCardFeatureControl(),
+                Localization.Loc.Get("label_lock_card"),
+                CardLockCard.Icon);
+
+        private void CardBubbleCount_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.BubbleCountFeatureControl(),
+                Localization.Loc.Get("label_bubble_count"),
+                CardBubbleCount.Icon);
+
+        private void CardBouncingText_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.BouncingTextFeatureControl(),
+                Localization.Loc.Get("label_bouncing_text"),
+                CardBouncingText.Icon);
+
+        private void CardMindWipe_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.MindWipeFeatureControl(),
+                Localization.Loc.Get("label_mind_wipe"),
+                CardMindWipe.Icon);
+
+        private void CardSystem_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.SystemFeatureControl(),
+                Localization.Loc.Get("section_system"),
+                glyph: "⚙");
+
+        private void VelvetBtnScheduler_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.SchedulerFeatureControl(),
+                Localization.Loc.Get("section_scheduler"),
+                glyph: "📅");
+
+        private void VelvetBtnAppInfo_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.AppInfoFeatureControl(),
+                Localization.Loc.Get("label_app_info"),
+                glyph: "ℹ");
+
+        private void VelvetBtnRamp_Click(object sender, RoutedEventArgs e) =>
+            ShowFeaturePopup(new Features.IntensityRampFeatureControl(),
+                Localization.Loc.Get("section_intensity_ramp"),
+                glyph: "📈");
+
         private void BtnStartSession_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedSession == null || !_selectedSession.IsAvailable) return;
-
-            // Check for locked features in this session
-            var lockedFeatures = GetLockedFeaturesForSession(_selectedSession);
-            string lockedFeaturesMsg = "";
-            if (lockedFeatures.Count > 0)
-            {
-                lockedFeaturesMsg = $"\n\n⚠️ Features you haven't unlocked yet:\n• {string.Join("\n• ", lockedFeatures)}\n\n(These will be skipped during the session)";
-            }
 
             var confirmed = ShowStyledDialog(
                 $"🌅 Start {_selectedSession.Name}?",
                 $"Duration: {_selectedSession.DurationMinutes} minutes\n\n" +
                 "Your current settings will be temporarily replaced.\n" +
                 "They will be restored when the session ends." +
-                lockedFeaturesMsg +
                 "\n\nReady to begin?",
                 "▶ Start Session", "Not yet");
 
@@ -11004,43 +11313,6 @@ namespace ConditioningControlPanel
             {
                 StartSession(_selectedSession);
             }
-        }
-
-        /// <summary>
-        /// Get a list of features used by a session that the player hasn't unlocked yet
-        /// </summary>
-        private List<string> GetLockedFeaturesForSession(Models.Session session)
-        {
-            var locked = new List<string>();
-            var s = App.Settings.Current;
-            var settings = session.Settings;
-
-            // Use IsLevelUnlocked which accounts for OG toggle + HighestLevelEver + current level
-            if (!s.IsLevelUnlocked(10))
-            {
-                if (settings.SpiralEnabled) locked.Add("Spiral Overlay (Lv.10)");
-                if (settings.PinkFilterEnabled) locked.Add("Pink Filter (Lv.10)");
-            }
-
-            if (!s.IsLevelUnlocked(20) && settings.BubblesEnabled)
-                locked.Add("Bubbles (Lv.20)");
-
-            if (!s.IsLevelUnlocked(35) && settings.LockCardEnabled)
-                locked.Add("Lock Cards (Lv.35)");
-
-            if (!s.IsLevelUnlocked(50) && settings.BubbleCountEnabled)
-                locked.Add("Bubble Count Game (Lv.50)");
-
-            if (!s.IsLevelUnlocked(60) && settings.BouncingTextEnabled)
-                locked.Add("Bouncing Text (Lv.60)");
-
-            if (!s.IsLevelUnlocked(70) && settings.BrainDrainEnabled)
-                locked.Add("Brain Drain (Lv.70)");
-
-            if (!s.IsLevelUnlocked(75) && settings.MindWipeEnabled)
-                locked.Add("Mind Wipe (Lv.75)");
-
-            return locked;
         }
         
         private async void StartSession(Models.Session session)
@@ -14553,20 +14825,20 @@ namespace ConditioningControlPanel
                 App.Bubbles.Start();
             }
 
-            // Start lock card service (requires level 35)
-            if (settings.IsLevelUnlocked(35) && settings.LockCardEnabled)
+            // Start lock card service
+            if (settings.LockCardEnabled)
             {
                 App.LockCard.Start();
             }
 
-            // Start bubble count game service (requires level 50)
-            if (settings.IsLevelUnlocked(50) && settings.BubbleCountEnabled)
+            // Start bubble count game service
+            if (settings.BubbleCountEnabled)
             {
                 App.BubbleCount.Start();
             }
 
-            // Start bouncing text service (requires level 60)
-            if (settings.IsLevelUnlocked(60) && settings.BouncingTextEnabled)
+            // Start bouncing text service
+            if (settings.BouncingTextEnabled)
             {
                 App.BouncingText.Start();
             }
@@ -14576,8 +14848,8 @@ namespace ConditioningControlPanel
                 App.BouncingText.Stop();
             }
 
-            // Start mind wipe service (requires level 75)
-            if (settings.IsLevelUnlocked(75) && settings.MindWipeEnabled)
+            // Start mind wipe service
+            if (settings.MindWipeEnabled)
             {
                 App.MindWipe.Start(settings.MindWipeFrequency, settings.MindWipeVolume / 100.0);
 
@@ -14588,15 +14860,15 @@ namespace ConditioningControlPanel
                 }
             }
 
-            // Start brain drain service (requires level 70)
-            if (settings.IsLevelUnlocked(70) && settings.BrainDrainEnabled)
+            // Start brain drain service (still gated internally by Brain Drain rework flag)
+            if (settings.BrainDrainEnabled)
             {
                 App.BrainDrain.Start();
             }
 
-            // Start autonomy service (requires Patreon + level 100)
+            // Start autonomy service (requires Patreon)
             var hasPatreonAccess = settings.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
-            if (hasPatreonAccess && settings.IsLevelUnlocked(100) && settings.AutonomyModeEnabled && settings.AutonomyConsentGiven)
+            if (hasPatreonAccess && settings.AutonomyModeEnabled && settings.AutonomyConsentGiven)
             {
                 App.Autonomy?.Start();
             }
@@ -14656,7 +14928,7 @@ namespace ConditioningControlPanel
             // If the user has autonomy enabled in settings, let it keep running after session ends.
             var s = App.Settings?.Current;
             var hasPatreon = (s?.PatreonTier ?? 0) >= 1 || App.Patreon?.IsWhitelisted == true;
-            if (!(hasPatreon && s != null && s.IsLevelUnlocked(100) && s.AutonomyModeEnabled && s.AutonomyConsentGiven))
+            if (!(hasPatreon && s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven))
             {
                 App.Autonomy?.Stop();
             }
@@ -15487,7 +15759,7 @@ namespace ConditioningControlPanel
 
             // Start autonomy service if it was enabled (works independently of engine)
             var hasPatreonAccess = s.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
-            if (hasPatreonAccess && s.IsLevelUnlocked(100) && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
+            if (hasPatreonAccess && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
             {
                 App.Autonomy?.Start();
                 App.Logger?.Debug("MainWindow: Started autonomy service on settings load");
@@ -15555,6 +15827,17 @@ namespace ConditioningControlPanel
 
         private void SaveSettings()
         {
+            // velvet-mosaic: feature popups write to App.Settings.Current on every edit,
+            // so the settings object is already the source of truth. The legacy dashboard
+            // controls (now inside LegacyDashboardHost, Collapsed) can be stale. Re-sync
+            // them from settings before this method reads them, otherwise stale control
+            // values would clobber the popup changes.
+            var wasLoading = _isLoading;
+            _isLoading = true;
+            try { LoadSettings(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "SaveSettings: legacy control refresh failed"); }
+            finally { _isLoading = wasLoading; }
+
             var s = App.Settings.Current;
 
             // Flash
@@ -16446,53 +16729,49 @@ namespace ConditioningControlPanel
         {
             try
             {
-                App.Logger?.Debug("UpdateUnlockablesVisibility: Updating visibility for level {Level}", level);
+                // Feature level gating has been removed — every feature is available from level 1.
+                // The legacy Locked/Unlocked panels below live inside the collapsed LegacyDashboardHost,
+                // but we still flip them to the unlocked state so nothing appears locked if anything
+                // ever ends up rendering them.
+                if (SpiralLocked != null) SpiralLocked.Visibility = Visibility.Collapsed;
+                if (SpiralUnlocked != null) SpiralUnlocked.Visibility = Visibility.Visible;
+                if (PinkFilterLocked != null) PinkFilterLocked.Visibility = Visibility.Collapsed;
+                if (PinkFilterUnlocked != null) PinkFilterUnlocked.Visibility = Visibility.Visible;
+                if (SpiralFeatureImage != null) SetFeatureImageBlur(SpiralFeatureImage, false);
+                if (PinkFilterFeatureImage != null) SetFeatureImageBlur(PinkFilterFeatureImage, false);
 
-                // Level 10 unlocks: Spiral Overlay, Pink Filter
-                var level10Unlocked = App.Settings?.Current?.IsLevelUnlocked(10) ?? false;
-                if (SpiralLocked != null) SpiralLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
-                if (SpiralUnlocked != null) SpiralUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                if (PinkFilterLocked != null) PinkFilterLocked.Visibility = level10Unlocked ? Visibility.Collapsed : Visibility.Visible;
-                if (PinkFilterUnlocked != null) PinkFilterUnlocked.Visibility = level10Unlocked ? Visibility.Visible : Visibility.Collapsed;
+                if (BubblesLocked != null) BubblesLocked.Visibility = Visibility.Collapsed;
+                if (BubblesUnlocked != null) BubblesUnlocked.Visibility = Visibility.Visible;
+                if (BubblePopFeatureImage != null) SetFeatureImageBlur(BubblePopFeatureImage, false);
 
-                if (SpiralFeatureImage != null) SetFeatureImageBlur(SpiralFeatureImage, !level10Unlocked);
-                if (PinkFilterFeatureImage != null) SetFeatureImageBlur(PinkFilterFeatureImage, !level10Unlocked);
+                if (LockCardLocked != null) LockCardLocked.Visibility = Visibility.Collapsed;
+                if (LockCardUnlocked != null) LockCardUnlocked.Visibility = Visibility.Visible;
+                if (LockCardFeatureImage != null) SetFeatureImageBlur(LockCardFeatureImage, false);
 
-                // Level 20 unlocks: Bubbles
-                var level20Unlocked = App.Settings?.Current?.IsLevelUnlocked(20) ?? false;
-                if (BubblesLocked != null) BubblesLocked.Visibility = level20Unlocked ? Visibility.Collapsed : Visibility.Visible;
-                if (BubblesUnlocked != null) BubblesUnlocked.Visibility = level20Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                if (BubblePopFeatureImage != null) SetFeatureImageBlur(BubblePopFeatureImage, !level20Unlocked);
+                if (Level50Locked != null) Level50Locked.Visibility = Visibility.Collapsed;
+                if (Level50Unlocked != null) Level50Unlocked.Visibility = Visibility.Visible;
+                if (BubbleCountFeatureImage != null) SetFeatureImageBlur(BubbleCountFeatureImage, false);
 
-                // Level 35 unlocks: Lock Card
-                var level35Unlocked = App.Settings?.Current?.IsLevelUnlocked(35) ?? false;
-                if (LockCardLocked != null) LockCardLocked.Visibility = level35Unlocked ? Visibility.Collapsed : Visibility.Visible;
-                if (LockCardUnlocked != null) LockCardUnlocked.Visibility = level35Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                if (LockCardFeatureImage != null) SetFeatureImageBlur(LockCardFeatureImage, !level35Unlocked);
+                if (Level60Locked != null) Level60Locked.Visibility = Visibility.Collapsed;
+                if (Level60Unlocked != null) Level60Unlocked.Visibility = Visibility.Visible;
+                if (BouncingTextFeatureImage != null) SetFeatureImageBlur(BouncingTextFeatureImage, false);
 
-                // Level 50 unlocks: Bubble Count Game
-                var level50Unlocked = App.Settings?.Current?.IsLevelUnlocked(50) ?? false;
-                if (Level50Locked != null) Level50Locked.Visibility = level50Unlocked ? Visibility.Collapsed : Visibility.Visible;
-                if (Level50Unlocked != null) Level50Unlocked.Visibility = level50Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                if (BubbleCountFeatureImage != null) SetFeatureImageBlur(BubbleCountFeatureImage, !level50Unlocked);
+                if (MindWipeLocked != null) MindWipeLocked.Visibility = Visibility.Collapsed;
+                if (MindWipeUnlocked != null) MindWipeUnlocked.Visibility = Visibility.Visible;
+                if (MindWipeFeatureImage != null) SetFeatureImageBlur(MindWipeFeatureImage, false);
 
-                // Level 60 unlocks: Bouncing Text
-                var level60Unlocked = App.Settings?.Current?.IsLevelUnlocked(60) ?? false;
-                if (Level60Locked != null) Level60Locked.Visibility = level60Unlocked ? Visibility.Collapsed : Visibility.Visible;
-                if (Level60Unlocked != null) Level60Unlocked.Visibility = level60Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                if (BouncingTextFeatureImage != null) SetFeatureImageBlur(BouncingTextFeatureImage, !level60Unlocked);
+                if (BrainDrainLocked != null) BrainDrainLocked.Visibility = Visibility.Collapsed;
+                if (BrainDrainUnlocked != null) BrainDrainUnlocked.Visibility = Visibility.Visible;
+                if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, false);
 
-                // Level 75 unlocks: Mind Wipe
-                var level75Unlocked = App.Settings?.Current?.IsLevelUnlocked(75) ?? false;
-                if (MindWipeLocked != null) MindWipeLocked.Visibility = level75Unlocked ? Visibility.Collapsed : Visibility.Visible;
-                if (MindWipeUnlocked != null) MindWipeUnlocked.Visibility = level75Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                if (MindWipeFeatureImage != null) SetFeatureImageBlur(MindWipeFeatureImage, !level75Unlocked);
-
-                // Level 70 unlocks: Brain Drain
-                var level70Unlocked = App.Settings?.Current?.IsLevelUnlocked(70) ?? false;
-                if (BrainDrainLocked != null) BrainDrainLocked.Visibility = level70Unlocked ? Visibility.Collapsed : Visibility.Visible;
-                if (BrainDrainUnlocked != null) BrainDrainUnlocked.Visibility = level70Unlocked ? Visibility.Visible : Visibility.Collapsed;
-                if (BrainDrainFeatureImage != null) SetFeatureImageBlur(BrainDrainFeatureImage, !level70Unlocked);
+                // velvet-mosaic dashboard cards are never locked anymore.
+                if (CardSpiral != null) CardSpiral.IsLocked = false;
+                if (CardPinkFilter != null) CardPinkFilter.IsLocked = false;
+                if (CardBubblePop != null) CardBubblePop.IsLocked = false;
+                if (CardLockCard != null) CardLockCard.IsLocked = false;
+                if (CardBubbleCount != null) CardBubbleCount.IsLocked = false;
+                if (CardBouncingText != null) CardBouncingText.IsLocked = false;
+                if (CardMindWipe != null) CardMindWipe.IsLocked = false;
 
                 // Lab Tab: Requires Patreon T2 / whitelist
                 var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2 || (App.Settings?.Current?.PatreonTier ?? 0) >= 2;
@@ -16509,8 +16788,6 @@ namespace ConditioningControlPanel
                     TxtAutonomyLockStatus.Text = Loc.Get("label_patreon_only");
                     TxtAutonomyLockMessage.Text = Loc.Get("label_support_on_patreon_to_unlock");
                 }
-
-                App.Logger?.Debug("UpdateUnlockablesVisibility: Completed successfully.");
             }
             catch (Exception ex)
             {
@@ -16861,7 +17138,7 @@ namespace ConditioningControlPanel
             // Immediately update lock card service if engine is running
             if (_isRunning)
             {
-                if (isEnabled && App.Settings.Current.IsLevelUnlocked(35))
+                if (isEnabled)
                 {
                     App.LockCard.Start();
                 }
@@ -17040,7 +17317,7 @@ namespace ConditioningControlPanel
             // Immediately update service if engine is running
             if (_isRunning)
             {
-                if (isEnabled && App.Settings.Current.IsLevelUnlocked(50))
+                if (isEnabled)
                 {
                     App.BubbleCount.Start();
                 }
@@ -17133,7 +17410,7 @@ namespace ConditioningControlPanel
             // Immediately update service if engine is running
             if (_isRunning)
             {
-                if (isEnabled && App.Settings.Current.IsLevelUnlocked(60))
+                if (isEnabled)
                 {
                     App.BouncingText.Start();
                 }
@@ -17207,7 +17484,7 @@ namespace ConditioningControlPanel
             // Immediately update service if engine is running (non-session mode)
             if (_isRunning && _sessionEngine?.CurrentSession == null)
             {
-                if (isEnabled && App.Settings.Current.IsLevelUnlocked(75))
+                if (isEnabled)
                 {
                     App.MindWipe.Start(App.Settings.Current.MindWipeFrequency, App.Settings.Current.MindWipeVolume / 100.0);
                 }
@@ -17285,7 +17562,7 @@ namespace ConditioningControlPanel
 
             if (_isRunning)
             {
-                if (isEnabled && App.Settings.Current.IsLevelUnlocked(70))
+                if (isEnabled)
                 {
                     App.BrainDrain.Start();
                 }
@@ -20871,7 +21148,7 @@ namespace ConditioningControlPanel
 
                 // Bouncing text needs restart
                 App.BouncingText.Stop();
-                if (App.Settings.Current.BouncingTextEnabled && App.Settings.Current.IsLevelUnlocked(60))
+                if (App.Settings.Current.BouncingTextEnabled)
                 {
                     App.BouncingText.Start();
                 }

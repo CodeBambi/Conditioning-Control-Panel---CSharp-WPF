@@ -208,6 +208,7 @@ namespace ConditioningControlPanel
         public static RoadmapService Roadmap { get; private set; } = null!;
         public static SkillTreeService SkillTree { get; private set; } = null!;
         public static KeywordTriggerService KeywordTriggers { get; private set; } = null!;
+        public static KeywordTriggerPresetService KeywordPresets { get; private set; } = null!;
         public static ScreenOcrService ScreenOcr { get; private set; } = null!;
         public static KeywordHighlightService? KeywordHighlight { get; private set; }
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
@@ -329,10 +330,31 @@ namespace ConditioningControlPanel
         private static readonly TimeSpan CcpWindowRectsCacheDuration = TimeSpan.FromMilliseconds(250);
         private static readonly object _ccpWindowRectsLock = new();
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool GetWindowRect(IntPtr hWnd, out CcpRect lpRect);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct CcpRect { public int Left, Top, Right, Bottom; }
+
         /// <summary>
         /// Returns screen rectangles of all currently visible CCP-owned windows
-        /// (MainWindow, avatar, overlays, dialogs). Used by ScreenOcrService to
-        /// drop OCR word hits that fall inside our own UI, preventing feedback loops.
+        /// (MainWindow, avatar, overlays, dialogs) in PHYSICAL pixels on the
+        /// virtual desktop. Used by ScreenOcrService to drop OCR word hits that
+        /// fall inside our own UI, preventing feedback loops.
+        ///
+        /// Uses Win32 <c>GetWindowRect</c> directly rather than WPF Window.Left/Top
+        /// multiplied by CompositionTarget scale — the latter is unreliable on
+        /// PerMonitorV2 + multi-monitor setups because Left/Top is anchored to
+        /// primary's DIP space while the scale is the current window's monitor
+        /// scale, producing oversized rects that incorrectly swallow external
+        /// OCR hits. <c>GetWindowRect</c> returns physical virtual-desktop pixels
+        /// in one call, which is what OCR hits are already expressed in.
+        ///
         /// Cached for a short interval to stay cheap under per-scan filtering.
         /// </summary>
         public static System.Drawing.Rectangle[] GetCcpWindowRectsCached()
@@ -357,6 +379,10 @@ namespace ConditioningControlPanel
                         return _cachedCcpWindowRects;
                     }
 
+                    // Collect the HWNDs on the UI thread, then call GetWindowRect
+                    // outside the dispatcher lock — GetWindowRect is a thread-safe
+                    // Win32 call and doesn't need dispatcher affinity.
+                    var hwnds = new System.Collections.Generic.List<IntPtr>();
                     dispatcher.Invoke(() =>
                     {
                         foreach (var w in Current!.Windows.OfType<Window>())
@@ -366,37 +392,24 @@ namespace ConditioningControlPanel
                                 if (!w.IsVisible) continue;
                                 if (w.WindowState == WindowState.Minimized) continue;
 
-                                // Convert logical WPF units (Left/Top/Width/Height) to pixel rect.
-                                var src = PresentationSource.FromVisual(w);
-                                double scaleX = 1.0, scaleY = 1.0;
-                                if (src?.CompositionTarget != null)
-                                {
-                                    scaleX = src.CompositionTarget.TransformToDevice.M11;
-                                    scaleY = src.CompositionTarget.TransformToDevice.M22;
-                                }
-
-                                double left = w.Left;
-                                double top = w.Top;
-                                double width = w.ActualWidth > 0 ? w.ActualWidth : w.Width;
-                                double height = w.ActualHeight > 0 ? w.ActualHeight : w.Height;
-
-                                if (double.IsNaN(left) || double.IsNaN(top) ||
-                                    double.IsNaN(width) || double.IsNaN(height) ||
-                                    width <= 0 || height <= 0)
-                                    continue;
-
-                                var rect = new System.Drawing.Rectangle(
-                                    (int)(left * scaleX),
-                                    (int)(top * scaleY),
-                                    (int)(width * scaleX),
-                                    (int)(height * scaleY));
-
-                                if (rect.Width > 0 && rect.Height > 0)
-                                    rects.Add(rect);
+                                var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                                if (hwnd != IntPtr.Zero) hwnds.Add(hwnd);
                             }
                             catch { /* skip malformed window */ }
                         }
                     });
+
+                    foreach (var hwnd in hwnds)
+                    {
+                        if (!IsWindowVisible(hwnd)) continue;
+                        if (!GetWindowRect(hwnd, out var r)) continue;
+
+                        int w = r.Right - r.Left;
+                        int h = r.Bottom - r.Top;
+                        if (w <= 0 || h <= 0) continue;
+
+                        rects.Add(new System.Drawing.Rectangle(r.Left, r.Top, w, h));
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -742,6 +755,7 @@ namespace ConditioningControlPanel
             Haptics = new HapticService(Settings.Current.Haptics);
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
             KeywordTriggers = new KeywordTriggerService();
+            KeywordPresets = new KeywordTriggerPresetService();
             ScreenOcr = new ScreenOcrService();
             KeywordHighlight = new KeywordHighlightService();
             RemoteControl = new RemoteControlService();
@@ -951,7 +965,7 @@ namespace ConditioningControlPanel
                 // Start autonomy service if it should be enabled
                 // (might have been skipped during LoadSettings if whitelist wasn't loaded yet)
                 var s = Settings?.Current;
-                if (s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven && s.IsLevelUnlocked(100))
+                if (s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
                 {
                     var hasPatreonAccess = s.PatreonTier >= 1 || Patreon?.IsWhitelisted == true;
                     if (hasPatreonAccess && Autonomy?.IsEnabled != true)
@@ -984,8 +998,10 @@ namespace ConditioningControlPanel
                 {
                     Logger?.Information("Discord authenticated: {Id}", Discord.UserId);
 
-                    // Auto-upgrade: if Discord is authenticated but no V2 identity, migrate via /v2/auth/discord
-                    if (string.IsNullOrEmpty(UnifiedUserId))
+                    // Auto-upgrade: if Discord is authenticated but no V2 identity OR no auth token, migrate via /v2/auth/discord
+                    // (legacy users created before Feb 2026 may have a UnifiedUserId but no auth_token_hash on the server —
+                    // re-running /v2/auth/discord bootstraps a fresh token for them)
+                    if (string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken))
                     {
                         try
                         {

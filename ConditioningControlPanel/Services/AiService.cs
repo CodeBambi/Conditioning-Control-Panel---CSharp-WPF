@@ -141,6 +141,23 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Gets an AI-generated reaction line when a configured keyword trigger fires.
+        /// Used by <see cref="KeywordTriggerService"/>'s AvatarCommentAction dispatch.
+        /// Returns null if AI is unavailable (caller is expected to use a canned phrase).
+        /// </summary>
+        public async Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null)
+        {
+            if (!IsAvailable) return null;
+
+            var systemPrompt = _bambiSprite.GetSystemPrompt();
+            var userInput = string.IsNullOrEmpty(promptTemplate)
+                ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
+                : promptTemplate.Replace("{keyword}", keyword);
+
+            return await GetAiResponseAsync(userInput, systemPrompt);
+        }
+
+        /// <summary>
         /// Core method to get an AI response with custom system prompt.
         /// Returns null if unavailable.
         /// </summary>

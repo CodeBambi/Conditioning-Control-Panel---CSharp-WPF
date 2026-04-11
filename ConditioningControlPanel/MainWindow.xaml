@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
+        xmlns:features="clr-namespace:ConditioningControlPanel.Features"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         Title="Conditioning Control Panel"
         Height="943" Width="1385"
@@ -183,70 +184,7 @@
             </Setter>
         </Style>
 
-        <!-- Outline Button Style -->
-        <Style x:Key="OutlineButton" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
-            <Setter Property="BorderThickness" Value="1.5"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Padding" Value="15,8"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="border"
-                                Background="Transparent"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8" Padding="{TemplateBinding Padding}"
-                                RenderTransformOrigin="0.5,0.5">
-                            <Border.RenderTransform>
-                                <ScaleTransform x:Name="borderScale" ScaleX="1" ScaleY="1"/>
-                            </Border.RenderTransform>
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Trigger.EnterActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
-                                                             To="0.97" Duration="0:0:0.08"/>
-                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
-                                                             To="0.97" Duration="0:0:0.08"/>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.EnterActions>
-                                <Trigger.ExitActions>
-                                    <BeginStoryboard>
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleX"
-                                                             To="1.0" Duration="0:0:0.15">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
-                                            <DoubleAnimation Storyboard.TargetName="borderScale" Storyboard.TargetProperty="ScaleY"
-                                                             To="1.0" Duration="0:0:0.15">
-                                                <DoubleAnimation.EasingFunction>
-                                                    <BackEase Amplitude="0.3" EasingMode="EaseOut"/>
-                                                </DoubleAnimation.EasingFunction>
-                                            </DoubleAnimation>
-                                        </Storyboard>
-                                    </BeginStoryboard>
-                                </Trigger.ExitActions>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <!-- OutlineButton moved to Resources/Theme/Controls.xaml so feature UserControls can reach it. -->
 
         <!-- Shared template for expandable icon buttons -->
         <ControlTemplate x:Key="ExpandableIconTemplate" TargetType="Button">
@@ -1521,13 +1459,8 @@
                             <TextBlock Text="{loc:Str tab_presets}" FontSize="11"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="BtnProgression" Tag="Progression" Style="{StaticResource TabButton}"
-                            Margin="3,0" Click="BtnProgression_Click" ToolTip="{loc:Str tooltip_level_progression}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📊" FontSize="12" Margin="0,0,4,0"/>
-                            <TextBlock Text="{loc:Str tab_progression}" FontSize="11"/>
-                        </StackPanel>
-                    </Button>
+                    <!-- BtnProgression removed in velvet-mosaic phase 6 — progression features
+                         are now cards on the main Dashboard instead of a separate tab. -->
                     <Button x:Name="BtnQuests" Tag="Quests" Style="{StaticResource TabButton}"
                             Margin="3,0" Click="BtnQuests_Click" ToolTip="{loc:Str tooltip_daily_weekly_quests}">
                         <StackPanel Orientation="Horizontal">
@@ -2051,19 +1984,126 @@
         <ContentControl x:Name="SettingsTab" Grid.Row="4" Margin="10,5,10,2" Template="{StaticResource AnimatedTabBackground}">
             <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="330"/>
-                <ColumnDefinition Width="360"/>
+                <ColumnDefinition Width="640"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
+
+            <!-- ============================================================ -->
+            <!-- VELVET MOSAIC DASHBOARD - 4x4 feature card grid (col 0)       -->
+            <!-- ============================================================ -->
+            <Grid Grid.Column="0" Grid.Row="0" x:Name="VelvetFeatureGrid" Margin="5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Row 1: Dashboard features -->
+                <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash"
+                                      Title="Flash Images"
+                                      Icon="pack://application:,,,/Resources/features/flash.png"
+                                      HelpSectionId="FlashImages"
+                                      Click="CardFlash_Click"/>
+                <features:FeatureCard Grid.Row="0" Grid.Column="1" x:Name="CardVisuals"
+                                      Title="Visuals"
+                                      Glyph="👁"
+                                      HelpSectionId="Visuals"
+                                      Click="CardVisuals_Click"/>
+                <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardVideo"
+                                      Title="Mandatory Video"
+                                      Icon="pack://application:,,,/Resources/features/mandatory_videos.png"
+                                      HelpSectionId="Video"
+                                      Click="CardVideo_Click"/>
+                <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardSubliminal"
+                                      Title="Subliminals"
+                                      Icon="pack://application:,,,/Resources/features/subliminal.png"
+                                      HelpSectionId="Subliminals"
+                                      Click="CardSubliminal_Click"/>
+
+                <!-- Row 2: Progression tier 1 -->
+                <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardSpiral"
+                                      Title="Spiral Overlay"
+                                      Icon="pack://application:,,,/Resources/features/spiral_overlay.png"
+                                      HelpSectionId="SpiralOverlay"
+                                      Click="CardSpiral_Click"/>
+                <features:FeatureCard Grid.Row="1" Grid.Column="1" x:Name="CardPinkFilter"
+                                      Title="Pink Filter"
+                                      Icon="pack://application:,,,/Resources/features/Pink_filter.png"
+                                      HelpSectionId="PinkFilter"
+                                      Click="CardPinkFilter_Click"/>
+                <features:FeatureCard Grid.Row="1" Grid.Column="2" x:Name="CardBubblePop"
+                                      Title="Bubble Pop"
+                                      Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
+                                      HelpSectionId="BubblePop"
+                                      Click="CardBubblePop_Click"/>
+                <features:FeatureCard Grid.Row="1" Grid.Column="3" x:Name="CardLockCard"
+                                      Title="Lock Card"
+                                      Icon="pack://application:,,,/Resources/features/Phrase_Lock.png"
+                                      HelpSectionId="LockCard"
+                                      Click="CardLockCard_Click"/>
+
+                <!-- Row 3-4: Logo (2x2) + Bouncing/Mind + System/BubbleCount -->
+                <Border Grid.Row="2" Grid.RowSpan="2" Grid.Column="0" Grid.ColumnSpan="2"
+                        Background="#01000000" Margin="6"
+                        Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
+                        ToolTip="{loc:Str tooltip_click_me_rapidly}">
+                    <Border CornerRadius="12" ClipToBounds="True">
+                        <Image x:Name="ImgLogo" Stretch="Uniform"
+                               HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Border>
+                </Border>
+
+                <features:FeatureCard Grid.Row="2" Grid.Column="2" x:Name="CardBouncingText"
+                                      Title="Bouncing Text"
+                                      Icon="pack://application:,,,/Resources/features/bouncing_text.png"
+                                      HelpSectionId="BouncingText"
+                                      Click="CardBouncingText_Click"/>
+                <features:FeatureCard Grid.Row="2" Grid.Column="3" x:Name="CardMindWipe"
+                                      Title="Mind Wipe"
+                                      Icon="pack://application:,,,/Resources/features/Mind_Wipers.png"
+                                      HelpSectionId="MindWipe"
+                                      Click="CardMindWipe_Click"/>
+
+                <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardSystem"
+                                      Title="System"
+                                      Glyph="⚙"
+                                      HelpSectionId="System"
+                                      Click="CardSystem_Click"/>
+                <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardBubbleCount"
+                                      Title="Bubble Count"
+                                      Icon="pack://application:,,,/Resources/features/Bubble_count.png"
+                                      HelpSectionId="BubbleCount"
+                                      Click="CardBubbleCount_Click"/>
+            </Grid>
+
+            <!-- ============================================================ -->
+            <!-- LEGACY DASHBOARD HOST - kept collapsed to preserve x:Names   -->
+            <!-- referenced by MainWindow.xaml.cs until the full rewire is    -->
+            <!-- complete. Phase 6+ will delete this block.                   -->
+            <!-- ============================================================ -->
+            <Grid x:Name="LegacyDashboardHost" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="330"/>
+                <ColumnDefinition Width="360"/>
+            </Grid.ColumnDefinitions>
 
             <!-- LEFT COLUMN -->
             <ScrollViewer Grid.Column="0" Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="5">
                 <StackPanel>
-                    
+
                     <!-- Flash Images Section -->
                     <Border x:Name="FlashSection" CornerRadius="12" Padding="10,6" Margin="0,0,0,6"
                             Background="{DynamicResource ElevatedSurfaceBrush}"
@@ -2209,16 +2249,7 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Logo (Clickable for Neon Obsession achievement + Easter Egg) -->
-                    <Border Background="#01000000" Padding="0" Height="234" Margin="0,0,0,8"
-                            Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
-                            ToolTip="{loc:Str tooltip_click_me_rapidly}">
-                        <Border CornerRadius="20" ClipToBounds="True">
-                            <Image x:Name="ImgLogo" Stretch="Uniform"
-                                   HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                                   RenderOptions.BitmapScalingMode="HighQuality"/>
-                        </Border>
-                    </Border>
+                    <!-- Legacy Logo removed — velvet-mosaic grid owns the live ImgLogo. -->
 
                 </StackPanel>
             </ScrollViewer>
@@ -2471,9 +2502,11 @@
                     </Border>
                 </StackPanel>
             </ScrollViewer>
+            </Grid>
+            <!-- /LegacyDashboardHost -->
 
-            <!-- RIGHT COLUMN -->
-            <Grid Grid.Column="2" Grid.Row="0" Margin="5">
+            <!-- RIGHT HALF (was col 2, now col 1 — Browser / Audio / Quick Links) -->
+            <Grid Grid.Column="1" Grid.Row="0" Margin="5">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -2730,22 +2763,29 @@
                                 <TextBlock x:Name="TxtDuck" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="80%" FontSize="10"/>
                             </Grid>
 
-                            <!-- Exclude BambiCloud from ducking -->
-                            <CheckBox x:Name="ChkExcludeBambiCloudDucking" Margin="0,4,0,0"
-                                      Content="{loc:Str setting_don_t_duck_browser}"
-                                      IsChecked="True"
-                                      Checked="ChkExcludeBambiCloudDucking_Changed"
-                                      Unchecked="ChkExcludeBambiCloudDucking_Changed"
-                                      ToolTip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}"
-                                      Foreground="{DynamicResource PinkBrush}" FontSize="9"/>
-
-                            <!-- Audio Diagnostics -->
-                            <Button x:Name="BtnTestAudio" Content="Test Audio" Margin="0,6,0,0"
-                                    Click="BtnTestAudio_Click"
-                                    ToolTip="Play a test sound and show audio diagnostics. Use this if audio isn't working."
-                                    Background="#33FF69B4" Foreground="White" FontSize="9" Padding="8,3"
-                                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
-                                    HorizontalAlignment="Left"/>
+                            <!-- Don't-duck-browser toggle + Audio Test on the same row -->
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <CheckBox Grid.Column="0"
+                                          x:Name="ChkExcludeBambiCloudDucking"
+                                          VerticalAlignment="Center"
+                                          Content="{loc:Str setting_don_t_duck_browser}"
+                                          IsChecked="True"
+                                          Checked="ChkExcludeBambiCloudDucking_Changed"
+                                          Unchecked="ChkExcludeBambiCloudDucking_Changed"
+                                          ToolTip="{loc:Str tooltip_when_enabled_audio_from_the_integrated_bambic}"
+                                          Foreground="{DynamicResource PinkBrush}" FontSize="9"/>
+                                <Button Grid.Column="1"
+                                        x:Name="BtnTestAudio" Content="Test Audio"
+                                        Click="BtnTestAudio_Click"
+                                        ToolTip="Play a test sound and show audio diagnostics. Use this if audio isn't working."
+                                        Background="#33FF69B4" Foreground="White" FontSize="9" Padding="8,3"
+                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
+                                        VerticalAlignment="Center"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
 
@@ -2880,8 +2920,98 @@
                 </Grid>
             </Grid>
 
-            <!-- Scrolling Marquee Banner - spans all columns -->
-            <Border x:Name="MarqueeBanner" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+            <!-- ============================================================ -->
+            <!-- VELVET MOSAIC HELPER BUTTON ROW - full width, under both     -->
+            <!-- the feature grid AND the right half.                         -->
+            <!-- ============================================================ -->
+            <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" x:Name="VelvetHelperButtonRow"
+                  Height="30" Margin="5,4,5,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" x:Name="VelvetBtnScheduler"
+                        Click="VelvetBtnScheduler_Click"
+                        Cursor="Hand" FontSize="12" FontWeight="Bold">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="b"
+                                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="14">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="📅" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Text="{loc:Str section_scheduler}" Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                    <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
+                <Button Grid.Column="2" x:Name="VelvetBtnAppInfo"
+                        Click="VelvetBtnAppInfo_Click"
+                        Cursor="Hand" FontSize="12" FontWeight="Bold">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="b"
+                                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="14">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="ℹ" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"
+                                               Foreground="{DynamicResource PinkBrush}"/>
+                                    <TextBlock Text="{loc:Str label_app_info}" Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                    <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
+                <Button Grid.Column="4" x:Name="VelvetBtnRamp"
+                        Click="VelvetBtnRamp_Click"
+                        Cursor="Hand" FontSize="12" FontWeight="Bold">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="b"
+                                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="14">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="📈" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Text="{loc:Str section_intensity_ramp}" Foreground="White" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                    <Setter TargetName="b" Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+
+            <!-- Scrolling Marquee Banner - row 2, spans both columns -->
+            <Border x:Name="MarqueeBanner" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                     Background="#1A0A1A" BorderBrush="{DynamicResource DarkPinkBrush}" BorderThickness="2"
                     CornerRadius="8" Height="48" Margin="5,5,5,0" ClipToBounds="True">
                 <Border.Effect>
@@ -8371,67 +8501,41 @@
                         <Grid Margin="4,0,4,10">
                             <TextBlock Text="PRESETS" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
                                        VerticalAlignment="Center"/>
-                            <TextBlock Text="Coming soon — curated one-click packs"
+                            <TextBlock Text="One-click packs — click any card to preview or install"
                                        HorizontalAlignment="Right"
                                        Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"/>
                         </Grid>
-                        <WrapPanel HorizontalAlignment="Stretch">
-                            <!-- Puppy Pet card -->
-                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
-                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
-                                    Cursor="Hand" Tag="puppy" MouseLeftButtonUp="AwarenessPresetCard_Click">
-                                <StackPanel>
-                                    <TextBlock Text="🐶" FontSize="26"/>
-                                    <TextBlock Text="Puppy Pet" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
-                                    <TextBlock Text='"good boy", "sit", "stay" → clicker + praise'
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
-                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                               FontWeight="Bold" Margin="0,8,0,0"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Chastity Watcher card -->
-                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
-                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
-                                    Cursor="Hand" Tag="chastity" MouseLeftButtonUp="AwarenessPresetCard_Click">
-                                <StackPanel>
-                                    <TextBlock Text="🔒" FontSize="26"/>
-                                    <TextBlock Text="Chastity Watcher" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
-                                    <TextBlock Text="Porn detected → session time added &amp; avatar comment"
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
-                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                               FontWeight="Bold" Margin="0,8,0,0"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Bimbo Reinforcement card -->
-                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
-                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
-                                    Cursor="Hand" Tag="bimbo" MouseLeftButtonUp="AwarenessPresetCard_Click">
-                                <StackPanel>
-                                    <TextBlock Text="💖" FontSize="26"/>
-                                    <TextBlock Text="Bimbo Reinforcement" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
-                                    <TextBlock Text='"smart", "focus" → subliminal flash of opposites'
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
-                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                               FontWeight="Bold" Margin="0,8,0,0"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Trance Induction card -->
-                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
-                                    CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="140"
-                                    Cursor="Hand" Tag="trance" MouseLeftButtonUp="AwarenessPresetCard_Click">
-                                <StackPanel>
-                                    <TextBlock Text="🌀" FontSize="26"/>
-                                    <TextBlock Text="Trance Induction" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
-                                    <TextBlock Text='"relax", "deeper" → soft overlay pulse &amp; mantra'
-                                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
-                                    <TextBlock Text="Coming soon" Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                               FontWeight="Bold" Margin="0,8,0,0"/>
-                                </StackPanel>
-                            </Border>
-                        </WrapPanel>
+                        <ItemsControl x:Name="AwarenessPresetItems">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel HorizontalAlignment="Stretch"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                                            CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="150"
+                                            Cursor="Hand" Tag="{Binding Id}" MouseLeftButtonUp="AwarenessPresetCard_Click">
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Icon}" FontSize="26"/>
+                                                <Border Background="#2A1A3E" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                                        CornerRadius="4" Padding="5,1" Margin="8,4,0,0" VerticalAlignment="Center"
+                                                        Visibility="{Binding RequiresAi, Converter={StaticResource BoolToVisibility}}">
+                                                    <TextBlock Text="AI" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="Bold"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Name}" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
+                                            <TextBlock Text="{Binding Description}"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                            <TextBlock Text="✓ Installed" Foreground="{DynamicResource PinkBrush}" FontSize="10"
+                                                       FontWeight="Bold" Margin="0,8,0,0"
+                                                       Visibility="{Binding MasterEnabled, Converter={StaticResource BoolToVisibility}}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
 
                     <!-- ==================== SOURCES + SAFETY ==================== -->
@@ -8499,7 +8603,57 @@
                                     <TextBlock Text="Loop protection" FontWeight="SemiBold"/>
                                 </CheckBox>
                                 <TextBlock Text="After a trigger fires, its keyword is muted for a few seconds so the reaction can't re-arm it."
-                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,0"/>
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,10"/>
+
+                                <!-- On-screen highlight: toggle + color picker. The highlight overlay
+                                     draws a glowing box around OCR-matched words on your screen. -->
+                                <CheckBox x:Name="ChkAwarenessHighlight"
+                                          Foreground="White" FontSize="12" Margin="0,4,0,2"
+                                          Checked="ChkAwarenessHighlight_Changed" Unchecked="ChkAwarenessHighlight_Changed">
+                                    <TextBlock Text="Highlight matched words on screen" FontWeight="SemiBold"/>
+                                </CheckBox>
+                                <TextBlock Text="Draws a glowing box around OCR-detected trigger words. Pick the glow color below."
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,6"/>
+                                <StackPanel x:Name="AwarenessHighlightColorPanel" Orientation="Horizontal" Margin="22,0,0,0">
+                                    <TextBlock Text="Color:" Foreground="#A0A0B8" FontSize="10"
+                                               VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Border x:Name="SwatchHighlightPink" Width="22" Height="22" CornerRadius="3"
+                                            Background="#FF69B4" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,4,0" Cursor="Hand" Tag="#FF69B4"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <Border x:Name="SwatchHighlightCyan" Width="22" Height="22" CornerRadius="3"
+                                            Background="#00E5FF" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,4,0" Cursor="Hand" Tag="#00E5FF"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <Border x:Name="SwatchHighlightLime" Width="22" Height="22" CornerRadius="3"
+                                            Background="#9DFF00" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,4,0" Cursor="Hand" Tag="#9DFF00"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <Border x:Name="SwatchHighlightOrange" Width="22" Height="22" CornerRadius="3"
+                                            Background="#FF8A00" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,4,0" Cursor="Hand" Tag="#FF8A00"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <Border x:Name="SwatchHighlightViolet" Width="22" Height="22" CornerRadius="3"
+                                            Background="#B388FF" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,4,0" Cursor="Hand" Tag="#B388FF"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <Border x:Name="SwatchHighlightWhite" Width="22" Height="22" CornerRadius="3"
+                                            Background="#FFFFFF" BorderBrush="#3A3A5A" BorderThickness="1"
+                                            Margin="0,0,8,0" Cursor="Hand" Tag="#FFFFFF"
+                                            MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
+                                    <TextBox x:Name="TxtAwarenessHighlightHex" Width="74" FontSize="10"
+                                             Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
+                                             Padding="4,3" VerticalAlignment="Center"
+                                             ToolTip="Custom hex color (e.g. #FF00AA)"
+                                             LostFocus="TxtAwarenessHighlightHex_LostFocus"
+                                             KeyDown="TxtAwarenessHighlightHex_KeyDown"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ChkAwarenessHighlightVisibleInCapture"
+                                          Content="Visible in screen capture / streams"
+                                          Foreground="#A0A0A0" FontSize="10" Margin="22,6,0,0"
+                                          Checked="ChkAwarenessHighlightVisibleInCapture_Changed"
+                                          Unchecked="ChkAwarenessHighlightVisibleInCapture_Changed"
+                                          ToolTip="Turn off to hide highlights from OBS / recordings (default). Turn on if highlights don't show on-screen at all — some GPU drivers hide WDA_EXCLUDEFROMCAPTURE windows."/>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -8511,7 +8665,7 @@
                                        Foreground="{DynamicResource PinkBrush}"
                                        TextDecorations="Underline"
                                        Click="LnkAwarenessAdvanced_Click">
-                                <Run Text="Customize individual triggers (advanced) →"/>
+                                <Run x:Name="LnkAwarenessAdvancedText" Text="Customize individual triggers (advanced) →"/>
                             </Hyperlink>
                         </TextBlock>
                     </Grid>

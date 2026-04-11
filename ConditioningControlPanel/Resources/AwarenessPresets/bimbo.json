@@ -1,0 +1,94 @@
+{
+  "id": "builtin.bimbo",
+  "name": "Bimbo Reinforcement",
+  "icon": "💖",
+  "description": "\"smart\", \"focus\" → subliminal flash of opposites",
+  "longDescription": "Catches \"smart\" words and fires opposing subliminals to nudge you back where you belong. Pairs a soft subliminal flash with a bimbo-coded avatar line. Works hands-off — no AI required, but the comments are better with it.",
+  "author": "Built-in",
+  "version": 2,
+  "isBuiltIn": true,
+  "requiresAi": false,
+  "avatarPromptTemplate": "You're her ditzy bimbo friend. She just ran into the word '{keyword}'. Distract her in character with one giggly line.",
+  "phrasePools": [ "BimboGiggle" ],
+  "cannedPhrases": {
+    "BimboGiggle": [
+      "Ugh, that word again. Boring~",
+      "Don't even try to focus, silly.",
+      "*giggles* Thinking is hard, isn't it?",
+      "Empty head, full lips. Remember?",
+      "That word doesn't fit in there anymore.",
+      "Pink thoughts only, babe.",
+      "You look SO much cuter when you're not thinking.",
+      "*pops bubblegum*",
+      "Smart? You? Hehe~",
+      "Let it go. Let it ALL go."
+    ]
+  },
+  "triggers": [
+    {
+      "keyword": "smart",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 30,
+      "visualEffect": "SubliminalFlash",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "SubliminalFlash" },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "focus",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 30,
+      "visualEffect": "SubliminalFlash",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "SubliminalFlash" },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "think",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 30,
+      "visualEffect": "SubliminalFlash",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "SubliminalFlash" },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "intelligent",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 45,
+      "visualEffect": "SubliminalFlash",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "SubliminalFlash" },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "work",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 60,
+      "visualEffect": "SubliminalFlash",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "SubliminalFlash" },
+        { "type": "AvatarComment", "promptTemplate": "She just ran into the word 'work'. Distract her with one bimbo-coded line.", "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    }
+  ]
+}

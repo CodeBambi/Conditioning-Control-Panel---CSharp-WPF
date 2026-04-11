@@ -1,0 +1,107 @@
+{
+  "id": "builtin.trance",
+  "name": "Trance Induction",
+  "icon": "🌀",
+  "description": "\"relax\", \"deeper\" → overlay pulse + mantra",
+  "longDescription": "Reinforces trance words with a soft overlay pulse, a mantra subliminal, and a calm companion line. Set-and-forget — catches trance language in anything you read or type.",
+  "author": "Built-in",
+  "version": 2,
+  "isBuiltIn": true,
+  "requiresAi": false,
+  "avatarPromptTemplate": "You're her soft-voiced hypnotist. She just read or typed '{keyword}'. Respond in character, one short line that deepens the trance.",
+  "phrasePools": [ "TranceMurmur" ],
+  "cannedPhrases": {
+    "TranceMurmur": [
+      "Deeper now.",
+      "Let go a little more.",
+      "Breathe in. Hold. Release.",
+      "That word is a signal. You know what to do.",
+      "Drop.",
+      "*soft, slow* Good.",
+      "Every time you read that, you sink.",
+      "Feel the weight in your eyes.",
+      "Quieter. Slower. Heavier.",
+      "Yes. Just like that."
+    ]
+  },
+  "triggers": [
+    {
+      "keyword": "relax",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 30,
+      "visualEffect": "OverlayPulse",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "OverlayPulse" },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "deeper",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 30,
+      "visualEffect": "OverlayPulse",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "OverlayPulse" },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "sleep",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 45,
+      "visualEffect": "SubliminalFlash",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "SubliminalFlash" },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "drop",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 30,
+      "visualEffect": "OverlayPulse",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "OverlayPulse" },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "breathe",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 45,
+      "visualEffect": "OverlayPulse",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "OverlayPulse" },
+        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "keyword": "focus on my voice",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 60,
+      "visualEffect": "SubliminalFlash",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "SubliminalFlash" },
+        { "type": "AvatarComment", "promptTemplate": "She just read the phrase 'focus on my voice'. Pull her into trance with one quiet line.", "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    }
+  ]
+}
