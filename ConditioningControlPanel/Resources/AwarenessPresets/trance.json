@@ -2,10 +2,10 @@
   "id": "builtin.trance",
   "name": "Trance Induction",
   "icon": "🌀",
-  "description": "\"relax\", \"deeper\" → overlay pulse + mantra",
-  "longDescription": "Reinforces trance words with a soft overlay pulse, a mantra subliminal, and a calm companion line. Set-and-forget — catches trance language in anything you read or type.",
+  "description": "\"relax\", \"deeper\", \"drop\" — overlay pulse + mantra",
+  "longDescription": "Reinforces classic deepener vocabulary with a soft overlay pulse, a soft bell, and a calm companion line. The most thematic word — 'empty' — fires a mind-wipe on a long cooldown so it stays the jackpot. Set-and-forget; catches trance language in anything you read or type.",
   "author": "Built-in",
-  "version": 2,
+  "version": 3,
   "isBuiltIn": true,
   "requiresAi": false,
   "avatarPromptTemplate": "You're her soft-voiced hypnotist. She just read or typed '{keyword}'. Respond in character, one short line that deepens the trance.",
@@ -21,11 +21,20 @@
       "Every time you read that, you sink.",
       "Feel the weight in your eyes.",
       "Quieter. Slower. Heavier.",
-      "Yes. Just like that."
+      "Yes. Just like that.",
+      "Quiet. Still. Mine.",
+      "Eyes heavy. Mind heavier.",
+      "Every word pulls you down.",
+      "There's no tension left.",
+      "You don't need to follow. Just fall.",
+      "Empty is good.",
+      "*soft, slower* Yes.",
+      "One more breath. One more drop."
     ]
   },
   "triggers": [
     {
+      "id": "relax",
       "keyword": "relax",
       "matchType": "PlainText",
       "enabled": true,
@@ -34,11 +43,12 @@
       "actions": [
         { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
         { "type": "VisualEffect", "effect": "OverlayPulse" },
-        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "AvatarComment", "promptTemplate": "She just read 'relax'. Murmur softly to her in character, one short line — quiet hypnotist voice, gentle release.", "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
     },
     {
+      "id": "deeper",
       "keyword": "deeper",
       "matchType": "PlainText",
       "enabled": true,
@@ -47,11 +57,12 @@
       "actions": [
         { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
         { "type": "VisualEffect", "effect": "OverlayPulse" },
-        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "AvatarComment", "promptTemplate": "She just read 'deeper'. Use it as a deepener in character, one slow line — pull her further down.", "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
     },
     {
+      "id": "sleep",
       "keyword": "sleep",
       "matchType": "PlainText",
       "enabled": true,
@@ -60,11 +71,12 @@
       "actions": [
         { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
         { "type": "VisualEffect", "effect": "SubliminalFlash" },
-        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "AvatarComment", "promptTemplate": "She just read 'sleep'. Soft sleep cue in character, one quiet line — eyes heavy, mind heavier.", "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
     },
     {
+      "id": "drop",
       "keyword": "drop",
       "matchType": "PlainText",
       "enabled": true,
@@ -73,11 +85,12 @@
       "actions": [
         { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
         { "type": "VisualEffect", "effect": "OverlayPulse" },
-        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "AvatarComment", "promptTemplate": "She just read 'drop'. Use it as a one-word command in character, one short line — clean, certain, irresistible.", "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
     },
     {
+      "id": "breathe",
       "keyword": "breathe",
       "matchType": "PlainText",
       "enabled": true,
@@ -86,20 +99,50 @@
       "actions": [
         { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
         { "type": "VisualEffect", "effect": "OverlayPulse" },
-        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "AvatarComment", "promptTemplate": "She just read 'breathe'. Give her a slow breath cue in character, one short line — pace her down.", "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
     },
     {
-      "keyword": "focus on my voice",
+      "id": "trance",
+      "keyword": "trance",
       "matchType": "PlainText",
       "enabled": true,
       "cooldownSeconds": 60,
-      "visualEffect": "SubliminalFlash",
+      "visualEffect": "OverlayPulse",
       "actions": [
         { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
-        { "type": "VisualEffect", "effect": "SubliminalFlash" },
-        { "type": "AvatarComment", "promptTemplate": "She just read the phrase 'focus on my voice'. Pull her into trance with one quiet line.", "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "VisualEffect", "effect": "OverlayPulse" },
+        { "type": "AvatarComment", "promptTemplate": "She just read the word 'trance'. Reinforce her identity as someone who slips easily, in character, one quiet line.", "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "Highlight" },
+        { "type": "Haptic", "intensity": 0.3 }
+      ]
+    },
+    {
+      "id": "empty",
+      "keyword": "empty",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 300,
+      "visualEffect": "MindWipe",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "MindWipe" },
+        { "type": "AvatarComment", "promptTemplate": "She just read 'empty'. Praise it softly in character, one quiet line — good, all gone, exactly how she should be.", "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "id": "spiral",
+      "keyword": "spiral",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 60,
+      "visualEffect": "OverlayPulse",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/bell.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "OverlayPulse" },
+        { "type": "AvatarComment", "promptTemplate": "She just read the word 'spiral'. Tell her to watch it turn in character, one slow line — let it pull her in.", "fallbackPhraseCategory": "TranceMurmur", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
     }

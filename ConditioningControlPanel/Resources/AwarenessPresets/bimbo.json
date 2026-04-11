@@ -2,10 +2,10 @@
   "id": "builtin.bimbo",
   "name": "Bimbo Reinforcement",
   "icon": "💖",
-  "description": "\"smart\", \"focus\" → subliminal flash of opposites",
-  "longDescription": "Catches \"smart\" words and fires opposing subliminals to nudge you back where you belong. Pairs a soft subliminal flash with a bimbo-coded avatar line. Works hands-off — no AI required, but the comments are better with it.",
+  "description": "\"smart\", \"focus\" → subliminal flash + ditzy distraction",
+  "longDescription": "Catches \"smart\" words and fires opposing subliminals to nudge you back where you belong. Pairs a soft subliminal flash with a bimbo-coded avatar line. Two thematic jackpots — bubbles on 'study' and a mind-wipe on 'concentrate' — sit on long cooldowns so they stay special. Works hands-off; comments are better with AI on.",
   "author": "Built-in",
-  "version": 2,
+  "version": 3,
   "isBuiltIn": true,
   "requiresAi": false,
   "avatarPromptTemplate": "You're her ditzy bimbo friend. She just ran into the word '{keyword}'. Distract her in character with one giggly line.",
@@ -21,11 +21,20 @@
       "You look SO much cuter when you're not thinking.",
       "*pops bubblegum*",
       "Smart? You? Hehe~",
-      "Let it go. Let it ALL go."
+      "Let it go. Let it ALL go.",
+      "Math is *so* last decade.",
+      "Why think when you can pose?",
+      "*twirls hair* What were you saying?",
+      "Concentrating? Ew.",
+      "That's a lot of letters in one word, babe.",
+      "Can't remember = doesn't matter.",
+      "Thinking gives you wrinkles.",
+      "Skip it. Smile instead."
     ]
   },
   "triggers": [
     {
+      "id": "smart",
       "keyword": "smart",
       "matchType": "PlainText",
       "enabled": true,
@@ -34,11 +43,12 @@
       "actions": [
         { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
         { "type": "VisualEffect", "effect": "SubliminalFlash" },
-        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "AvatarComment", "promptTemplate": "She just read the word 'smart'. Dismiss it with a giggly bimbo line in character — pretty over clever, one short sentence.", "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
     },
     {
+      "id": "focus",
       "keyword": "focus",
       "matchType": "PlainText",
       "enabled": true,
@@ -47,38 +57,27 @@
       "actions": [
         { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
         { "type": "VisualEffect", "effect": "SubliminalFlash" },
-        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "AvatarComment", "promptTemplate": "She just ran into 'focus'. Distract her in character with one giggly bimbo quip — focus is so not her thing anymore.", "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
     },
     {
-      "keyword": "think",
-      "matchType": "PlainText",
+      "id": "think",
+      "keyword": "\\bthink\\w*\\b",
+      "matchType": "Regex",
       "enabled": true,
       "cooldownSeconds": 30,
       "visualEffect": "SubliminalFlash",
       "actions": [
         { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
         { "type": "VisualEffect", "effect": "SubliminalFlash" },
-        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "AvatarComment", "promptTemplate": "She's trying to think. Tease her in character, one giggly line — don't strain yourself, babe.", "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
     },
     {
+      "id": "intelligent",
       "keyword": "intelligent",
-      "matchType": "PlainText",
-      "enabled": true,
-      "cooldownSeconds": 45,
-      "visualEffect": "SubliminalFlash",
-      "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
-        { "type": "VisualEffect", "effect": "SubliminalFlash" },
-        { "type": "AvatarComment", "promptTemplate": null, "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
-        { "type": "Highlight" }
-      ]
-    },
-    {
-      "keyword": "work",
       "matchType": "PlainText",
       "enabled": true,
       "cooldownSeconds": 60,
@@ -86,7 +85,63 @@
       "actions": [
         { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
         { "type": "VisualEffect", "effect": "SubliminalFlash" },
-        { "type": "AvatarComment", "promptTemplate": "She just ran into the word 'work'. Distract her with one bimbo-coded line.", "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "AvatarComment", "promptTemplate": "She just read the word 'intelligent'. Praise her ironically in character, one giggly line — pretend she has no idea what it means.", "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "id": "work",
+      "keyword": "work",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 120,
+      "visualEffect": "SubliminalFlash",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "SubliminalFlash" },
+        { "type": "AvatarComment", "promptTemplate": "She just ran into the word 'work'. Distract her with one giggly bimbo line — work is boring, looking pretty isn't.", "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "id": "study",
+      "keyword": "study",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 300,
+      "visualEffect": "Bubbles",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 75, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "Bubbles" },
+        { "type": "AvatarComment", "promptTemplate": "She just tried to 'study'. Distract her with bubbles in character, one giggly line — look, shiny! No more reading.", "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "id": "concentrate",
+      "keyword": "concentrate",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 300,
+      "visualEffect": "MindWipe",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 75, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "MindWipe" },
+        { "type": "AvatarComment", "promptTemplate": "She tried to 'concentrate'. Wipe the thought in character, one giggly line — oops, gone. Empty is better.", "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
+        { "type": "Highlight" }
+      ]
+    },
+    {
+      "id": "remember",
+      "keyword": "remember",
+      "matchType": "PlainText",
+      "enabled": true,
+      "cooldownSeconds": 120,
+      "visualEffect": "SubliminalFlash",
+      "actions": [
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/chime.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "VisualEffect", "effect": "SubliminalFlash" },
+        { "type": "AvatarComment", "promptTemplate": "She's trying to 'remember' something. Tease her in character, one giggly line — forgot already? Doesn't matter anyway.", "fallbackPhraseCategory": "BimboGiggle", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
     }

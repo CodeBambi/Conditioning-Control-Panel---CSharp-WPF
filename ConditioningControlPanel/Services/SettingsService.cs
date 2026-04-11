@@ -25,6 +25,15 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool WasSettingsFileMissing { get; private set; }
 
+        /// <summary>
+        /// Preset IDs that need a re-install pass after services are wired up. Populated by
+        /// <see cref="MergeBuiltInAwarenessPresets"/> when an installed preset's <c>Version</c>
+        /// is bumped — we can't call <c>App.KeywordPresets.InstallPreset</c> from inside
+        /// <c>Load()</c> because that service hasn't been constructed yet. Drained by
+        /// <see cref="App.OnStartup"/> immediately after <c>App.KeywordPresets</c> exists.
+        /// </summary>
+        public List<string> PendingPresetReinstalls { get; } = new();
+
         public SettingsService()
         {
             // Store settings in user data folder (persists across updates)
@@ -276,6 +285,12 @@ namespace ConditioningControlPanel.Services
                         }
                         else if (preset.Version > existing.Version)
                         {
+                            // Refresh the preset definition in place. Prior versions only
+                            // updated the metadata here — the cloned triggers in
+                            // KeywordTriggers were left stale, so users who installed v2
+                            // never picked up v3's new keywords/actions.
+                            var wasInstalled = existing.MasterEnabled;
+
                             existing.Name = preset.Name;
                             existing.Icon = preset.Icon;
                             existing.Description = preset.Description;
@@ -288,6 +303,19 @@ namespace ConditioningControlPanel.Services
                             existing.CannedPhrases = preset.CannedPhrases;
                             existing.Triggers = preset.Triggers;
                             refreshed++;
+
+                            // If the user already had this preset installed, queue a
+                            // re-install so the new triggers reach the live KeywordTriggers
+                            // list. We flip MasterEnabled = false now so InstallPreset's
+                            // "already installed" guard (line 64 of KeywordTriggerPresetService)
+                            // won't bail out, and we can't call InstallPreset directly here
+                            // because App.KeywordPresets is constructed later in OnStartup.
+                            if (wasInstalled)
+                            {
+                                existing.MasterEnabled = false;
+                                if (!PendingPresetReinstalls.Contains(existing.Id))
+                                    PendingPresetReinstalls.Add(existing.Id);
+                            }
                         }
                     }
                     catch (Exception ex)

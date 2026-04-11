@@ -756,6 +756,26 @@ namespace ConditioningControlPanel
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
             KeywordTriggers = new KeywordTriggerService();
             KeywordPresets = new KeywordTriggerPresetService();
+
+            // Drain any preset re-installs queued by SettingsService.MergeBuiltInAwarenessPresets
+            // when a built-in preset's version was bumped on this launch. This re-clones the
+            // new triggers into KeywordTriggers so version bumps actually reach the live list
+            // instead of only refreshing card metadata.
+            if (Settings?.PendingPresetReinstalls.Count > 0)
+            {
+                foreach (var presetId in Settings.PendingPresetReinstalls.ToList())
+                {
+                    try
+                    {
+                        KeywordPresets.InstallPreset(presetId);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.Warning("Pending preset re-install failed for {Id}: {Error}", presetId, ex.Message);
+                    }
+                }
+                Settings.PendingPresetReinstalls.Clear();
+            }
             ScreenOcr = new ScreenOcrService();
             KeywordHighlight = new KeywordHighlightService();
             RemoteControl = new RemoteControlService();
