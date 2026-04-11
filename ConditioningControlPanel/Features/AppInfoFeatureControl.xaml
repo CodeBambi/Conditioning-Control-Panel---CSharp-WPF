@@ -4,9 +4,10 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
 
     <StackPanel>
+        <!-- Version header -->
         <Border Background="{DynamicResource SurfaceBgBrush}"
                 BorderBrush="{DynamicResource GlassBorderBrush}"
-                BorderThickness="1" CornerRadius="10" Padding="20,20" Margin="0,0,0,10">
+                BorderThickness="1" CornerRadius="10" Padding="20,20" Margin="0,0,0,12">
             <StackPanel HorizontalAlignment="Center">
                 <TextBlock Text="{loc:Str label_app_info}"
                            Foreground="{DynamicResource PinkBrush}"
@@ -22,6 +23,10 @@
                            HorizontalAlignment="Center"/>
             </StackPanel>
         </Border>
+
+        <!-- Host for reparented account sections (Patreon/Discord login, Cloud Backup, Data & Privacy).
+             These come from MainWindow's PatreonTab at popup-open time and are returned when the popup closes. -->
+        <StackPanel x:Name="ExternalSectionsHost" Margin="0,0,0,8"/>
 
         <Button x:Name="BtnCheckUpdates" Content="{loc:Str btn_check_updates}"
                 Style="{StaticResource OutlineButton}"

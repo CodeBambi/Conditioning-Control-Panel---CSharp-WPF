@@ -1075,6 +1075,23 @@ namespace ConditioningControlPanel
                         rect.Fill = new ImageBrush(image) { Stretch = Stretch.UniformToFill };
                     }
                 }
+
+                // Image elements in description cards + Video Haptic Sync card.
+                // These are mod-aware: a Drone mod can ship resources/features/bambi takeover.png
+                // (or vibe.png) and it'll show the dronification image instead of the bambi default.
+                var descImageMap = new (string resourcePath, System.Windows.Controls.Image? img)[]
+                {
+                    ("features/bambi takeover.png", ImgBambiTakeoverDesc),
+                    ("features/vibe.png", ImgHapticsVibeDesc),
+                    ("features/vibe.png", ImgVideoHapticSync),
+                };
+                foreach (var (path, img) in descImageMap)
+                {
+                    if (img == null) continue;
+                    var resolved = ModResourceResolver.ResolveImage(path);
+                    if (resolved != null)
+                        img.Source = resolved;
+                }
             }
             catch (Exception ex)
             {
@@ -1356,7 +1373,18 @@ namespace ConditioningControlPanel
             // Apply mod-aware feature names to static XAML labels
             ApplyModFeatureNames();
             if (App.Mods != null)
+            {
                 App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
+                // Re-render the Remote Control QR code in the new mod's accent color
+                App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(() =>
+                {
+                    var code = App.RemoteControl?.SessionCode;
+                    if (!string.IsNullOrEmpty(code))
+                        RefreshRemoteQrCode(BuildRemotePairingUrl(code));
+                });
+                // Re-load mod-aware feature images (description card images, VHS card)
+                App.Mods.ModChanged += (_, _) => Dispatcher.Invoke(LoadFeatureImages);
+            }
 
             // Re-apply code-behind strings when language changes (section headers, feature names, etc.)
             LocalizationManager.Instance.LanguageChanged += (_, _) => Dispatcher.Invoke(ApplyModFeatureNames);
@@ -2867,7 +2895,23 @@ namespace ConditioningControlPanel
 
         private void BtnPatreonExclusives_Click(object sender, RoutedEventArgs e)
         {
-            ShowTab("patreon");
+            // The Exclusives tab no longer exists — this button is now purely a
+            // launcher for the submenu popup (Remote Control / Bambi Takeover /
+            // Haptics / Awareness). The account/data content that used to live in
+            // the Exclusives tab now lives in the dashboard's App Info & Data popup.
+            RefreshExclusivesSubmenuLocks();
+            ExclusivesSubmenuPopup.IsOpen = true;
+        }
+
+        /// <summary>
+        /// Opens the dashboard's "App Info &amp; Data" popup. This is the new home
+        /// for account management (Patreon/Discord login, cloud backup, data
+        /// export, privacy policy, support links) that used to live in the
+        /// Patreon Exclusives tab.
+        /// </summary>
+        internal void ShowAppInfoPopup()
+        {
+            VelvetBtnAppInfo_Click(this, new RoutedEventArgs());
         }
 
         private void BtnAwareness_Click(object sender, RoutedEventArgs e)
@@ -2946,12 +2990,12 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Routes the gating overlay's CTA button to the Patreon login/upgrade flow.
-        /// Mirrors what BtnPatreonExclusives_Click does for free users today.
+        /// Routes the gating overlay's CTA button to the App Info &amp; Data popup,
+        /// where users can sign in with Patreon/Discord to unlock premium features.
         /// </summary>
         private void BtnGateUnlock_Click(object sender, RoutedEventArgs e)
         {
-            ShowTab("patreon");
+            ShowAppInfoPopup();
         }
 
         /// <summary>
@@ -3766,6 +3810,16 @@ namespace ConditioningControlPanel
 
         private void ShowTab(string tab)
         {
+            // Legacy redirect: the "patreon" tab was eliminated and its
+            // account/data content lives in the dashboard's App Info popup now.
+            // Route any legacy callers there WITHOUT disturbing the currently
+            // active tab (opening a popup is overlay-style, not a tab switch).
+            if (tab == "patreon")
+            {
+                ShowAppInfoPopup();
+                return;
+            }
+
             // Stop animations on tabs we're leaving to reduce idle CPU
             StopSeasonTitleShimmer();
             StopLockdownPulse();
@@ -3866,12 +3920,9 @@ namespace ConditioningControlPanel
                     StartLockdownPulse();
                     break;
 
-                case "patreon":
-                    PatreonTab.Visibility = Visibility.Visible;
-                    AnimateTabIn(PatreonTab);
-                    // Note: The main Discord login button isn't a tab button, so no style update needed
-                    UpdatePatreonUI();
-                    break;
+                // Note: "patreon" case is handled at the top of ShowTab as a
+                // legacy redirect to the App Info & Data popup (Exclusives tab
+                // was eliminated; account/data UI now lives in the dashboard).
 
                 case "leaderboard":
                     LeaderboardTab.Visibility = Visibility.Visible;
@@ -5490,6 +5541,93 @@ namespace ConditioningControlPanel
 
             // Update XP bar login state when Patreon auth changes
             UpdateXPBarLoginState();
+        }
+
+        // ========================================================================
+        // Account sections reparenting (App Info & Data popup)
+        // ========================================================================
+        // The Patreon login card, Discord login card, AccountLinkingSection,
+        // CloudSettingsBackupSection and DataPrivacySection live physically inside
+        // PatreonTab's XAML tree (so their x:Name fields resolve for ~64 handler
+        // references across this file). When the dashboard's "App Info & Data"
+        // popup opens, we temporarily detach these Borders and attach them to the
+        // popup's host StackPanel so the user can manage their account/data from
+        // the dashboard. When the popup closes we put them back — the same element
+        // instances, so all handler refs remain valid.
+
+        private readonly System.Collections.Generic.List<System.Windows.FrameworkElement> _detachedAccountSections = new();
+
+        /// <summary>
+        /// Detaches the account/data sections from PatreonTab's content StackPanel
+        /// and attaches them to the provided target host (usually the AppInfoFeatureControl's
+        /// ExternalSectionsHost). Called when the App Info &amp; Data popup opens.
+        /// </summary>
+        internal void DetachAccountSectionsInto(System.Windows.Controls.Panel target)
+        {
+            if (target == null) return;
+            if (_detachedAccountSections.Count > 0) return; // already detached
+
+            // Order matters — this is the vertical order they'll appear in the popup.
+            var toMove = new System.Windows.FrameworkElement?[]
+            {
+                PatreonLoginCard,
+                DiscordLoginCard,
+                AccountLinkingSection,
+                CloudSettingsBackupSection,
+                DataPrivacySection,
+                SupportDevelopmentCard,
+            };
+
+            foreach (var fe in toMove)
+            {
+                if (fe == null) continue;
+
+                // Detach from whichever parent it currently has (defensive:
+                // could be PatreonTabContent on first open, or a stale popup
+                // host if a previous close didn't clean up).
+                if (fe.Parent is System.Windows.Controls.Panel currentParent)
+                {
+                    currentParent.Children.Remove(fe);
+                }
+                else if (fe.Parent is System.Windows.Controls.ContentControl cc)
+                {
+                    cc.Content = null;
+                }
+
+                try
+                {
+                    target.Children.Add(fe);
+                    _detachedAccountSections.Add(fe);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "DetachAccountSectionsInto: failed to attach {Name}", fe.Name);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns the detached account/data sections to PatreonTab so their
+        /// x:Name references stay valid and they can be borrowed again next time
+        /// the popup opens. Called when the App Info &amp; Data popup closes.
+        /// </summary>
+        internal void ReattachAccountSections()
+        {
+            if (_detachedAccountSections.Count == 0 || PatreonTabContent == null) return;
+
+            // Insert right after the header Grid (index 0), preserving the original order.
+            int insertAt = 1;
+            foreach (var fe in _detachedAccountSections)
+            {
+                if (fe.Parent is System.Windows.Controls.Panel currentParent)
+                    currentParent.Children.Remove(fe);
+
+                if (insertAt > PatreonTabContent.Children.Count)
+                    insertAt = PatreonTabContent.Children.Count;
+                PatreonTabContent.Children.Insert(insertAt, fe);
+                insertAt++;
+            }
+            _detachedAccountSections.Clear();
         }
 
         private async void BtnPatreonLogin_Click(object sender, RoutedEventArgs e)
@@ -8017,8 +8155,10 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // No preset installed — fall back to the Exclusives tab power-user editor.
-            ShowTab("patreon");
+            // No preset installed — the Exclusives tab is gone, so just open the
+            // dashboard's App Info popup as a safe landing point. In practice the
+            // Awareness tab handles the full customization flow now.
+            ShowAppInfoPopup();
         }
 
         #endregion
@@ -8528,10 +8668,24 @@ namespace ConditioningControlPanel
             if (ImgRemoteQrCode == null) return;
             try
             {
+                // Pull mod-themed colors. Use AccentDarkColor for foreground (max contrast on white).
+                byte[] fgRgb = new byte[] { 0xFF, 0x14, 0x93 };
+                byte[] bgRgb = new byte[] { 0xFF, 0xFF, 0xFF };
+                try
+                {
+                    var accentDarkHex = App.Mods?.GetAccentDarkColorHex();
+                    if (!string.IsNullOrEmpty(accentDarkHex))
+                    {
+                        var fgColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(accentDarkHex);
+                        fgRgb = new byte[] { fgColor.R, fgColor.G, fgColor.B };
+                    }
+                }
+                catch { /* fall back to default pink */ }
+
                 using var generator = new QRCoder.QRCodeGenerator();
                 using var data = generator.CreateQrCode(url, QRCoder.QRCodeGenerator.ECCLevel.M);
                 using var qr = new QRCoder.PngByteQRCode(data);
-                var bytes = qr.GetGraphic(8);
+                var bytes = qr.GetGraphic(10, fgRgb, bgRgb);
                 using var ms = new MemoryStream(bytes);
                 var bmp = new BitmapImage();
                 bmp.BeginInit();
@@ -11521,10 +11675,44 @@ namespace ConditioningControlPanel
                 Localization.Loc.Get("section_scheduler"),
                 glyph: "📅");
 
-        private void VelvetBtnAppInfo_Click(object sender, RoutedEventArgs e) =>
-            ShowFeaturePopup(new Features.AppInfoFeatureControl(),
+        private void VelvetBtnAppInfo_Click(object sender, RoutedEventArgs e)
+        {
+            // Build the UserControl and immediately reparent the account/data
+            // sections (Patreon/Discord login, Cloud Backup, Data & Privacy,
+            // Support Development) into its host BEFORE showing the popup.
+            // Doing it pre-show avoids timing issues with the Loaded event.
+            var control = new Features.AppInfoFeatureControl();
+            try
+            {
+                DetachAccountSectionsInto(control.AccountSectionsHost);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "AppInfo: failed to attach account sections pre-show");
+            }
+
+            var popup = new Features.FeaturePopupWindow(
+                control,
                 Localization.Loc.Get("label_app_info"),
-                glyph: "ℹ");
+                glyph: "ℹ")
+            {
+                Owner = this
+            };
+
+            // When the popup closes, return the sections to PatreonTabContent
+            // so the next open can borrow them again and any MainWindow
+            // handlers that read their Text/Visibility keep working.
+            popup.Closed += (_, __) =>
+            {
+                try { ReattachAccountSections(); }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "AppInfo: failed to return account sections");
+                }
+            };
+
+            popup.ShowDialog();
+        }
 
         private void VelvetBtnRamp_Click(object sender, RoutedEventArgs e) =>
             ShowFeaturePopup(new Features.IntensityRampFeatureControl(),
@@ -16343,7 +16531,9 @@ namespace ConditioningControlPanel
                 showProgression: () => ShowTab("progression"),
                 showAchievements: () => ShowTab("achievements"),
                 showCompanion: () => ShowTab("companion"),
-                showPatreon: () => ShowTab("patreon")
+                // Exclusives tab eliminated — route tutorial's "patreon" step to the
+                // App Info & Data popup which hosts the login/data sections.
+                showPatreon: () => ShowAppInfoPopup()
             );
 
             App.Tutorial.Start(type);
@@ -16567,6 +16757,12 @@ namespace ConditioningControlPanel
             if (PillRankPercentile != null)
                 PillRankPercentile.ToolTip = App.Mods?.GetStatPillTooltip("popular_girl")
                     ?? ML("Your rank percentile (Popular Girl skill)", "tooltip_your_rank_percentile_popular_girl_skill");
+
+            // Mod-aware Bambi Takeover header + side-nav button label
+            // (Drone mod → "Drone Takeover", SissyHypno → "Sissy Takeover", etc.)
+            var takeoverLabel = App.Mods?.GetTakeoverLabel() ?? Loc.Get("tab_bambi_takeover");
+            if (TxtBambiTakeoverHeader != null) TxtBambiTakeoverHeader.Text = takeoverLabel;
+            if (TxtSubBambiTakeover != null) TxtSubBambiTakeover.Text = takeoverLabel;
 
             // Refresh bonus chips with updated names
             RefreshXPBarBonuses();

@@ -1,5 +1,4 @@
 using System;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using ConditioningControlPanel.Services;
@@ -13,6 +12,13 @@ namespace ConditioningControlPanel.Features
             InitializeComponent();
             Loaded += OnLoaded;
         }
+
+        /// <summary>
+        /// Publicly-exposed host for the account/data sections that get reparented
+        /// in from MainWindow's PatreonTab. Populated by VelvetBtnAppInfo_Click
+        /// before the popup is shown so the sections are in place before layout.
+        /// </summary>
+        public StackPanel AccountSectionsHost => ExternalSectionsHost;
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
