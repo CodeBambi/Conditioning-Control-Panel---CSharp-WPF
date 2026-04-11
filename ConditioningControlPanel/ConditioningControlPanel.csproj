@@ -98,6 +98,9 @@
 
     <!-- Auto-Update -->
     <PackageReference Include="Velopack" Version="0.0.1298" />
+
+    <!-- QR Code Generation (used by Remote Control tab for mobile pairing) -->
+    <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
 
   <ItemGroup>

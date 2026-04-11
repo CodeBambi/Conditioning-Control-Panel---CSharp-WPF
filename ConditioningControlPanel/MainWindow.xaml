@@ -91,6 +91,33 @@
             </Setter>
         </Style>
 
+        <!-- Exclusives Submenu Button Style — used inside the Exclusives popup -->
+        <Style x:Key="ExclusivesSubmenuButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#33FF69B4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Tab Button Active Style — filled accent with bottom indicator -->
         <Style x:Key="TabButtonActive" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
@@ -1475,13 +1502,6 @@
                             <TextBlock Text="{loc:Str tab_enhancements}" FontSize="11"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="BtnAwareness" Tag="Awareness" Style="{StaticResource TabButton}"
-                            Margin="3,0" Click="BtnAwareness_Click" ToolTip="Awareness Engine — screen + typing awareness">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="👁" FontSize="12" Margin="0,0,4,0"/>
-                            <TextBlock Text="Awareness" FontSize="11"/>
-                        </StackPanel>
-                    </Button>
                     <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource TabButton}"
                             Margin="3,0" Click="BtnAssets_Click" ToolTip="{loc:Str tooltip_assets_packs}">
                         <StackPanel Orientation="Horizontal">
@@ -1841,38 +1861,103 @@
                             <TextBlock Text="{loc:Str tab_lab}" FontSize="10"/>
                         </StackPanel>
                     </Button>
-                    <Button Grid.Column="5" x:Name="BtnPatreonExclusives" Tag="Patreon" Click="BtnPatreonExclusives_Click"
-                            ToolTip="{loc:Str tooltip_patreon_exclusives}" Cursor="Hand" Height="32" Margin="2,0">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Background" Value="#FF424D"/>
-                                <Setter Property="Foreground" Value="White"/>
-                                <Setter Property="FontWeight" Value="Bold"/>
-                                <Setter Property="FontSize" Value="10"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="border" Background="{TemplateBinding Background}"
-                                                    CornerRadius="6" BorderThickness="2" BorderBrush="#E8363F"
-                                                    Padding="7,3">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Grid Grid.Column="5">
+                        <Button x:Name="BtnPatreonExclusives" Tag="Patreon" Click="BtnPatreonExclusives_Click"
+                                MouseEnter="BtnPatreonExclusives_MouseEnter"
+                                MouseLeave="ExclusivesMenu_MouseLeave"
+                                ToolTip="{loc:Str tooltip_patreon_exclusives}" Cursor="Hand" Height="32" Margin="2,0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="#FF424D"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                    <Setter Property="FontSize" Value="10"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="border" Background="{TemplateBinding Background}"
+                                                        CornerRadius="6" BorderThickness="2" BorderBrush="#E8363F"
+                                                        Padding="7,3">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="border" Property="Background" Value="#E8363F"/>
+                                                        <Setter TargetName="border" Property="BorderBrush" Value="#FF424D"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="⭐" FontSize="10" Margin="0,0,3,0"/>
+                                <TextBlock Text="{loc:Str tab_exclusives}" FontSize="10"/>
+                            </StackPanel>
+                        </Button>
+                        <Popup x:Name="ExclusivesSubmenuPopup"
+                               PlacementTarget="{Binding ElementName=BtnPatreonExclusives}"
+                               Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+                               PopupAnimation="Slide"
+                               MouseLeave="ExclusivesMenu_MouseLeave"
+                               MouseEnter="ExclusivesSubmenuPopup_MouseEnter">
+                            <Border Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="2"
+                                    CornerRadius="6" Padding="6" Margin="0,4,0,0" MinWidth="220">
+                                <StackPanel Orientation="Vertical">
+                                    <Button x:Name="BtnSubRemoteControl" Style="{StaticResource ExclusivesSubmenuButton}"
+                                            Click="BtnSubRemoteControl_Click">
+                                        <DockPanel LastChildFill="True">
+                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeRemoteControl"
+                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
                                             </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="border" Property="Background" Value="#E8363F"/>
-                                                    <Setter TargetName="border" Property="BorderBrush" Value="#FF424D"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⭐" FontSize="10" Margin="0,0,3,0"/>
-                            <TextBlock Text="{loc:Str tab_exclusives}" FontSize="10"/>
-                        </StackPanel>
-                    </Button>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🎮" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{loc:Str tab_remote_control}" Foreground="White" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Button>
+                                    <Button x:Name="BtnSubBambiTakeover" Style="{StaticResource ExclusivesSubmenuButton}"
+                                            Click="BtnSubBambiTakeover_Click">
+                                        <DockPanel LastChildFill="True">
+                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeBambiTakeover"
+                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
+                                            </Border>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🤖" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{loc:Str tab_bambi_takeover}" Foreground="White" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Button>
+                                    <Button x:Name="BtnSubHaptics" Style="{StaticResource ExclusivesSubmenuButton}"
+                                            Click="BtnSubHaptics_Click">
+                                        <DockPanel LastChildFill="True">
+                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeHaptics"
+                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
+                                            </Border>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="💜" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{loc:Str tab_haptics}" Foreground="White" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Button>
+                                    <Button x:Name="BtnSubAwareness" Style="{StaticResource ExclusivesSubmenuButton}"
+                                            Click="BtnSubAwareness_Click">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="👁" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{loc:Str tab_awareness}" Foreground="White" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
                     <Button x:Name="BtnMainHelp" Grid.Column="6" Content="?" Click="BtnMainHelp_Click"
                             Width="26" Height="26" ToolTip="{loc:Str tooltip_how_to_use}" Margin="3,0">
                         <Button.Template>
@@ -5966,233 +6051,9 @@
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <!-- Row 0, Col 0: Bambi Takeover -->
-                            <Expander Grid.Row="0" Grid.Column="0" Style="{StaticResource ExclusivesSectionExpander}">
-                                <Expander.Header>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="TxtTakeoverHeader" Text="{loc:Str label_bambi_takeover}" Foreground="White" FontSize="14" FontWeight="Bold"/>
-                                    </StackPanel>
-                                </Expander.Header>
-                                <StackPanel>
-                                <Grid>
-                                    <!-- Locked State -->
-                                    <StackPanel x:Name="AutonomyLocked" Visibility="Visible">
-                                        <Grid>
-                                            <TextBlock x:Name="TxtTakeoverLocked" Text="{loc:Str label_bambi_takeover}" Foreground="#666666" FontWeight="Bold" FontSize="13"/>
-                                            <TextBlock x:Name="TxtAutonomyLockStatus" Text="{loc:Str label_patreon_only}" Foreground="{DynamicResource SecondaryBrush}" HorizontalAlignment="Right" FontSize="11"/>
-                                        </Grid>
-                                        <TextBlock x:Name="TxtAutonomyLockMessage" Text="{loc:Str label_support_on_patreon_to_unlock}" Foreground="{DynamicResource PinkBrush}" FontSize="11" Margin="0,4,0,0"/>
-                                    </StackPanel>
+                            <!-- Row 0, Col 0: Bambi Takeover — moved to BambiTakeoverTab -->
 
-                                    <!-- Unlocked State -->
-                                    <StackPanel x:Name="AutonomyUnlocked" Visibility="Collapsed">
-                                        <!-- Header -->
-                                        <Grid>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock x:Name="TxtTakeoverUnlocked" Text="{loc:Str label_bambi_takeover}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="13"/>
-                                                <Border Background="#2A1A3A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-                                                    <TextBlock Text="{loc:Str label_no_engine_needed}" Foreground="{DynamicResource PinkBrush}" FontSize="9"/>
-                                                </Border>
-                                            </StackPanel>
-                                        </Grid>
-
-                                        <StackPanel x:Name="AutonomySettings" Margin="0,8,0,0">
-                                            <!-- Sliders: 2x2 grid -->
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="8"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="6"/>
-                                                    <RowDefinition Height="Auto"/>
-                                                </Grid.RowDefinitions>
-                                                <StackPanel Grid.Row="0" Grid.Column="0">
-                                                    <Grid><TextBlock Text="{loc:Str setting_interval}" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyInterval" Text="{loc:Str label_60s}" Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right"/></Grid>
-                                                    <Slider x:Name="SliderAutonomyInterval" Minimum="30" Maximum="300" Value="60" Height="18" ValueChanged="SliderAutonomyInterval_Changed"/>
-                                                </StackPanel>
-                                                <StackPanel Grid.Row="0" Grid.Column="2">
-                                                    <Grid><TextBlock Text="{loc:Str label_cooldown}" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyCooldown" Text="{loc:Str label_30s}" Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right"/></Grid>
-                                                    <Slider x:Name="SliderAutonomyCooldown" Minimum="10" Maximum="300" Value="30" Height="18" ValueChanged="SliderAutonomyCooldown_Changed"/>
-                                                </StackPanel>
-                                                <StackPanel Grid.Row="2" Grid.Column="0">
-                                                    <Grid><TextBlock Text="{loc:Str setting_intensity}" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyIntensity" Text="5" Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right"/></Grid>
-                                                    <Slider x:Name="SliderAutonomyIntensity" Minimum="1" Maximum="10" Value="5" Height="18" ValueChanged="SliderAutonomyIntensity_Changed"/>
-                                                </StackPanel>
-                                                <StackPanel Grid.Row="2" Grid.Column="2">
-                                                    <Grid><TextBlock Text="{loc:Str label_announce}" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyAnnounce" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right"/></Grid>
-                                                    <Slider x:Name="SliderAutonomyAnnounce" Minimum="0" Maximum="100" Value="50" Height="18" ValueChanged="SliderAutonomyAnnounce_Changed"/>
-                                                </StackPanel>
-                                            </Grid>
-
-                                            <!-- Checkboxes: 3 columns -->
-                                            <Grid Margin="0,10,0,0">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="8"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="8"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-                                                <!-- Triggers -->
-                                                <StackPanel Grid.Column="0">
-                                                    <TextBlock Text="{loc:Str label_triggers}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
-                                                    <Grid Margin="0,1"><TextBlock Text="{loc:Str label_idle}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyIdle" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyIdle_Changed" Unchecked="ChkAutonomyIdle_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock Text="{loc:Str label_random_2}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyRandom" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyRandom_Changed" Unchecked="ChkAutonomyRandom_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock Text="{loc:Str label_time_aware}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyTimeAware" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyTimeAware_Changed" Unchecked="ChkAutonomyTimeAware_Changed"/></Grid>
-                                                </StackPanel>
-                                                <!-- Basic -->
-                                                <StackPanel Grid.Column="2">
-                                                    <TextBlock Text="{loc:Str label_basic}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
-                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoFlash" Text="{loc:Str tab_flashes}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoVideo" Text="{loc:Str tab_videos}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock Text="{loc:Str label_web_videos}" FontSize="10" Foreground="#CCC" ToolTip="{loc:Str tooltip_auto_plays_hypnotube_videos_fullscreen}"/><CheckBox x:Name="ChkAutonomyWebVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoSubliminal" Text="{loc:Str tab_subliminals}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock Text="{loc:Str label_comments}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyComment" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                </StackPanel>
-                                                <!-- Advanced -->
-                                                <StackPanel Grid.Column="4">
-                                                    <TextBlock Text="{loc:Str label_advanced_2}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
-                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoBubbles" Text="{loc:Str label_bubbles}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBubbles" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoPinkFilter" Text="{loc:Str label_pink_filter_2}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyPinkFilter" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoLockCards" Text="{loc:Str label_lock_cards}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyLockCard" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoBouncing" Text="{loc:Str label_bouncing}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBouncingText" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoMindwipe" Text="{loc:Str label_mindwipe}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyMindWipe" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                                </StackPanel>
-                                            </Grid>
-
-                                            <!-- Buttons -->
-                                            <Grid Margin="0,10,0,0">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="8"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <Button x:Name="BtnAutonomyStartStop" Grid.Column="0" Content="{loc:Str btn_start_2}" Background="#2A1A3A" Foreground="#90EE90"
-                                                        FontWeight="Bold" FontSize="12" Padding="12,6"
-                                                        Click="BtnAutonomyStartStop_Click" ToolTip="{loc:Str tooltip_start_stop_bambi_takeover}"/>
-                                                <Button Grid.Column="2" Content="{loc:Str btn_test}" Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="11"
-                                                        Padding="12,6" Click="BtnTestAutonomy_Click" ToolTip="{loc:Str tooltip_test_action}"/>
-                                            </Grid>
-
-                                            <!-- Hidden elements -->
-                                            <CheckBox x:Name="ChkAutonomySpiral" Visibility="Collapsed" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
-                                            <CheckBox x:Name="ChkAutonomyBubbleCount" Visibility="Collapsed" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
-                                            <Button x:Name="BtnForceStartAutonomy" Visibility="Collapsed" Click="BtnForceStartAutonomy_Click"/>
-                                            <CheckBox x:Name="ChkAutonomyEnabled" Visibility="Collapsed" Checked="ChkAutonomyEnabled_Changed" Unchecked="ChkAutonomyEnabled_Changed"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Grid>
-
-                                <!-- Feature Image -->
-                                <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="8" Padding="8" Margin="0,10,0,0">
-                                    <StackPanel>
-                                        <TextBlock Text="{loc:Str label_let_her_take_control}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str label_she_will_autonomously_trigger_effects_based_o}"
-                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" TextAlignment="Center" Margin="0,4,0,8"/>
-                                        <Image x:Name="ImgTakeover" Source="pack://application:,,,/Resources/features/bambi takeover.png"
-                                               Stretch="Uniform" MaxHeight="160"/>
-                                    </StackPanel>
-                                </Border>
-                                </StackPanel>
-                            </Expander>
-
-                            <!-- Row 0, Col 2: Remote Control -->
-                            <Expander Grid.Row="0" Grid.Column="2" Style="{StaticResource ExclusivesSectionExpander}">
-                                <Expander.Header>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Str label_remote_control}" Foreground="White" FontSize="14" FontWeight="Bold"/>
-                                    </StackPanel>
-                                </Expander.Header>
-                                <StackPanel>
-                                    <!-- Header row with toggle -->
-                                    <Grid Margin="0,0,0,10">
-                                        <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap">
-                                            <Run Text="{loc:Str label_hand_over_control_to_someone_you_trust_they_g}"/>
-                                        </TextBlock>
-                                    </Grid>
-                                    <Grid Margin="0,0,0,10">
-                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                            <Button x:Name="HelpBtnRemoteControl" Style="{StaticResource HelpButtonStyle}"
-                                                    VerticalAlignment="Center" Margin="0,0,8,0" Tag="RemoteControl" Panel.ZIndex="1"/>
-                                            <CheckBox x:Name="ChkRemoteControlEnabled" Style="{StaticResource ToggleStyle}"
-                                                      Checked="ChkRemoteControlEnabled_Changed" Unchecked="ChkRemoteControlEnabled_Changed"/>
-                                        </StackPanel>
-                                    </Grid>
-
-                                    <!-- Settings (visible when active) -->
-                                    <StackPanel x:Name="RemoteControlPanel" Visibility="Collapsed">
-                                        <!-- Tier selection -->
-                                        <Grid Margin="0,0,0,10">
-                                            <TextBlock Text="{loc:Str label_permission_tier}" Foreground="#C0C0C0" FontSize="12" VerticalAlignment="Center"/>
-                                            <ComboBox x:Name="CmbRemoteTier" HorizontalAlignment="Right" Width="130"
-                                                      Style="{StaticResource DarkComboBoxStyle}" FontSize="12"
-                                                      SelectionChanged="CmbRemoteTier_SelectionChanged">
-                                                <ComboBoxItem Content="{loc:Str btn_light}" IsSelected="True"/>
-                                                <ComboBoxItem Content="{loc:Str btn_standard}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_full}"/>
-                                            </ComboBox>
-                                        </Grid>
-
-                                        <!-- Controller Link -->
-                                        <Border x:Name="RemoteLinkPanel" Background="#0D0D1A" CornerRadius="8" Padding="10,8" Margin="0,0,0,6"
-                                                BorderBrush="#353550" BorderThickness="1" Visibility="Collapsed">
-                                            <Grid>
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="🔗" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                    <TextBlock Text="{loc:Str label_codebambi_github_io_remote}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11"
-                                                               VerticalAlignment="Center"/>
-                                                </StackPanel>
-                                                <Button x:Name="BtnCopyRemoteLink" Content="{loc:Str btn_copy_link}" Background="#353550" Foreground="White"
-                                                        FontSize="10" Padding="8,3" BorderThickness="0" Cursor="Hand"
-                                                        HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                        Click="BtnCopyRemoteLink_Click"/>
-                                            </Grid>
-                                        </Border>
-
-                                        <!-- Session Code Display -->
-                                        <Border x:Name="RemoteCodePanel" Background="#0D0D1A" CornerRadius="8" Padding="15,12" Margin="0,0,0,10"
-                                                BorderBrush="#353550" BorderThickness="1" Visibility="Collapsed">
-                                            <Grid>
-                                                <StackPanel HorizontalAlignment="Center">
-                                                    <TextBlock Text="{loc:Str label_s_e_s_s_i_o_n_c_o_d_e}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" FontWeight="Bold"
-                                                               HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                                                    <TextBlock x:Name="TxtRemoteCode" Text="- - - - - - - -" Foreground="{DynamicResource PinkBrush}"
-                                                               FontSize="28" FontWeight="Bold" FontFamily="Consolas"
-                                                               HorizontalAlignment="Center"/>
-                                                    <TextBlock x:Name="TxtRemotePin" Text="" Foreground="{DynamicResource SecondaryBrush}"
-                                                               FontSize="16" FontWeight="Bold" FontFamily="Consolas"
-                                                               HorizontalAlignment="Center" Margin="0,4,0,0"
-                                                               Visibility="Collapsed"/>
-                                                </StackPanel>
-                                                <Button x:Name="BtnCopyRemoteCode" Content="{loc:Str btn_copy}" Background="#353550" Foreground="White"
-                                                        FontSize="11" Padding="10,4" BorderThickness="0" Cursor="Hand"
-                                                        HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                        Click="BtnCopyRemoteCode_Click"/>
-                                            </Grid>
-                                        </Border>
-
-                                        <!-- Connection Status -->
-                                        <StackPanel x:Name="RemoteStatusPanel" Orientation="Horizontal" Margin="0,0,0,10" Visibility="Collapsed">
-                                            <Ellipse x:Name="RemoteStatusDot" Width="8" Height="8" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="TxtRemoteStatus" Text="{loc:Str label_waiting_for_controller}" Foreground="#A0A0A0" FontSize="12"/>
-                                        </StackPanel>
-
-                                        <!-- Stop button -->
-                                        <Button x:Name="BtnStopRemote" Content="{loc:Str btn_stop_session}" Background="#FF4444" Foreground="White"
-                                                FontWeight="Bold" FontSize="12" Padding="15,8" BorderThickness="0" Cursor="Hand"
-                                                Margin="0,0,0,10" Visibility="Collapsed"
-                                                Click="BtnStopRemote_Click"/>
-
-                                        <!-- Info notice -->
-                                        <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextDimBrush}" FontSize="10" Margin="0,4,0,0">
-                                            <Run Text="{loc:Str label_all_triggers_use_your_local_media_files_the_c}"/>
-                                        </TextBlock>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Expander>
+                            <!-- Row 0, Col 2: Remote Control — moved to RemoteControlTab -->
 
                             <!-- Row 1, Col 0: Keyword Triggers -->
                             <Expander Grid.Row="1" Grid.Column="0" Style="{StaticResource ExclusivesSectionExpander}">
@@ -6354,635 +6215,7 @@
                                 </StackPanel>
                             </Expander>
 
-                            <!-- Row 2, Full Width: Haptic Feedback -->
-                            <Expander Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource ExclusivesSectionExpander}">
-                                <Expander.Header>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Str label_haptic_feedback}" Foreground="White" FontSize="14" FontWeight="Bold"/>
-                                    </StackPanel>
-                                </Expander.Header>
-                                <Grid>
-                                    <!-- Haptics Content (enabled for Patreon supporters) -->
-                                    <Grid x:Name="HapticsContentGrid">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="10"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <!-- Left Box: Connection Settings -->
-                                    <Grid Grid.Column="0">
-                                        <Border x:Name="HapticsConnectionBox" CornerRadius="8" Padding="12"
-                                                Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#353550" BorderThickness="1">
-                                    <StackPanel>
-                                    <Grid>
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{loc:Str label_haptic_connection}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"/>
-                                            <Button x:Name="HelpBtnHaptics" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="Haptics"/>
-                                        </StackPanel>
-                                        <CheckBox x:Name="ChkHapticsEnabled" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                  Checked="ChkHapticsEnabled_Changed" Unchecked="ChkHapticsEnabled_Changed"/>
-                                    </Grid>
-                                    <Grid Margin="0,4,0,0">
-                                        <TextBlock Text="{loc:Str label_connect_to_lovense_or_buttplug_io_devices}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                                        <Button x:Name="BtnHapticsHelp" Content="{loc:Str btn_need_help_setting_up}"
-                                                HorizontalAlignment="Right" Background="Transparent"
-                                                Foreground="{DynamicResource PinkBrush}" BorderThickness="0" FontSize="10"
-                                                Cursor="Hand" Click="BtnHapticsHelp_Click" Padding="0">
-                                            <Button.Style>
-                                                <Style TargetType="Button">
-                                                    <Setter Property="Template">
-                                                        <Setter.Value>
-                                                            <ControlTemplate TargetType="Button">
-                                                                <TextBlock Text="{TemplateBinding Content}"
-                                                                           Foreground="{TemplateBinding Foreground}"
-                                                                           FontSize="{TemplateBinding FontSize}"
-                                                                           TextDecorations="Underline"/>
-                                                            </ControlTemplate>
-                                                        </Setter.Value>
-                                                    </Setter>
-                                                </Style>
-                                            </Button.Style>
-                                        </Button>
-                                    </Grid>
-
-                                <!-- Provider Selection -->
-                                <Grid Margin="0,12,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <TextBlock Text="{loc:Str label_provider}" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
-                                    <ComboBox x:Name="CmbHapticProvider" Grid.Column="1" Margin="10,0"
-                                              Background="{DynamicResource SurfaceBgBrush}" Foreground="Black" BorderThickness="0"
-                                              SelectionChanged="CmbHapticProvider_SelectionChanged">
-                                        <ComboBoxItem Content="{loc:Str btn_lovense_connect}" Tag="Lovense" Foreground="Black"/>
-                                        <ComboBoxItem Content="{loc:Str btn_buttplug_io_intiface}" Tag="Buttplug" Foreground="Black"/>
-                                    </ComboBox>
-                                    <Button x:Name="BtnHapticConnect" Grid.Column="2" Content="{loc:Str btn_connect}"
-                                            Background="{DynamicResource PinkBrush}" Foreground="White"
-                                            BorderThickness="0" Padding="12,6"
-                                            FontSize="11" Cursor="Hand"
-                                            Click="BtnHapticConnect_Click"/>
-                                </Grid>
-<!-- URL Input with Tooltip Guide -->
-                                <Grid Margin="0,10,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{loc:Str label_url}" Foreground="White" FontSize="11" VerticalAlignment="Center"/>
-                                    <TextBox x:Name="TxtHapticUrl" Grid.Column="1" Margin="10,0,0,0"
-                                             Background="#FFFFFF" Foreground="Black" BorderThickness="1"
-                                             BorderBrush="{DynamicResource PanelAccentBrush}" Padding="8,4" FontSize="11"
-                                             TextChanged="TxtHapticUrl_TextChanged">
-                                        <TextBox.ToolTip>
-                                            <ToolTip Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1" Padding="12">
-                                                <StackPanel MaxWidth="280">
-                                                    <TextBlock Text="{loc:Str label_connection_guide}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,8"/>
-
-                                                    <TextBlock Text="{loc:Str label_lovense_connect}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold"/>
-                                                    <TextBlock Foreground="#CCCCCC" FontSize="10" TextWrapping="Wrap" Margin="0,2,0,6">
-                                                        <Run Text="1."/><Run Text="{loc:Str label_open_lovense_remote_app}" Foreground="White"/>
-                                                        <LineBreak/><Run Text="2."/><Run Text="{loc:Str label_go_to_settings_game_mode}" Foreground="White"/>
-                                                        <LineBreak/><Run Text="3."/><Run Text="{loc:Str label_enable_game_mode_note_the_ip}" Foreground="White"/>
-                                                        <LineBreak/><Run Text="4."/><Run Text="{loc:Str label_enter_http_ip_30010}" Foreground="{DynamicResource PinkBrush}"/>
-                                                    </TextBlock>
-
-                                                    <TextBlock Text="{loc:Str label_buttplug_io_intiface}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold"/>
-                                                    <TextBlock Foreground="#CCCCCC" FontSize="10" TextWrapping="Wrap" Margin="0,2,0,0">
-                                                        <Run Text="1."/><Run Text="{loc:Str label_open_intiface_central}" Foreground="White"/>
-                                                        <LineBreak/><Run Text="2."/><Run Text="{loc:Str label_click_start_server}" Foreground="White"/>
-                                                        <LineBreak/><Run Text="3."/><Run Text="{loc:Str label_click_start_scanning_for_devices}" Foreground="White"/>
-                                                        <LineBreak/><Run Text="4."/><Run Text="{loc:Str label_use_ws_localhost_12345}" Foreground="{DynamicResource PinkBrush}"/>
-                                                    </TextBlock>
-                                                </StackPanel>
-                                            </ToolTip>
-                                        </TextBox.ToolTip>
-                                    </TextBox>
-                                </Grid>
-                                <TextBlock x:Name="TxtHapticUrlHint"
-                                           Text="{loc:Str label_lovense_enter_ip_from_lovense_remote_settings}"
-                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
-
-                                <!-- Auto-connect on startup -->
-                                <CheckBox x:Name="ChkHapticAutoConnect" Content="{loc:Str setting_auto_connect_on_startup}"
-                                          Foreground="#CCCCCC" FontSize="11" Margin="0,8,0,0"
-                                          Checked="ChkHapticAutoConnect_Changed" Unchecked="ChkHapticAutoConnect_Changed"
-                                          ToolTip="{loc:Str tooltip_automatically_connect_to_your_haptic_device_w}"/>
-
-                                <!-- Connection Status -->
-                                <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="10" Margin="0,10,0,0">
-                                    <StackPanel>
-                                        <Grid>
-                                            <TextBlock Text="{loc:Str label_status}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
-                                            <TextBlock x:Name="TxtHapticStatus" Text="{loc:Str label_disconnected}"
-                                                       Foreground="#FF6B6B" FontSize="11" HorizontalAlignment="Right"/>
-                                        </Grid>
-                                        <TextBlock x:Name="TxtHapticDevices" Text="{loc:Str label_no_devices}"
-                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="10" Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Intensity Slider -->
-                                <Grid Margin="0,10,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="40"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{loc:Str label_intensity}" Foreground="White" FontSize="11" VerticalAlignment="Center"/>
-                                    <Slider x:Name="SliderHapticIntensity" Grid.Column="1"
-                                            Style="{StaticResource PinkSlider}"
-                                            Minimum="0" Maximum="100" Value="70" Margin="10,0"
-                                            ValueChanged="SliderHapticIntensity_ValueChanged"/>
-                                    <TextBlock x:Name="TxtHapticIntensity" Grid.Column="2" Text="70%"
-                                               Foreground="{DynamicResource PinkBrush}" FontSize="11" FontWeight="Bold"/>
-                                </Grid>
-
-                                <!-- Test Button -->
-                                <Button x:Name="BtnHapticTest" Content="{loc:Str btn_test_vibration}"
-                                        Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
-                                        BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
-                                        Padding="12,6" Margin="0,10,0,0"
-                                        HorizontalAlignment="Left" FontSize="11" Cursor="Hand"
-                                        Click="BtnHapticTest_Click"/>
-                                    </StackPanel>
-                                </Border>
-                                <!-- Lock Overlay for Left Box -->
-                                <Border x:Name="HapticsConnectionLock" Background="#80000000" CornerRadius="8" Visibility="Collapsed">
-                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str label_patreon_only_2}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-
-                            <!-- Right Box: Feature Sliders -->
-                            <Grid Grid.Column="2">
-                                <Border x:Name="HapticsFeatureBox" CornerRadius="8" Padding="12"
-                                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#353550" BorderThickness="1">
-                                    <StackPanel>
-                                <Grid>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Str section_feature_intensity}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"/>
-                                    </StackPanel>
-                                </Grid>
-                                <TextBlock Text="{loc:Str label_adjust_vibration_strength_per_feature}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,4,0,8"/>
-
-                                        <!-- Bubble Pop -->
-                                        <Grid Margin="0,4,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="44"/>
-                                                <ColumnDefinition Width="90"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="32"/>
-                                                <ColumnDefinition Width="85"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox x:Name="ChkHapticBubble" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Bubble"/>
-                                            <TextBlock Grid.Column="1" Text="{loc:Str label_bubbles}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
-                                            <Slider x:Name="SliderHapticBubble" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
-                                                    ValueChanged="SliderHapticFeature_Changed" Tag="Bubble"/>
-                                            <TextBlock x:Name="TxtHapticBubble" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
-                                            <ComboBox x:Name="CmbHapticBubbleMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
-                                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Bubble">
-                                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                            </ComboBox>
-                                        </Grid>
-
-                                        <!-- Flash Display -->
-                                        <Grid Margin="0,4,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="44"/>
-                                                <ColumnDefinition Width="90"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="32"/>
-                                                <ColumnDefinition Width="85"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox x:Name="ChkHapticFlashDisplay" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="FlashDisplay"/>
-                                            <TextBlock Grid.Column="1" Text="{loc:Str label_flash_show}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
-                                            <Slider x:Name="SliderHapticFlashDisplay" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
-                                                    ValueChanged="SliderHapticFeature_Changed" Tag="FlashDisplay"/>
-                                            <TextBlock x:Name="TxtHapticFlashDisplay" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
-                                            <ComboBox x:Name="CmbHapticFlashDisplayMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
-                                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="FlashDisplay">
-                                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                            </ComboBox>
-                                        </Grid>
-
-                                        <!-- Flash Click -->
-                                        <Grid Margin="0,4,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="44"/>
-                                                <ColumnDefinition Width="90"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="32"/>
-                                                <ColumnDefinition Width="85"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox x:Name="ChkHapticFlashClick" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="FlashClick"/>
-                                            <TextBlock Grid.Column="1" Text="{loc:Str label_flash_click}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
-                                            <Slider x:Name="SliderHapticFlashClick" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
-                                                    ValueChanged="SliderHapticFeature_Changed" Tag="FlashClick"/>
-                                            <TextBlock x:Name="TxtHapticFlashClick" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
-                                            <ComboBox x:Name="CmbHapticFlashClickMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
-                                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="FlashClick">
-                                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                            </ComboBox>
-                                        </Grid>
-
-                                        <!-- Video -->
-                                        <Grid Margin="0,4,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="44"/>
-                                                <ColumnDefinition Width="90"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="32"/>
-                                                <ColumnDefinition Width="85"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox x:Name="ChkHapticVideo" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Video"/>
-                                            <TextBlock Grid.Column="1" Text="{loc:Str tab_videos}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
-                                            <Slider x:Name="SliderHapticVideo" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
-                                                    ValueChanged="SliderHapticFeature_Changed" Tag="Video"/>
-                                            <TextBlock x:Name="TxtHapticVideo" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
-                                            <ComboBox x:Name="CmbHapticVideoMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
-                                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Video">
-                                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                            </ComboBox>
-                                        </Grid>
-
-                                        <!-- Target Hit (video attention targets) -->
-                                        <Grid Margin="0,4,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="44"/>
-                                                <ColumnDefinition Width="90"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="32"/>
-                                                <ColumnDefinition Width="85"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox x:Name="ChkHapticTargetHit" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="TargetHit"/>
-                                            <TextBlock Grid.Column="1" Text="{loc:Str label_target_hit}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
-                                            <Slider x:Name="SliderHapticTargetHit" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                    Minimum="0" Maximum="100" Value="70" Margin="5,0"
-                                                    ValueChanged="SliderHapticFeature_Changed" Tag="TargetHit"/>
-                                            <TextBlock x:Name="TxtHapticTargetHit" Grid.Column="3" Text="70%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
-                                            <ComboBox x:Name="CmbHapticTargetHitMode" Grid.Column="4" SelectedIndex="1" FontSize="9"
-                                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="TargetHit">
-                                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                            </ComboBox>
-                                        </Grid>
-
-                                        <!-- Subliminal -->
-                                        <Grid Margin="0,4,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="44"/>
-                                                <ColumnDefinition Width="90"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="32"/>
-                                                <ColumnDefinition Width="85"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox x:Name="ChkHapticSubliminal" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Subliminal"/>
-                                            <TextBlock Grid.Column="1" Text="{loc:Str tab_subliminals}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
-                                            <Slider x:Name="SliderHapticSubliminal" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
-                                                    ValueChanged="SliderHapticFeature_Changed" Tag="Subliminal"/>
-                                            <TextBlock x:Name="TxtHapticSubliminal" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
-                                            <ComboBox x:Name="CmbHapticSubliminalMode" Grid.Column="4" SelectedIndex="1" FontSize="9"
-                                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Subliminal">
-                                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                            </ComboBox>
-                                        </Grid>
-
-                                        <!-- Level Up -->
-                                        <Grid Margin="0,4,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="44"/>
-                                                <ColumnDefinition Width="90"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="32"/>
-                                                <ColumnDefinition Width="85"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox x:Name="ChkHapticLevelUp" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="LevelUp"/>
-                                            <TextBlock Grid.Column="1" Text="{loc:Str label_level_up}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
-                                            <Slider x:Name="SliderHapticLevelUp" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
-                                                    ValueChanged="SliderHapticFeature_Changed" Tag="LevelUp"/>
-                                            <TextBlock x:Name="TxtHapticLevelUp" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
-                                            <ComboBox x:Name="CmbHapticLevelUpMode" Grid.Column="4" SelectedIndex="4" FontSize="9"
-                                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="LevelUp">
-                                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                            </ComboBox>
-                                        </Grid>
-
-                                        <!-- Achievement -->
-                                        <Grid Margin="0,4,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="44"/>
-                                                <ColumnDefinition Width="90"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="32"/>
-                                                <ColumnDefinition Width="85"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox x:Name="ChkHapticAchievement" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Achievement"/>
-                                            <TextBlock Grid.Column="1" Text="{loc:Str tab_achievements}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
-                                            <Slider x:Name="SliderHapticAchievement" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
-                                                    ValueChanged="SliderHapticFeature_Changed" Tag="Achievement"/>
-                                            <TextBlock x:Name="TxtHapticAchievement" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
-                                            <ComboBox x:Name="CmbHapticAchievementMode" Grid.Column="4" SelectedIndex="3" FontSize="9"
-                                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Achievement">
-                                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                            </ComboBox>
-                                        </Grid>
-                                        <!-- Bouncing Text -->
-                                        <Grid Margin="0,3">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="44"/>
-                                                <ColumnDefinition Width="90"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="32"/>
-                                                <ColumnDefinition Width="85"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox x:Name="ChkHapticBouncingText" Style="{StaticResource ToggleStyle}" IsChecked="True"
-                                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="BouncingText"/>
-                                            <TextBlock Grid.Column="1" Text="{loc:Str label_bounce_text}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
-                                            <Slider x:Name="SliderHapticBouncingText" Grid.Column="2" Style="{StaticResource PinkSlider}"
-                                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
-                                                    ValueChanged="SliderHapticFeature_Changed" Tag="BouncingText"/>
-                                            <TextBlock x:Name="TxtHapticBouncingText" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
-                                            <ComboBox x:Name="CmbHapticBouncingTextMode" Grid.Column="4" SelectedIndex="1" FontSize="9"
-                                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
-                                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="BouncingText">
-                                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
-                                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
-                                            </ComboBox>
-                                        </Grid>
-
-                                        <!-- Video Haptic Sync - Enhanced Featured Card -->
-                                        <Border x:Name="VideoHapticSyncCard" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1,2,1,1"
-                                                CornerRadius="8" Margin="0,12,0,0" Background="{DynamicResource SurfaceBgBrush}">
-                                            <Grid>
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="Auto"/>
-                                                </Grid.RowDefinitions>
-
-                                                <!-- Row 0: Header Section -->
-                                                <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="8,8,0,0" Padding="12,10">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*"/>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                            <ColumnDefinition Width="Auto"/>
-                                                        </Grid.ColumnDefinitions>
-
-                                                        <!-- Title and Description -->
-                                                        <StackPanel Grid.Column="0">
-                                                            <StackPanel Orientation="Horizontal">
-                                                                <TextBlock Text="🎵" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                                                <TextBlock Text="{loc:Str label_video_haptic_sync}" Foreground="{DynamicResource SecondaryBrush}"
-                                                                           FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
-                                                            </StackPanel>
-                                                            <TextBlock Text="{loc:Str label_syncs_haptics_to_video_audio_in_real_time}"
-                                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
-                                                        </StackPanel>
-
-                                                        <!-- Help Button -->
-                                                        <Button x:Name="HelpBtnVideoHapticSync" Grid.Column="1"
-                                                                Style="{StaticResource HelpButtonStyle}" Tag="VideoHapticSync"
-                                                                Margin="0,0,10,0"/>
-
-                                                        <!-- Master Enable Toggle -->
-                                                        <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                                            <TextBlock Text="{loc:Str btn_enable}" Foreground="#AAAAAA" FontSize="10"
-                                                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                                            <CheckBox x:Name="ChkHapticAudioSync" Style="{StaticResource ToggleStyle}"
-                                                                      IsChecked="False"
-                                                                      Checked="ChkHapticAudioSync_Changed"
-                                                                      Unchecked="ChkHapticAudioSync_Changed"/>
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </Border>
-
-                                                <!-- Row 1: Algorithm Cards (left) + Image (right) -->
-                                                <Grid Grid.Row="1" Margin="12,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="10"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <!-- Left: Algorithm Selection Cards (stacked vertically) -->
-                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                        <TextBlock Text="{loc:Str label_sync_algorithm}" Foreground="#AAAAAA" FontSize="10" Margin="0,0,0,5"/>
-
-                                                        <!-- Algorithm 1: Audio Reactive (Enabled) -->
-                                                        <Border x:Name="AlgorithmCardAudioReactive"
-                                                                Background="{DynamicResource PanelBgBrush}" CornerRadius="4" Padding="8,5" Cursor="Hand"
-                                                                BorderThickness="2" BorderBrush="{DynamicResource SecondaryBrush}" Margin="0,0,0,3"
-                                                                MouseLeftButtonDown="AlgorithmCard_Click" Tag="AudioReactive">
-                                                            <Border.Style>
-                                                                <Style TargetType="Border">
-                                                                    <Style.Triggers>
-                                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                                            <Setter Property="Background" Value="#2A2A4E"/>
-                                                                        </Trigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Border.Style>
-                                                            <Grid>
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="*"/>
-                                                                    <ColumnDefinition Width="Auto"/>
-                                                                </Grid.ColumnDefinitions>
-                                                                <TextBlock Text="{loc:Str label_audio_reactive}" Foreground="White"
-                                                                           FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                                                <Ellipse x:Name="AlgorithmIndicatorAudioReactive" Grid.Column="1"
-                                                                         Width="6" Height="6" Fill="{DynamicResource SecondaryBrush}"
-                                                                         VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                                            </Grid>
-                                                        </Border>
-
-                                                        <!-- Algorithm 2: Beat Detection (Coming Soon) -->
-                                                        <Grid Margin="0,0,0,3">
-                                                            <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="4" Padding="8,5">
-                                                                <Border.Effect>
-                                                                    <BlurEffect Radius="2"/>
-                                                                </Border.Effect>
-                                                                <TextBlock Text="{loc:Str label_beat_detection}" Foreground="#666666"
-                                                                           FontSize="10" FontWeight="SemiBold"/>
-                                                            </Border>
-                                                            <Border Background="#CC1A1A2E" CornerRadius="4">
-                                                                <TextBlock Text="{loc:Str label_coming_soon}" Foreground="{DynamicResource SecondaryBrush}" FontSize="8"
-                                                                           FontWeight="Bold" HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center"/>
-                                                            </Border>
-                                                        </Grid>
-
-                                                        <!-- Algorithm 3: AI Enhanced (Coming Soon) -->
-                                                        <Grid>
-                                                            <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="4" Padding="8,5">
-                                                                <Border.Effect>
-                                                                    <BlurEffect Radius="2"/>
-                                                                </Border.Effect>
-                                                                <TextBlock Text="{loc:Str label_ai_enhanced}" Foreground="#666666"
-                                                                           FontSize="10" FontWeight="SemiBold"/>
-                                                            </Border>
-                                                            <Border Background="#CC1A1A2E" CornerRadius="4">
-                                                                <TextBlock Text="{loc:Str label_coming_soon}" Foreground="{DynamicResource SecondaryBrush}" FontSize="8"
-                                                                           FontWeight="Bold" HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center"/>
-                                                            </Border>
-                                                        </Grid>
-                                                    </StackPanel>
-
-                                                    <!-- Right: Square Image -->
-                                                    <Border Grid.Column="2" CornerRadius="6" ClipToBounds="True"
-                                                            BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
-                                                            Width="130" Height="130">
-                                                        <Image x:Name="ImgVideoHapticSync"
-                                                               Source="pack://application:,,,/Resources/features/vibe.png"
-                                                               Stretch="UniformToFill"/>
-                                                    </Border>
-                                                </Grid>
-
-                                                <!-- Row 3: Delay and Power Sliders -->
-                                                <Border x:Name="VideoHapticSyncSliders" Grid.Row="3" Padding="12,8,12,12"
-                                                        Visibility="Collapsed">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*"/>
-                                                            <ColumnDefinition Width="12"/>
-                                                            <ColumnDefinition Width="*"/>
-                                                        </Grid.ColumnDefinitions>
-
-                                                        <!-- Delay Slider -->
-                                                        <StackPanel Grid.Column="0">
-                                                            <Grid>
-                                                                <TextBlock Text="{loc:Str label_delay_2}" Foreground="#AAAAAA" FontSize="10"/>
-                                                                <TextBlock x:Name="TxtVideoHapticDelay" Text="{loc:Str label_0ms}"
-                                                                           Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
-                                                                           HorizontalAlignment="Right"/>
-                                                            </Grid>
-                                                            <Slider x:Name="SliderVideoHapticDelay" Minimum="-600" Maximum="600"
-                                                                    Value="0" Margin="0,4,0,0"
-                                                                    ValueChanged="SliderVideoHapticDelay_Changed"
-                                                                    ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}"/>
-                                                        </StackPanel>
-
-                                                        <!-- Power Slider -->
-                                                        <StackPanel Grid.Column="2">
-                                                            <Grid>
-                                                                <TextBlock Text="{loc:Str label_power_2}" Foreground="#AAAAAA" FontSize="10"/>
-                                                                <TextBlock x:Name="TxtVideoHapticPower" Text="100%"
-                                                                           Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
-                                                                           HorizontalAlignment="Right"/>
-                                                            </Grid>
-                                                            <Slider x:Name="SliderVideoHapticPower" Minimum="0" Maximum="100"
-                                                                    Value="100" Margin="0,4,0,0"
-                                                                    ValueChanged="SliderVideoHapticPower_Changed"
-                                                                    ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}"/>
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </Border>
-                                            </Grid>
-                                        </Border>
-                                    </StackPanel>
-                                </Border>
-                                <!-- Lock Overlay for Right Box -->
-                                <Border x:Name="HapticsFeatureLock" Background="#80000000" CornerRadius="8" Visibility="Collapsed">
-                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str label_patreon_only_2}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-                            </Grid>
-
-                            <!-- Patreon Only Overlay (hidden for Patreon supporters) -->
-                            <Border x:Name="HapticsComingSoonOverlay" Background="#CC1A1A2E" CornerRadius="8">
-                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock Text="{loc:Str label_patreon_only_2}" Foreground="{DynamicResource PinkBrush}" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center">
-                                        <TextBlock.Effect>
-                                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
-                                        </TextBlock.Effect>
-                                    </TextBlock>
-                                    <TextBlock Text="{loc:Str label_unlock_haptic_feedback_by_supporting_on_patre}"
-                                               Foreground="#AAAAAA" FontSize="13" HorizontalAlignment="Center" Margin="0,8,0,0"/>
-                                    <TextBlock Text="{loc:Str label_lovense_buttplug_io_support}"
-                                               Foreground="{DynamicResource SecondaryBrush}" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                                </StackPanel>
-                            </Border>
-                                </Grid>
-                            </Expander>
+                            <!-- Row 2, Full Width: Haptic Feedback — moved to HapticsTab -->
 
                         </Grid>
                         </Grid>
@@ -8672,6 +7905,1073 @@
                 </Grid>
             </ScrollViewer>
         </ContentControl>
+
+        <!-- Remote Control Tab — Patreon premium feature, full redesign with QR pairing -->
+        <Grid x:Name="RemoteControlTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="28,20,28,20" MaxWidth="1080" HorizontalAlignment="Center">
+
+                    <!-- Header -->
+                    <Grid Margin="0,0,0,18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="🎮" FontSize="34" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Str tab_remote_control}" Foreground="White" FontSize="22" FontWeight="Bold"/>
+                            <TextBlock Text="{loc:Str desc_remote_control}" Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap" MaxWidth="700"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="HelpBtnRemoteControl" Style="{StaticResource HelpButtonStyle}"
+                                    VerticalAlignment="Center" Margin="0,0,8,0" Tag="RemoteControl"/>
+                            <CheckBox x:Name="ChkRemoteControlEnabled" Style="{StaticResource ToggleStyle}"
+                                      VerticalAlignment="Center"
+                                      Checked="ChkRemoteControlEnabled_Changed" Unchecked="ChkRemoteControlEnabled_Changed"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Description card (always visible) -->
+                    <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                            CornerRadius="10" Padding="18,14" Margin="0,0,0,18">
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str desc_remote_control}" Foreground="White" FontSize="13"
+                                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <TextBlock Text="{loc:Str desc_remote_control_bullets}" Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Interactive controls + translucent gating overlay -->
+                    <Grid>
+                        <StackPanel x:Name="RemoteControlControls">
+
+                            <!-- Tier comparison cards (3 across) -->
+                            <Grid Margin="0,0,0,18">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Border x:Name="TierCardLight" Grid.Column="0" Background="{DynamicResource SurfaceBgBrush}"
+                                        BorderBrush="#FF69B4" BorderThickness="2" CornerRadius="10" Padding="14,12"
+                                        Cursor="Hand" Tag="0" MouseLeftButtonUp="TierCard_Click">
+                                    <StackPanel>
+                                        <TextBlock Text="✨" FontSize="20"/>
+                                        <TextBlock Text="{loc:Str label_remote_tier_light}" Foreground="White"
+                                                   FontSize="14" FontWeight="Bold" Margin="0,4,0,4"/>
+                                        <TextBlock Text="Visual triggers only"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Text="• Flashes • Subliminals • Overlays" Foreground="#A0A0A0"
+                                                   FontSize="10" Margin="0,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border x:Name="TierCardStandard" Grid.Column="2" Background="{DynamicResource SurfaceBgBrush}"
+                                        BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="10" Padding="14,12"
+                                        Cursor="Hand" Tag="1" MouseLeftButtonUp="TierCard_Click">
+                                    <StackPanel>
+                                        <TextBlock Text="🎯" FontSize="20"/>
+                                        <TextBlock Text="{loc:Str label_remote_tier_standard}" Foreground="White"
+                                                   FontSize="14" FontWeight="Bold" Margin="0,4,0,4"/>
+                                        <TextBlock Text="Light + audio + overlays"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Text="• Videos • Haptics • Audio ducking" Foreground="#A0A0A0"
+                                                   FontSize="10" Margin="0,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border x:Name="TierCardFull" Grid.Column="4" Background="{DynamicResource SurfaceBgBrush}"
+                                        BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="10" Padding="14,12"
+                                        Cursor="Hand" Tag="2" MouseLeftButtonUp="TierCard_Click">
+                                    <StackPanel>
+                                        <TextBlock Text="🔥" FontSize="20"/>
+                                        <TextBlock Text="{loc:Str label_remote_tier_full}" Foreground="White"
+                                                   FontSize="14" FontWeight="Bold" Margin="0,4,0,4"/>
+                                        <TextBlock Text="Everything including session control"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                   TextWrapping="Wrap"/>
+                                        <TextBlock Text="• Bambi Takeover • Sessions • Lockdown" Foreground="#A0A0A0"
+                                                   FontSize="10" Margin="0,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- Hidden ComboBox keeps existing handler wiring intact -->
+                            <ComboBox x:Name="CmbRemoteTier" Visibility="Collapsed"
+                                      SelectionChanged="CmbRemoteTier_SelectionChanged">
+                                <ComboBoxItem Content="Light" IsSelected="True"/>
+                                <ComboBoxItem Content="Standard"/>
+                                <ComboBoxItem Content="Full"/>
+                            </ComboBox>
+
+                            <!-- Pairing panel: 2 columns (code + QR) -->
+                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                                    CornerRadius="10" Padding="18,16" Margin="0,0,0,18">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Left: code + PIN + buttons -->
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="SESSION CODE" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold" Margin="0,0,0,6"/>
+                                        <TextBlock x:Name="TxtRemoteCode" Text="- - - - - - - -"
+                                                   Foreground="{DynamicResource PinkBrush}" FontSize="42"
+                                                   FontWeight="Bold" FontFamily="Consolas"/>
+                                        <TextBlock x:Name="TxtRemotePin" Text="" Foreground="{DynamicResource SecondaryBrush}"
+                                                   FontSize="20" FontWeight="Bold" FontFamily="Consolas" Margin="0,4,0,0"
+                                                   Visibility="Collapsed"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                            <Button x:Name="BtnCopyRemoteCode" Content="{loc:Str btn_copy}"
+                                                    Background="#353550" Foreground="White" FontSize="11"
+                                                    Padding="12,6" BorderThickness="0" Cursor="Hand"
+                                                    Click="BtnCopyRemoteCode_Click"/>
+                                            <Button x:Name="BtnCopyRemoteLink" Content="{loc:Str btn_copy_link}"
+                                                    Background="#353550" Foreground="White" FontSize="11"
+                                                    Padding="12,6" Margin="8,0,0,0" BorderThickness="0" Cursor="Hand"
+                                                    Click="BtnCopyRemoteLink_Click"/>
+                                        </StackPanel>
+                                        <Border x:Name="RemoteLinkPanel" Visibility="Collapsed"/>
+                                        <Border x:Name="RemoteCodePanel" Visibility="Collapsed"/>
+                                    </StackPanel>
+
+                                    <!-- Right: QR code -->
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                        <Border CornerRadius="6" Background="White" Padding="10">
+                                            <Image x:Name="ImgRemoteQrCode" Width="180" Height="180" Stretch="Uniform"/>
+                                        </Border>
+                                        <TextBlock Text="{loc:Str label_remote_pairing}"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                   HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <!-- Connected controller card -->
+                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                                    CornerRadius="10" Padding="18,14" Margin="0,0,0,18">
+                                <StackPanel x:Name="ControllerInfoPanel">
+                                    <Grid Margin="0,0,0,8">
+                                        <TextBlock Text="{loc:Str label_remote_controller_info}"
+                                                   Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"/>
+                                        <StackPanel x:Name="RemoteStatusPanel" Orientation="Horizontal"
+                                                    HorizontalAlignment="Right">
+                                            <Ellipse x:Name="RemoteStatusDot" Width="8" Height="8" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="TxtRemoteStatus" Text="{loc:Str label_remote_idle}" Foreground="#A0A0A0" FontSize="11"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Command log -->
+                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                                    CornerRadius="10" Padding="18,14" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str label_remote_command_log}"
+                                               Foreground="#8A8AA0" FontSize="10" FontWeight="Bold" Margin="0,0,0,8"/>
+                                    <ListBox x:Name="LstRemoteCommandLog" Background="Transparent" BorderThickness="0"
+                                             Foreground="White" FontSize="11" MaxHeight="220"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Stop session button -->
+                            <Button x:Name="BtnStopRemote" Content="{loc:Str btn_stop_session}" Background="#FF4444"
+                                    Foreground="White" FontWeight="Bold" FontSize="12" Padding="15,8"
+                                    BorderThickness="0" Cursor="Hand" HorizontalAlignment="Left"
+                                    Visibility="Collapsed"
+                                    Click="BtnStopRemote_Click"/>
+
+                            <!-- Hidden legacy container — kept so existing handlers don't NRE -->
+                            <StackPanel x:Name="RemoteControlPanel" Visibility="Collapsed"/>
+
+                        </StackPanel>
+
+                        <!-- Translucent gating overlay (only for free users) -->
+                        <Border x:Name="RemoteControlGate" Visibility="Collapsed"
+                                Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
+                                CornerRadius="10" IsHitTestVisible="True">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="18"
+                                           FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="12"
+                                           Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                                <Button Content="{loc:Str gate_unlock_with_patreon}"
+                                        Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                                        Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- Bambi Takeover Tab — Patreon premium feature, visible-but-locked for free users -->
+        <Grid x:Name="BambiTakeoverTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="28,20,28,20" MaxWidth="980" HorizontalAlignment="Center">
+                <!-- Header -->
+                <Grid Margin="0,0,0,18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="🤖" FontSize="34" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str tab_bambi_takeover}" Foreground="White" FontSize="22" FontWeight="Bold"/>
+                        <TextBlock Text="{loc:Str desc_bambi_takeover}" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap" MaxWidth="640"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Description card (always visible — even to free users) -->
+                <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                        CornerRadius="10" Padding="18,14" Margin="0,0,0,18">
+                    <StackPanel>
+                        <TextBlock Text="{loc:Str desc_bambi_takeover}" Foreground="White" FontSize="13"
+                                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+                        <TextBlock Text="{loc:Str desc_bambi_takeover_bullets}" Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="12" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Interactive controls + translucent gating overlay -->
+                <Grid>
+                    <StackPanel x:Name="BambiTakeoverControls">
+                        <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                                CornerRadius="10" Padding="18,16">
+                            <StackPanel>
+                <!-- Lifted from old Bambi Expander — every x:Name preserved -->
+                <Grid>
+                    <!-- Locked State (legacy — kept hidden, replaced by gating overlay below) -->
+                    <StackPanel x:Name="AutonomyLocked" Visibility="Collapsed">
+                        <Grid>
+                            <TextBlock x:Name="TxtTakeoverLocked" Text="{loc:Str label_bambi_takeover}" Foreground="#666666" FontWeight="Bold" FontSize="13"/>
+                            <TextBlock x:Name="TxtAutonomyLockStatus" Text="{loc:Str label_patreon_only}" Foreground="{DynamicResource SecondaryBrush}" HorizontalAlignment="Right" FontSize="11"/>
+                        </Grid>
+                        <TextBlock x:Name="TxtAutonomyLockMessage" Text="{loc:Str label_support_on_patreon_to_unlock}" Foreground="{DynamicResource PinkBrush}" FontSize="11" Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <!-- Unlocked State — always visible now; gating handled by overlay -->
+                    <StackPanel x:Name="AutonomyUnlocked" Visibility="Visible">
+                        <!-- Header -->
+                        <Grid>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="TxtTakeoverUnlocked" Text="{loc:Str label_bambi_takeover}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="13"/>
+                                <Border Background="#2A1A3A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                    <TextBlock Text="{loc:Str label_no_engine_needed}" Foreground="{DynamicResource PinkBrush}" FontSize="9"/>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel x:Name="AutonomySettings" Margin="0,8,0,0">
+                            <!-- Sliders: 2x2 grid -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="6"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <StackPanel Grid.Row="0" Grid.Column="0">
+                                    <Grid><TextBlock Text="{loc:Str setting_interval}" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyInterval" Text="{loc:Str label_60s}" Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                    <Slider x:Name="SliderAutonomyInterval" Minimum="30" Maximum="300" Value="60" Height="18" ValueChanged="SliderAutonomyInterval_Changed"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="2">
+                                    <Grid><TextBlock Text="{loc:Str label_cooldown}" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyCooldown" Text="{loc:Str label_30s}" Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                    <Slider x:Name="SliderAutonomyCooldown" Minimum="10" Maximum="300" Value="30" Height="18" ValueChanged="SliderAutonomyCooldown_Changed"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="0">
+                                    <Grid><TextBlock Text="{loc:Str setting_intensity}" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyIntensity" Text="5" Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                    <Slider x:Name="SliderAutonomyIntensity" Minimum="1" Maximum="10" Value="5" Height="18" ValueChanged="SliderAutonomyIntensity_Changed"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="2">
+                                    <Grid><TextBlock Text="{loc:Str label_announce}" Foreground="#AAA" FontSize="10"/><TextBlock x:Name="TxtAutonomyAnnounce" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right"/></Grid>
+                                    <Slider x:Name="SliderAutonomyAnnounce" Minimum="0" Maximum="100" Value="50" Height="18" ValueChanged="SliderAutonomyAnnounce_Changed"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Checkboxes: 3 columns -->
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- Triggers -->
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Str label_triggers}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
+                                    <Grid Margin="0,1"><TextBlock Text="{loc:Str label_idle}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyIdle" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyIdle_Changed" Unchecked="ChkAutonomyIdle_Changed"/></Grid>
+                                    <Grid Margin="0,1"><TextBlock Text="{loc:Str label_random_2}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyRandom" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyRandom_Changed" Unchecked="ChkAutonomyRandom_Changed"/></Grid>
+                                    <Grid Margin="0,1"><TextBlock Text="{loc:Str label_time_aware}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyTimeAware" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyTimeAware_Changed" Unchecked="ChkAutonomyTimeAware_Changed"/></Grid>
+                                </StackPanel>
+                                <!-- Basic -->
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{loc:Str label_basic}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
+                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoFlash" Text="{loc:Str tab_flashes}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoVideo" Text="{loc:Str tab_videos}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,1"><TextBlock Text="{loc:Str label_web_videos}" FontSize="10" Foreground="#CCC" ToolTip="{loc:Str tooltip_auto_plays_hypnotube_videos_fullscreen}"/><CheckBox x:Name="ChkAutonomyWebVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoSubliminal" Text="{loc:Str tab_subliminals}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,1"><TextBlock Text="{loc:Str label_comments}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyComment" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                </StackPanel>
+                                <!-- Advanced -->
+                                <StackPanel Grid.Column="4">
+                                    <TextBlock Text="{loc:Str label_advanced_2}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="10" Margin="0,0,0,2"/>
+                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoBubbles" Text="{loc:Str label_bubbles}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBubbles" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoPinkFilter" Text="{loc:Str label_pink_filter_2}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyPinkFilter" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoLockCards" Text="{loc:Str label_lock_cards}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyLockCard" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoBouncing" Text="{loc:Str label_bouncing}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyBouncingText" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                    <Grid Margin="0,1"><TextBlock x:Name="TxtAutoMindwipe" Text="{loc:Str label_mindwipe}" FontSize="10" Foreground="#CCC"/><CheckBox x:Name="ChkAutonomyMindWipe" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Buttons -->
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="BtnAutonomyStartStop" Grid.Column="0" Content="{loc:Str btn_start_2}" Background="#2A1A3A" Foreground="#90EE90"
+                                        FontWeight="Bold" FontSize="12" Padding="12,6"
+                                        Click="BtnAutonomyStartStop_Click" ToolTip="{loc:Str tooltip_start_stop_bambi_takeover}"/>
+                                <Button Grid.Column="2" Content="{loc:Str btn_test}" Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="11"
+                                        Padding="12,6" Click="BtnTestAutonomy_Click" ToolTip="{loc:Str tooltip_test_action}"/>
+                            </Grid>
+
+                            <!-- Hidden elements -->
+                            <CheckBox x:Name="ChkAutonomySpiral" Visibility="Collapsed" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                            <CheckBox x:Name="ChkAutonomyBubbleCount" Visibility="Collapsed" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/>
+                            <Button x:Name="BtnForceStartAutonomy" Visibility="Collapsed" Click="BtnForceStartAutonomy_Click"/>
+                            <CheckBox x:Name="ChkAutonomyEnabled" Visibility="Collapsed" Checked="ChkAutonomyEnabled_Changed" Unchecked="ChkAutonomyEnabled_Changed"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Translucent gating overlay (only for free users) -->
+                    <Border x:Name="BambiTakeoverGate" Visibility="Collapsed"
+                            Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
+                            CornerRadius="10" IsHitTestVisible="True">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="18"
+                                       FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                            <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="12"
+                                       Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                            <Button Content="{loc:Str gate_unlock_with_patreon}"
+                                    Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                                    Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- Haptics Tab — Patreon premium feature, visible-but-locked for free users -->
+        <Grid x:Name="HapticsTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="28,20,28,20" MaxWidth="1100" HorizontalAlignment="Center">
+
+                    <!-- Header -->
+                    <Grid Margin="0,0,0,18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="💜" FontSize="34" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Str tab_haptics}" Foreground="White" FontSize="22" FontWeight="Bold"/>
+                            <TextBlock Text="{loc:Str desc_haptics}" Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap" MaxWidth="640"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Description card (always visible) -->
+                    <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
+                            CornerRadius="10" Padding="18,14" Margin="0,0,0,18">
+                        <StackPanel>
+                            <TextBlock Text="{loc:Str desc_haptics}" Foreground="White" FontSize="13"
+                                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <TextBlock Text="{loc:Str desc_haptics_bullets}" Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Interactive controls + translucent gating overlay -->
+                    <Grid>
+                        <Border x:Name="HapticsControls" Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
+                                BorderThickness="1" CornerRadius="10" Padding="18,16">
+                            <StackPanel>
+                <Grid>
+                    <!-- Haptics Content (enabled for Patreon supporters) -->
+                    <Grid x:Name="HapticsContentGrid">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left Box: Connection Settings -->
+                    <Grid Grid.Column="0">
+                        <Border x:Name="HapticsConnectionBox" CornerRadius="8" Padding="12"
+                                Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#353550" BorderThickness="1">
+                    <StackPanel>
+                    <Grid>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Str label_haptic_connection}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"/>
+                            <Button x:Name="HelpBtnHaptics" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="Haptics"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkHapticsEnabled" Style="{StaticResource ToggleStyle}"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  Checked="ChkHapticsEnabled_Changed" Unchecked="ChkHapticsEnabled_Changed"/>
+                    </Grid>
+                    <Grid Margin="0,4,0,0">
+                        <TextBlock Text="{loc:Str label_connect_to_lovense_or_buttplug_io_devices}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                        <Button x:Name="BtnHapticsHelp" Content="{loc:Str btn_need_help_setting_up}"
+                                HorizontalAlignment="Right" Background="Transparent"
+                                Foreground="{DynamicResource PinkBrush}" BorderThickness="0" FontSize="10"
+                                Cursor="Hand" Click="BtnHapticsHelp_Click" Padding="0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <TextBlock Text="{TemplateBinding Content}"
+                                                           Foreground="{TemplateBinding Foreground}"
+                                                           FontSize="{TemplateBinding FontSize}"
+                                                           TextDecorations="Underline"/>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+
+                <!-- Provider Selection -->
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="{loc:Str label_provider}" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="CmbHapticProvider" Grid.Column="1" Margin="10,0"
+                              Background="{DynamicResource SurfaceBgBrush}" Foreground="Black" BorderThickness="0"
+                              SelectionChanged="CmbHapticProvider_SelectionChanged">
+                        <ComboBoxItem Content="{loc:Str btn_lovense_connect}" Tag="Lovense" Foreground="Black"/>
+                        <ComboBoxItem Content="{loc:Str btn_buttplug_io_intiface}" Tag="Buttplug" Foreground="Black"/>
+                    </ComboBox>
+                    <Button x:Name="BtnHapticConnect" Grid.Column="2" Content="{loc:Str btn_connect}"
+                            Background="{DynamicResource PinkBrush}" Foreground="White"
+                            BorderThickness="0" Padding="12,6"
+                            FontSize="11" Cursor="Hand"
+                            Click="BtnHapticConnect_Click"/>
+                </Grid>
+<!-- URL Input with Tooltip Guide -->
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{loc:Str label_url}" Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBox x:Name="TxtHapticUrl" Grid.Column="1" Margin="10,0,0,0"
+                             Background="#FFFFFF" Foreground="Black" BorderThickness="1"
+                             BorderBrush="{DynamicResource PanelAccentBrush}" Padding="8,4" FontSize="11"
+                             TextChanged="TxtHapticUrl_TextChanged">
+                        <TextBox.ToolTip>
+                            <ToolTip Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1" Padding="12">
+                                <StackPanel MaxWidth="280">
+                                    <TextBlock Text="{loc:Str label_connection_guide}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="Bold" Margin="0,0,0,8"/>
+
+                                    <TextBlock Text="{loc:Str label_lovense_connect}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold"/>
+                                    <TextBlock Foreground="#CCCCCC" FontSize="10" TextWrapping="Wrap" Margin="0,2,0,6">
+                                        <Run Text="1."/><Run Text="{loc:Str label_open_lovense_remote_app}" Foreground="White"/>
+                                        <LineBreak/><Run Text="2."/><Run Text="{loc:Str label_go_to_settings_game_mode}" Foreground="White"/>
+                                        <LineBreak/><Run Text="3."/><Run Text="{loc:Str label_enable_game_mode_note_the_ip}" Foreground="White"/>
+                                        <LineBreak/><Run Text="4."/><Run Text="{loc:Str label_enter_http_ip_30010}" Foreground="{DynamicResource PinkBrush}"/>
+                                    </TextBlock>
+
+                                    <TextBlock Text="{loc:Str label_buttplug_io_intiface}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11" FontWeight="Bold"/>
+                                    <TextBlock Foreground="#CCCCCC" FontSize="10" TextWrapping="Wrap" Margin="0,2,0,0">
+                                        <Run Text="1."/><Run Text="{loc:Str label_open_intiface_central}" Foreground="White"/>
+                                        <LineBreak/><Run Text="2."/><Run Text="{loc:Str label_click_start_server}" Foreground="White"/>
+                                        <LineBreak/><Run Text="3."/><Run Text="{loc:Str label_click_start_scanning_for_devices}" Foreground="White"/>
+                                        <LineBreak/><Run Text="4."/><Run Text="{loc:Str label_use_ws_localhost_12345}" Foreground="{DynamicResource PinkBrush}"/>
+                                    </TextBlock>
+                                </StackPanel>
+                            </ToolTip>
+                        </TextBox.ToolTip>
+                    </TextBox>
+                </Grid>
+                <TextBlock x:Name="TxtHapticUrlHint"
+                           Text="{loc:Str label_lovense_enter_ip_from_lovense_remote_settings}"
+                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"/>
+
+                <!-- Auto-connect on startup -->
+                <CheckBox x:Name="ChkHapticAutoConnect" Content="{loc:Str setting_auto_connect_on_startup}"
+                          Foreground="#CCCCCC" FontSize="11" Margin="0,8,0,0"
+                          Checked="ChkHapticAutoConnect_Changed" Unchecked="ChkHapticAutoConnect_Changed"
+                          ToolTip="{loc:Str tooltip_automatically_connect_to_your_haptic_device_w}"/>
+
+                <!-- Connection Status -->
+                <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="10" Margin="0,10,0,0">
+                    <StackPanel>
+                        <Grid>
+                            <TextBlock Text="{loc:Str label_status}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                            <TextBlock x:Name="TxtHapticStatus" Text="{loc:Str label_disconnected}"
+                                       Foreground="#FF6B6B" FontSize="11" HorizontalAlignment="Right"/>
+                        </Grid>
+                        <TextBlock x:Name="TxtHapticDevices" Text="{loc:Str label_no_devices}"
+                                   Foreground="{DynamicResource TextDimBrush}" FontSize="10" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Intensity Slider -->
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="40"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{loc:Str label_intensity}" Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+                    <Slider x:Name="SliderHapticIntensity" Grid.Column="1"
+                            Style="{StaticResource PinkSlider}"
+                            Minimum="0" Maximum="100" Value="70" Margin="10,0"
+                            ValueChanged="SliderHapticIntensity_ValueChanged"/>
+                    <TextBlock x:Name="TxtHapticIntensity" Grid.Column="2" Text="70%"
+                               Foreground="{DynamicResource PinkBrush}" FontSize="11" FontWeight="Bold"/>
+                </Grid>
+
+                <!-- Test Button -->
+                <Button x:Name="BtnHapticTest" Content="{loc:Str btn_test_vibration}"
+                        Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
+                        BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
+                        Padding="12,6" Margin="0,10,0,0"
+                        HorizontalAlignment="Left" FontSize="11" Cursor="Hand"
+                        Click="BtnHapticTest_Click"/>
+                    </StackPanel>
+                </Border>
+                <!-- Lock Overlay for Left Box -->
+                <Border x:Name="HapticsConnectionLock" Background="#80000000" CornerRadius="8" Visibility="Collapsed">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{loc:Str label_patreon_only_2}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Right Box: Feature Sliders -->
+            <Grid Grid.Column="2">
+                <Border x:Name="HapticsFeatureBox" CornerRadius="8" Padding="12"
+                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#353550" BorderThickness="1">
+                    <StackPanel>
+                <Grid>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{loc:Str section_feature_intensity}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"/>
+                    </StackPanel>
+                </Grid>
+                <TextBlock Text="{loc:Str label_adjust_vibration_strength_per_feature}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,4,0,8"/>
+
+                        <!-- Bubble Pop -->
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="85"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkHapticBubble" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Bubble"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Str label_bubbles}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
+                            <Slider x:Name="SliderHapticBubble" Grid.Column="2" Style="{StaticResource PinkSlider}"
+                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
+                                    ValueChanged="SliderHapticFeature_Changed" Tag="Bubble"/>
+                            <TextBlock x:Name="TxtHapticBubble" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbHapticBubbleMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
+                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
+                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Bubble">
+                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Flash Display -->
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="85"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkHapticFlashDisplay" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="FlashDisplay"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Str label_flash_show}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
+                            <Slider x:Name="SliderHapticFlashDisplay" Grid.Column="2" Style="{StaticResource PinkSlider}"
+                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
+                                    ValueChanged="SliderHapticFeature_Changed" Tag="FlashDisplay"/>
+                            <TextBlock x:Name="TxtHapticFlashDisplay" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbHapticFlashDisplayMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
+                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
+                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="FlashDisplay">
+                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Flash Click -->
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="85"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkHapticFlashClick" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="FlashClick"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Str label_flash_click}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
+                            <Slider x:Name="SliderHapticFlashClick" Grid.Column="2" Style="{StaticResource PinkSlider}"
+                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
+                                    ValueChanged="SliderHapticFeature_Changed" Tag="FlashClick"/>
+                            <TextBlock x:Name="TxtHapticFlashClick" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbHapticFlashClickMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
+                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
+                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="FlashClick">
+                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Video -->
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="85"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkHapticVideo" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Video"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Str tab_videos}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
+                            <Slider x:Name="SliderHapticVideo" Grid.Column="2" Style="{StaticResource PinkSlider}"
+                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
+                                    ValueChanged="SliderHapticFeature_Changed" Tag="Video"/>
+                            <TextBlock x:Name="TxtHapticVideo" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbHapticVideoMode" Grid.Column="4" SelectedIndex="0" FontSize="9"
+                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
+                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Video">
+                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Target Hit (video attention targets) -->
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="85"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkHapticTargetHit" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="TargetHit"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Str label_target_hit}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
+                            <Slider x:Name="SliderHapticTargetHit" Grid.Column="2" Style="{StaticResource PinkSlider}"
+                                    Minimum="0" Maximum="100" Value="70" Margin="5,0"
+                                    ValueChanged="SliderHapticFeature_Changed" Tag="TargetHit"/>
+                            <TextBlock x:Name="TxtHapticTargetHit" Grid.Column="3" Text="70%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbHapticTargetHitMode" Grid.Column="4" SelectedIndex="1" FontSize="9"
+                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
+                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="TargetHit">
+                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Subliminal -->
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="85"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkHapticSubliminal" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Subliminal"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Str tab_subliminals}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
+                            <Slider x:Name="SliderHapticSubliminal" Grid.Column="2" Style="{StaticResource PinkSlider}"
+                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
+                                    ValueChanged="SliderHapticFeature_Changed" Tag="Subliminal"/>
+                            <TextBlock x:Name="TxtHapticSubliminal" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbHapticSubliminalMode" Grid.Column="4" SelectedIndex="1" FontSize="9"
+                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
+                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Subliminal">
+                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Level Up -->
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="85"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkHapticLevelUp" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="LevelUp"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Str label_level_up}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
+                            <Slider x:Name="SliderHapticLevelUp" Grid.Column="2" Style="{StaticResource PinkSlider}"
+                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
+                                    ValueChanged="SliderHapticFeature_Changed" Tag="LevelUp"/>
+                            <TextBlock x:Name="TxtHapticLevelUp" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbHapticLevelUpMode" Grid.Column="4" SelectedIndex="4" FontSize="9"
+                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
+                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="LevelUp">
+                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Achievement -->
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="85"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkHapticAchievement" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="Achievement"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Str tab_achievements}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
+                            <Slider x:Name="SliderHapticAchievement" Grid.Column="2" Style="{StaticResource PinkSlider}"
+                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
+                                    ValueChanged="SliderHapticFeature_Changed" Tag="Achievement"/>
+                            <TextBlock x:Name="TxtHapticAchievement" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbHapticAchievementMode" Grid.Column="4" SelectedIndex="3" FontSize="9"
+                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
+                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="Achievement">
+                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
+                            </ComboBox>
+                        </Grid>
+                        <!-- Bouncing Text -->
+                        <Grid Margin="0,3">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="85"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkHapticBouncingText" Style="{StaticResource ToggleStyle}" IsChecked="True"
+                                      VerticalAlignment="Center" Checked="ChkHapticFeature_Changed" Unchecked="ChkHapticFeature_Changed" Tag="BouncingText"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Str label_bounce_text}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="30,0,0,0"/>
+                            <Slider x:Name="SliderHapticBouncingText" Grid.Column="2" Style="{StaticResource PinkSlider}"
+                                    Minimum="0" Maximum="100" Value="50" Margin="5,0"
+                                    ValueChanged="SliderHapticFeature_Changed" Tag="BouncingText"/>
+                            <TextBlock x:Name="TxtHapticBouncingText" Grid.Column="3" Text="50%" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbHapticBouncingTextMode" Grid.Column="4" SelectedIndex="1" FontSize="9"
+                                      Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}" BorderBrush="{DynamicResource SecondaryBrush}"
+                                      SelectionChanged="CmbHapticMode_SelectionChanged" Tag="BouncingText">
+                                <ComboBoxItem Content="{loc:Str btn_constant}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_pulse}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_wave}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_heartbeat}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_escalate}" Foreground="{DynamicResource PinkBrush}"/>
+                                <ComboBoxItem Content="{loc:Str btn_earthquake}" Foreground="{DynamicResource PinkBrush}"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Video Haptic Sync - Enhanced Featured Card -->
+                        <Border x:Name="VideoHapticSyncCard" BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1,2,1,1"
+                                CornerRadius="8" Margin="0,12,0,0" Background="{DynamicResource SurfaceBgBrush}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Row 0: Header Section -->
+                                <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" CornerRadius="8,8,0,0" Padding="12,10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Title and Description -->
+                                        <StackPanel Grid.Column="0">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🎵" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <TextBlock Text="{loc:Str label_video_haptic_sync}" Foreground="{DynamicResource SecondaryBrush}"
+                                                           FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{loc:Str label_syncs_haptics_to_video_audio_in_real_time}"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="10" Margin="0,2,0,0"/>
+                                        </StackPanel>
+
+                                        <!-- Help Button -->
+                                        <Button x:Name="HelpBtnVideoHapticSync" Grid.Column="1"
+                                                Style="{StaticResource HelpButtonStyle}" Tag="VideoHapticSync"
+                                                Margin="0,0,10,0"/>
+
+                                        <!-- Master Enable Toggle -->
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                            <TextBlock Text="{loc:Str btn_enable}" Foreground="#AAAAAA" FontSize="10"
+                                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                            <CheckBox x:Name="ChkHapticAudioSync" Style="{StaticResource ToggleStyle}"
+                                                      IsChecked="False"
+                                                      Checked="ChkHapticAudioSync_Changed"
+                                                      Unchecked="ChkHapticAudioSync_Changed"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Row 1: Algorithm Cards (left) + Image (right) -->
+                                <Grid Grid.Row="1" Margin="12,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="10"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Left: Algorithm Selection Cards (stacked vertically) -->
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Str label_sync_algorithm}" Foreground="#AAAAAA" FontSize="10" Margin="0,0,0,5"/>
+
+                                        <!-- Algorithm 1: Audio Reactive (Enabled) -->
+                                        <Border x:Name="AlgorithmCardAudioReactive"
+                                                Background="{DynamicResource PanelBgBrush}" CornerRadius="4" Padding="8,5" Cursor="Hand"
+                                                BorderThickness="2" BorderBrush="{DynamicResource SecondaryBrush}" Margin="0,0,0,3"
+                                                MouseLeftButtonDown="AlgorithmCard_Click" Tag="AudioReactive">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#2A2A4E"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{loc:Str label_audio_reactive}" Foreground="White"
+                                                           FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                <Ellipse x:Name="AlgorithmIndicatorAudioReactive" Grid.Column="1"
+                                                         Width="6" Height="6" Fill="{DynamicResource SecondaryBrush}"
+                                                         VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Algorithm 2: Beat Detection (Coming Soon) -->
+                                        <Grid Margin="0,0,0,3">
+                                            <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="4" Padding="8,5">
+                                                <Border.Effect>
+                                                    <BlurEffect Radius="2"/>
+                                                </Border.Effect>
+                                                <TextBlock Text="{loc:Str label_beat_detection}" Foreground="#666666"
+                                                           FontSize="10" FontWeight="SemiBold"/>
+                                            </Border>
+                                            <Border Background="#CC1A1A2E" CornerRadius="4">
+                                                <TextBlock Text="{loc:Str label_coming_soon}" Foreground="{DynamicResource SecondaryBrush}" FontSize="8"
+                                                           FontWeight="Bold" HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Algorithm 3: AI Enhanced (Coming Soon) -->
+                                        <Grid>
+                                            <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="4" Padding="8,5">
+                                                <Border.Effect>
+                                                    <BlurEffect Radius="2"/>
+                                                </Border.Effect>
+                                                <TextBlock Text="{loc:Str label_ai_enhanced}" Foreground="#666666"
+                                                           FontSize="10" FontWeight="SemiBold"/>
+                                            </Border>
+                                            <Border Background="#CC1A1A2E" CornerRadius="4">
+                                                <TextBlock Text="{loc:Str label_coming_soon}" Foreground="{DynamicResource SecondaryBrush}" FontSize="8"
+                                                           FontWeight="Bold" HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <!-- Right: Square Image -->
+                                    <Border Grid.Column="2" CornerRadius="6" ClipToBounds="True"
+                                            BorderBrush="{DynamicResource SecondaryBrush}" BorderThickness="1"
+                                            Width="130" Height="130">
+                                        <Image x:Name="ImgVideoHapticSync"
+                                               Source="pack://application:,,,/Resources/features/vibe.png"
+                                               Stretch="UniformToFill"/>
+                                    </Border>
+                                </Grid>
+
+                                <!-- Row 3: Delay and Power Sliders -->
+                                <Border x:Name="VideoHapticSyncSliders" Grid.Row="3" Padding="12,8,12,12"
+                                        Visibility="Collapsed">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Delay Slider -->
+                                        <StackPanel Grid.Column="0">
+                                            <Grid>
+                                                <TextBlock Text="{loc:Str label_delay_2}" Foreground="#AAAAAA" FontSize="10"/>
+                                                <TextBlock x:Name="TxtVideoHapticDelay" Text="{loc:Str label_0ms}"
+                                                           Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                           HorizontalAlignment="Right"/>
+                                            </Grid>
+                                            <Slider x:Name="SliderVideoHapticDelay" Minimum="-600" Maximum="600"
+                                                    Value="0" Margin="0,4,0,0"
+                                                    ValueChanged="SliderVideoHapticDelay_Changed"
+                                                    ToolTip="{loc:Str tooltip_adjust_haptic_timing_positive_earlier_negativ}"/>
+                                        </StackPanel>
+
+                                        <!-- Power Slider -->
+                                        <StackPanel Grid.Column="2">
+                                            <Grid>
+                                                <TextBlock Text="{loc:Str label_power_2}" Foreground="#AAAAAA" FontSize="10"/>
+                                                <TextBlock x:Name="TxtVideoHapticPower" Text="100%"
+                                                           Foreground="{DynamicResource SecondaryBrush}" FontSize="10"
+                                                           HorizontalAlignment="Right"/>
+                                            </Grid>
+                                            <Slider x:Name="SliderVideoHapticPower" Minimum="0" Maximum="100"
+                                                    Value="100" Margin="0,4,0,0"
+                                                    ValueChanged="SliderVideoHapticPower_Changed"
+                                                    ToolTip="{loc:Str tooltip_live_intensity_control_reduce_if_vibration_is}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Border>
+                <!-- Lock Overlay for Right Box -->
+                <Border x:Name="HapticsFeatureLock" Background="#80000000" CornerRadius="8" Visibility="Collapsed">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{loc:Str label_patreon_only_2}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+            </Grid>
+
+            <!-- Patreon Only Overlay (hidden for Patreon supporters) -->
+            <Border x:Name="HapticsComingSoonOverlay" Background="#CC1A1A2E" CornerRadius="8">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="{loc:Str label_patreon_only_2}" Foreground="{DynamicResource PinkBrush}" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                    <TextBlock Text="{loc:Str label_unlock_haptic_feedback_by_supporting_on_patre}"
+                               Foreground="#AAAAAA" FontSize="13" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                    <TextBlock Text="{loc:Str label_lovense_buttplug_io_support}"
+                               Foreground="{DynamicResource SecondaryBrush}" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+                </Grid>
+
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Translucent gating overlay (only for free users) -->
+                        <Border x:Name="HapticsGate" Visibility="Collapsed"
+                                Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
+                                CornerRadius="10" IsHitTestVisible="True">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="18"
+                                           FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="12"
+                                           Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                                <Button Content="{loc:Str gate_unlock_with_patreon}"
+                                        Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                                        Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
 
         <!-- Global Bottom Bar: Start / Save / Exit (Always visible) -->
         <Border Grid.Row="5" Background="{StaticResource PanelBgBrush}" Margin="10,5,10,10" CornerRadius="10" Padding="15,12">

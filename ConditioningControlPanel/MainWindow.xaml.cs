@@ -829,19 +829,16 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var imageFile = App.Settings?.Current?.IsSissyMode == true ? "takeover.png" : "bambi takeover.png";
-                var image = Services.ModResourceResolver.ResolveImage($"features/{imageFile}");
-                if (image != null)
-                    ImgTakeover.Source = image;
-
-                // Update mod-aware takeover labels
+                // Update mod-aware takeover labels. ImgTakeover and TxtTakeoverHeader
+                // were removed when the Bambi feature image moved out of the Exclusives
+                // page into BambiTakeoverTab — guard the legacy element references.
                 var takeoverLabel = App.Mods?.GetTakeoverLabel() ?? "Bambi Takeover";
-                TxtTakeoverHeader.Text = $"🤖 {takeoverLabel}";
-                TxtTakeoverLocked.Text = $"🤖 {takeoverLabel}";
-                TxtTakeoverUnlocked.Text = $"🤖 {takeoverLabel}";
-                BtnAutonomyStartStop.ToolTip = Loc.GetF("tooltip_start_stop_takeover", takeoverLabel);
-                ImgTakeover.ToolTip = Loc.GetF("tooltip_takeover_let_her_take_control", takeoverLabel);
-                RunPatreonFeatures.Text = Loc.GetF("label_patreon_features", takeoverLabel);
+                if (TxtTakeoverLocked != null) TxtTakeoverLocked.Text = $"🤖 {takeoverLabel}";
+                if (TxtTakeoverUnlocked != null) TxtTakeoverUnlocked.Text = $"🤖 {takeoverLabel}";
+                if (BtnAutonomyStartStop != null)
+                    BtnAutonomyStartStop.ToolTip = Loc.GetF("tooltip_start_stop_takeover", takeoverLabel);
+                if (RunPatreonFeatures != null)
+                    RunPatreonFeatures.Text = Loc.GetF("label_patreon_features", takeoverLabel);
             }
             catch (Exception ex)
             {
@@ -2878,6 +2875,98 @@ namespace ConditioningControlPanel
             ShowTab("awareness");
         }
 
+        #region Exclusives Submenu
+
+        private DispatcherTimer? _exclusivesMenuCloseTimer;
+
+        private void BtnPatreonExclusives_MouseEnter(object sender, MouseEventArgs e)
+        {
+            _exclusivesMenuCloseTimer?.Stop();
+            RefreshExclusivesSubmenuLocks();
+            ExclusivesSubmenuPopup.IsOpen = true;
+        }
+
+        private void ExclusivesSubmenuPopup_MouseEnter(object sender, MouseEventArgs e)
+        {
+            _exclusivesMenuCloseTimer?.Stop();
+        }
+
+        private void ExclusivesMenu_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (_exclusivesMenuCloseTimer == null)
+            {
+                _exclusivesMenuCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(280) };
+                _exclusivesMenuCloseTimer.Tick += ExclusivesMenuCloseTick;
+            }
+            _exclusivesMenuCloseTimer.Stop();
+            _exclusivesMenuCloseTimer.Start();
+        }
+
+        private void ExclusivesMenuCloseTick(object? sender, EventArgs e)
+        {
+            _exclusivesMenuCloseTimer?.Stop();
+            ExclusivesSubmenuPopup.IsOpen = false;
+        }
+
+        private void BtnSubRemoteControl_Click(object sender, RoutedEventArgs e)
+        {
+            ExclusivesSubmenuPopup.IsOpen = false;
+            ShowTab("remotecontrol");
+        }
+
+        private void BtnSubBambiTakeover_Click(object sender, RoutedEventArgs e)
+        {
+            ExclusivesSubmenuPopup.IsOpen = false;
+            ShowTab("bambitakeover");
+        }
+
+        private void BtnSubHaptics_Click(object sender, RoutedEventArgs e)
+        {
+            ExclusivesSubmenuPopup.IsOpen = false;
+            ShowTab("haptics");
+        }
+
+        private void BtnSubAwareness_Click(object sender, RoutedEventArgs e)
+        {
+            ExclusivesSubmenuPopup.IsOpen = false;
+            ShowTab("awareness");
+        }
+
+        /// <summary>
+        /// Updates "Premium" badges on the Exclusives submenu items based on the
+        /// user's current subscription state. Called whenever the popup opens.
+        /// </summary>
+        private void RefreshExclusivesSubmenuLocks()
+        {
+            var hasPremium = App.Patreon?.HasPremiumAccess == true;
+            var badgeVis = hasPremium ? Visibility.Collapsed : Visibility.Visible;
+            if (SubBadgeRemoteControl != null) SubBadgeRemoteControl.Visibility = badgeVis;
+            if (SubBadgeBambiTakeover != null) SubBadgeBambiTakeover.Visibility = badgeVis;
+            if (SubBadgeHaptics != null) SubBadgeHaptics.Visibility = badgeVis;
+        }
+
+        /// <summary>
+        /// Routes the gating overlay's CTA button to the Patreon login/upgrade flow.
+        /// Mirrors what BtnPatreonExclusives_Click does for free users today.
+        /// </summary>
+        private void BtnGateUnlock_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("patreon");
+        }
+
+        /// <summary>
+        /// Toggles a translucent gating overlay's visibility based on the user's
+        /// premium subscription state. Used by the new visible-but-locked tabs.
+        /// </summary>
+        private void RefreshPremiumGate(Border? gate)
+        {
+            if (gate == null) return;
+            var hasPremium = App.Patreon?.HasPremiumAccess == true;
+            gate.Visibility = hasPremium ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        #endregion
+
         #region Unified Login
 
         /// <summary>
@@ -3696,6 +3785,9 @@ namespace ConditioningControlPanel
             EnhancementsTab.Visibility = Visibility.Collapsed;
             LabTab.Visibility = Visibility.Collapsed;
             AwarenessTab.Visibility = Visibility.Collapsed;
+            if (RemoteControlTab != null) RemoteControlTab.Visibility = Visibility.Collapsed;
+            if (BambiTakeoverTab != null) BambiTakeoverTab.Visibility = Visibility.Collapsed;
+            if (HapticsTab != null) HapticsTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive
             var inactiveStyle = FindResource("TabButton") as Style;
@@ -3709,7 +3801,8 @@ namespace ConditioningControlPanel
             BtnLeaderboard.Style = inactiveStyle;
             BtnLab.Style = inactiveStyle;
             BtnOpenAssetsTop.Style = inactiveStyle;
-            BtnAwareness.Style = inactiveStyle;
+            // BtnAwareness was removed from the primary tab bar — its only entry point
+            // is now the Exclusives popup submenu
             // BtnPatreonExclusives keeps its inline Patreon red style defined in XAML
 
             switch (tab)
@@ -3806,8 +3899,25 @@ namespace ConditioningControlPanel
                 case "awareness":
                     AwarenessTab.Visibility = Visibility.Visible;
                     AnimateTabIn(AwarenessTab);
-                    BtnAwareness.Style = activeStyle;
                     SyncAwarenessTabUI();
+                    break;
+
+                case "remotecontrol":
+                    RemoteControlTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(RemoteControlTab);
+                    UpdateRemoteControlUI();
+                    break;
+
+                case "bambitakeover":
+                    BambiTakeoverTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(BambiTakeoverTab);
+                    UpdatePatreonUI();
+                    break;
+
+                case "haptics":
+                    HapticsTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(HapticsTab);
+                    UpdatePatreonUI();
                     break;
 
             }
@@ -5337,9 +5447,14 @@ namespace ConditioningControlPanel
             // Hide "Coming Soon" overlay for Patreon supporters
             HapticsComingSoonOverlay.Visibility = hasHapticsAccess ? Visibility.Collapsed : Visibility.Visible;
 
-            // Bambi Takeover (Autonomy) lock
-            if (AutonomyLocked != null) AutonomyLocked.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
-            if (AutonomyUnlocked != null) AutonomyUnlocked.Visibility = hasPremiumAccess ? Visibility.Visible : Visibility.Collapsed;
+            // Bambi Takeover (Autonomy) — visible-but-locked: keep AutonomyUnlocked
+            // always visible, AutonomyLocked stays collapsed (legacy element), and the
+            // new BambiTakeoverGate translucent overlay handles gating.
+            if (AutonomyLocked != null) AutonomyLocked.Visibility = Visibility.Collapsed;
+            if (AutonomyUnlocked != null) AutonomyUnlocked.Visibility = Visibility.Visible;
+            RefreshPremiumGate(BambiTakeoverGate);
+            RefreshPremiumGate(HapticsGate);
+            RefreshPremiumGate(RemoteControlGate);
 
             // Update AI connection status
             if (TxtAiStatus != null)
@@ -7961,6 +8076,7 @@ namespace ConditioningControlPanel
                 RemoteStatusPanel.Visibility = System.Windows.Visibility.Visible;
                 BtnStopRemote.Visibility = System.Windows.Visibility.Visible;
                 UpdateRemoteStatus(false);
+                RefreshRemoteQrCode(BuildRemotePairingUrl(code));
 
                 // Listen for controller connection changes
                 App.RemoteControl.ControllerConnectedChanged += OnRemoteControllerChanged;
@@ -8131,6 +8247,8 @@ namespace ConditioningControlPanel
             RemoteCodePanel.Visibility = System.Windows.Visibility.Collapsed;
             RemoteStatusPanel.Visibility = System.Windows.Visibility.Collapsed;
             BtnStopRemote.Visibility = System.Windows.Visibility.Collapsed;
+            if (ImgRemoteQrCode != null) ImgRemoteQrCode.Source = null;
+            if (LstRemoteCommandLog != null) LstRemoteCommandLog.Items.Clear();
         }
 
         private void OnRemoteControllerChanged(object? sender, EventArgs e)
@@ -8353,7 +8471,123 @@ namespace ConditioningControlPanel
         {
             if (SuppressedCommands.Contains(action)) return;
 
-            Dispatcher.Invoke(() => ShowCommandNotification(action));
+            Dispatcher.Invoke(() =>
+            {
+                ShowCommandNotification(action);
+                AppendRemoteCommandLog(action);
+            });
+        }
+
+        /// <summary>
+        /// Appends a command to the Remote Control tab's command log.
+        /// Caps the log at 50 entries (oldest dropped).
+        /// </summary>
+        private void AppendRemoteCommandLog(string action)
+        {
+            if (LstRemoteCommandLog == null) return;
+            try
+            {
+                var label = CommandLabels.TryGetValue(action, out var l) ? Loc.Get(l) : action.Replace("_", " ");
+                var entry = $"{DateTime.Now:HH:mm:ss}  {label}";
+                LstRemoteCommandLog.Items.Insert(0, entry);
+                while (LstRemoteCommandLog.Items.Count > 50)
+                    LstRemoteCommandLog.Items.RemoveAt(LstRemoteCommandLog.Items.Count - 1);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Refreshes the Remote Control tab UI: gating overlay, QR code (if a session
+        /// is active), tier card highlight. Called whenever the tab is shown.
+        /// </summary>
+        private void UpdateRemoteControlUI()
+        {
+            RefreshPremiumGate(RemoteControlGate);
+            RefreshTierCardHighlight();
+            // If a session is already running, refresh the QR code with the current code.
+            var code = App.RemoteControl?.SessionCode;
+            if (!string.IsNullOrEmpty(code))
+                RefreshRemoteQrCode(BuildRemotePairingUrl(code));
+            else if (ImgRemoteQrCode != null)
+                ImgRemoteQrCode.Source = null;
+        }
+
+        /// <summary>
+        /// Generates the pairing URL for the QR code from the current session code.
+        /// </summary>
+        private string BuildRemotePairingUrl(string code)
+        {
+            return $"https://cclabs.app/remote/?code={code}";
+        }
+
+        /// <summary>
+        /// Renders a QR code image into ImgRemoteQrCode for the given pairing URL.
+        /// </summary>
+        private void RefreshRemoteQrCode(string url)
+        {
+            if (ImgRemoteQrCode == null) return;
+            try
+            {
+                using var generator = new QRCoder.QRCodeGenerator();
+                using var data = generator.CreateQrCode(url, QRCoder.QRCodeGenerator.ECCLevel.M);
+                using var qr = new QRCoder.PngByteQRCode(data);
+                var bytes = qr.GetGraphic(8);
+                using var ms = new MemoryStream(bytes);
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.StreamSource = ms;
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.EndInit();
+                bmp.Freeze();
+                ImgRemoteQrCode.Source = bmp;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to render remote QR code");
+            }
+        }
+
+        /// <summary>
+        /// Highlights the active tier card based on CmbRemoteTier.SelectedIndex.
+        /// </summary>
+        private void RefreshTierCardHighlight()
+        {
+            if (TierCardLight == null || TierCardStandard == null || TierCardFull == null) return;
+            var dim = new SolidColorBrush(Color.FromRgb(0x2E, 0x2E, 0x48));
+            var active = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4));
+            TierCardLight.BorderBrush = dim;
+            TierCardLight.BorderThickness = new Thickness(1);
+            TierCardStandard.BorderBrush = dim;
+            TierCardStandard.BorderThickness = new Thickness(1);
+            TierCardFull.BorderBrush = dim;
+            TierCardFull.BorderThickness = new Thickness(1);
+
+            var idx = CmbRemoteTier?.SelectedIndex ?? 0;
+            Border? activeCard = idx switch
+            {
+                1 => TierCardStandard,
+                2 => TierCardFull,
+                _ => TierCardLight,
+            };
+            if (activeCard != null)
+            {
+                activeCard.BorderBrush = active;
+                activeCard.BorderThickness = new Thickness(2);
+            }
+        }
+
+        /// <summary>
+        /// Routes a tier card click to the legacy CmbRemoteTier handler so the
+        /// existing tier-change logic still fires.
+        /// </summary>
+        private void TierCard_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.Tag is string tagStr && int.TryParse(tagStr, out var idx))
+            {
+                if (CmbRemoteTier != null && CmbRemoteTier.SelectedIndex != idx)
+                    CmbRemoteTier.SelectedIndex = idx;
+                RefreshTierCardHighlight();
+            }
         }
 
         private void ShowCommandNotification(string action)
