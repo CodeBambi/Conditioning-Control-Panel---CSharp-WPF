@@ -21,6 +21,28 @@ public class AiCommandData
             options.Converters.Add(new AiCommandConverter());
             return JsonSerializer.Deserialize<AiCommandData>(json, options);
         }
+        catch (JsonException ex) when (ex.Message.Contains("Expected depth to be zero") || ex.Message.Contains("open JSON object"))
+        {
+            try
+            {
+                // Try to fix missing closing braces
+                var fixedJson = json.Trim();
+                int openBraces = fixedJson.Count(c => c == '{');
+                int closeBraces = fixedJson.Count(c => c == '}');
+                while (openBraces > closeBraces)
+                {
+                    fixedJson += "}";
+                    closeBraces++;
+                }
+                return JsonSerializer.Deserialize<AiCommandData>(fixedJson, options);
+            }
+            catch
+            {
+                Console.WriteLine("Error parsing AI command (recovery failed):" + json);
+                Console.WriteLine(ex);
+                return null;
+            }
+        }
         catch (Exception e)
         {
             Console.WriteLine("Error parsing AI command:" + json);

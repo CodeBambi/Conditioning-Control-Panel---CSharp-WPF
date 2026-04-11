@@ -143,14 +143,9 @@ public class LocalAiService : IAiService
     private string ParseJson(string response)
     {
         CurrentCommands = new List<AiCommandData>();
+        // Standard JSON processing
         try
         {
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-                ReadCommentHandling = JsonCommentHandling.Skip,
-                AllowTrailingCommas = true
-            };
             var jsonDoc = JsonDocument.Parse(response);
             if (jsonDoc.RootElement.TryGetProperty("response", out var respProp))
             {
@@ -174,35 +169,62 @@ public class LocalAiService : IAiService
         }
         catch
         {
-            // Fallback to old regex parsing if it's not the new format or parsing fails
+            // Fallback to old regex/extraction parsing if it's not the new format or parsing fails
         }
 
-        var pattern = new Regex(@"{\s*([\s\S]*?)\s*}", RegexOptions.Compiled);
-        string clean = pattern.Replace(response, m =>
-        {
-            var body = m.Groups[0].Value; // Use the whole match including braces
-            try
-            {
-                var cmd = AiCommandData.ParseCommand(body);
-                if (cmd != null)
-                    CurrentCommands.Add(cmd);
-            }
-            catch
-            {
-                // If parsing fails, you may choose to ignore, log, or keep it
-            }
-            // Return empty string to strip the entire JSON from output
-            return string.Empty;
-        });
+        return ParseOldFormat(response);
+    }
 
-        // Optional: collapse extra blank lines created by stripping
-        clean = Regex.Replace(clean, @"\n{3,}", "\n\n");
+    private string ParseOldFormat(string response)
+    {
+        var textOnly = response;
+        var index = 0;
+        while ((index = textOnly.IndexOf('{', index)) != -1)
+        {
+            var start = index;
+            var balance = 0;
+            var end = -1;
+            for (var i = start; i < textOnly.Length; i++)
+            {
+                if (textOnly[i] == '{') balance++;
+                else if (textOnly[i] == '}') balance--;
+
+                if (balance == 0)
+                {
+                    end = i;
+                    break;
+                }
+            }
+
+            if (end != -1)
+            {
+                var json = textOnly.Substring(start, end - start + 1);
+                try
+                {
+                    var cmd = AiCommandData.ParseCommand(json);
+                    if (cmd != null)
+                    {
+                        CurrentCommands.Add(cmd);
+                        textOnly = textOnly.Remove(start, end - start + 1);
+                        index = start; // Stay at same position as it was replaced
+                        continue;
+                    }
+                }
+                catch
+                {
+                    // Ignore and move on
+                }
+            }
+            index++;
+        }
+
         LogCommands();
         foreach (var command in CurrentCommands)
         {
             TriggerCommand(command);
         }
-        return clean.Trim();
+
+        return textOnly.Trim();
     }
 
     private void LogCommands()

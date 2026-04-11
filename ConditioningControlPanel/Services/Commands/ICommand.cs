@@ -1,8 +1,9 @@
+using System.Threading.Tasks;
 using ConditioningControlPanel.Models.CommandData;
 
 namespace ConditioningControlPanel.Services.Commands;
 
 public interface ICommand
 {
-    public bool Execute();
+    public Task<bool> ExecuteAsync();
 }

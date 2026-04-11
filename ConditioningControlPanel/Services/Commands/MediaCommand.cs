@@ -1,5 +1,8 @@
+using System;
 using System.Linq;
 using System.IO;
+using System.Threading.Tasks;
+using System.Windows;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
 
@@ -7,11 +10,11 @@ namespace ConditioningControlPanel.Services.Commands;
 
 public class MediaCommand(Media commandData) : ICommand
 {
-    public bool Execute()
+    public async Task<bool> ExecuteAsync()
     {
         if (commandData.Random)
         {
-            return System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            return Application.Current.Dispatcher.Invoke(() =>
             {
                 if (App.Video.IsPlaying) return false;
                 App.Video.TriggerVideo();
@@ -33,7 +36,7 @@ public class MediaCommand(Media commandData) : ICommand
 
         if (IsVideo(extension))
         {
-            return System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            return Application.Current.Dispatcher.Invoke(() =>
             {
                 if (App.Video.IsPlaying) return false;
                 App.Video.PlaySpecificVideo(fullPath, false);
@@ -43,11 +46,14 @@ public class MediaCommand(Media commandData) : ICommand
 
         if (IsAudio(extension))
         {
-            App.Audio.PlaySound(fullPath, 100);
-            return true;
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                App.Audio.PlaySound(fullPath, 100);
+            });
+            return await Task.FromResult(true);
         }
 
-        return false;
+        return await Task.FromResult(false);
     }
 
     private bool IsVideo(string extension)

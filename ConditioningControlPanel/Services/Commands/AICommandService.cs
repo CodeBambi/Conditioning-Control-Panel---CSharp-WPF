@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
 
@@ -9,30 +10,35 @@ public class AiCommandService : IAiCommandService
 {
     private static readonly Dictionary<string, CancellationTokenSource> TokenCancellationSources = new();
 
-    public void ExecuteCommand(AiCommandData commandData)
+    public async void ExecuteCommand(AiCommandData commandData)
     {
         if (commandData.Data == null) return;
 
-        if (commandData.Command == AICommandType.getbacktome && commandData.Data is GetBackToMe getBackToMe)
+        var token = commandData.Data.Token;
+        CancellationTokenSource? cts = null;
+
+        if (!string.IsNullOrEmpty(token))
         {
-            if (getBackToMe.Stop)
-            {
-                CancelToken(getBackToMe.Token);
-                return;
-            }
-
-            // Cancel any existing task with the same token
-            CancelToken(getBackToMe.Token);
-
-            var cts = new CancellationTokenSource();
-            TokenCancellationSources[getBackToMe.Token] = cts;
-
-            var command = CommandFactory.CreateCommand(commandData, cts.Token);
-            command?.Execute();
-            return;
+            CancelToken(token);
+            cts = new CancellationTokenSource();
+            TokenCancellationSources[token] = cts;
         }
 
-        CommandFactory.CreateCommand(commandData)?.Execute();
+        try
+        {
+            var command = CommandFactory.CreateCommand(commandData, cts?.Token ?? default);
+            if (command != null)
+            {
+                await command.ExecuteAsync();
+            }
+        }
+        finally
+        {
+            if (!string.IsNullOrEmpty(token))
+            {
+                RemoveToken(token);
+            }
+        }
     }
 
     public void CancelAllCommands()

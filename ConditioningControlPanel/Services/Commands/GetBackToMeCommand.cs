@@ -1,35 +1,39 @@
 using System.Threading;
+using System.Threading.Tasks;
 using ConditioningControlPanel.Models.CommandData;
 
 namespace ConditioningControlPanel.Services.Commands;
 
 public class GetBackToMeCommand(GetBackToMe commandData, CancellationToken cancellationToken) : ICommand
 {
-    public bool Execute()
+    public async Task<bool> ExecuteAsync()
     {
-        var delay = Math.Min(commandData.Delay, 5);
-        Task.Delay(delay * 1000, cancellationToken).ContinueWith(async task =>
+        var delay = Math.Max(commandData.Delay, 0);
+        try
         {
-            if (task.IsCanceled) return;
+            await Task.Delay(delay * 1000, cancellationToken);
             
-            try
+            await SendTokenMessage(commandData.Token, commandData.JsonOnly);
+            
+            if (commandData.Commands != null)
             {
-                await SendTokenMessage(commandData.Token, commandData.JsonOnly);
-                if (commandData.Commands != null)
+                foreach (var subCommand in commandData.Commands)
                 {
-                    foreach (var subCommand in commandData.Commands)
+                    if (cancellationToken.IsCancellationRequested) break;
+                    
+                    var cmd = CommandFactory.CreateCommand(subCommand, cancellationToken);
+                    if (cmd != null)
                     {
-                        if (cancellationToken.IsCancellationRequested) break;
-                        CommandFactory.CreateCommand(subCommand, cancellationToken)?.Execute();
+                        await cmd.ExecuteAsync();
                     }
                 }
             }
-            finally
-            {
-                AiCommandService.RemoveToken(commandData.Token);
-            }
-        }, cancellationToken);
-        return true;
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
     }
     
     private async Task SendTokenMessage(string token, bool jsonOnly = false)

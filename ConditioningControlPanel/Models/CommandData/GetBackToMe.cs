@@ -5,6 +5,8 @@ public record GetBackToMe(
     string Token, 
     List<AiCommandData>? Commands, 
     string? Text, 
-    bool JsonOnly,
-    bool Stop = false
-): IAiCommandData;
+    bool JsonOnly
+): IAiCommandData
+{
+    string? IAiCommandData.Token => Token;
+}

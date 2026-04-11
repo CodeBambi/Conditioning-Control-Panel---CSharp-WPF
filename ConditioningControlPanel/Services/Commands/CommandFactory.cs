@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
 
@@ -7,25 +9,35 @@ namespace ConditioningControlPanel.Services.Commands;
 
 public class CommandFactory
 {
+    private static readonly Dictionary<AICommandType, Func<IAiCommandData, CancellationToken, ICommand>> Registry = new()
+    {
+        { AICommandType.flash_image, (data, _) => new FlashImageCommand((FlashImage)data) },
+        { AICommandType.bubbles, (data, _) => new BubbleCommand((Bubbles)data) },
+        { AICommandType.video, (data, _) => new MediaCommand((Media)data) },
+        { AICommandType.audio, (data, _) => new MediaCommand((Media)data) },
+        { AICommandType.getbacktome, (data, ct) => new GetBackToMeCommand((GetBackToMe)data, ct) },
+        { AICommandType.mantra_lockscreen, (data, _) => new MantraLockScreenCommand((MantraLockscreen)data) },
+        { AICommandType.pink, (data, _) => new PinkCommand((SpiralPinkFiler)data) },
+        { AICommandType.spiral, (data, _) => new SpiralCommand((SpiralPinkFiler)data) },
+        { AICommandType.subliminal, (data, _) => new SubliminalCommand((Subliminal)data) },
+        { AICommandType.bounce, (data, _) => new BounceCommand((Bounce)data) },
+        { AICommandType.haptic, (data, _) => new HapticCommand((HapticCommandData)data) }
+    };
+
     public static ICommand? CreateCommand(AiCommandData commandData, CancellationToken cancellationToken = default)
     {
         if (commandData.Data == null) return null;
 
-        ICommand? command = commandData.Command switch
+        if (Registry.TryGetValue(commandData.Command, out var factory))
         {
-            AICommandType.flash_image => new FlashImageCommand((FlashImage)commandData.Data),
-            AICommandType.bubbles     => new BubbleCommand((Bubbles)commandData.Data),
-            AICommandType.video    => new MediaCommand((Media)commandData.Data),
-            AICommandType.audio    => new MediaCommand((Media)commandData.Data),
-            AICommandType.getbacktome => new GetBackToMeCommand((GetBackToMe)commandData.Data, cancellationToken),
-            AICommandType.mantra_lockscreen => new MantraLockScreenCommand((MantraLockscreen)commandData.Data),
-            AICommandType.pink    => new PinkCommand((SpiralPinkFiler)commandData.Data),
-            AICommandType.spiral    => new SpiralCommand((SpiralPinkFiler)commandData.Data),
-            AICommandType.subliminal    => new SubliminalCommand((Subliminal)commandData.Data),
-            AICommandType.bounce    => new BounceCommand((Bounce)commandData.Data),
-            AICommandType.haptic    => new HapticCommand((HapticCommandData)commandData.Data),
-            _ => null
-        };
-        return command;
+            return factory(commandData.Data, cancellationToken);
+        }
+
+        return null;
+    }
+
+    public static void RegisterCommand(AICommandType type, Func<IAiCommandData, CancellationToken, ICommand> factory)
+    {
+        Registry[type] = factory;
     }
 }
