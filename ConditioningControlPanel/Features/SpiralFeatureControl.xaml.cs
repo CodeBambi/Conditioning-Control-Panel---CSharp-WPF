@@ -11,12 +11,10 @@ namespace ConditioningControlPanel.Features
     /// Popup-hostable control for the Spiral Overlay feature.
     /// Reads/writes App.Settings.Current.SpiralEnabled / SpiralOpacity / SpiralPath
     /// and stays in sync with external changes (Intensity Ramp, presets, sessions)
-    /// via INotifyPropertyChanged. Subscribes to Progression level-ups to refresh
-    /// its locked/unlocked view.
+    /// via INotifyPropertyChanged.
     /// </summary>
     public partial class SpiralFeatureControl : UserControl
     {
-        private const int UnlockLevel = 10;
         private bool _isLoading;
 
         public SpiralFeatureControl()
@@ -29,15 +27,10 @@ namespace ConditioningControlPanel.Features
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             LoadFromSettings();
-            RefreshLockState();
 
             if (App.Settings?.Current is INotifyPropertyChanged inpc)
             {
                 inpc.PropertyChanged += OnSettingsPropertyChanged;
-            }
-            if (App.Progression != null)
-            {
-                App.Progression.LevelUp += OnLevelUp;
             }
         }
 
@@ -46,10 +39,6 @@ namespace ConditioningControlPanel.Features
             if (App.Settings?.Current is INotifyPropertyChanged inpc)
             {
                 inpc.PropertyChanged -= OnSettingsPropertyChanged;
-            }
-            if (App.Progression != null)
-            {
-                App.Progression.LevelUp -= OnLevelUp;
             }
         }
 
@@ -71,13 +60,6 @@ namespace ConditioningControlPanel.Features
             }
         }
 
-        private void RefreshLockState()
-        {
-            var unlocked = App.Settings?.Current?.IsLevelUnlocked(UnlockLevel) ?? false;
-            LockedPanel.Visibility = unlocked ? Visibility.Collapsed : Visibility.Visible;
-            UnlockedPanel.Visibility = unlocked ? Visibility.Visible : Visibility.Collapsed;
-        }
-
         private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             // Reflect external writes (Ramp, presets, session engine) back into our UI.
@@ -86,16 +68,6 @@ namespace ConditioningControlPanel.Features
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
-            else if (e.PropertyName == nameof(Models.AppSettings.PlayerLevel) ||
-                     e.PropertyName == nameof(Models.AppSettings.HighestLevelEver))
-            {
-                Dispatcher.BeginInvoke(new Action(RefreshLockState));
-            }
-        }
-
-        private void OnLevelUp(object? sender, int newLevel)
-        {
-            Dispatcher.BeginInvoke(new Action(RefreshLockState));
         }
 
         private void ChkEnable_Changed(object sender, RoutedEventArgs e)

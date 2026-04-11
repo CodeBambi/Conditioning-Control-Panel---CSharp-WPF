@@ -4,29 +4,7 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
 
     <Grid>
-        <!-- Locked -->
-        <StackPanel x:Name="LockedPanel" Visibility="Collapsed">
-            <Border Background="{DynamicResource SurfaceBgBrush}"
-                    BorderBrush="{DynamicResource GlassBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="10"
-                    Padding="20,24">
-                <StackPanel HorizontalAlignment="Center">
-                    <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"
-                               Foreground="{DynamicResource PinkBrush}"/>
-                    <TextBlock Text="{loc:Str label_pink_filter}"
-                               Foreground="White" FontSize="18" FontWeight="SemiBold"
-                               HorizontalAlignment="Center" Margin="0,12,0,4"/>
-                    <TextBlock Text="{loc:Str label_reach_level_10_to_unlock}"
-                               Foreground="{DynamicResource PinkBrush}"
-                               FontSize="13" TextAlignment="Center" TextWrapping="Wrap"
-                               HorizontalAlignment="Center"/>
-                </StackPanel>
-            </Border>
-        </StackPanel>
-
-        <!-- Unlocked -->
-        <StackPanel x:Name="UnlockedPanel" Visibility="Collapsed">
+        <StackPanel>
             <Border Background="{DynamicResource SurfaceBgBrush}"
                     BorderBrush="{DynamicResource GlassBorderBrush}"
                     BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">

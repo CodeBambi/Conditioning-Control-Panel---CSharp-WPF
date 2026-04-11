@@ -57,16 +57,9 @@ public class BouncingTextService : IDisposable
 
         var settings = App.Settings.Current;
 
-        // Check level requirement (Level 60) unless bypassed (e.g., during sessions)
-        if (!bypassLevelCheck && !settings.IsLevelUnlocked(60))
-        {
-            App.Logger?.Information("BouncingTextService: Level {Level} is below 60, not available", settings.PlayerLevel);
-            return;
-        }
-        
         // Note: We don't check BouncingTextEnabled here because Start() is called
         // explicitly when we want to start (either by toggle or by session)
-        
+
         _isRunning = true;
         
         // Calculate font size based on settings (50-300% of base)

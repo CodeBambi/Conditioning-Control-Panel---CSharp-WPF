@@ -139,20 +139,11 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Switches to a different companion. No cooldown - free switching.
-        /// Requires player to have reached the companion's unlock level.
+        /// All companions are available from level 1.
         /// </summary>
         public bool SwitchCompanion(CompanionId newCompanion)
         {
             var def = CompanionDefinition.GetById(newCompanion);
-            var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
-
-            // Validate player level for unlock requirement (respects OG unlock toggle)
-            if (!(App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false))
-            {
-                App.Logger?.Warning("Cannot switch to {Companion} - requires Level {Level}, player is Level {PlayerLevel}",
-                    def.Name, def.RequiredLevel, playerLevel);
-                return false;
-            }
 
             var oldCompanion = ActiveCompanion;
             if (oldCompanion == newCompanion)
@@ -326,20 +317,19 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Checks if a companion is unlocked based on current player level.
+        /// Companion level gating has been removed — every companion is available from level 1.
         /// </summary>
         public bool IsCompanionUnlocked(CompanionId id)
         {
-            var def = CompanionDefinition.GetById(id);
-            return App.Settings?.Current?.IsLevelUnlocked(def.RequiredLevel) ?? false;
+            return true;
         }
 
         /// <summary>
-        /// Checks if a companion is unlocked based on current player level.
+        /// Companion level gating has been removed — every companion is available from level 1.
         /// </summary>
         public bool IsCompanionUnlocked(int id)
         {
-            return IsCompanionUnlocked((CompanionId)id);
+            return true;
         }
 
         #region Drain Timer (Brain Parasite)

@@ -56,13 +56,6 @@ public class BubbleCountService : IDisposable
         
         var settings = App.Settings.Current;
 
-        // Check level requirement (Level 50)
-        if (!settings.IsLevelUnlocked(50))
-        {
-            App.Logger?.Information("BubbleCountService: Level {Level} is below 50, not available", settings.PlayerLevel);
-            return;
-        }
-        
         if (!settings.BubbleCountEnabled)
         {
             App.Logger?.Information("BubbleCountService: Disabled in settings");
@@ -132,9 +125,6 @@ public class BubbleCountService : IDisposable
         if (_isBusy) return; // Still prevent double-triggering
 
         var settings = App.Settings.Current;
-
-        // Level check - skip for forced tests
-        if (!forceTest && !settings.IsLevelUnlocked(50)) return;
 
         // Check if another fullscreen interaction is active (video, lock card)
         // If so, queue this bubble count for later

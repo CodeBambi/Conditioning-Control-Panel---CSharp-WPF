@@ -379,11 +379,11 @@ namespace ConditioningControlPanel.Services
             if (settings.FlashEnabled) App.Flash?.Start();
             if (settings.SubliminalEnabled) App.Subliminal?.Start();
             if (settings.BubblesEnabled) App.Bubbles?.Start();
-            if (settings.LockCardEnabled && App.Settings.Current.IsLevelUnlocked(35)) App.LockCard?.Start();
+            if (settings.LockCardEnabled) App.LockCard?.Start();
             if (App.Settings.Current.PopQuizEnabled) App.PopQuiz?.Start();
-            if (settings.BubbleCountEnabled && App.Settings.Current.IsLevelUnlocked(50)) App.BubbleCount?.Start();
-            if (settings.BouncingTextEnabled && App.Settings.Current.IsLevelUnlocked(60)) App.BouncingText?.Start();
-            if (settings.MindWipeEnabled && App.Settings.Current.IsLevelUnlocked(75))
+            if (settings.BubbleCountEnabled) App.BubbleCount?.Start();
+            if (settings.BouncingTextEnabled) App.BouncingText?.Start();
+            if (settings.MindWipeEnabled)
                 App.MindWipe?.Start(settings.MindWipeBaseMultiplier, settings.MindWipeVolume / 100.0);
             // DISABLED: Brain Drain is up for rework due to performance issues
             // if (_brainDrainActive && App.Settings.Current.IsLevelUnlocked(70)) App.BrainDrain?.Start();

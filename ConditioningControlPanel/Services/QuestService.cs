@@ -350,20 +350,11 @@ public class QuestService : IDisposable
     }
 
     /// <summary>
-    /// Check if a quest category's feature is unlocked at the player's current level.
+    /// Feature level gating has been removed — every quest category is available from level 1.
     /// </summary>
     private static bool IsQuestAvailableForLevel(QuestCategory category)
     {
-        var settings = App.Settings?.Current;
-        if (settings == null) return true;
-
-        return category switch
-        {
-            QuestCategory.Bubbles => settings.IsLevelUnlocked(20),
-            QuestCategory.LockCard => settings.IsLevelUnlocked(35),
-            QuestCategory.BubbleCount => settings.IsLevelUnlocked(50),
-            _ => true
-        };
+        return true;
     }
 
     /// <summary>

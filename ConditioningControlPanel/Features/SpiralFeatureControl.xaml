@@ -4,34 +4,7 @@
              xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
 
     <Grid>
-        <!-- Locked state -->
-        <StackPanel x:Name="LockedPanel" Visibility="Collapsed">
-            <Border Background="{DynamicResource SurfaceBgBrush}"
-                    BorderBrush="{DynamicResource GlassBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="10"
-                    Padding="20,24">
-                <StackPanel HorizontalAlignment="Center">
-                    <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"
-                               Foreground="{DynamicResource PinkBrush}"/>
-                    <TextBlock Text="{loc:Str label_spiral_overlay}"
-                               Foreground="White"
-                               FontSize="18"
-                               FontWeight="SemiBold"
-                               HorizontalAlignment="Center"
-                               Margin="0,12,0,4"/>
-                    <TextBlock Text="{loc:Str label_reach_level_10_to_unlock}"
-                               Foreground="{DynamicResource PinkBrush}"
-                               FontSize="13"
-                               TextAlignment="Center"
-                               TextWrapping="Wrap"
-                               HorizontalAlignment="Center"/>
-                </StackPanel>
-            </Border>
-        </StackPanel>
-
-        <!-- Unlocked state -->
-        <StackPanel x:Name="UnlockedPanel" Visibility="Collapsed">
+        <StackPanel>
 
             <!-- Enable toggle -->
             <Border Background="{DynamicResource SurfaceBgBrush}"

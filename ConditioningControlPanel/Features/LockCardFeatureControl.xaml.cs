@@ -9,7 +9,6 @@ namespace ConditioningControlPanel.Features
 {
     public partial class LockCardFeatureControl : UserControl
     {
-        private const int UnlockLevel = 35;
         private bool _isLoading;
 
         public LockCardFeatureControl()
@@ -22,19 +21,14 @@ namespace ConditioningControlPanel.Features
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             LoadFromSettings();
-            RefreshLockState();
             if (App.Settings?.Current is INotifyPropertyChanged inpc)
                 inpc.PropertyChanged += OnSettingsPropertyChanged;
-            if (App.Progression != null)
-                App.Progression.LevelUp += OnLevelUp;
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             if (App.Settings?.Current is INotifyPropertyChanged inpc)
                 inpc.PropertyChanged -= OnSettingsPropertyChanged;
-            if (App.Progression != null)
-                App.Progression.LevelUp -= OnLevelUp;
         }
 
         private void LoadFromSettings()
@@ -54,13 +48,6 @@ namespace ConditioningControlPanel.Features
             finally { _isLoading = false; }
         }
 
-        private void RefreshLockState()
-        {
-            var unlocked = App.Settings?.Current?.IsLevelUnlocked(UnlockLevel) ?? false;
-            LockedPanel.Visibility = unlocked ? Visibility.Collapsed : Visibility.Visible;
-            UnlockedPanel.Visibility = unlocked ? Visibility.Visible : Visibility.Collapsed;
-        }
-
         private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(Models.AppSettings.LockCardEnabled) ||
@@ -70,15 +57,7 @@ namespace ConditioningControlPanel.Features
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
-            else if (e.PropertyName == nameof(Models.AppSettings.PlayerLevel) ||
-                     e.PropertyName == nameof(Models.AppSettings.HighestLevelEver))
-            {
-                Dispatcher.BeginInvoke(new Action(RefreshLockState));
-            }
         }
-
-        private void OnLevelUp(object? sender, int newLevel) =>
-            Dispatcher.BeginInvoke(new Action(RefreshLockState));
 
         private void ChkEnable_Changed(object sender, RoutedEventArgs e)
         {

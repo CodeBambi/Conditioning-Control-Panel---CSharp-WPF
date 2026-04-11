@@ -827,28 +827,28 @@ namespace ConditioningControlPanel.Services
             if (settings.AutonomyCanTriggerSubliminal)
                 candidates.Add((AutonomyActionType.Subliminal, 25));
 
-            if (settings.AutonomyCanTriggerBrainDrain && settings.IsLevelUnlocked(70))
+            if (settings.AutonomyCanTriggerBrainDrain)
                 candidates.Add((AutonomyActionType.BrainDrainPulse, 10));
 
-            if (settings.AutonomyCanTriggerBubbles && settings.IsLevelUnlocked(20))
+            if (settings.AutonomyCanTriggerBubbles)
                 candidates.Add((AutonomyActionType.StartBubbles, 15));
 
             if (settings.AutonomyCanComment)
                 candidates.Add((AutonomyActionType.Comment, 20));
 
             // New progression features
-            if (settings.AutonomyCanTriggerMindWipe && settings.IsLevelUnlocked(80))
+            if (settings.AutonomyCanTriggerMindWipe)
                 candidates.Add((AutonomyActionType.MindWipe, 15));
 
-            if (settings.AutonomyCanTriggerLockCard && settings.IsLevelUnlocked(35))
+            if (settings.AutonomyCanTriggerLockCard)
                 candidates.Add((AutonomyActionType.LockCard, 10)); // Lower weight - very disruptive
 
             // Note: SpiralPulse removed from autonomy - can interfere with user experience
 
-            if (settings.AutonomyCanTriggerPinkFilter && settings.IsLevelUnlocked(10))
+            if (settings.AutonomyCanTriggerPinkFilter)
                 candidates.Add((AutonomyActionType.PinkFilterPulse, 20));
 
-            if (settings.AutonomyCanTriggerBouncingText && settings.IsLevelUnlocked(60))
+            if (settings.AutonomyCanTriggerBouncingText)
                 candidates.Add((AutonomyActionType.BouncingText, 15));
 
             // Web video - plays random HypnoTube video fullscreen in browser
