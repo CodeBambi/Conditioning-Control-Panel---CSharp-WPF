@@ -2014,36 +2014,44 @@
                 <features:FeatureCard Grid.Row="0" Grid.Column="0" x:Name="CardFlash"
                                       Title="Flash Images"
                                       Icon="pack://application:,,,/Resources/features/flash.png"
+                                      HelpSectionId="FlashImages"
                                       Click="CardFlash_Click"/>
                 <features:FeatureCard Grid.Row="0" Grid.Column="1" x:Name="CardVisuals"
                                       Title="Visuals"
                                       Glyph="👁"
+                                      HelpSectionId="Visuals"
                                       Click="CardVisuals_Click"/>
                 <features:FeatureCard Grid.Row="0" Grid.Column="2" x:Name="CardVideo"
                                       Title="Mandatory Video"
                                       Icon="pack://application:,,,/Resources/features/mandatory_videos.png"
+                                      HelpSectionId="Video"
                                       Click="CardVideo_Click"/>
                 <features:FeatureCard Grid.Row="0" Grid.Column="3" x:Name="CardSubliminal"
                                       Title="Subliminals"
                                       Icon="pack://application:,,,/Resources/features/subliminal.png"
+                                      HelpSectionId="Subliminals"
                                       Click="CardSubliminal_Click"/>
 
                 <!-- Row 2: Progression tier 1 -->
                 <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardSpiral"
                                       Title="Spiral Overlay"
                                       Icon="pack://application:,,,/Resources/features/spiral_overlay.png"
+                                      HelpSectionId="SpiralOverlay"
                                       Click="CardSpiral_Click"/>
                 <features:FeatureCard Grid.Row="1" Grid.Column="1" x:Name="CardPinkFilter"
                                       Title="Pink Filter"
                                       Icon="pack://application:,,,/Resources/features/Pink_filter.png"
+                                      HelpSectionId="PinkFilter"
                                       Click="CardPinkFilter_Click"/>
                 <features:FeatureCard Grid.Row="1" Grid.Column="2" x:Name="CardBubblePop"
                                       Title="Bubble Pop"
                                       Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
+                                      HelpSectionId="BubblePop"
                                       Click="CardBubblePop_Click"/>
                 <features:FeatureCard Grid.Row="1" Grid.Column="3" x:Name="CardLockCard"
                                       Title="Lock Card"
                                       Icon="pack://application:,,,/Resources/features/Phrase_Lock.png"
+                                      HelpSectionId="LockCard"
                                       Click="CardLockCard_Click"/>
 
                 <!-- Row 3-4: Logo (2x2) + Bouncing/Mind + System/BubbleCount -->
@@ -2061,19 +2069,23 @@
                 <features:FeatureCard Grid.Row="2" Grid.Column="2" x:Name="CardBouncingText"
                                       Title="Bouncing Text"
                                       Icon="pack://application:,,,/Resources/features/bouncing_text.png"
+                                      HelpSectionId="BouncingText"
                                       Click="CardBouncingText_Click"/>
                 <features:FeatureCard Grid.Row="2" Grid.Column="3" x:Name="CardMindWipe"
                                       Title="Mind Wipe"
                                       Icon="pack://application:,,,/Resources/features/Mind_Wipers.png"
+                                      HelpSectionId="MindWipe"
                                       Click="CardMindWipe_Click"/>
 
                 <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardSystem"
                                       Title="System"
                                       Glyph="⚙"
+                                      HelpSectionId="System"
                                       Click="CardSystem_Click"/>
                 <features:FeatureCard Grid.Row="3" Grid.Column="3" x:Name="CardBubbleCount"
                                       Title="Bubble Count"
                                       Icon="pack://application:,,,/Resources/features/Bubble_count.png"
+                                      HelpSectionId="BubbleCount"
                                       Click="CardBubbleCount_Click"/>
             </Grid>
 

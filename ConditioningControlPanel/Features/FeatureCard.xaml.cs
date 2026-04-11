@@ -35,6 +35,10 @@ namespace ConditioningControlPanel.Features
             DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(FeatureCard),
                 new PropertyMetadata(false, OnActiveStateChanged));
 
+        public static readonly DependencyProperty HelpSectionIdProperty =
+            DependencyProperty.Register(nameof(HelpSectionId), typeof(string), typeof(FeatureCard),
+                new PropertyMetadata(null, OnHelpSectionIdChanged));
+
         public static readonly RoutedEvent ClickEvent =
             EventManager.RegisterRoutedEvent(nameof(Click), RoutingStrategy.Bubble,
                 typeof(RoutedEventHandler), typeof(FeatureCard));
@@ -80,6 +84,17 @@ namespace ConditioningControlPanel.Features
             set => SetValue(IsActiveProperty, value);
         }
 
+        /// <summary>
+        /// ID of the entry in <see cref="Services.HelpContentService"/> whose rich
+        /// tooltip should be shown when hovering the "?" icon. Null/unknown IDs
+        /// hide the icon entirely.
+        /// </summary>
+        public string? HelpSectionId
+        {
+            get => (string?)GetValue(HelpSectionIdProperty);
+            set => SetValue(HelpSectionIdProperty, value);
+        }
+
         public event RoutedEventHandler Click
         {
             add => AddHandler(ClickEvent, value);
@@ -90,6 +105,10 @@ namespace ConditioningControlPanel.Features
         {
             InitializeComponent();
             ApplyLockState();
+            // Build the help tooltip once the card is in the visual tree so that
+            // FindResource can walk up into the owning Window's resources where
+            // HelpButtonStyle / HelpTooltipStyle / PinkBrush live.
+            Loaded += (_, _) => RefreshHelpTooltip();
         }
 
         private static void OnTitleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -140,6 +159,32 @@ namespace ConditioningControlPanel.Features
             if (d is FeatureCard c) c.ApplyActiveState();
         }
 
+        private static void OnHelpSectionIdChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is FeatureCard c) c.RefreshHelpTooltip();
+        }
+
+        private void RefreshHelpTooltip()
+        {
+            var id = HelpSectionId;
+            if (string.IsNullOrWhiteSpace(id) || !Services.HelpContentService.HasContent(id))
+            {
+                BtnHelp.Visibility = Visibility.Collapsed;
+                BtnHelp.ToolTip = null;
+                return;
+            }
+            // If we haven't been added to the visual tree yet, resource lookup
+            // will fail. Wait until Loaded rebuilds us.
+            if (!IsLoaded)
+            {
+                BtnHelp.Visibility = Visibility.Visible;
+                return;
+            }
+            BtnHelp.ToolTip = Services.HelpTooltipBuilder.Build(
+                Services.HelpContentService.GetContent(id), this);
+            BtnHelp.Visibility = Visibility.Visible;
+        }
+
         private void ApplyLockState()
         {
             if (IsLocked)
@@ -167,7 +212,28 @@ namespace ConditioningControlPanel.Features
 
         private void OnClick(object sender, MouseButtonEventArgs e)
         {
+            // Swallow clicks that originate inside the help button so the user
+            // can hover/click the "?" without also opening the feature popup.
+            if (e.OriginalSource is DependencyObject src && IsDescendantOf(src, BtnHelp))
+                return;
             RaiseEvent(new RoutedEventArgs(ClickEvent, this));
+        }
+
+        private void BtnHelp_Click(object sender, RoutedEventArgs e)
+        {
+            // Prevent the help click from also opening the feature popup.
+            e.Handled = true;
+        }
+
+        private static bool IsDescendantOf(DependencyObject node, DependencyObject ancestor)
+        {
+            var current = node;
+            while (current != null)
+            {
+                if (ReferenceEquals(current, ancestor)) return true;
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return false;
         }
     }
 }

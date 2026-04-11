@@ -119,6 +119,16 @@
                                FontWeight="SemiBold"/>
                 </StackPanel>
             </Border>
+
+            <!-- Help icon overlay (top-right corner) -->
+            <Button x:Name="BtnHelp"
+                    Style="{DynamicResource HelpButtonStyle}"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="0,8,8,0"
+                    Panel.ZIndex="10"
+                    Visibility="Collapsed"
+                    Click="BtnHelp_Click"/>
         </Grid>
     </Border>
 </UserControl>

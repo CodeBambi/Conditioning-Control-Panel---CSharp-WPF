@@ -900,6 +900,160 @@ namespace ConditioningControlPanel.Services
                              "the top through consistent conditioning!"
             },
 
+            // ==================== DASHBOARD FEATURE POPUPS ====================
+
+            ["SpiralOverlay"] = new HelpContent
+            {
+                SectionId = "SpiralOverlay",
+                Icon = "\uD83C\uDF00",
+                Title = "Spiral Overlay",
+                WhatItDoes = "Displays a hypnotic spiral animation overlaid on all monitors. " +
+                             "Choose from built-in spiral GIFs or your own, adjust the opacity for " +
+                             "subtle or intense effect. Unlocks at Level 10.",
+                Tips = new List<string>
+                {
+                    "Start with 10-20% opacity for a gentle background effect",
+                    "Pick 30-50% opacity when you want the spiral to dominate the view",
+                    "Drop your own spiral GIFs into assets/spirals to expand the selection",
+                    "If the overlay looks wrong on your display, check your monitor's DPI scaling",
+                    "Pair with Pink Filter for a soft, dreamy conditioning atmosphere"
+                },
+                HowItWorks = "A borderless topmost window is created per monitor showing the chosen " +
+                             "spiral GIF at the configured opacity. The overlay is click-through so it " +
+                             "never interferes with anything underneath. Multi-monitor is supported " +
+                             "automatically when enabled in System settings."
+            },
+
+            ["PinkFilter"] = new HelpContent
+            {
+                SectionId = "PinkFilter",
+                Icon = "\uD83D\uDC97",
+                Title = "Pink Filter",
+                WhatItDoes = "Tints every screen with a soft pink overlay — subtle or intense, your choice. " +
+                             "Reinforces the pink aesthetic without blocking your view of what you're doing. " +
+                             "Unlocks at Level 10.",
+                Tips = new List<string>
+                {
+                    "5-15% opacity is a whisper of pink that's easy to forget is even on",
+                    "20-35% is noticeable and immersive without being disruptive",
+                    "Above 40% is intense — good for focused sessions, not for reading",
+                    "Combine with Spiral Overlay for a layered pink/hypnotic atmosphere",
+                    "The filter is click-through, so it never blocks mouse input"
+                },
+                HowItWorks = "A transparent topmost window is created per monitor and filled with a pink " +
+                             "brush at the configured opacity. Because the window is click-through, your " +
+                             "clicks pass straight to whatever is underneath. Multi-monitor support mirrors " +
+                             "the overlay to every connected display when enabled."
+            },
+
+            ["BubblePop"] = new HelpContent
+            {
+                SectionId = "BubblePop",
+                Icon = "\uD83E\uDEE7",
+                Title = "Bubble Pop",
+                WhatItDoes = "A playful mini-game that spawns floating bubbles on your screen. Pop them " +
+                             "by clicking to earn XP — a lightweight distraction that rewards attention. " +
+                             "Unlocks at Level 20.",
+                Tips = new List<string>
+                {
+                    "Start with a low spawn rate and turn it up once you're comfortable",
+                    "Every popped bubble awards XP — great for passive progression",
+                    "Turn the pop-sound volume down if you're doing voice calls",
+                    "Bubbles are click-through until you actually hit one, so they don't block you",
+                    "Pairs nicely with Flash Images for a busy, reinforcing atmosphere"
+                },
+                HowItWorks = "A topmost overlay window spawns bubble sprites at the rate you configure. " +
+                             "Each bubble drifts around the screen until clicked or until it expires. " +
+                             "Clicking a bubble plays the pop sound and awards XP through the progression " +
+                             "service."
+            },
+
+            ["LockCard"] = new HelpContent
+            {
+                SectionId = "LockCard",
+                Icon = "\uD83D\uDD12",
+                Title = "Lock Card",
+                WhatItDoes = "Periodically locks your screen with a card that requires you to type a phrase " +
+                             "to dismiss. Reinforces conditioning through repetition and typed affirmation. " +
+                             "Unlocks at Level 35.",
+                Tips = new List<string>
+                {
+                    "Start at 1-2 cards per hour — they're more intrusive than flashes",
+                    "Set Repeats to 3-5 so the phrase really sinks in",
+                    "Edit your phrase list via the Manage Phrases button for personal triggers",
+                    "Strict Lock blocks ESC — only enable when you're ready to commit to typing",
+                    "Use the Test button before a session to preview the look and pacing"
+                },
+                HowItWorks = "A timer spawns lock card windows at the configured frequency. Each card " +
+                             "shows a random phrase that must be typed correctly the chosen number of " +
+                             "times before the card will dismiss. In Strict mode the ESC key is intercepted, " +
+                             "so the only way out is to finish typing."
+            },
+
+            ["BouncingText"] = new HelpContent
+            {
+                SectionId = "BouncingText",
+                Icon = "\uD83D\uDCFA",
+                Title = "Bouncing Text",
+                WhatItDoes = "DVD-screensaver-style text that bounces around your screen with customizable " +
+                             "phrases. Earns XP every time the text bounces off a corner. Unlocks at Level 60.",
+                Tips = new List<string>
+                {
+                    "Use Edit Phrases to load your own affirmations into the rotation",
+                    "Text size 100-150% reads well without overpowering the screen",
+                    "Speed 3-5 is a relaxing bounce; 8-10 is hyperactive",
+                    "Show Over Videos keeps the text layered on top of fullscreen playback",
+                    "XP caps at 150/minute so it can't be farmed indefinitely"
+                },
+                HowItWorks = "A topmost transparent window hosts a text block that moves across the screen " +
+                             "by updating its position on a timer. Each time the text hits a screen edge " +
+                             "it flips direction and awards +25 XP (up to the per-minute cap). Phrases " +
+                             "rotate through your list between bounces."
+            },
+
+            ["MindWipe"] = new HelpContent
+            {
+                SectionId = "MindWipe",
+                Icon = "\uD83E\uDDE0",
+                Title = "Mind Wipe",
+                WhatItDoes = "Random mind-wipe audio effects that escalate in frequency during sessions. " +
+                             "A dedicated volume channel keeps wipe sounds independent from everything " +
+                             "else. Unlocks at Level 75.",
+                Tips = new List<string>
+                {
+                    "Start at 6-12 per hour — the audio is disorienting on purpose",
+                    "Keep the volume modest so it surprises you instead of startling you",
+                    "Loop in Background replaces random triggers with a single continuous track",
+                    "Use the Test Now button to preview a random wipe sound",
+                    "Higher frequencies feel most effective inside a longer session"
+                },
+                HowItWorks = "A timer fires mind-wipe audio clips at the configured frequency (1-180/hour). " +
+                             "The clips play through a dedicated volume channel that doesn't respond to " +
+                             "normal audio ducking. Loop mode switches from random triggers to a single " +
+                             "looping track playing in the background."
+            },
+
+            ["BubbleCount"] = new HelpContent
+            {
+                SectionId = "BubbleCount",
+                Icon = "\uD83E\uDEE7",
+                Title = "Bubble Count",
+                WhatItDoes = "A memory and attention challenge: bubbles appear on screen briefly, then you " +
+                             "must answer how many you saw. Answer correctly for bonus XP. Unlocks at Level 50.",
+                Tips = new List<string>
+                {
+                    "Start on Easy and move up once you're consistently getting them right",
+                    "1-3 challenges per hour keeps it from feeling like homework",
+                    "Strict mode prevents closing until you answer — use it for real focus training",
+                    "Test Now lets you rehearse before relying on the challenge in a session",
+                    "Rewards scale with difficulty, so Hard mode pays out the most XP"
+                },
+                HowItWorks = "At the configured frequency a challenge window briefly flashes a randomized " +
+                             "number of bubbles on screen, then asks you to recall the count. Difficulty " +
+                             "controls how many bubbles can appear and how long they're visible. Correct " +
+                             "answers award XP; incorrect answers simply close with no reward."
+            },
+
             ["Modding"] = new HelpContent
             {
                 SectionId = "Modding",
