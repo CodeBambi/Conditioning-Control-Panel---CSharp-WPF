@@ -98,6 +98,7 @@ namespace ConditioningControlPanel.Services
         private bool _bubblesPulseActive = false;
         private bool _bouncingTextPulseActive = false;
         private bool _webVideoActive = false; // Blocks all actions while web video plays fullscreen
+        private int _webVideoWatchdogGeneration = 0; // Invalidates stale watchdog callbacks
         private HashSet<string> _shownWebVideos = new(); // Track shown videos to avoid repeats
         // Separate generation counters for each pulse type to avoid cross-invalidation
         private int _spiralPulseGeneration = 0;
@@ -618,7 +619,7 @@ namespace ConditioningControlPanel.Services
                 var timeCooldownActive = timeSinceLast < cooldownSec;
 
                 App.Logger?.Information(
-                    "AutonomyService HEARTBEAT: Enabled={Enabled}, RandomTimer={Random}, IdleTimer={Idle}, Cooldown={Cooldown}, TimeCooldown={TimeCooldown} ({Elapsed:F0}s/{Required}s), QueueBusy={Busy}",
+                    "AutonomyService HEARTBEAT: Enabled={Enabled}, RandomTimer={Random}, IdleTimer={Idle}, Cooldown={Cooldown}, TimeCooldown={TimeCooldown} ({Elapsed:F0}s/{Required}s), WebVideo={WebVideo}, QueueBusy={Busy}",
                     _isEnabled,
                     nextRandomTick,
                     nextIdleTick,
@@ -626,6 +627,7 @@ namespace ConditioningControlPanel.Services
                     timeCooldownActive,
                     timeSinceLast,
                     cooldownSec,
+                    _webVideoActive,
                     App.InteractionQueue?.IsBusy == true);
             };
             _heartbeatTimer.Start();
@@ -1218,6 +1220,17 @@ namespace ConditioningControlPanel.Services
 
             // Mark video as active - blocks other autonomy actions
             _webVideoActive = true;
+            var watchdogGen = ++_webVideoWatchdogGeneration;
+
+            // Safety watchdog: auto-reset after 5 minutes if OnWebVideoEnded never fires
+            Task.Delay(TimeSpan.FromMinutes(5)).ContinueWith(_ =>
+            {
+                if (_webVideoActive && _webVideoWatchdogGeneration == watchdogGen)
+                {
+                    _webVideoActive = false;
+                    App.Logger?.Warning("AutonomyService: Web video watchdog fired - resetting stuck _webVideoActive after 5 minutes");
+                }
+            });
 
             // Navigate to video with fullscreen autoplay
             if (mainWindow.NavigateToUrlInBrowser(videoUrl, autoPlayFullscreen: true))
