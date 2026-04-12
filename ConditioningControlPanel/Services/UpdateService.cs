@@ -69,6 +69,15 @@ A full trigger engine that watches what you see and type, and fires conditioning
 • Tray notification when a controller joins — taskbar icon flashes, window auto-restores from minimized, balloon toast fires.
 • Effectively unlimited sessions — as long as the app is running and polling, the server TTL keeps refreshing. Waiver copy updated to match.
 
+🖼 WALLPAPER OVERRIDE
+• Override your desktop wallpaper with random images from assets/wallpapers.
+• Autonomy can trigger wallpaper shuffles; remote control support via trigger_wallpaper / stop_wallpaper.
+• Original wallpaper auto-restores when you disable the feature or close the app.
+
+🔧 QUALITY OF LIFE
+• Feature popups are now modeless — effects keep running while you configure them.
+• Feature toggles apply live during sessions (no restart needed).
+
 🐛 BUG FIXES
 • Fixed ""Discord Not Linked"" popup showing literal \n\n text.
 • Fixed ""Discord Not Linked"" popup firing at startup for users whose Rich Presence was enabled before they unlinked Discord.
@@ -80,6 +89,15 @@ A full trigger engine that watches what you see and type, and fires conditioning
 • Fixed Bubble Count minigame timing out on long videos (#19).
 • Fixed anti-cheat clamping large legitimate XP bonuses (#21).
 • Fixed bug report privacy notice wording (#12).
+• Fixed non-clickable bubbles intercepting mouse clicks.
+• Fixed audio ducking stuck at 0% volume.
+• Fixed bouncing text rendering behind other windows.
+• Fixed OAuth listener crash on timeout (#18).
+• Fixed HypnoTube button state after external link navigation (#41).
+• Fixed pack list not refreshing after download (#40).
+• Fixed XP/level reset on corrupt settings sync.
+• Fixed auth recovery using one-shot instead of cooldown.
+• Fixed Lovense LAN URL not being normalized.
 
 🎨 UNDER THE HOOD
 • Retired the Test Lab built-in preset with a clean migration.
