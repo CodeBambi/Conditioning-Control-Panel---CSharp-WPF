@@ -6774,11 +6774,45 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Placeholder Card 4 -->
-                        <Border Background="#12FFFFFF" CornerRadius="12" Margin="6" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                <TextBlock Text="{loc:Str label_coming_soon}" Foreground="#505070" FontSize="14" HorizontalAlignment="Center"/>
+                        <!-- Wallpaper Override Card -->
+                        <Border CornerRadius="12" Margin="6" Padding="15">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A1A32" Offset="0"/>
+                                    <GradientStop Color="#201A38" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.BorderThickness>
+                                <Thickness>2</Thickness>
+                            </Border.BorderThickness>
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str label_wallpaper_override}" Foreground="White" FontWeight="Bold" FontSize="16" Margin="0,0,0,6"/>
+                                <TextBlock Text="{loc:Str label_wallpaper_description}"
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                <CheckBox x:Name="ChkWallpaperEnabled" Content="{loc:Str setting_enable_wallpaper_override}"
+                                          Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,8"
+                                          Checked="ChkWallpaperEnabled_Changed" Unchecked="ChkWallpaperEnabled_Changed"/>
+
+                                <TextBlock x:Name="TxtCurrentWallpaper" Foreground="#B0B0C8" FontSize="11"
+                                           Margin="0,0,0,8" Visibility="Collapsed"/>
+
+                                <Button x:Name="BtnShuffleWallpaper" Content="{loc:Str btn_shuffle_wallpaper}" Cursor="Hand"
+                                        Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="12"
+                                        BorderThickness="0" Padding="12,8" HorizontalAlignment="Left" Visibility="Collapsed"
+                                        Click="BtnShuffleWallpaper_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="8"/>
+                                        </Style>
+                                    </Button.Resources>
+                                </Button>
                             </StackPanel>
                         </Border>
                     </UniformGrid>

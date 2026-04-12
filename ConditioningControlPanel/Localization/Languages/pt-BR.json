@@ -2139,5 +2139,10 @@ Desbloqueia no Nível 75.",
   "session_spoiler_mandatory_videos": "\u25a0 Vídeos Obrigatórios: ~{0}/hora. Usa banco de vídeos global.",
   "session_spoiler_lock_cards": "\u25a0 Cartões de Bloqueio: ~{0}/hora. {1}.",
   "session_spoiler_bubble_count_game": "\u25a0 Jogo de Contagem de Bolhas: ~{0}/hora.",
-  "session_spoiler_interactive_none": "\u25a0 Eventos Interativos: Nenhum"
+  "session_spoiler_interactive_none": "\u25a0 Eventos Interativos: Nenhum",
+  "label_wallpaper_override": "Wallpaper Override",
+  "label_wallpaper_description": "Temporarily replaces your desktop wallpaper with a random image from your wallpapers folder. Original wallpaper is restored when disabled or app exits.",
+  "setting_enable_wallpaper_override": "Enable wallpaper override",
+  "btn_shuffle_wallpaper": "Shuffle",
+  "msg_no_wallpaper_images": "No images found. Add images (jpg, png, bmp) to your assets/wallpapers folder."
 }

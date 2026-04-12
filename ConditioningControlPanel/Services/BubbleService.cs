@@ -929,7 +929,12 @@ internal class Bubble
         {
             var hwnd = new System.Windows.Interop.WindowInteropHelper(_window).Handle;
             var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+            var flags = exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+            // Non-clickable bubbles must be truly click-through at the Win32 level;
+            // WPF's IsHitTestVisible alone doesn't prevent the window from eating clicks.
+            if (!_isClickable)
+                flags |= WS_EX_TRANSPARENT;
+            SetWindowLong(hwnd, GWL_EXSTYLE, flags);
         }
         catch { }
     }
@@ -937,6 +942,7 @@ internal class Bubble
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const int WS_EX_TRANSPARENT = 0x00000020;
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern int GetWindowLong(IntPtr hwnd, int index);

@@ -354,6 +354,7 @@ namespace ConditioningControlPanel.Services
                 if (App.LockCard?.IsRunning == true) services.Add("lock_card");
                 if (App.MindWipe?.IsRunning == true) services.Add("mind_wipe");
                 if (App.BouncingText?.IsRunning == true) services.Add("bounce_text");
+                if (App.Wallpaper?.IsActive == true) services.Add("wallpaper");
             }
             catch { }
             return services;
@@ -378,6 +379,7 @@ namespace ConditioningControlPanel.Services
                 App.MindWipe?.Stop();
                 App.BrainDrain?.Stop();
                 App.LockCard?.Stop();
+                App.Wallpaper?.Deactivate();
 
                 // Force close any open game/lock windows
                 LockCardWindow.ForceCloseAll();
@@ -715,6 +717,17 @@ namespace ConditioningControlPanel.Services
                                 App.Settings.Current.PanicKeyEnabled = true;
                                 App.Settings.Save();
                             }
+                            break;
+
+                        case "trigger_wallpaper":
+                            if (App.Wallpaper?.IsActive == true)
+                                App.Wallpaper.Shuffle();
+                            else
+                                App.Wallpaper?.Activate();
+                            break;
+
+                        case "stop_wallpaper":
+                            App.Wallpaper?.Deactivate();
                             break;
 
                         case "trigger_panic":

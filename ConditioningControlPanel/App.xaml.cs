@@ -218,6 +218,7 @@ namespace ConditioningControlPanel
         public static MantraService Mantra { get; private set; } = null!;
         public static ModService Mods { get; private set; } = null!;
         public static BugReportService BugReport { get; private set; } = null!;
+        public static WallpaperService? Wallpaper { get; private set; }
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -478,6 +479,9 @@ namespace ConditioningControlPanel
                 // Stop autonomy mode
                 Autonomy?.Stop();
 
+                // Restore wallpaper
+                Wallpaper?.Deactivate();
+
                 // Stop avatar voice lines
                 AvatarWindow?.StopVoiceLineAudio();
 
@@ -657,6 +661,7 @@ namespace ConditioningControlPanel
             // Create user assets directories in LocalAppData (persists across updates)
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "images"));
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "videos"));
+            Directory.CreateDirectory(Path.Combine(UserAssetsPath, "wallpapers"));
             Directory.CreateDirectory(Path.Combine(UserDataPath, "Spirals"));
 
             // Migrate assets from old location (install dir) to new location (user data) in background
@@ -813,6 +818,9 @@ namespace ConditioningControlPanel
 
             // Initialize mantra lab service
             Mantra = new MantraService();
+
+            // Initialize wallpaper override service
+            Wallpaper = new WallpaperService();
 
             // Initialize Patreon (validate subscription in background)
             // Then load cloud profile if authenticated
@@ -2267,6 +2275,7 @@ Application State:
             DualMonitorVideo?.Dispose();
             ScreenMirror?.Dispose();
             Autonomy?.Dispose();
+            Wallpaper?.Dispose();
             ContentPacks?.Dispose();
             Roadmap?.Dispose();
             SkillTree?.Dispose();

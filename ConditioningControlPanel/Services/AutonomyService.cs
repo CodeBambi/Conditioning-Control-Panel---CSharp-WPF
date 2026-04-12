@@ -25,7 +25,8 @@ namespace ConditioningControlPanel.Services
         PinkFilterPulse,
         BouncingText,
         BubbleCount,
-        WebVideo
+        WebVideo,
+        WallpaperShuffle
     }
 
     /// <summary>
@@ -199,6 +200,12 @@ namespace ConditioningControlPanel.Services
                 "Sit back and let it sink in~",
                 "Watch and absorb~",
                 "Fullscreen time~"
+            }},
+            { AutonomyActionType.WallpaperShuffle, new[] {
+                "New scenery for you~",
+                "Let me redecorate~",
+                "A little change of view~",
+                "How about this one?~"
             }}
         };
 
@@ -855,6 +862,10 @@ namespace ConditioningControlPanel.Services
             if (settings.AutonomyCanTriggerWebVideo && !_webVideoActive)
                 candidates.Add((AutonomyActionType.WebVideo, 20));
 
+            // Wallpaper shuffle - subtle desktop wallpaper change
+            if (settings.AutonomyCanTriggerWallpaper)
+                candidates.Add((AutonomyActionType.WallpaperShuffle, 10));
+
             // Note: BubbleCount removed from autonomy - too disruptive and unreliable
 
             if (candidates.Count == 0) return null;
@@ -1063,6 +1074,37 @@ namespace ConditioningControlPanel.Services
 
                         case AutonomyActionType.WebVideo:
                             TriggerWebVideoFullscreen();
+                            break;
+
+                        case AutonomyActionType.WallpaperShuffle:
+                            if (App.Wallpaper != null)
+                            {
+                                if (App.Wallpaper.IsActive)
+                                {
+                                    // Already active — just shuffle
+                                    App.Wallpaper.Shuffle();
+                                }
+                                else
+                                {
+                                    // Pulse: activate, wait 30s, deactivate (unless user toggled it on manually)
+                                    App.Wallpaper.Activate();
+                                    var userEnabled = App.Settings?.Current?.WallpaperEnabled == true;
+                                    if (!userEnabled)
+                                    {
+                                        _ = Task.Delay(30000).ContinueWith(_ =>
+                                        {
+                                            try
+                                            {
+                                                if (Application.Current?.Dispatcher == null) return;
+                                                // Only deactivate if user hasn't manually enabled it since
+                                                if (App.Settings?.Current?.WallpaperEnabled != true)
+                                                    App.Wallpaper?.Deactivate();
+                                            }
+                                            catch { }
+                                        });
+                                    }
+                                }
+                            }
                             break;
                     }
 
