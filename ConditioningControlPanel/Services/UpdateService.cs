@@ -22,30 +22,70 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.7.3";
+        public const string AppVersion = "5.8.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.7.3 — Remote Polish
+        public const string CurrentPatchNotes = @"v5.8.0 — Airhead Awakening
 
-✨ FEATURES
-• Remote Control: one-click pairing links — the shareable link now carries both the session code AND the PIN (via URL hash fragment, so neither hits server logs), so the controller just pastes and instantly connects.
-• Remote Control: use the app while waiting — the host stays fully unlocked until a controller actually joins. Start sessions, trigger flashes, switch tabs freely during standby.
-• Remote Control: tray notification when a controller joins — taskbar icon flashes, window auto-restores from minimized, balloon toast fires so you don't miss the connect.
-• Remote Control: effectively unlimited sessions — as long as the app is running and polling, the server TTL keeps refreshing. Waiver copy updated to match.
+The biggest UI reshape since the pink rewrite, plus a brand-new Awareness Engine that watches your screen and reacts to trigger words in real time.
 
-🧠 AWARENESS ENGINE
-• Retired the ""Test Lab"" built-in preset and its cloned triggers/phrases (clean migration on first launch).
-• Swapped preset click sounds from .wav to .mp3 (smaller install, same audio).
-• Awareness tab gets the same premium sub-badge the other premium tabs have.
-• 16 new hover tooltips on the Takeover panel explain what each setting does.
+✨ VELVET MOSAIC DASHBOARD
+• Dashboard rebuilt as a 4x4 feature-card grid — click any card to open that feature in a clean, focused popup instead of scrolling through a wall of checkboxes. Logo sits in the middle as a 2x2 centerpiece.
+• Every feature card glows pink when its feature is currently on, so you can tell at a glance what's active without opening anything.
+• Helper button row above the grid: Scheduler, App Info, Intensity Ramp — each opens in its own popup.
+• Rich help tooltips (the ""?"" overlay) carry over to every card — hover to see What It Does / Tips / How It Works.
+• Progression tab removed. Scheduler and Intensity Ramp live on the dashboard now, and every feature is available from Level 1.
+
+🔓 EVERYTHING UNLOCKED FROM LEVEL 1
+• Legacy level-unlock gates removed from all features. Spiral, Pink Filter, Bubble Pop, Lock Cards, Bubble Count, Bouncing Text, and Mind Wipe are now usable from the very first session. XP is about progression flavor, not feature gating.
+
+🧠 NEW: AWARENESS ENGINE
+A full trigger engine that watches what you see and type, and fires conditioning actions when it catches keywords. Lives on its own tab now.
+• Signal sources: Screen OCR (scans every few seconds) + Keyboard Capture (rolling typing buffer, fires instantly).
+• 4 built-in tuned presets — Puppy, Chastity, Bimbo, Trance — each with 8 researched keywords, distinct action stacks per keyword, and 18 phrase-pool lines. Inflection-aware regex matching so ""edging"" and ""thinking"" actually fire.
+• Full preset editor: add/remove/configure every action type per trigger — Play Audio, Visual Effects (6 variants), Haptic, Avatar Comment (with AI prompt + fallback pool), Highlight, Extend Session, Chaster Add Time.
+• On-screen word highlighting — glowing box around detected trigger words with your choice of color (6 swatches + custom hex). Hidden from screen capture by default so OBS/Discord don't see it.
+• Loop protection: trigger silenced for a few seconds after firing so OCR can't re-arm it on the same frame.
+• Own-UI filter: OCR skips Control Panel windows, avatar bubbles, and subliminal flashes — she never reacts to her own voice.
+• Whole-word matching so ""sit"" no longer fires on ""intensity"".
+• Multi-trigger merge dispatch: when several keywords match one scan, actions merge with dedup — one highlight box around the full phrase instead of overlapping chaos.
+• Per-keyword (15s) and global (10s) cooldowns, common-English keywords get long cooldowns to suppress false positives.
+• Last Detected feed shows per-action emoji chips with hover tooltips explaining what each effect did.
+
+💎 PREMIUM TABS REORGANIZED
+• Exclusives split into four dedicated tabs — Remote Control, Bambi Takeover, Haptics, Awareness — reachable via a hover submenu on the Exclusives (now ""Premium"") button. No more cramped everything-in-one page.
+• Every premium page is discoverable to free users behind a translucent gating overlay, so the whole app is now a walkthrough of what Premium unlocks.
+• UI polish across all premium tabs: animated backgrounds, bigger typography, icon-framed description cards, 2-column Bambi and Haptics grids.
+• Bambi Takeover header + nav label now match the active mod — ""Drone Takeover"", ""Bimbo Takeover"", etc.
+• QR codes render in the active mod's accent color on white (BambiSleep pink, SissyHypno purple). Tab description art and video haptic sync art now resolve through the mod's asset folder so mods can ship their own.
+• App Info & Data popup absorbs the former Exclusives account sections — Patreon login, Discord login, Account Linking, Cloud Backup, Data & Privacy, Support Development.
+
+🎮 REMOTE CONTROL POLISH
+• One-click pairing links — the shareable link now carries both the session code AND the PIN via URL hash fragment (stays out of server logs and Referer headers), so the controller pastes and instantly connects.
+• Use the app while waiting — the host stays fully unlocked until a controller actually joins. Start sessions, trigger flashes, switch tabs freely during standby.
+• Tray notification when a controller joins — taskbar icon flashes, window auto-restores from minimized, balloon toast fires.
+• Effectively unlimited sessions — as long as the app is running and polling, the server TTL keeps refreshing. Waiver copy updated to match.
 
 🐛 BUG FIXES
-• Fixed ""Discord Not Linked"" popup showing literal \n\n characters instead of newlines.
-• Fixed ""Discord Not Linked"" popup sometimes firing at startup for users whose Rich Presence was enabled before they unlinked Discord.
-• Fixed the loading splash screen covering other dialogs (age verification, Discord popups) — splash no longer steals the top z-order.
+• Fixed ""Discord Not Linked"" popup showing literal \n\n text.
+• Fixed ""Discord Not Linked"" popup firing at startup for users whose Rich Presence was enabled before they unlinked Discord.
+• Fixed the loading splash covering age-verification and other startup dialogs.
+• Fixed XP bar overlay not recognizing invite-code auth (#23).
+• Fixed FlashService crash on disposed cancellation token (#25C).
+• Fixed HapticService video vibe NullReferenceException (#25D).
+• Fixed companion switch spamming greeting messages (#10).
+• Fixed Bubble Count minigame timing out on long videos (#19).
+• Fixed anti-cheat clamping large legitimate XP bonuses (#21).
+• Fixed bug report privacy notice wording (#12).
+
+🎨 UNDER THE HOOD
+• Retired the Test Lab built-in preset with a clean migration.
+• Preset click sounds swapped from .wav to .mp3 (smaller install).
+• Added 16 hover tooltips across the Takeover panel.
+• Avatar Comment trigger action now uses AI-generated reactions (with keyword substitution) when AI is available.
 
 Season: Airhead April";
 
