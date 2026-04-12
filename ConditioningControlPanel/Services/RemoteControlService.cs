@@ -240,8 +240,9 @@ namespace ConditioningControlPanel.Services
                     }
                     else
                     {
-                        // Controller explicitly disconnected — stop all effects
-                        StopAllRemoteEffects();
+                        // Controller explicitly disconnected — stop remote-triggered effects
+                        // but preserve the user's engine/autonomy state so they can keep going
+                        StopRemoteTriggeredEffects();
                     }
                     ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
                 }
@@ -412,6 +413,59 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "[RemoteControl] Failed to stop remote effects");
+            }
+        }
+
+        /// <summary>
+        /// Lighter cleanup for controller disconnect — stops remote-triggered effects
+        /// but preserves the user's engine and autonomy state.
+        /// </summary>
+        private void StopRemoteTriggeredEffects()
+        {
+            try
+            {
+                App.Logger?.Information("[RemoteControl] Controller disconnected — cleaning up remote effects only");
+
+                App.Autonomy?.CancelActivePulses();
+
+                App.Video?.Stop();
+                App.Flash?.Stop();
+                App.Subliminal?.Stop();
+                App.Bubbles?.Stop();
+                App.BouncingText?.Stop();
+                App.BubbleCount?.Stop();
+                App.MindWipe?.Stop();
+                App.BrainDrain?.Stop();
+                App.LockCard?.Stop();
+                App.Wallpaper?.Deactivate();
+
+                LockCardWindow.ForceCloseAll();
+                BubbleCountWindow.ForceCloseAll();
+
+                // Reset overlays that were enabled by remote
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.PinkFilterEnabled = false;
+                    App.Settings.Current.SpiralEnabled = false;
+                    App.Settings.Current.StrictLockEnabled = false;
+                    App.Settings.Current.PanicKeyEnabled = true;
+                }
+                App.Overlay?.RefreshOverlays();
+
+                App.InteractionQueue?.ForceReset();
+
+                // Restore window visibility but don't stop engine/autonomy
+                if (MainWindowRef != null)
+                {
+                    MainWindowRef.EnablePinkFilter(false);
+                    MainWindowRef.EnableSpiral(false);
+                    MainWindowRef.RestoreFromTrayForRemote();
+                    MainWindowRef.ShowAvatarTube();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "[RemoteControl] Failed to clean up remote effects on disconnect");
             }
         }
 

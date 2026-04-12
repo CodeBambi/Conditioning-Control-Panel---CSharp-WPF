@@ -1586,7 +1586,9 @@ namespace ConditioningControlPanel.Services
                 var requestBody = JsonConvert.SerializeObject(new
                 {
                     unified_id = unifiedId,
-                    skill_id = skillId
+                    skill_id = skillId,
+                    // Send local points so server can reconcile (bubble pop points may not be synced yet)
+                    skill_points = settings.SkillPoints
                 });
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/purchase-skill");
                 AddAuthHeader(request);
