@@ -99,7 +99,7 @@ namespace ConditioningControlPanel.Features
             var on = ChkStrict.IsChecked ?? false;
             if (on)
             {
-                var owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+                var owner = Application.Current.MainWindow;
                 var confirmed = WarningDialog.ShowDoubleWarning(owner,
                     "Strict Lock Card",
                     "• You will NOT be able to escape lock cards with ESC\n" +
@@ -108,11 +108,12 @@ namespace ConditioningControlPanel.Features
 
                 if (!confirmed)
                 {
-                    ChkStrict.Checked -= ChkStrict_Changed;
-                    ChkStrict.Unchecked -= ChkStrict_Changed;
-                    ChkStrict.IsChecked = false;
-                    ChkStrict.Checked += ChkStrict_Changed;
-                    ChkStrict.Unchecked += ChkStrict_Changed;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkStrict.IsChecked = false;
+                        _isLoading = false;
+                    }));
                     return;
                 }
             }

@@ -805,6 +805,129 @@ namespace ConditioningControlPanel
             ChkNoPanic.IsChecked = disablePanic;
         }
 
+        /// <summary>
+        /// Applies no-panic mode change directly (for use by feature popups).
+        /// Returns true if the change was applied, false if cancelled.
+        /// </summary>
+        internal bool ApplyNoPanic(bool disablePanic, Window dialogOwner)
+        {
+            if (disablePanic)
+            {
+                var confirmed = WarningDialog.ShowDoubleWarning(dialogOwner,
+                    "Disable Panic Key",
+                    "• You will have NO emergency escape option\n" +
+                    "• The ONLY way to exit will be the Exit button\n" +
+                    "• Combined with Strict Lock, this is VERY restrictive\n" +
+                    "• Make sure you know what you're doing!");
+
+                if (!confirmed) return false;
+
+                if (App.Settings.Current.KeywordTriggersEnabled != true)
+                    _keyboardHook?.Stop();
+                App.Settings.Current.PanicKeyEnabled = false;
+                App.Settings?.Save();
+                App.Logger?.Information("Keyboard hook stopped - panic key disabled");
+            }
+            else
+            {
+                _keyboardHook?.Start();
+                App.Settings.Current.PanicKeyEnabled = true;
+                App.Settings?.Save();
+                App.Logger?.Information("Keyboard hook started - panic key enabled");
+            }
+
+            // Sync MainWindow checkbox without triggering handler
+            _isLoading = true;
+            ChkNoPanic.IsChecked = disablePanic;
+            _isLoading = false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Applies offline mode change directly (for use by feature popups).
+        /// Returns true if the change was applied, false if cancelled.
+        /// </summary>
+        internal bool ApplyOfflineMode(bool enable, Window dialogOwner)
+        {
+            if (enable)
+            {
+                if (string.IsNullOrWhiteSpace(App.Settings.Current.OfflineUsername))
+                {
+                    var dialog = new OfflineUsernameDialog();
+                    dialog.Owner = dialogOwner;
+                    dialog.Topmost = true;
+
+                    if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.Username))
+                    {
+                        App.Settings.Current.OfflineUsername = dialog.Username;
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+
+                App.Settings.Current.OfflineMode = true;
+                DisconnectNetworkServices();
+                App.Logger?.Information("Offline mode enabled with username '{Username}'",
+                    App.Settings.Current.OfflineUsername);
+            }
+            else
+            {
+                App.Settings.Current.OfflineMode = false;
+                App.Logger?.Information("Offline mode disabled");
+            }
+
+            UpdateOfflineModeUI(enable);
+            App.Settings.Save();
+
+            // Sync MainWindow checkbox without triggering handler
+            _isLoading = true;
+            ChkOfflineMode.IsChecked = enable;
+            _isLoading = false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Syncs the keyboard hook and MainWindow NoPanic checkbox after the setting changes externally.
+        /// </summary>
+        internal void SyncNoPanicState()
+        {
+            var panicEnabled = App.Settings.Current.PanicKeyEnabled;
+            if (panicEnabled)
+            {
+                _keyboardHook?.Start();
+                App.Logger?.Information("Keyboard hook started - panic key enabled");
+            }
+            else
+            {
+                if (App.Settings.Current.KeywordTriggersEnabled != true)
+                    _keyboardHook?.Stop();
+                App.Logger?.Information("Keyboard hook stopped - panic key disabled");
+            }
+
+            _isLoading = true;
+            ChkNoPanic.IsChecked = !panicEnabled;
+            _isLoading = false;
+        }
+
+        /// <summary>
+        /// Syncs the MainWindow offline mode UI after the setting changes externally.
+        /// </summary>
+        internal void SyncOfflineModeState()
+        {
+            var isOffline = App.Settings.Current.OfflineMode;
+            if (isOffline)
+                DisconnectNetworkServices();
+            UpdateOfflineModeUI(isOffline);
+
+            _isLoading = true;
+            ChkOfflineMode.IsChecked = isOffline;
+            _isLoading = false;
+        }
+
         internal bool RequestToggleWindowsStartup(bool enable)
         {
             // Drive the existing handler via the legacy checkbox so the combined-with-hidden
@@ -8252,9 +8375,14 @@ namespace ConditioningControlPanel
                 // Show consent waiver
                 if (!ShowRemoteControlWaiver(tier))
                 {
-                    _isLoading = true;
-                    ChkRemoteControlEnabled.IsChecked = false;
-                    _isLoading = false;
+                    // Defer revert so it runs after the dialog's event stack fully unwinds,
+                    // preventing WPF toggle animation from getting stuck in the ON position.
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkRemoteControlEnabled.IsChecked = false;
+                        _isLoading = false;
+                    }));
                     return;
                 }
 
@@ -19108,11 +19236,12 @@ namespace ConditioningControlPanel
 
                 if (!confirmed)
                 {
-                    ChkLockCardStrict.Checked -= ChkLockCardStrict_Changed;
-                    ChkLockCardStrict.Unchecked -= ChkLockCardStrict_Changed;
-                    ChkLockCardStrict.IsChecked = false;
-                    ChkLockCardStrict.Checked += ChkLockCardStrict_Changed;
-                    ChkLockCardStrict.Unchecked += ChkLockCardStrict_Changed;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkLockCardStrict.IsChecked = false;
+                        _isLoading = false;
+                    }));
                     return;
                 }
             }
@@ -21440,11 +21569,14 @@ namespace ConditioningControlPanel
 
                 if (!confirmed)
                 {
-                    ChkStrictLock.Checked -= ChkStrictLock_Changed;
-                    ChkStrictLock.Unchecked -= ChkStrictLock_Changed;
-                    ChkStrictLock.IsChecked = false;
-                    ChkStrictLock.Checked += ChkStrictLock_Changed;
-                    ChkStrictLock.Unchecked += ChkStrictLock_Changed;
+                    // Defer revert so it runs after the dialog's event stack fully unwinds,
+                    // preventing WPF toggle animation from getting stuck in the ON position.
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkStrictLock.IsChecked = false;
+                        _isLoading = false;
+                    }));
                     return;
                 }
             }
@@ -21471,11 +21603,14 @@ namespace ConditioningControlPanel
 
                 if (!confirmed)
                 {
-                    ChkNoPanic.Checked -= ChkNoPanic_Changed;
-                    ChkNoPanic.Unchecked -= ChkNoPanic_Changed;
-                    ChkNoPanic.IsChecked = false;
-                    ChkNoPanic.Checked += ChkNoPanic_Changed;
-                    ChkNoPanic.Unchecked += ChkNoPanic_Changed;
+                    // Defer revert so it runs after the dialog's event stack fully unwinds,
+                    // preventing WPF toggle animation from getting stuck in the ON position.
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkNoPanic.IsChecked = false;
+                        _isLoading = false;
+                    }));
                     return;
                 }
 

@@ -131,16 +131,76 @@ namespace ConditioningControlPanel.Features
         private void ChkNoPanic_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            Main?.RequestToggleNoPanic(ChkNoPanic.IsChecked ?? false);
-            // The handler may revert if cancelled; reload from settings to stay in sync.
-            Dispatcher.BeginInvoke(new Action(LoadFromSettings));
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            var disablePanic = ChkNoPanic.IsChecked ?? false;
+
+            if (disablePanic)
+            {
+                // Show confirmation dialog
+                var confirmed = WarningDialog.ShowDoubleWarning(
+                    Application.Current.MainWindow ?? Window.GetWindow(this),
+                    "Disable Panic Key",
+                    "• You will have NO emergency escape option\n" +
+                    "• The ONLY way to exit will be the Exit button\n" +
+                    "• Combined with Strict Lock, this is VERY restrictive\n" +
+                    "• Make sure you know what you're doing!");
+
+                if (!confirmed)
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkNoPanic.IsChecked = false;
+                        _isLoading = false;
+                    }));
+                    return;
+                }
+            }
+
+            s.PanicKeyEnabled = !disablePanic;
+            App.Settings?.Save();
+
+            // Sync MainWindow keyboard hook + checkbox
+            Main?.SyncNoPanicState();
         }
 
         private void ChkOfflineMode_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
-            Main?.RequestToggleOfflineMode(ChkOfflineMode.IsChecked ?? false);
-            Dispatcher.BeginInvoke(new Action(LoadFromSettings));
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            var enable = ChkOfflineMode.IsChecked ?? false;
+
+            if (enable && string.IsNullOrWhiteSpace(s.OfflineUsername))
+            {
+                var dialog = new OfflineUsernameDialog();
+                dialog.Owner = Application.Current.MainWindow ?? Window.GetWindow(this);
+                dialog.Topmost = true;
+
+                if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.Username))
+                {
+                    s.OfflineUsername = dialog.Username;
+                }
+                else
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkOfflineMode.IsChecked = false;
+                        _isLoading = false;
+                    }));
+                    return;
+                }
+            }
+
+            s.OfflineMode = enable;
+            App.Settings?.Save();
+
+            // Sync MainWindow UI (login buttons, browser, etc.) + checkbox
+            Main?.SyncOfflineModeState();
         }
 
         private void BtnPanicKey_Click(object sender, RoutedEventArgs e)
