@@ -22,25 +22,30 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.7.2";
+        public const string AppVersion = "5.7.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.7.2 — Bug Report Update
+        public const string CurrentPatchNotes = @"v5.7.3 — Remote Polish
 
 ✨ FEATURES
-• In-app bug report system — report bugs directly from the app with automatic log collection and privacy scrubbing
-• Bug report button added next to help button in tab row for easy access
+• Remote Control: one-click pairing links — the shareable link now carries both the session code AND the PIN (via URL hash fragment, so neither hits server logs), so the controller just pastes and instantly connects.
+• Remote Control: use the app while waiting — the host stays fully unlocked until a controller actually joins. Start sessions, trigger flashes, switch tabs freely during standby.
+• Remote Control: tray notification when a controller joins — taskbar icon flashes, window auto-restores from minimized, balloon toast fires so you don't miss the connect.
+• Remote Control: effectively unlimited sessions — as long as the app is running and polling, the server TTL keeps refreshing. Waiver copy updated to match.
 
-🎨 UI/UX
-• UI overhaul: refined dark theme with glass panel effects, improved typography, and updated color palette
+🧠 AWARENESS ENGINE
+• Retired the ""Test Lab"" built-in preset and its cloned triggers/phrases (clean migration on first launch).
+• Swapped preset click sounds from .wav to .mp3 (smaller install, same audio).
+• Awareness tab gets the same premium sub-badge the other premium tabs have.
+• 16 new hover tooltips on the Takeover panel explain what each setting does.
 
-🔧 BUG FIXES
-• Fixed mod subliminal audio not playing (audio lookup now checks active mod's audio directory)
-• Fixed deleted subliminal messages reappearing after app restart
-• Fixed speech bubble getting hidden behind main window
+🐛 BUG FIXES
+• Fixed ""Discord Not Linked"" popup showing literal \n\n characters instead of newlines.
+• Fixed ""Discord Not Linked"" popup sometimes firing at startup for users whose Rich Presence was enabled before they unlinked Discord.
+• Fixed the loading splash screen covering other dialogs (age verification, Discord popups) — splash no longer steals the top z-order.
 
 Season: Airhead April";
 
