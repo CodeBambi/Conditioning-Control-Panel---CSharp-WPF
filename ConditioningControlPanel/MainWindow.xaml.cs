@@ -703,10 +703,20 @@ namespace ConditioningControlPanel
                     sessionWasPaused = true;
                 }
 
+                // Remember if autonomy was running before we stop everything
+                bool autonomyWasRunning = App.Autonomy?.IsEnabled == true;
+
                 StopEngine();
 
                 // Reset interaction queue to clear any pending queued items
                 App.InteractionQueue?.ForceReset();
+
+                // Restart autonomy if it was running — panic should skip the current action, not kill autonomy
+                if (autonomyWasRunning && !sessionWasPaused)
+                {
+                    App.Autonomy?.Start();
+                    App.Logger?.Information("Panic key: Restarted autonomy after skipping current action");
+                }
 
                 // Restore window - always show and bring to front
                 Show();
