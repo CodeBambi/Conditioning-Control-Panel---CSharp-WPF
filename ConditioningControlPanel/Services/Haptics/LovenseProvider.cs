@@ -51,7 +51,21 @@ namespace ConditioningControlPanel.Services.Haptics
             _client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
         }
 
-        public void SetUrl(string url) => _baseUrl = url.TrimEnd('/');
+        public void SetUrl(string url)
+        {
+            url = url.Trim().TrimEnd('/');
+
+            // Add http:// if no scheme present
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                url = "http://" + url;
+
+            // Parse and normalize — if valid, use just the authority (scheme+host+port)
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                _baseUrl = uri.GetLeftPart(UriPartial.Authority);
+            else
+                _baseUrl = url;
+        }
         public void SetMode(LovenseConnectionMode mode) => _mode = mode;
 
         public async Task<bool> ConnectAsync()

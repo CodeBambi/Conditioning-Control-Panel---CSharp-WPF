@@ -2009,7 +2009,11 @@ namespace ConditioningControlPanel
             while (element != null)
             {
                 if (element == parent) return true;
-                element = System.Windows.Media.VisualTreeHelper.GetParent(element);
+                // ContentElements (e.g. Run, Hyperlink) are not part of the visual tree —
+                // VisualTreeHelper.GetParent crashes on them. Use LogicalTreeHelper instead.
+                element = element is System.Windows.Media.Visual
+                    ? System.Windows.Media.VisualTreeHelper.GetParent(element)
+                    : System.Windows.LogicalTreeHelper.GetParent(element);
             }
             return false;
         }

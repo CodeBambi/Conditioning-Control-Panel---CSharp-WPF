@@ -30,7 +30,8 @@ namespace ConditioningControlPanel.Services
         private bool _disposed;
         private bool _syncEnabled = true;
         private bool _pendingQuestResetClear;
-        private int _authRecoveryAttempted; // 0 = not attempted, 1 = attempted (Interlocked)
+        private DateTime _lastAuthRecoveryAttempt = DateTime.MinValue;
+        private bool _hasLoadedProfile; // true after first successful LoadProfileAsync/SyncProfileAsync round-trip
         private readonly SemaphoreSlim _syncGate = new(1, 1);
 
         /// <summary>
@@ -227,6 +228,7 @@ namespace ConditioningControlPanel.Services
                     var v2Success = await SyncProfileAsync();
                     if (v2Success)
                     {
+                        _hasLoadedProfile = true;
                         ProfileLoaded?.Invoke(this, EventArgs.Empty);
                         return true;
                     }
@@ -306,6 +308,8 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("Loaded cloud profile: Level {Level}, {Xp} XP, {Achievements} achievements, {SkillPoints} skill points, {UnlockedSkills} skills",
                     result.Profile.Level, result.Profile.Xp, result.Profile.Achievements?.Count ?? 0,
                     result.Profile.SkillPoints ?? 0, result.Profile.UnlockedSkills?.Count ?? 0);
+
+                _hasLoadedProfile = true;
 
                 // Notify listeners (MainWindow) to refresh UI
                 ProfileLoaded?.Invoke(this, EventArgs.Empty);
@@ -392,6 +396,16 @@ namespace ConditioningControlPanel.Services
 
                 // Calculate total accumulated XP (sum of all levels + current progress)
                 var totalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+
+                // Guard: if local data looks like fresh defaults (Level 1, near-zero XP) and we
+                // haven't completed a round-trip load yet this session, skip sending XP/level.
+                // This prevents a settings reset (update crash, corruption) from zeroing the server.
+                if (!_hasLoadedProfile && settings.PlayerLevel <= 1 && totalXp < 100)
+                {
+                    App.Logger?.Warning("Sync blocked — local looks like defaults (Level {Level}, XP {Xp}) and profile not yet loaded. Waiting for LoadProfileAsync.",
+                        settings.PlayerLevel, (int)totalXp);
+                    return false;
+                }
 
                 App.Logger?.Information("Syncing profile - Level: {Level}, TotalXP: {Xp}, VideoMinutes: {VideoMin:F1}, LockCards: {LockCards}",
                     settings.PlayerLevel,
@@ -702,9 +716,9 @@ namespace ConditioningControlPanel.Services
                             var serverTotalXp = (double)v2Result.User.Xp;
                             var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? 0;
 
-                            if (serverTotalXp > localTotalXp + 1)
+                            if (serverTotalXp > localTotalXp + 5000)
                             {
-                                // Server has more — adopt server values
+                                // Server has substantially more — adopt server values (admin boost, other device)
                                 var serverLevel = v2Result.User.Level;
                                 var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverTotalXp) ?? 0;
 
@@ -714,7 +728,7 @@ namespace ConditioningControlPanel.Services
                                 settings.PlayerXP = serverLevelXp;
                                 App.Settings?.Save();
                             }
-                            else if (localTotalXp > serverTotalXp + 25000)
+                            else if (localTotalXp > serverTotalXp + 75000)
                             {
                                 // Server clamped our XP significantly — force adopt to prevent exploit
                                 var serverLevel = v2Result.User.Level;
@@ -1811,7 +1825,7 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Handles a 401 Unauthorized response. Attempts token recovery via restore-session
-        /// once per session before clearing the stored auth token.
+        /// with a 5-minute cooldown between attempts. Token is preserved on failure.
         /// Returns true if the response was a 401.
         /// </summary>
         private async Task<bool> HandleUnauthorizedAsync(HttpResponseMessage response)
@@ -1819,9 +1833,11 @@ namespace ConditioningControlPanel.Services
             if (response.StatusCode != HttpStatusCode.Unauthorized)
                 return false;
 
-            // Attempt recovery once per session — atomic to prevent concurrent 401s from double-recovering
-            if (Interlocked.CompareExchange(ref _authRecoveryAttempted, 1, 0) == 0)
+            // Attempt recovery with a 5-minute cooldown to prevent concurrent 401s from spam-recovering
+            // while still allowing retry if a transient server issue resolves later.
+            if (DateTime.Now - _lastAuthRecoveryAttempt > TimeSpan.FromMinutes(5))
             {
+                _lastAuthRecoveryAttempt = DateTime.Now;
                 App.Logger?.Information("[Auth] 401 received — attempting token recovery via restore-session");
                 var recovered = await TryRecoverAuthTokenAsync();
                 if (recovered)
@@ -1832,15 +1848,9 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            App.Logger?.Warning("[Auth] 401 — clearing stored auth token (recovery failed or already attempted)");
-            if (App.Settings?.Current != null)
-            {
-                App.Settings.Current.AuthToken = null;
-                // Save to disk but suppress the cloud backup that Save() normally triggers —
-                // we just cleared the auth token, so any backup attempt would 401 again,
-                // creating a 401 → Save() → backup → 401 storm loop.
-                App.Settings.Save(suppressCloudBackup: true);
-            }
+            // Don't clear the auth token — it may still be valid for other endpoints or after
+            // a transient server issue. The 5-minute cooldown prevents recovery spam.
+            App.Logger?.Warning("[Auth] 401 — recovery failed or on cooldown, token kept for retry");
             return true;
         }
 
