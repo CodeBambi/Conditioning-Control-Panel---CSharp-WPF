@@ -8993,14 +8993,12 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Alerts the host that a remote controller just joined. Always pops a
-        /// tray balloon; if the window is minimized or hidden, also flashes the
-        /// taskbar icon and restores the window so the lock overlay becomes visible.
+        /// Alerts the host that a remote controller just joined. Pops a tray
+        /// balloon and flashes the taskbar icon if minimized — does NOT restore
+        /// the window so the host stays in control of window state.
         /// </summary>
         private void NotifyRemoteControllerJoined()
         {
-            var wasMinimized = this.WindowState == WindowState.Minimized || !this.IsVisible;
-
             // Always show a tray balloon — it's a useful cue even when visible.
             try
             {
@@ -9014,22 +9012,10 @@ namespace ConditioningControlPanel
                 App.Logger?.Debug("Failed to show remote controller tray balloon: {Error}", ex.Message);
             }
 
-            if (wasMinimized)
+            // Flash the taskbar button so the host notices even with notifications off.
+            if (this.WindowState == WindowState.Minimized || !this.IsVisible)
             {
-                // Flash the taskbar button so the host notices even with notifications off.
                 try { Helpers.FlashWindowHelper.Flash(this); } catch { }
-
-                // Auto-restore so the lock overlay is visible.
-                try
-                {
-                    this.Show();
-                    this.WindowState = WindowState.Normal;
-                    this.Activate();
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("Failed to restore window on remote connect: {Error}", ex.Message);
-                }
             }
         }
 

@@ -6774,8 +6774,8 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Wallpaper Override Card -->
-                        <Border CornerRadius="12" Margin="6" Padding="15">
+                        <!-- Wallpaper Override Card (hidden until feature is ready) -->
+                        <Border CornerRadius="12" Margin="6" Padding="15" Visibility="Collapsed">
                             <Border.Background>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                     <GradientStop Color="#1A1A32" Offset="0"/>
@@ -9316,7 +9316,7 @@
         </Border>
 
         <!-- Remote Control Overlay (shown when controller is connected) -->
-        <Border x:Name="RemoteControlOverlay" Grid.RowSpan="6" Panel.ZIndex="999" Visibility="Collapsed" Background="#E0000000" Opacity="0">
+        <Border x:Name="RemoteControlOverlay" Grid.Row="1" Grid.RowSpan="5" Panel.ZIndex="999" Visibility="Collapsed" Background="#E0000000" Opacity="0">
             <Grid>
                 <!-- Command notification banner at top -->
                 <Border x:Name="RemoteCommandNotification" VerticalAlignment="Top" HorizontalAlignment="Center"
