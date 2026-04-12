@@ -144,7 +144,8 @@ namespace ConditioningControlPanel.Services
         public void Stop()
         {
             _isRunning = false;
-            _cancellationSource?.Cancel();
+            try { _cancellationSource?.Cancel(); }
+            catch (ObjectDisposedException) { }
             _heartbeatTimer?.Stop();
             _schedulerTimer?.Stop();
 

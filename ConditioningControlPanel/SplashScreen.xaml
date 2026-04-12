@@ -8,7 +8,6 @@
         Background="Transparent"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        Topmost="True"
         ShowInTaskbar="False">
 
     <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="15" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">

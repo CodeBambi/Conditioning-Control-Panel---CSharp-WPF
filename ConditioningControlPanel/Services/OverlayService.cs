@@ -1,5 +1,9 @@
+using System;
+using System.Collections.Generic;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Linq;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -124,7 +128,7 @@ public class OverlayService : IDisposable
                     return settings.SpiralPath;
                 }
                 
-                return ModResourceResolver.ResolveUri("spirals/spiral.gif");
+                return ModResourceResolver.ResolveUri("spiral.gif");
             }
     public void Start()
     {
@@ -134,12 +138,6 @@ public class OverlayService : IDisposable
         DispatcherHelper.RunOnUISync(() =>
         {
             var settings = App.Settings.Current;
-
-            if (!BypassLevelCheck && !settings.IsLevelUnlocked(10))
-            {
-                App.Logger?.Information("OverlayService: Level {Level} is below 10, overlays not available", settings.PlayerLevel);
-                return;
-            }
 
             if (settings.PinkFilterEnabled)
             {
@@ -345,14 +343,6 @@ public class OverlayService : IDisposable
     private void UpdateOverlays(object? sender, EventArgs e)
     {
         var settings = App.Settings.Current;
-
-        if (!BypassLevelCheck && !settings.IsLevelUnlocked(10))
-        {
-            StopPinkFilter();
-            StopSpiral();
-            StopBrainDrainBlur();
-            return;
-        }
 
         if (settings.PinkFilterEnabled && _pinkFilterWindows.Count == 0)
         {

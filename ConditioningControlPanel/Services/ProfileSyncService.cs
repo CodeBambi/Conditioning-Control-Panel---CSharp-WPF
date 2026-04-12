@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -7,6 +9,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
@@ -511,12 +514,14 @@ namespace ConditioningControlPanel.Services
                         }
                         else if (v2Result?.SkillPoints.HasValue == true)
                         {
-                            // Server-authoritative: always accept server's skill_points value
-                            if (v2Result.SkillPoints.Value != settings.SkillPoints)
+                            // Take max of server/local — skill points only increase (level-ups, bubble pops)
+                            // so the higher value is always correct; prevents stale server value overwriting local level-up awards
+                            var maxPoints = Math.Max(v2Result.SkillPoints.Value, settings.SkillPoints);
+                            if (maxPoints != settings.SkillPoints)
                             {
-                                App.Logger?.Information("V2 Sync: Skill points server={Server}, local={Local} — accepting server value",
-                                    v2Result.SkillPoints.Value, settings.SkillPoints);
-                                settings.SkillPoints = v2Result.SkillPoints.Value;
+                                App.Logger?.Information("V2 Sync: Skill points server={Server}, local={Local} — taking max ({Max})",
+                                    v2Result.SkillPoints.Value, settings.SkillPoints, maxPoints);
+                                settings.SkillPoints = maxPoints;
                                 App.Settings?.Save();
                             }
                         }
@@ -686,19 +691,36 @@ namespace ConditioningControlPanel.Services
                             settings.HighestLevelEver = v2Result.User.HighestLevelEver ?? 0;
                             App.Settings?.Save();
                         }
-                        // Adopt server level/xp if higher than local (e.g. crash lost recent progress)
-                        // Compare total XP (not just level) so within-level progress is also recovered
+                        // Adopt server XP after sync. Two cases:
+                        // 1. Server > local: server has more (admin boost, other device). Adopt.
+                        // 2. Server significantly < local: server clamped us (anti-cheat). Adopt to
+                        //    kill the file-edit exploit where inflated local persists across syncs.
+                        // Small local > server gaps (<5K) are normal race conditions during active
+                        // sessions (XP earned while sync was in-flight) — don't force those down.
                         else if (v2Result?.User != null)
                         {
                             var serverTotalXp = (double)v2Result.User.Xp;
                             var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? 0;
 
-                            if (serverTotalXp > localTotalXp)
+                            if (serverTotalXp > localTotalXp + 1)
                             {
+                                // Server has more — adopt server values
                                 var serverLevel = v2Result.User.Level;
                                 var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverTotalXp) ?? 0;
 
-                                App.Logger?.Information("V2 Sync: Server XP higher than local — adopting Level {ServerLevel} XP {ServerXp} (local total was {LocalXp})",
+                                App.Logger?.Information("V2 Sync: Server XP higher — adopting Level {ServerLevel} XP {ServerXp} (local was {LocalXp})",
+                                    serverLevel, serverTotalXp, localTotalXp);
+                                settings.PlayerLevel = serverLevel;
+                                settings.PlayerXP = serverLevelXp;
+                                App.Settings?.Save();
+                            }
+                            else if (localTotalXp > serverTotalXp + 25000)
+                            {
+                                // Server clamped our XP significantly — force adopt to prevent exploit
+                                var serverLevel = v2Result.User.Level;
+                                var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverTotalXp) ?? 0;
+
+                                App.Logger?.Warning("[Anti-cheat] V2 Sync: Server clamped XP — forcing Level {ServerLevel} XP {ServerXp} (local was {LocalXp})",
                                     serverLevel, serverTotalXp, localTotalXp);
                                 settings.PlayerLevel = serverLevel;
                                 settings.PlayerXP = serverLevelXp;
@@ -854,8 +876,10 @@ namespace ConditioningControlPanel.Services
             var localTotalXp = App.Progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
             var cloudTotalXp = (double)cloudProfile.Xp;
 
-            // TAKE HIGHER VALUES - prevents progress loss from cloud corruption/sync issues
-            // This is safer than "cloud is truth" which can wipe legitimate progress
+            // Cloud is authoritative on startup. Allow a small grace delta for unsynced
+            // progress from a crash, but reject suspiciously large local values (file edits).
+            const double MAX_STARTUP_DELTA = 50000; // Max XP above cloud we trust from local
+
             if (cloudTotalXp > localTotalXp)
             {
                 // Cloud has more progress - use cloud values
@@ -871,9 +895,22 @@ namespace ConditioningControlPanel.Services
                 // Check for level-based achievements with the new level
                 App.Achievements?.CheckLevelAchievements(cloudProfile.Level);
             }
+            else if (localTotalXp > cloudTotalXp + MAX_STARTUP_DELTA)
+            {
+                // Local is suspiciously higher than cloud — likely file edit, not legitimate play.
+                // Force adopt cloud values to prevent XP inflation exploit.
+                var cloudLevelXp = App.Progression?.GetCurrentLevelXP(cloudProfile.Level, cloudProfile.Xp) ?? 0;
+
+                App.Logger?.Warning("[Anti-cheat] Local XP suspiciously high on startup: local={LocalXP} vs cloud={CloudXP} (delta={Delta}) — forcing cloud values",
+                    (int)localTotalXp, (int)cloudTotalXp, (int)(localTotalXp - cloudTotalXp));
+
+                settings.PlayerLevel = cloudProfile.Level;
+                settings.PlayerXP = cloudLevelXp;
+                needsSave = true;
+            }
             else if (localTotalXp > cloudTotalXp)
             {
-                // Local has more progress - keep local, will sync UP on next SyncProfileAsync
+                // Small delta - likely unsynced progress from a crash. Sync UP.
                 App.Logger?.Information("Local has higher progress - keeping local: Local Level {LocalLevel} ({LocalXP} total XP) > Cloud Level {CloudLevel} ({CloudXP} total XP)",
                     settings.PlayerLevel, (int)localTotalXp, cloudProfile.Level, (int)cloudTotalXp);
 
@@ -1260,14 +1297,15 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Merge skill tree data - server-authoritative: always accept server value
+            // Merge skill tree data - take max of server/local (skill points only increase)
             if (cloudProfile.SkillPoints.HasValue)
             {
-                if (cloudProfile.SkillPoints.Value != settings.SkillPoints)
+                var maxPoints = Math.Max(cloudProfile.SkillPoints.Value, settings.SkillPoints);
+                if (maxPoints != settings.SkillPoints)
                 {
-                    App.Logger?.Information("Skill tree sync: Accepting server skill points ({Server}), local was ({Local})",
-                        cloudProfile.SkillPoints.Value, settings.SkillPoints);
-                    settings.SkillPoints = cloudProfile.SkillPoints.Value;
+                    App.Logger?.Information("Skill tree sync: Skill points server={Server}, local={Local} — taking max ({Max})",
+                        cloudProfile.SkillPoints.Value, settings.SkillPoints, maxPoints);
+                    settings.SkillPoints = maxPoints;
                     needsSave = true;
                 }
             }
@@ -1531,25 +1569,41 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                var requestData = new
+                var requestBody = JsonConvert.SerializeObject(new
                 {
                     unified_id = unifiedId,
                     skill_id = skillId
-                };
+                });
                 var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/purchase-skill");
                 AddAuthHeader(request);
-                request.Content = new StringContent(
-                    JsonConvert.SerializeObject(requestData),
-                    Encoding.UTF8,
-                    "application/json"
-                );
+                request.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    await HandleUnauthorizedAsync(response);
+                    // On 401, attempt auth recovery and retry once if token was restored
+                    if (await HandleUnauthorizedAsync(response) && !string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
+                    {
+                        App.Logger?.Information("Skill purchase: retrying after auth token recovery");
+                        var retryRequest = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/purchase-skill");
+                        AddAuthHeader(retryRequest);
+                        retryRequest.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+                        response = await _httpClient.SendAsync(retryRequest);
+                        json = await response.Content.ReadAsStringAsync();
+                    }
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Show user-friendly message for auth failures instead of raw server error
+                    if (response.StatusCode == HttpStatusCode.Unauthorized)
+                    {
+                        App.Logger?.Warning("Skill purchase failed: auth token invalid/missing after recovery attempt");
+                        return (false, "Your session has expired. Please log in again from Settings to purchase enhancements.");
+                    }
+
                     string errorMsg;
                     try
                     {

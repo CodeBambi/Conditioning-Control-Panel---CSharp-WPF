@@ -1,4 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -33,8 +38,21 @@ namespace ConditioningControlPanel
         // Test mode — no XP or achievements
         private static bool _isTest = false;
 
-        // Debounced focus reclaim — prevents rapid focus flickering that leaks keystrokes
-        private DispatcherTimer? _focusReclaimTimer;
+        // Win32 focus-stealing support
+        private static readonly IntPtr HWND_TOPMOST = new(-1);
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_SHOWWINDOW = 0x0040;
+
+        [DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        private IntPtr _hwnd;
+
+
 
         /// <summary>
         /// Check if any lock card window is currently open
@@ -101,30 +119,25 @@ namespace ConditioningControlPanel
             // Register this window
             _allWindows.Add(this);
 
-            // Reclaim focus when lost — debounced to prevent rapid focus flickering
-            // that causes keystrokes to leak into other apps (e.g., Discord)
+            // When focus is lost, immediately reclaim it using Win32 to prevent
+            // keystrokes from leaking into other apps (e.g., Discord)
             if (_isPrimary)
             {
                 Deactivated += (s, e) =>
                 {
                     if (_isCompleted) return;
-
-                    // Stop any pending reclaim and restart the timer (debounce)
-                    _focusReclaimTimer?.Stop();
-                    _focusReclaimTimer = new DispatcherTimer
+                    Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        Interval = TimeSpan.FromMilliseconds(500)
-                    };
-                    _focusReclaimTimer.Tick += (_, _) =>
-                    {
-                        _focusReclaimTimer?.Stop();
-                        if (!_isCompleted)
+                        if (_isCompleted || !IsVisible) return;
+                        if (_hwnd != IntPtr.Zero)
                         {
-                            Activate();
-                            TxtInput.Focus();
+                            SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                            SetForegroundWindow(_hwnd);
                         }
-                    };
-                    _focusReclaimTimer.Start();
+                        Activate();
+                        TxtInput.Focus();
+                    }), DispatcherPriority.Input);
                 };
             }
         }
@@ -202,11 +215,20 @@ namespace ConditioningControlPanel
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            // Focus the input field only on primary
+            _hwnd = new WindowInteropHelper(this).Handle;
+
+            // Force this window to foreground via Win32 on primary
             if (_isPrimary)
             {
+                if (_hwnd != IntPtr.Zero)
+                {
+                    SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                    SetForegroundWindow(_hwnd);
+                }
+                Activate();
                 TxtInput.Focus();
-                
+
                 App.Logger?.Information("Lock Card shown - Phrase: {Phrase}, Repeats: {Repeats}, Strict: {Strict}, Monitors: {Count}",
                     _phrase, _requiredRepeats, _strictMode, _allWindows.Count);
             }
@@ -350,7 +372,6 @@ namespace ConditioningControlPanel
             foreach (var window in _allWindows)
             {
                 window._isCompleted = true;
-                window._focusReclaimTimer?.Stop();
                 window.TxtInput.IsEnabled = false;
                 window.TxtHint.Visibility = Visibility.Collapsed;
                 window.CompletionPanel.Visibility = Visibility.Visible;
@@ -450,7 +471,6 @@ namespace ConditioningControlPanel
                 return;
             }
             
-            _focusReclaimTimer?.Stop();
             _closeTimer?.Stop();
             _allWindows.Remove(this);
             base.OnClosing(e);

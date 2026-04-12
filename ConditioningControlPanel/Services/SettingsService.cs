@@ -1,5 +1,9 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -10,6 +14,9 @@ namespace ConditioningControlPanel.Services
     {
         private readonly string _settingsPath;
         private long _lastBackupAttemptTicks = 0;
+        private System.Threading.Timer? _saveDebounceTimer;
+        private volatile bool _savePending;
+        private volatile bool _suppressCloudBackupPending;
 
         public AppSettings Current { get; private set; }
 
@@ -17,6 +24,15 @@ namespace ConditioningControlPanel.Services
         /// True if the settings file did not exist when the service was initialized (fresh install).
         /// </summary>
         public bool WasSettingsFileMissing { get; private set; }
+
+        /// <summary>
+        /// Preset IDs that need a re-install pass after services are wired up. Populated by
+        /// <see cref="MergeBuiltInAwarenessPresets"/> when an installed preset's <c>Version</c>
+        /// is bumped — we can't call <c>App.KeywordPresets.InstallPreset</c> from inside
+        /// <c>Load()</c> because that service hasn't been constructed yet. Drained by
+        /// <see cref="App.OnStartup"/> immediately after <c>App.KeywordPresets</c> exists.
+        /// </summary>
+        public List<string> PendingPresetReinstalls { get; } = new();
 
         public SettingsService()
         {
@@ -98,6 +114,13 @@ namespace ConditioningControlPanel.Services
                         // Merge any new default subliminal triggers that were added in updates
                         MergeNewDefaultSubliminalTriggers(settings);
 
+                        // Synthesize Actions lists on any keyword triggers that predate the
+                        // action-list refactor so the dispatcher can always iterate Actions.
+                        MigrateKeywordTriggerActions(settings);
+
+                        // Merge built-in Awareness preset packs (4 shipped presets).
+                        MergeBuiltInAwarenessPresets(settings);
+
                         // Migrate legacy ContentMode-based settings to mod-based settings
                         settings.MigrateFromContentModeToMod();
 
@@ -116,7 +139,9 @@ namespace ConditioningControlPanel.Services
 
             WasSettingsFileMissing = true;
             App.Logger?.Information("Using default settings (fresh install detected)");
-            return new AppSettings();
+            var fresh = new AppSettings();
+            MergeBuiltInAwarenessPresets(fresh);
+            return fresh;
         }
 
         /// <summary>
@@ -162,6 +187,10 @@ namespace ConditioningControlPanel.Services
 
                 foreach (var trigger in defaults.Keys)
                 {
+                    // Skip triggers the user explicitly removed
+                    if (settings.RemovedDefaultSubliminals.Contains(trigger))
+                        continue;
+
                     if (!settings.SubliminalPool.ContainsKey(trigger))
                     {
                         // Add new triggers as enabled by default (matching default behavior)
@@ -183,64 +212,217 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Validates that level-locked features are disabled if user doesn't meet the level requirement.
-        /// This fixes issues where old sessions or manual JSON edits enable features the user can't access.
+        /// Feature level gating has been removed — every feature is available from level 1,
+        /// so there is nothing to validate on load. Stub kept for call-site compatibility.
         /// </summary>
         private void ValidateLevelLockedFeatures(AppSettings settings)
         {
-            var anyFixed = false;
+        }
 
-            // Brain Drain requires Level 70
-            if (settings.BrainDrainEnabled && !settings.IsLevelUnlocked(70))
+        /// <summary>
+        /// Loads built-in Awareness preset pack JSON files from
+        /// <c>Resources/AwarenessPresets/*.json</c> and merges them into
+        /// <see cref="AppSettings.KeywordTriggerPresets"/>.
+        ///
+        /// - Presets the user has explicitly removed (<see cref="AppSettings.RemovedBuiltInPresetIds"/>) are skipped.
+        /// - New presets are appended with <c>MasterEnabled = false</c>.
+        /// - If a built-in's <see cref="KeywordTriggerPreset.Version"/> is newer than the stored copy's, the
+        ///   stored copy's <c>Triggers</c> / <c>CannedPhrases</c> are refreshed in place (keeping MasterEnabled state).
+        /// </summary>
+        private void MergeBuiltInAwarenessPresets(AppSettings settings)
+        {
+            try
             {
-                settings.BrainDrainEnabled = false;
-                App.Logger?.Warning("Settings: Disabled BrainDrain (requires Level 70, user is {Level})", settings.PlayerLevel);
-                anyFixed = true;
+                // Migration: drop the retired "builtin.testlab" preset if it's still
+                // stored from a prior version. Also strips its cloned triggers and
+                // any canned phrases it injected so nothing ghosts around in the UI.
+                const string RetiredTestLabId = "builtin.testlab";
+                var stored = settings.KeywordTriggerPresets
+                    .FirstOrDefault(p => p.Id == RetiredTestLabId);
+                if (stored != null)
+                {
+                    var triggerPrefix = "preset:" + RetiredTestLabId + ":";
+                    settings.KeywordTriggers.RemoveAll(t =>
+                        t.Id?.StartsWith(triggerPrefix, StringComparison.Ordinal) == true);
+
+                    var phrasePrefix = "preset:" + RetiredTestLabId + ":phrase:";
+                    settings.CustomCompanionPhrases.RemoveAll(p =>
+                        p.Id?.StartsWith(phrasePrefix, StringComparison.Ordinal) == true);
+
+                    settings.KeywordTriggerPresets.Remove(stored);
+                    App.Logger?.Information("MergeBuiltInAwarenessPresets: removed retired {Id}", RetiredTestLabId);
+                }
+
+                var dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "AwarenessPresets");
+                if (!Directory.Exists(dir))
+                {
+                    App.Logger?.Debug("MergeBuiltInAwarenessPresets: no directory at {Dir}", dir);
+                    return;
+                }
+
+                var files = Directory.GetFiles(dir, "*.json");
+                if (files.Length == 0) return;
+
+                var serializer = new JsonSerializerSettings
+                {
+                    ObjectCreationHandling = ObjectCreationHandling.Replace
+                };
+
+                int added = 0;
+                int refreshed = 0;
+                foreach (var file in files)
+                {
+                    try
+                    {
+                        var json = File.ReadAllText(file);
+                        var preset = JsonConvert.DeserializeObject<Models.KeywordTriggerPreset>(json, serializer);
+                        if (preset == null || string.IsNullOrEmpty(preset.Id)) continue;
+
+                        preset.IsBuiltIn = true;
+
+                        // Ensure each trigger inside the preset has an action list — preset
+                        // JSONs may ship only the composable form, but legacy tooling can
+                        // still set flat fields.
+                        if (preset.Triggers != null)
+                        {
+                            foreach (var t in preset.Triggers)
+                            {
+                                if (t == null) continue;
+                                if (t.Actions == null || t.Actions.Count == 0)
+                                    KeywordTriggerService.RebuildActionsFromFlatFields(t);
+                            }
+                        }
+
+                        if (settings.RemovedBuiltInPresetIds.Contains(preset.Id))
+                            continue;
+
+                        var existing = settings.KeywordTriggerPresets.FirstOrDefault(p => p.Id == preset.Id);
+                        if (existing == null)
+                        {
+                            preset.MasterEnabled = false;
+                            settings.KeywordTriggerPresets.Add(preset);
+                            added++;
+                        }
+                        else if (preset.Version > existing.Version)
+                        {
+                            // Refresh the preset definition in place. Prior versions only
+                            // updated the metadata here — the cloned triggers in
+                            // KeywordTriggers were left stale, so users who installed v2
+                            // never picked up v3's new keywords/actions.
+                            var wasInstalled = existing.MasterEnabled;
+
+                            existing.Name = preset.Name;
+                            existing.Icon = preset.Icon;
+                            existing.Description = preset.Description;
+                            existing.LongDescription = preset.LongDescription;
+                            existing.Author = preset.Author;
+                            existing.Version = preset.Version;
+                            existing.RequiresAi = preset.RequiresAi;
+                            existing.AvatarPromptTemplate = preset.AvatarPromptTemplate;
+                            existing.PhrasePools = preset.PhrasePools;
+                            existing.CannedPhrases = preset.CannedPhrases;
+                            existing.Triggers = preset.Triggers;
+                            refreshed++;
+
+                            // If the user already had this preset installed, queue a
+                            // re-install so the new triggers reach the live KeywordTriggers
+                            // list. We flip MasterEnabled = false now so InstallPreset's
+                            // "already installed" guard (line 64 of KeywordTriggerPresetService)
+                            // won't bail out, and we can't call InstallPreset directly here
+                            // because App.KeywordPresets is constructed later in OnStartup.
+                            if (wasInstalled)
+                            {
+                                existing.MasterEnabled = false;
+                                if (!PendingPresetReinstalls.Contains(existing.Id))
+                                    PendingPresetReinstalls.Add(existing.Id);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning("Failed to load preset file {File}: {Error}", file, ex.Message);
+                    }
+                }
+
+                if (added > 0 || refreshed > 0)
+                    App.Logger?.Information("Awareness presets merged: {Added} added, {Refreshed} refreshed",
+                        added, refreshed);
             }
-
-            // Bouncing Text requires Level 60
-            if (settings.BouncingTextEnabled && !settings.IsLevelUnlocked(60))
+            catch (Exception ex)
             {
-                settings.BouncingTextEnabled = false;
-                App.Logger?.Warning("Settings: Disabled BouncingText (requires Level 60, user is {Level})", settings.PlayerLevel);
-                anyFixed = true;
-            }
-
-            // Bubble Count requires Level 50
-            if (settings.BubbleCountEnabled && !settings.IsLevelUnlocked(50))
-            {
-                settings.BubbleCountEnabled = false;
-                App.Logger?.Warning("Settings: Disabled BubbleCount (requires Level 50, user is {Level})", settings.PlayerLevel);
-                anyFixed = true;
-            }
-
-            // Lock Card requires Level 35
-            if (settings.LockCardEnabled && !settings.IsLevelUnlocked(35))
-            {
-                settings.LockCardEnabled = false;
-                App.Logger?.Warning("Settings: Disabled LockCard (requires Level 35, user is {Level})", settings.PlayerLevel);
-                anyFixed = true;
-            }
-
-            // Bubbles require Level 20
-            if (settings.BubblesEnabled && !settings.IsLevelUnlocked(20))
-            {
-                settings.BubblesEnabled = false;
-                App.Logger?.Warning("Settings: Disabled Bubbles (requires Level 20, user is {Level})", settings.PlayerLevel);
-                anyFixed = true;
-            }
-
-            // Autonomy Mode is Patreon-only (no level requirement)
-            // Patreon check is done at runtime, not here
-
-            if (anyFixed)
-            {
-                App.Logger?.Information("Settings: Fixed level-locked features that were incorrectly enabled");
+                App.Logger?.Warning("MergeBuiltInAwarenessPresets failed: {Error}", ex.Message);
             }
         }
 
+        /// <summary>
+        /// Synthesize a composable <see cref="KeywordTrigger.Actions"/> list from the
+        /// flat audio/visual/haptic/xp fields for any trigger loaded from an older save
+        /// that pre-dates the action-list refactor.
+        ///
+        /// Delegates to <see cref="KeywordTriggerService.RebuildActionsFromFlatFields"/>
+        /// so load-time migration and the editor's synth-on-save path stay in sync.
+        /// </summary>
+        private void MigrateKeywordTriggerActions(AppSettings settings)
+        {
+            try
+            {
+                var triggers = settings.KeywordTriggers;
+                if (triggers == null || triggers.Count == 0) return;
+
+                int migrated = 0;
+                foreach (var trigger in triggers)
+                {
+                    if (trigger == null) continue;
+                    if (trigger.Actions != null && trigger.Actions.Count > 0) continue;
+
+                    KeywordTriggerService.RebuildActionsFromFlatFields(trigger);
+                    migrated++;
+                }
+
+                if (migrated > 0)
+                    App.Logger?.Information("Migrated {Count} keyword triggers to action-list model", migrated);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("Keyword trigger action migration failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Debounced save — coalesces rapid calls into a single disk write after 500ms of quiet.
+        /// Use <see cref="SaveImmediate"/> for shutdown or other critical paths that must flush now.
+        /// </summary>
         public void Save(bool suppressCloudBackup = false)
         {
+            _savePending = true;
+            if (suppressCloudBackup)
+                _suppressCloudBackupPending = true;
+
+            _saveDebounceTimer?.Dispose();
+            _saveDebounceTimer = new System.Threading.Timer(_ =>
+            {
+                if (_savePending)
+                {
+                    _savePending = false;
+                    var suppress = _suppressCloudBackupPending;
+                    _suppressCloudBackupPending = false;
+                    SaveImmediate(suppress);
+                }
+            }, null, 500, Timeout.Infinite);
+        }
+
+        /// <summary>
+        /// Writes settings to disk immediately (no debounce). Called by the debounce timer,
+        /// on shutdown, and from RestoreFrom/Reset where the write must happen now.
+        /// </summary>
+        public void SaveImmediate(bool suppressCloudBackup = false)
+        {
+            // Cancel any pending debounce — we're flushing now
+            _savePending = false;
+            _suppressCloudBackupPending = false;
+            _saveDebounceTimer?.Dispose();
+            _saveDebounceTimer = null;
+
             try
             {
                 App.Logger?.Information("Settings.Save: ActivePackIds BEFORE serialize: [{Ids}]",
@@ -293,14 +475,14 @@ namespace ConditioningControlPanel.Services
         public void RestoreFrom(AppSettings settings)
         {
             Current = settings ?? throw new ArgumentNullException(nameof(settings));
-            Save();
+            SaveImmediate();
             App.Logger?.Information("Settings restored from external source");
         }
 
         public void Reset()
         {
             Current = new AppSettings();
-            Save();
+            SaveImmediate();
         }
     }
 }

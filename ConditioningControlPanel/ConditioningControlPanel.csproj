@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>5.7.0</Version>
+    <Version>5.8.0</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>
@@ -99,6 +99,18 @@
 
     <!-- Auto-Update -->
     <PackageReference Include="Velopack" Version="0.0.1298" />
+
+    <!-- QR Code Generation (used by Remote Control tab for mobile pairing) -->
+    <PackageReference Include="QRCoder" Version="1.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Localization language files - must be on disk for File.ReadAllText() -->
+    <Content Include="Localization\Languages\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -113,6 +125,7 @@
     <Content Include="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
 
@@ -121,8 +134,19 @@
     <Content Include="assets\sessions\*.session.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
   </ItemGroup>
+
+  <!-- WebView2Loader.dll must be on disk - the WebView2 SDK loads it outside .NET's single-file extraction -->
+  <Target Name="IncludeWebView2LoaderInPublish" AfterTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(NuGetPackageRoot)microsoft.web.webview2\1.0.2535.41\runtimes\win-x64\native\WebView2Loader.dll">
+        <RelativePath>WebView2Loader.dll</RelativePath>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
 
   <ItemGroup>
@@ -234,6 +258,12 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Awareness Engine preset packs -->
+    <Content Include="Resources\AwarenessPresets\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- Custom spirals folder -->
     <Content Include="Spirals\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -251,11 +281,13 @@
     <ItemGroup>
       <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" />
       <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
+      <AwarenessPresetFiles Include="$(ProjectDir)Resources\AwarenessPresets\**\*" />
       <SpiralFiles Include="$(ProjectDir)Spirals\**\*" />
       <AssetFiles Include="$(ProjectDir)assets\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(SoundFiles)" DestinationFolder="$(PublishDir)Resources\sounds\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SubAudioFiles)" DestinationFolder="$(PublishDir)Resources\sub_audio\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(AwarenessPresetFiles)" DestinationFolder="$(PublishDir)Resources\AwarenessPresets\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SpiralFiles)" DestinationFolder="$(PublishDir)Spirals\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(AssetFiles)" DestinationFolder="$(PublishDir)assets\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Message Importance="High" Text="Copied content files to publish folder" />

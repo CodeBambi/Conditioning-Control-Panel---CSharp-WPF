@@ -15,15 +15,15 @@ dotnet run
 ### Version Locations (ALL must be updated for releases)
 | File | What |
 |------|------|
-| `ConditioningControlPanel.csproj:11` | `<Version>` tag |
+| `ConditioningControlPanel.csproj:12` | `<Version>` tag |
 | `Services/UpdateService.cs:25` | `AppVersion` constant |
 | `Services/UpdateService.cs:31` | `CurrentPatchNotes` |
-| `../installer.iss:17` | `MyAppVersion` |
+| `../installer.iss:16` | `MyAppVersion` |
 | `../build-installer.bat:10` | `VERSION` |
-| `MainWindow.xaml:741` | `BtnUpdateAvailable` Content |
-| `../docs/index.html` | Download buttons + URLs |
+| `MainWindow.xaml:~1749` | `BtnUpdateAvailable` Content + ToolTip loc keys |
+| `Localization/Languages/*.json` (9 files) | `btn_vX_Y_Z_is_out` + `tooltip_vX_Y_Z_*` keys |
 
-See `../RELEASE_WORKFLOW.md` for full release process.
+Use `/release X.Y.Z "Subtitle"` to automate this. See `../RELEASE_WORKFLOW.md` for full process.
 
 ### Important Paths
 | Path | Purpose |
@@ -35,18 +35,8 @@ See `../RELEASE_WORKFLOW.md` for full release process.
 | `../docs/` | GitHub Pages website |
 | `../releases/` | Velopack release output |
 | `../installer-output/` | Inno Setup installer output |
-| `../patreon-proxy-server/` | Vercel proxy server code |
 
-### Server Endpoints (codebambi-proxy.vercel.app)
-| Endpoint | Purpose |
-|----------|---------|
-| `POST /patreon/authorize` | OAuth initiation |
-| `POST /patreon/token` | Token exchange |
-| `GET /patreon/validate` | Validate subscription + whitelist check |
-| `POST /patreon/refresh` | Refresh tokens |
-| `GET /config/update-banner` | Force update notification banner |
-| `POST /pack/download-url` | Get signed pack download URL |
-| `GET /pack/status` | Pack download rate limits |
+> **Server code** lives in private repo `CC-Labs-llc/CCP-Server`. See that repo's docs for endpoints, deployment, and admin operations.
 
 ## Common Tasks
 

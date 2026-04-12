@@ -1,6 +1,10 @@
+using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Win32;
 using Velopack;
 using Velopack.Sources;
@@ -18,79 +22,72 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.7.0";
+        public const string AppVersion = "5.8.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.7.0 — Mod System & Localization Update
+        public const string CurrentPatchNotes = @"v5.8.0 — Airhead Awakening
 
-🧩 MOD SYSTEM
-• New .ccpmod package format for installable mod bundles
-• Mod Manager — install, switch, and remove mods from the UI
-• Mod Creator — visual tool for building your own mods with drag-and-drop
-• Audio section in Mod Creator — manage voice lines, giggles, pops, and chimes with play preview
-• Browser section in Mod Creator — set default URL, site name, and video link suggestions
-• Mods can customize: theme colors, identity labels, triggers, messages, phrases, subliminal pools, lock card phrases, achievement badges, avatar poses, skill tree icons, bubble/tube assets, sounds, and more
-• Moddable enhancement tree: titles, tooltips, boost descriptions, stat pill text, points label
-• Configurable tube layout: avatar position offsets, scale, and per-mode Y offsets
-• Supported avatar sets — mods declare which avatar sets they provide, hiding unsupported companions
-• Custom avatar sets — mods can add sets 8+ with custom unlock levels
-• Video links — mods define name-to-URL pairs for companion speech bubble suggestions
-• Auto-loads active mod as preset when opening the Mod Creator
-• Fallback chain: active mod → base mod for any missing resources
+The biggest UI reshape since the pink rewrite, plus a brand-new Awareness Engine that watches your screen and reacts to trigger words in real time.
 
-🤖 DRONE MODE (Built-in Mod)
-• Matrix-inspired terminal aesthetic — green on black with custom tube artwork
-• Custom companion personality (DroneOS) with full phrase set across 20+ categories
-• 28 custom drone achievement badges
-• 5 custom avatar chassis (Alpha through Omega) with 4 poses each
-• 22 custom skill tree icons with drone-themed names
-• Custom bubble, pop sounds, and computing-style giggle sounds
-• 240 voice lines for companion speech
-• 20 curated video links for the companion to suggest
-• Full subliminal pool and lock card phrase set
+✨ VELVET MOSAIC DASHBOARD
+• Dashboard rebuilt as a 4x4 feature-card grid — click any card to open that feature in a clean, focused popup instead of scrolling through a wall of checkboxes. Logo sits in the middle as a 2x2 centerpiece.
+• Every feature card glows pink when its feature is currently on, so you can tell at a glance what's active without opening anything.
+• Helper button row above the grid: Scheduler, App Info, Intensity Ramp — each opens in its own popup.
+• Rich help tooltips (the ""?"" overlay) carry over to every card — hover to see What It Does / Tips / How It Works.
+• Progression tab removed. Scheduler and Intensity Ramp live on the dashboard now, and every feature is available from Level 1.
 
-🌍 LOCALIZATION
-• Full UI localization infrastructure with 9 languages
-• 2,034 translated keys per language
-• Covers all tabs, dialogs, skill tree, sessions, notifications, banners, leaderboard, remote control, and code-behind strings
-• Languages: English, Spanish, French, German, Japanese, Korean, Chinese (Simplified), Portuguese, Russian
+🔓 EVERYTHING UNLOCKED FROM LEVEL 1
+• Legacy level-unlock gates removed from all features. Spiral, Pink Filter, Bubble Pop, Lock Cards, Bubble Count, Bouncing Text, and Mind Wipe are now usable from the very first session. XP is about progression flavor, not feature gating.
 
-📢 ANNOUNCEMENTS
-• Server announcements now support themed popups and download links
-• Matrix green/black theme for special announcements
+🧠 NEW: AWARENESS ENGINE
+A full trigger engine that watches what you see and type, and fires conditioning actions when it catches keywords. Lives on its own tab now.
+• Signal sources: Screen OCR (scans every few seconds) + Keyboard Capture (rolling typing buffer, fires instantly).
+• 4 built-in tuned presets — Puppy, Chastity, Bimbo, Trance — each with 8 researched keywords, distinct action stacks per keyword, and 18 phrase-pool lines. Inflection-aware regex matching so ""edging"" and ""thinking"" actually fire.
+• Full preset editor: add/remove/configure every action type per trigger — Play Audio, Visual Effects (6 variants), Haptic, Avatar Comment (with AI prompt + fallback pool), Highlight, Extend Session, Chaster Add Time.
+• On-screen word highlighting — glowing box around detected trigger words with your choice of color (6 swatches + custom hex). Hidden from screen capture by default so OBS/Discord don't see it.
+• Loop protection: trigger silenced for a few seconds after firing so OCR can't re-arm it on the same frame.
+• Own-UI filter: OCR skips Control Panel windows, avatar bubbles, and subliminal flashes — she never reacts to her own voice.
+• Whole-word matching so ""sit"" no longer fires on ""intensity"".
+• Multi-trigger merge dispatch: when several keywords match one scan, actions merge with dedup — one highlight box around the full phrase instead of overlapping chaos.
+• Per-keyword (15s) and global (10s) cooldowns, common-English keywords get long cooldowns to suppress false positives.
+• Last Detected feed shows per-action emoji chips with hover tooltips explaining what each effect did.
 
-🛠️ BUG FIXES
-• Fixed race conditions causing XP/level resets — added write locks + crash recovery
-• Fixed quest streak resetting on login by preserving cloud streak value
-• Fixed streak reset bugs: prevent silent resets, unify trim windows, preserve earned streaks
-• Fixed daily quests permanently showing as completed after day rollover
-• Fixed quest streak sync and subliminal thread safety
-• Fixed custom session crashes from unhandled async void exceptions
-• Fixed bubble count double pop sound and off-screen positioning
-• Fixed spiral GIF playing too fast by using median frame delay
-• Fixed spiral GIF stutter by reverting to synchronous loading
-• Fixed avatar tube SizeToContent localization bug, adjusted layout and float animation
-• Fixed avatar pose timer not starting for multi-pose static avatar sets
-• Fixed bubble click-through on transparent windows
-• Fixed avatar head clipping during floating animation
-• Fixed Mod Creator avatar slots not loading from installed mods
+💎 PREMIUM TABS REORGANIZED
+• Exclusives split into four dedicated tabs — Remote Control, Bambi Takeover, Haptics, Awareness — reachable via a hover submenu on the Exclusives (now ""Premium"") button. No more cramped everything-in-one page.
+• Every premium page is discoverable to free users behind a translucent gating overlay, so the whole app is now a walkthrough of what Premium unlocks.
+• UI polish across all premium tabs: animated backgrounds, bigger typography, icon-framed description cards, 2-column Bambi and Haptics grids.
+• Bambi Takeover header + nav label now match the active mod — ""Drone Takeover"", ""Bimbo Takeover"", etc.
+• QR codes render in the active mod's accent color on white (BambiSleep pink, SissyHypno purple). Tab description art and video haptic sync art now resolve through the mod's asset folder so mods can ship their own.
+• App Info & Data popup absorbs the former Exclusives account sections — Patreon login, Discord login, Account Linking, Cloud Backup, Data & Privacy, Support Development.
 
-🔐 STABILITY & AUTH
-• Hardened auth & sync pipeline: V2-first load, 401 recovery, heartbeat fix, race prevention
-• Server: fix V2 sync rejecting legacy users
-• Server: backfill skill points for pre-deployment users
+🎮 REMOTE CONTROL POLISH
+• One-click pairing links — the shareable link now carries both the session code AND the PIN via URL hash fragment (stays out of server logs and Referer headers), so the controller pastes and instantly connects.
+• Use the app while waiting — the host stays fully unlocked until a controller actually joins. Start sessions, trigger flashes, switch tabs freely during standby.
+• Tray notification when a controller joins — taskbar icon flashes, window auto-restores from minimized, balloon toast fires.
+• Effectively unlimited sessions — as long as the app is running and polling, the server TTL keeps refreshing. Waiver copy updated to match.
 
-🔒 SECURITY
-• Path traversal protection in all mod resource resolvers
-• Mod manifests re-validated on every load (defense-in-depth)
-• All theme colors validated as hex codes
-• Video links filtered to HTTPS-only at runtime
-• Size caps on all manifest fields (phrases, triggers, pools, tooltips)
-• Duplicate custom avatar set detection
-• Announcement link URLs validated as HTTPS on both server and client";
+🐛 BUG FIXES
+• Fixed ""Discord Not Linked"" popup showing literal \n\n text.
+• Fixed ""Discord Not Linked"" popup firing at startup for users whose Rich Presence was enabled before they unlinked Discord.
+• Fixed the loading splash covering age-verification and other startup dialogs.
+• Fixed XP bar overlay not recognizing invite-code auth (#23).
+• Fixed FlashService crash on disposed cancellation token (#25C).
+• Fixed HapticService video vibe NullReferenceException (#25D).
+• Fixed companion switch spamming greeting messages (#10).
+• Fixed Bubble Count minigame timing out on long videos (#19).
+• Fixed anti-cheat clamping large legitimate XP bonuses (#21).
+• Fixed bug report privacy notice wording (#12).
+
+🎨 UNDER THE HOOD
+• Retired the Test Lab built-in preset with a clean migration.
+• Preset click sounds swapped from .wav to .mp3 (smaller install).
+• Added 16 hover tooltips across the Takeover panel.
+• Avatar Comment trigger action now uses AI-generated reactions (with keyword substitution) when AI is available.
+
+Season: Airhead April";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

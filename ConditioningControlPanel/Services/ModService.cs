@@ -160,7 +160,7 @@ namespace ConditioningControlPanel.Services
                     if (Directory.Exists(installDir))
                         Directory.Delete(installDir, recursive: true);
 
-                    Directory.Move(tempDir, installDir);
+                    CopyDirectory(tempDir, installDir);
 
                     // Register
                     var package = new ModPackage(manifest, installDir, isBuiltIn: false);
@@ -1023,6 +1023,9 @@ namespace ConditioningControlPanel.Services
                 settings.SubliminalPool = new Dictionary<string, bool>(savedPool);
             else
                 settings.SubliminalPool = new Dictionary<string, bool>(GetDefaultSubliminalPool());
+
+            // Clear removed-defaults tracking since we're loading a fresh pool for this mod
+            settings.RemovedDefaultSubliminals.Clear();
 
             if (settings.LockCardPhrasesByMod?.TryGetValue(modId, out var savedLock) == true)
                 settings.LockCardPhrases = new Dictionary<string, bool>(savedLock);

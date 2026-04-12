@@ -49,13 +49,6 @@ public class BubbleCountService : IDisposable
         
         var settings = App.Settings.Current;
 
-        // Check level requirement (Level 50)
-        if (!settings.IsLevelUnlocked(50))
-        {
-            App.Logger?.Information("BubbleCountService: Level {Level} is below 50, not available", settings.PlayerLevel);
-            return;
-        }
-        
         if (!settings.BubbleCountEnabled)
         {
             App.Logger?.Information("BubbleCountService: Disabled in settings");
@@ -126,9 +119,6 @@ public class BubbleCountService : IDisposable
 
         var settings = App.Settings.Current;
 
-        // Level check - skip for forced tests
-        if (!forceTest && !settings.IsLevelUnlocked(50)) return;
-
         // Check if another fullscreen interaction is active (video, lock card)
         // If so, queue this bubble count for later
         // Note: If CurrentInteraction is already BubbleCount, the queue dequeued us — proceed normally
@@ -192,6 +182,10 @@ public class BubbleCountService : IDisposable
 
                     // Show the game on all monitors
                     BubbleCountWindow.ShowOnAllMonitors(videoPath, difficulty, settings.BubbleCountStrictLock, OnGameComplete);
+
+                    // Extend the stuck detection timeout to cover full video + counting phase
+                    var videoDuration = BubbleCountWindow.LastVideoDurationSeconds;
+                    App.InteractionQueue?.ExtendTimeout(videoDuration + 120);
                 }
                 catch (Exception ex)
                 {
@@ -293,6 +287,11 @@ public class BubbleCountService : IDisposable
     {
         // Check if panic button was pressed during message
         if (!_isBusy) return;
+
+        // Extend the stuck detection timeout to prevent InteractionQueue from
+        // auto-completing BubbleCount during the retry gap, which would let queued
+        // interactions (e.g. Video) start while the retry game plays.
+        App.InteractionQueue?.ExtendTimeout(300);
 
         try
         {
@@ -546,6 +545,20 @@ public class BubbleCountService : IDisposable
         CloseMessageWindows();
         App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.BubbleCount);
         App.Logger?.Debug("BubbleCountService: Busy state reset");
+    }
+
+    /// <summary>
+    /// Force cleanup all bubble count state and windows.
+    /// Called by InteractionQueue stuck detection to prevent lingering windows.
+    /// </summary>
+    public void ForceCleanup()
+    {
+        App.Logger?.Information("BubbleCountService: ForceCleanup called");
+        _isBusy = false;
+        _retryCount = 0;
+        CloseMessageWindows();
+        BubbleCountWindow.ForceCloseAll();
+        App.Bubbles?.Resume();
     }
 
     /// <summary>

@@ -690,6 +690,18 @@ namespace ConditioningControlPanel.Models
             set { _subliminalPool = value ?? new(); OnPropertyChanged(); }
         }
 
+        /// <summary>
+        /// Tracks default subliminal triggers the user explicitly removed,
+        /// so they don't get re-added on startup by MergeNewDefaultSubliminalTriggers.
+        /// </summary>
+        private HashSet<string> _removedDefaultSubliminals = new();
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public HashSet<string> RemovedDefaultSubliminals
+        {
+            get => _removedDefaultSubliminals;
+            set => _removedDefaultSubliminals = value ?? new();
+        }
+
         private string _subBackgroundColor = "#000000";
         public string SubBackgroundColor
         {
@@ -1425,7 +1437,7 @@ namespace ConditioningControlPanel.Models
 
         #region Spiral Overlay (Unlocks Lv.10)
 
-        private bool _spiralEnabled = false;
+        private bool _spiralEnabled = true;
         public bool SpiralEnabled
         {
             get => _spiralEnabled;
@@ -2602,22 +2614,13 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
-        /// Check if a feature at the specified level is unlocked for this user.
-        /// Features are unlocked if:
-        /// 1. OG user (Season 0) — all features always unlocked, OR
-        /// 2. User has reached this level in any previous season (HighestLevelEver), OR
-        /// 3. User's current level meets the requirement
+        /// Feature level gating has been removed — every feature is available from level 1.
+        /// XP, levels, quests, achievements, and the skill tree still exist; they just no longer
+        /// gate any features. Method stub preserved so existing call sites keep compiling.
         /// </summary>
         public bool IsLevelUnlocked(int requiredLevel)
         {
-            // OG users always bypass all level requirements
-            if (IsSeason0Og) return true;
-
-            // Check against highest level ever reached (permanent unlocks across seasons)
-            if (HighestLevelEver >= requiredLevel) return true;
-
-            // Check current level
-            return PlayerLevel >= requiredLevel;
+            return true;
         }
 
         private string? _currentSeason = null;
@@ -2722,14 +2725,36 @@ namespace ConditioningControlPanel.Models
             set { _keywordBufferTimeoutMs = Math.Clamp(value, 1000, 10000); OnPropertyChanged(); }
         }
 
-        private int _keywordGlobalCooldownSeconds = 5;
+        private int _keywordGlobalCooldownSeconds = 10;
         /// <summary>
-        /// Global cooldown between any trigger firing (1-300)
+        /// Global cooldown between any trigger firing, in seconds (clamped 1-300).
+        /// Enforced on all three match sources (OCR, keyboard, external text) —
+        /// this is a hard ceiling on trigger frequency regardless of how many
+        /// matches are on screen. Primarily prevents the OCR feedback loop
+        /// (avatar speech bubble getting re-read on next scan) from spamming.
+        /// Default raised to 10 per user preference — 10s minimum between any
+        /// two reactions, paired with KeywordPerKeywordCooldownSeconds for the
+        /// stricter 15s same-keyword hard cooldown.
         /// </summary>
         public int KeywordGlobalCooldownSeconds
         {
             get => _keywordGlobalCooldownSeconds;
             set { _keywordGlobalCooldownSeconds = Math.Clamp(value, 1, 300); OnPropertyChanged(); }
+        }
+
+        private int _keywordPerKeywordCooldownSeconds = 15;
+        /// <summary>
+        /// Hard minimum cooldown between two fires of the SAME keyword, in seconds
+        /// (clamped 1-600). Enforced at RecordFire time via the _mutedKeywords
+        /// dictionary independent of AwarenessLoopProtectionEnabled. Floor for
+        /// the per-trigger <see cref="KeywordTrigger.CooldownSeconds"/> — presets
+        /// that declare a lower cooldown will still be gated at this minimum.
+        /// </summary>
+        [JsonProperty]
+        public int KeywordPerKeywordCooldownSeconds
+        {
+            get => _keywordPerKeywordCooldownSeconds;
+            set { _keywordPerKeywordCooldownSeconds = Math.Clamp(value, 1, 600); OnPropertyChanged(); }
         }
 
         private double _keywordSessionMultiplier = 1.5;
@@ -2764,12 +2789,26 @@ namespace ConditioningControlPanel.Models
             set { _keywordHighlightEnabled = value; OnPropertyChanged(); }
         }
 
-        private int _keywordHighlightDurationMs = 600;
+        private int _keywordHighlightDurationMs = 1500;
         [JsonProperty]
         public int KeywordHighlightDurationMs
         {
             get => _keywordHighlightDurationMs;
             set { _keywordHighlightDurationMs = Math.Clamp(value, 300, 5000); OnPropertyChanged(); }
+        }
+
+        private string _keywordHighlightColor = "#FF69B4";
+        /// <summary>
+        /// Hex color (<c>#RRGGBB</c>) used for the OCR keyword highlight overlay box,
+        /// border, glow, and fill. Defaults to neon pink. Parsed at render time by
+        /// <see cref="Services.KeywordHighlightService"/>; invalid values fall back
+        /// to the default.
+        /// </summary>
+        [JsonProperty]
+        public string KeywordHighlightColor
+        {
+            get => _keywordHighlightColor;
+            set { _keywordHighlightColor = string.IsNullOrWhiteSpace(value) ? "#FF69B4" : value; OnPropertyChanged(); }
         }
 
         private bool _ocrHighlightAll = true;
@@ -2788,6 +2827,7 @@ namespace ConditioningControlPanel.Models
             set { _ocrHighlightVisibleInCapture = value; OnPropertyChanged(); }
         }
 
+
         private List<KeywordTrigger> _keywordTriggers = new();
         /// <summary>
         /// Configured keyword triggers
@@ -2798,6 +2838,66 @@ namespace ConditioningControlPanel.Models
             get => _keywordTriggers;
             set { _keywordTriggers = value ?? new List<KeywordTrigger>(); OnPropertyChanged(); }
         }
+
+        // --- Awareness Engine safety ---
+
+        private bool _awarenessIgnoreOwnUi = true;
+        /// <summary>
+        /// When true, OCR word hits that fall inside any CCP window (MainWindow, avatar,
+        /// subliminal flashes, highlight overlays, dialogs) are discarded before matching.
+        /// Prevents the app from reacting to its own output.
+        /// </summary>
+        [JsonProperty("awarenessIgnoreOwnUi")]
+        public bool AwarenessIgnoreOwnUi
+        {
+            get => _awarenessIgnoreOwnUi;
+            set { _awarenessIgnoreOwnUi = value; OnPropertyChanged(); }
+        }
+
+        private bool _awarenessLoopProtectionEnabled = true;
+        /// <summary>
+        /// When true, a keyword that has just fired a trigger is temporarily muted
+        /// across all sources so the trigger's own output cannot re-arm it.
+        /// </summary>
+        [JsonProperty("awarenessLoopProtectionEnabled")]
+        public bool AwarenessLoopProtectionEnabled
+        {
+            get => _awarenessLoopProtectionEnabled;
+            set { _awarenessLoopProtectionEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _awarenessLoopProtectionMs = 5000;
+        /// <summary>
+        /// Duration (ms) a keyword stays muted after firing, when loop protection is on.
+        /// </summary>
+        [JsonProperty("awarenessLoopProtectionMs")]
+        public int AwarenessLoopProtectionMs
+        {
+            get => _awarenessLoopProtectionMs;
+            set { _awarenessLoopProtectionMs = Math.Clamp(value, 500, 30000); OnPropertyChanged(); }
+        }
+
+        // --- Awareness preset packs ---
+
+        private List<KeywordTriggerPreset> _keywordTriggerPresets = new();
+        /// <summary>
+        /// Known keyword trigger presets (built-in + user-created). Built-in presets
+        /// are merged from Resources/AwarenessPresets/*.json on each load; their
+        /// MasterEnabled state and Triggers are then stored here per-user.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<KeywordTriggerPreset> KeywordTriggerPresets
+        {
+            get => _keywordTriggerPresets;
+            set { _keywordTriggerPresets = value ?? new List<KeywordTriggerPreset>(); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Ids of built-in presets the user has explicitly removed. Removed presets
+        /// are skipped by the merge step so they don't reappear after uninstall.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public HashSet<string> RemovedBuiltInPresetIds { get; set; } = new();
 
         #endregion
 

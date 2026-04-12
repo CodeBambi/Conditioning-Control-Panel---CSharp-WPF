@@ -204,6 +204,7 @@ namespace ConditioningControlPanel
         public static RoadmapService Roadmap { get; private set; } = null!;
         public static SkillTreeService SkillTree { get; private set; } = null!;
         public static KeywordTriggerService KeywordTriggers { get; private set; } = null!;
+        public static KeywordTriggerPresetService KeywordPresets { get; private set; } = null!;
         public static ScreenOcrService ScreenOcr { get; private set; } = null!;
         public static KeywordHighlightService? KeywordHighlight { get; private set; }
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
@@ -212,6 +213,7 @@ namespace ConditioningControlPanel
         public static LockdownService Lockdown { get; private set; } = null!;
         public static MantraService Mantra { get; private set; } = null!;
         public static ModService Mods { get; private set; } = null!;
+        public static BugReportService BugReport { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -315,6 +317,104 @@ namespace ConditioningControlPanel
             {
                 _cachedScreens = null;
                 _screenCacheTime = DateTime.MinValue;
+            }
+        }
+
+        // --- CCP window rect cache (used by Awareness Engine self-exclusion) ---
+        private static System.Drawing.Rectangle[]? _cachedCcpWindowRects;
+        private static DateTime _ccpWindowRectsCacheTime = DateTime.MinValue;
+        private static readonly TimeSpan CcpWindowRectsCacheDuration = TimeSpan.FromMilliseconds(250);
+        private static readonly object _ccpWindowRectsLock = new();
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool GetWindowRect(IntPtr hWnd, out CcpRect lpRect);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct CcpRect { public int Left, Top, Right, Bottom; }
+
+        /// <summary>
+        /// Returns screen rectangles of all currently visible CCP-owned windows
+        /// (MainWindow, avatar, overlays, dialogs) in PHYSICAL pixels on the
+        /// virtual desktop. Used by ScreenOcrService to drop OCR word hits that
+        /// fall inside our own UI, preventing feedback loops.
+        ///
+        /// Uses Win32 <c>GetWindowRect</c> directly rather than WPF Window.Left/Top
+        /// multiplied by CompositionTarget scale — the latter is unreliable on
+        /// PerMonitorV2 + multi-monitor setups because Left/Top is anchored to
+        /// primary's DIP space while the scale is the current window's monitor
+        /// scale, producing oversized rects that incorrectly swallow external
+        /// OCR hits. <c>GetWindowRect</c> returns physical virtual-desktop pixels
+        /// in one call, which is what OCR hits are already expressed in.
+        ///
+        /// Cached for a short interval to stay cheap under per-scan filtering.
+        /// </summary>
+        public static System.Drawing.Rectangle[] GetCcpWindowRectsCached()
+        {
+            lock (_ccpWindowRectsLock)
+            {
+                if (_cachedCcpWindowRects != null &&
+                    DateTime.Now - _ccpWindowRectsCacheTime <= CcpWindowRectsCacheDuration)
+                {
+                    return _cachedCcpWindowRects;
+                }
+
+                var rects = new System.Collections.Generic.List<System.Drawing.Rectangle>();
+                try
+                {
+                    // Must run on the UI thread to enumerate Application.Current.Windows safely.
+                    var dispatcher = Current?.Dispatcher;
+                    if (dispatcher == null || dispatcher.HasShutdownStarted)
+                    {
+                        _cachedCcpWindowRects = Array.Empty<System.Drawing.Rectangle>();
+                        _ccpWindowRectsCacheTime = DateTime.Now;
+                        return _cachedCcpWindowRects;
+                    }
+
+                    // Collect the HWNDs on the UI thread, then call GetWindowRect
+                    // outside the dispatcher lock — GetWindowRect is a thread-safe
+                    // Win32 call and doesn't need dispatcher affinity.
+                    var hwnds = new System.Collections.Generic.List<IntPtr>();
+                    dispatcher.Invoke(() =>
+                    {
+                        foreach (var w in Current!.Windows.OfType<Window>())
+                        {
+                            try
+                            {
+                                if (!w.IsVisible) continue;
+                                if (w.WindowState == WindowState.Minimized) continue;
+
+                                var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                                if (hwnd != IntPtr.Zero) hwnds.Add(hwnd);
+                            }
+                            catch { /* skip malformed window */ }
+                        }
+                    });
+
+                    foreach (var hwnd in hwnds)
+                    {
+                        if (!IsWindowVisible(hwnd)) continue;
+                        if (!GetWindowRect(hwnd, out var r)) continue;
+
+                        int w = r.Right - r.Left;
+                        int h = r.Bottom - r.Top;
+                        if (w <= 0 || h <= 0) continue;
+
+                        rects.Add(new System.Drawing.Rectangle(r.Left, r.Top, w, h));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger?.Debug("GetCcpWindowRectsCached failed: {Error}", ex.Message);
+                }
+
+                _cachedCcpWindowRects = rects.ToArray();
+                _ccpWindowRectsCacheTime = DateTime.Now;
+                return _cachedCcpWindowRects;
             }
         }
 
@@ -652,6 +752,27 @@ namespace ConditioningControlPanel
             Haptics = new HapticService(Settings.Current.Haptics);
             AudioSync = new AudioSyncService(Haptics, Settings.Current.Haptics.AudioSync);
             KeywordTriggers = new KeywordTriggerService();
+            KeywordPresets = new KeywordTriggerPresetService();
+
+            // Drain any preset re-installs queued by SettingsService.MergeBuiltInAwarenessPresets
+            // when a built-in preset's version was bumped on this launch. This re-clones the
+            // new triggers into KeywordTriggers so version bumps actually reach the live list
+            // instead of only refreshing card metadata.
+            if (Settings?.PendingPresetReinstalls.Count > 0)
+            {
+                foreach (var presetId in Settings.PendingPresetReinstalls.ToList())
+                {
+                    try
+                    {
+                        KeywordPresets.InstallPreset(presetId);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.Warning("Pending preset re-install failed for {Id}: {Error}", presetId, ex.Message);
+                    }
+                }
+                Settings.PendingPresetReinstalls.Clear();
+            }
             ScreenOcr = new ScreenOcrService();
             KeywordHighlight = new KeywordHighlightService();
             RemoteControl = new RemoteControlService();
@@ -706,6 +827,9 @@ namespace ConditioningControlPanel
             // Initialize Update service and check for updates in background
             Update = new UpdateService();
             _ = CheckForUpdatesInBackgroundAsync();
+
+            // Initialize bug report service (stateless, just holds an HttpClient)
+            BugReport = new BugReportService();
 
             // Wire up achievement popup BEFORE checking any achievements
             Achievements.AchievementUnlocked += OnAchievementUnlocked;
@@ -858,7 +982,7 @@ namespace ConditioningControlPanel
                 // Start autonomy service if it should be enabled
                 // (might have been skipped during LoadSettings if whitelist wasn't loaded yet)
                 var s = Settings?.Current;
-                if (s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven && s.IsLevelUnlocked(100))
+                if (s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
                 {
                     var hasPatreonAccess = s.PatreonTier >= 1 || Patreon?.IsWhitelisted == true;
                     if (hasPatreonAccess && Autonomy?.IsEnabled != true)
@@ -891,8 +1015,10 @@ namespace ConditioningControlPanel
                 {
                     Logger?.Information("Discord authenticated: {Id}", Discord.UserId);
 
-                    // Auto-upgrade: if Discord is authenticated but no V2 identity, migrate via /v2/auth/discord
-                    if (string.IsNullOrEmpty(UnifiedUserId))
+                    // Auto-upgrade: if Discord is authenticated but no V2 identity OR no auth token, migrate via /v2/auth/discord
+                    // (legacy users created before Feb 2026 may have a UnifiedUserId but no auth_token_hash on the server —
+                    // re-running /v2/auth/discord bootstraps a fresh token for them)
+                    if (string.IsNullOrEmpty(UnifiedUserId) || string.IsNullOrEmpty(Settings?.Current?.AuthToken))
                     {
                         try
                         {
@@ -2092,7 +2218,8 @@ Application State:
 
             // Save settings FIRST (before cloud sync) to persist the user's current local state.
             // This prevents cloud sync from overwriting local values with stale data before save.
-            Settings?.Save();
+            // Use SaveImmediate to flush any pending debounced writes and ensure final state is on disk.
+            Settings?.SaveImmediate();
 
             // Sync profile to cloud on exit (short timeout to avoid blocking shutdown)
             if (ProfileSync?.IsSyncEnabled == true)

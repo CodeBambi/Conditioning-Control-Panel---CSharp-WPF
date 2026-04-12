@@ -397,49 +397,23 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Determines the highest avatar set unlocked based on player level.
-        /// Note: Sets are not unlocked sequentially - set 7 (Bambi Cow) unlocks at level 75.
+        /// Feature level gating has been removed — every avatar set is available from level 1.
+        /// The "max set" now just returns the largest base set (7) so navigation lands in the
+        /// same place a level-200 user would.
         /// </summary>
         /// <param name="level">Player's current level (unused - kept for API compatibility)</param>
-        /// <returns>Avatar set number (1-7)</returns>
+        /// <returns>Avatar set number</returns>
         public static int GetAvatarSetForLevel(int level)
         {
-            // Find the highest unlocked set using IsLevelUnlocked which respects OG unlock and HighestLevelEver
-            var settings = App.Settings?.Current;
-            if (settings == null) return 1;
-
-            int maxSet = 1;
-            if (settings.IsLevelUnlocked(20)) maxSet = 2;
-            if (settings.IsLevelUnlocked(35)) maxSet = 3;
-            if (settings.IsLevelUnlocked(50)) maxSet = 4;
-            if (settings.IsLevelUnlocked(75)) maxSet = 7;  // Bambi Cow unlocks at 75 (set 7 > set 4)
-            if (settings.IsLevelUnlocked(100)) maxSet = 7; // Still 7 since 7 > 4
-            if (settings.IsLevelUnlocked(125)) maxSet = 7; // Still 7 since 7 > 5
-            if (settings.IsLevelUnlocked(150)) maxSet = 7; // Still 7 since 7 > 6
-            return maxSet;
+            return 7;
         }
 
         /// <summary>
-        /// Checks if a specific avatar set is unlocked for the given level.
-        /// Uses IsLevelUnlocked which respects OG unlock and HighestLevelEver.
+        /// Feature level gating has been removed — every avatar set is always unlocked.
         /// </summary>
         public static bool IsAvatarSetUnlocked(int setNumber, int level)
         {
-            var settings = App.Settings?.Current;
-            if (settings == null) return setNumber == 1;
-
-            return setNumber switch
-            {
-                1 => true,                              // Always unlocked
-                2 => settings.IsLevelUnlocked(20),      // Level 20
-                3 => settings.IsLevelUnlocked(35),      // Level 35
-                4 => settings.IsLevelUnlocked(50),      // Level 50 (CultBunny companion requirement is 100, but avatar unlocks at 50)
-                5 => settings.IsLevelUnlocked(125),     // Level 125
-                6 => settings.IsLevelUnlocked(150),     // Level 150
-                7 => settings.IsLevelUnlocked(75),      // Level 75 (Bambi Cow)
-                _ => App.Mods?.GetCustomAvatarSetUnlockLevel(setNumber) is int unlockLevel
-                     && settings.IsLevelUnlocked(unlockLevel)
-            };
+            return true;
         }
 
         /// <summary>
@@ -889,6 +863,7 @@ namespace ConditioningControlPanel
                 AvatarBorder.Margin = new Thickness(5, 100, 126 - dx, 210 + dy);
                 TitleBox.Margin = new Thickness(0, 0, 121 - dx, 180);
                 InputPanel.Margin = new Thickness(0, 0, 126 - dx, 520);
+                SpeechBubble.Margin = new Thickness(0, 0, 125 - dx, 550);
             }
             else
             {
@@ -897,6 +872,7 @@ namespace ConditioningControlPanel
                 AvatarBorder.Margin = new Thickness(5, 100, 426 - dx, 208 + dy);
                 TitleBox.Margin = new Thickness(0, 0, 416 - dx, 193);
                 InputPanel.Margin = new Thickness(0, 0, 426 - dx, 520);
+                SpeechBubble.Margin = new Thickness(0, 0, 425 - dx, 550);
             }
         }
 
@@ -1022,7 +998,11 @@ namespace ConditioningControlPanel
 
                             // Reset bubble position to ensure correct placement after layout
                             // Anchored at bottom, grows upward. Margin = left, top, right, bottom
-                            SpeechBubble.Margin = new Thickness(0, 0, 125, 550);
+                            var initDx = _isAttached
+                                ? (App.Mods?.GetAvatarOffsetX() ?? 0)
+                                : (App.Mods?.GetAvatarDetachedOffsetX() ?? 0);
+                            var initRight = _isAttached ? 125 - initDx : 425 - initDx;
+                            SpeechBubble.Margin = new Thickness(0, 0, initRight, 550);
                         }), System.Windows.Threading.DispatcherPriority.Loaded);
 
             // Start fullscreen detection timer
@@ -2414,8 +2394,12 @@ namespace ConditioningControlPanel
             // Reset scroll position to top when new text is shown
             SpeechScroller?.ScrollToTop();
 
-            // Position bubble next to avatar — stays at a fixed position near the tube.
-            SpeechBubble.Margin = new Thickness(0, 0, 125, 550);
+            // Position bubble next to avatar — align with tube position based on attach state.
+            var bubbleDx = _isAttached
+                ? (App.Mods?.GetAvatarOffsetX() ?? 0)
+                : (App.Mods?.GetAvatarDetachedOffsetX() ?? 0);
+            var bubbleRight = _isAttached ? 125 - bubbleDx : 425 - bubbleDx;
+            SpeechBubble.Margin = new Thickness(0, 0, bubbleRight, 550);
         }
 
         /// <summary>
@@ -2780,7 +2764,21 @@ namespace ConditioningControlPanel
                         return; // Another app is in front, don't steal focus
                 }
 
-                // Defer activation to parent so Windows finishes current activation first
+                // Don't redirect activation when speech bubble is showing —
+                // redirecting brings parent to front, hiding the bubble behind it
+                if (SpeechBubble.Visibility == Visibility.Visible)
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (_isAttached && _tubeHandle != IntPtr.Zero)
+                            BringAttachedPairToFront();
+                    }), DispatcherPriority.Background);
+                    return;
+                }
+
+                // Defer activation to parent so Windows finishes current activation first.
+                // Include BringAttachedPairToFront in the same callback to avoid a double-deferral
+                // gap where the tube drops behind the parent between two Background dispatches.
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     try
@@ -2790,6 +2788,7 @@ namespace ConditioningControlPanel
                             && _parentWindow.WindowState != WindowState.Minimized)
                         {
                             _parentWindow.Activate();
+                            BringAttachedPairToFront();
                         }
                     }
                     catch { /* Window may be closing */ }
@@ -2831,8 +2830,21 @@ namespace ConditioningControlPanel
                 {
                     // Only refresh z-order when our app owns the foreground — don't steal focus
                     // from other apps. ParentWindow_Activated handles restoration when user returns.
+                    // Use process-ID check (not just parent/tube handle) so dialogs, flashes,
+                    // overlays, and other app windows also count as "our foreground".
                     var foreground = GetForegroundWindow();
+                    bool isOurProcess = false;
                     if (foreground == _parentHandle || foreground == _tubeHandle)
+                    {
+                        isOurProcess = true;
+                    }
+                    else if (foreground != IntPtr.Zero)
+                    {
+                        GetWindowThreadProcessId(foreground, out uint foregroundPid);
+                        uint ourPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+                        isOurProcess = (foregroundPid == ourPid);
+                    }
+                    if (isOurProcess)
                     {
                         BringAttachedPairToFront();
                     }
@@ -4129,14 +4141,33 @@ namespace ConditioningControlPanel
         /// <summary>
         /// React to companion switch (v5.3).
         /// </summary>
+        private System.Windows.Threading.DispatcherTimer? _companionGreetingDebounce;
+
         private void OnCompanionSwitched(object? sender, Models.CompanionId newCompanion)
         {
             RefreshCompanionDisplay();
 
-            var companionName = Models.CompanionDefinition.GetById(newCompanion).Name;
-            companionName = App.Mods?.MakeModAware(companionName) ?? companionName;
-            var greeting = $"Hi! {companionName} is here now~";
-            Giggle(App.Mods?.MakeModAware(greeting) ?? greeting);
+            // Clear any queued speech so rapid cycling doesn't stack up greetings
+            _speechQueue.Clear();
+            _speechTimer?.Stop();
+            _speechDelayTimer?.Stop();
+            _isGiggling = false;
+
+            // Debounce: delay greeting so only the final companion in a rapid cycle gets one
+            _companionGreetingDebounce?.Stop();
+            _companionGreetingDebounce = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(600)
+            };
+            _companionGreetingDebounce.Tick += (_, _) =>
+            {
+                _companionGreetingDebounce.Stop();
+                var companionName = Models.CompanionDefinition.GetById(newCompanion).Name;
+                companionName = App.Mods?.MakeModAware(companionName) ?? companionName;
+                var greeting = $"Hi! {companionName} is here now~";
+                Giggle(App.Mods?.MakeModAware(greeting) ?? greeting);
+            };
+            _companionGreetingDebounce.Start();
         }
 
         /// <summary>
