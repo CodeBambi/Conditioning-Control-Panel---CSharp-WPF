@@ -303,9 +303,10 @@ public class BouncingTextService : IDisposable
             UpdateWindowsText();
         }
         
-        // Re-assert z-order every ~500ms when setting is enabled
+        // Re-assert z-order every ~500ms — bouncing text is long-lived and will
+        // lose topmost when competing with flash/video/overlay windows
         _topmostTickCount++;
-        if (_topmostTickCount >= 30 && App.Settings?.Current?.BouncingTextAlwaysOnTop == true)
+        if (_topmostTickCount >= 30)
         {
             _topmostTickCount = 0;
             foreach (var window in _windows)
@@ -469,8 +470,12 @@ internal class BouncingTextWindow : Window
         canvas.Children.Add(_textBlock);
         Content = canvas;
         
-        // Make click-through
-        SourceInitialized += (s, e) => MakeClickThrough();
+        // Make click-through and force Win32 TOPMOST (more reliable than WPF Topmost property)
+        SourceInitialized += (s, e) =>
+        {
+            MakeClickThrough();
+            SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        };
     }
 
     public void UpdateText(string text, Color color)

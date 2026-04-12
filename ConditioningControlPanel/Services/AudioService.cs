@@ -29,6 +29,8 @@ namespace ConditioningControlPanel.Services
         private bool _isDucked;
         private float _duckAmount = 0.8f; // Default: reduce to 20%
         private long _duckGeneration; // Incremented on ForceUnduck to invalidate stale Unduck callbacks
+        private System.Threading.Timer? _duckWatchdog; // Safety net: force-unduck if ducking exceeds max duration
+        private const int DuckWatchdogMs = 30_000; // 30 seconds — no single duck should last longer
 
         private bool _disposed;
 
@@ -472,6 +474,19 @@ namespace ConditioningControlPanel.Services
 
                     _isDucked = true;
 
+                    // Watchdog: force-unduck if ducking exceeds max duration.
+                    // Catches leaked ref counts from cancelled Task.Delay callbacks,
+                    // missing Unduck on audio failure, etc.
+                    _duckWatchdog?.Dispose();
+                    _duckWatchdog = new System.Threading.Timer(_ =>
+                    {
+                        if (_isDucked)
+                        {
+                            App.Logger?.Warning("[Ducking] Watchdog fired after {Ms}ms — force-unducking to prevent stuck volume", DuckWatchdogMs);
+                            ForceUnduck();
+                        }
+                    }, null, DuckWatchdogMs, System.Threading.Timeout.Infinite);
+
                     // Save state for crash recovery
                     SaveDuckingState();
 
@@ -539,6 +554,8 @@ namespace ConditioningControlPanel.Services
 
                     _originalVolumes.Clear();
                     _isDucked = false;
+                    _duckWatchdog?.Dispose();
+                    _duckWatchdog = null;
 
                     // Clear crash recovery file
                     ClearDuckingState();
@@ -594,6 +611,7 @@ namespace ConditioningControlPanel.Services
             }
 
             StopSound();
+            _duckWatchdog?.Dispose();
             _deviceEnumerator?.Dispose();
         }
 
