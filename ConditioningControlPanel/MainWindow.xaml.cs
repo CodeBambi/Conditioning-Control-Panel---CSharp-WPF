@@ -4954,11 +4954,6 @@ namespace ConditioningControlPanel
                 var companionName = def.GetDisplayName(isSlutMode);
                 nameTexts[i].Text = App.Mods?.MakeModAware(companionName) ?? companionName;
 
-                // Update companion name with mod text replacements
-                bool isSlutMode = App.Settings?.Current?.SlutModeEnabled ?? false;
-                var companionName = def.GetDisplayName(isSlutMode);
-                nameTexts[i].Text = App.Mods?.MakeModAware(companionName) ?? companionName;
-
                 // All companions are unlocked from level 1
                 levelTexts[i].Text = progress.IsMaxLevel ? "MAX" : $"Lv.{progress.Level}";
 
@@ -17969,13 +17964,6 @@ namespace ConditioningControlPanel
                 App.Logger?.Information("Bouncing text phrases updated: {Count} items", editor.ResultData.Count);
                 App.Settings.Save();
             }
-        }
-
-        private void ChkBouncingTextAlwaysOnTop_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            App.Settings.Current.BouncingTextAlwaysOnTop = ChkBouncingTextAlwaysOnTop.IsChecked ?? false;
-            App.Settings.Save();
         }
 
         private void ChkBouncingTextAlwaysOnTop_Changed(object sender, RoutedEventArgs e)

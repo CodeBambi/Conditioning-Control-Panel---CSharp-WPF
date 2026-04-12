@@ -83,6 +83,23 @@ public class LocalAiService : IAiService
         return await GetAiResponseAsync(userInput, prompt);
     }
 
+    /// <summary>
+    /// Gets an AI-generated reaction line when a configured keyword trigger fires.
+    /// Used by KeywordTriggerService's AvatarCommentAction dispatch.
+    /// Returns null if AI is unavailable (caller is expected to use a canned phrase).
+    /// </summary>
+    public async Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null)
+    {
+        if (!IsAvailable) return null;
+
+        var systemPrompt = _bambiSprite.GetSystemPrompt();
+        var userInput = string.IsNullOrEmpty(promptTemplate)
+            ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
+            : promptTemplate.Replace("{keyword}", keyword);
+
+        return await GetAiResponseAsync(userInput, systemPrompt);
+    }
+
     private bool _isWorkingOnResponse;
     private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt)
     {

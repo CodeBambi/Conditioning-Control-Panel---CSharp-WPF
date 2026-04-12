@@ -36,6 +36,11 @@ namespace ConditioningControlPanel.Services.AIService
         /// Includes time context for the AI to reference.
         /// </summary>
         Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration);
+
+        /// <summary>
+        /// Gets an AI-generated reply for a triggered keyword.
+        /// </summary>
+        Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null);
         
     }
 }
