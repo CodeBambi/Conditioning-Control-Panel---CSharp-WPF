@@ -1275,11 +1275,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void PulseSpiralOverlay()
         {
-            // Skip if session engine is running - it controls overlays itself
-            // (Flash service running indicates the engine is active)
-            if (App.Flash?.IsRunning == true)
+            // Skip if AI session is running - it controls overlays itself
+            if (App.IsSessionRunning)
             {
-                App.Logger?.Information("AutonomyService: Spiral pulse skipped - session engine is running");
+                App.Logger?.Information("AutonomyService: Spiral pulse skipped - AI session is running");
                 return;
             }
 
@@ -1383,11 +1382,10 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void PulsePinkFilter()
         {
-            // Skip if session engine is running - it controls overlays itself
-            // (Flash service running indicates the engine is active)
-            if (App.Flash?.IsRunning == true)
+            // Skip if AI session is running - it controls overlays itself
+            if (App.IsSessionRunning)
             {
-                App.Logger?.Information("AutonomyService: Pink filter pulse skipped - session engine is running");
+                App.Logger?.Information("AutonomyService: Pink filter pulse skipped - AI session is running");
                 return;
             }
 
