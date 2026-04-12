@@ -191,6 +191,9 @@ namespace ConditioningControlPanel.Services
 
                 if (completedTask == timeoutTask)
                 {
+                    // Observe the dangling GetContextAsync to prevent unobserved task exception
+                    // when StopCallbackListener disposes the listener
+                    _ = getContextTask.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
                     throw new TimeoutException("Discord login timed out. Please try again.");
                 }
 

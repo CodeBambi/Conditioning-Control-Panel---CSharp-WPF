@@ -1398,6 +1398,10 @@ namespace ConditioningControlPanel
             // Load past quizzes list
             RefreshPastQuizzes();
 
+            // Initialize wallpaper override from settings
+            if (ChkWallpaperEnabled != null && App.Settings.Current.WallpaperEnabled)
+                ChkWallpaperEnabled.IsChecked = true;
+
             // Initialize pop quiz UI from settings
             if (ChkPopQuizEnabled != null)
                 ChkPopQuizEnabled.IsChecked = App.Settings.Current.PopQuizEnabled;
@@ -4170,6 +4174,44 @@ namespace ConditioningControlPanel
         private void BtnTestPopQuiz_Click(object sender, RoutedEventArgs e)
         {
             App.PopQuiz?.TestPopQuiz();
+        }
+
+        // ============ WALLPAPER OVERRIDE HANDLERS ============
+
+        private void ChkWallpaperEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current == null || App.Wallpaper == null) return;
+
+            var enabled = ChkWallpaperEnabled.IsChecked == true;
+            if (enabled)
+            {
+                if (!App.Wallpaper.Activate())
+                {
+                    // No images found — uncheck and notify
+                    ChkWallpaperEnabled.IsChecked = false;
+                    App.Settings.Current.WallpaperEnabled = false;
+                    MessageBox.Show(Loc.Get("msg_no_wallpaper_images"), "Wallpaper Override",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                TxtCurrentWallpaper.Text = App.Wallpaper.CurrentFilename;
+                TxtCurrentWallpaper.Visibility = Visibility.Visible;
+                BtnShuffleWallpaper.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                App.Wallpaper.Deactivate();
+                TxtCurrentWallpaper.Visibility = Visibility.Collapsed;
+                BtnShuffleWallpaper.Visibility = Visibility.Collapsed;
+            }
+            App.Settings.Current.WallpaperEnabled = enabled;
+        }
+
+        private void BtnShuffleWallpaper_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Wallpaper == null) return;
+            App.Wallpaper.Shuffle();
+            TxtCurrentWallpaper.Text = App.Wallpaper.CurrentFilename;
         }
 
         private void OnLockdownActivated()
@@ -13452,6 +13494,14 @@ namespace ConditioningControlPanel
                     _skipSiteToggleNavigation = true;
                     RbHypnoTube.IsChecked = true;
                 }
+                else if (!lowerUrl.Contains("bambicloud.com") && !lowerUrl.Contains("hypnotube.com"))
+                {
+                    // External URL — deselect both radio buttons so clicking either one
+                    // fires a Checked event to navigate back (RadioButton.Checked only fires
+                    // on false→true transitions, so re-clicking an already-checked button does nothing)
+                    RbBambiCloud.IsChecked = false;
+                    RbHypnoTube.IsChecked = false;
+                }
 
                 _browser.ZoomFactor = 0.5;
 
@@ -19350,6 +19400,10 @@ namespace ConditioningControlPanel
                 }
 
                 RefreshAssetTree();
+
+                // Refresh pack list so button states update (the event's pack instance
+                // may differ from the one in _availablePacks)
+                await RefreshPacksAsync();
             });
         }
 
