@@ -5,7 +5,7 @@
   "description": "\"good boy\", \"sit\", \"stay\" — clicker + praise",
   "longDescription": "Turns common pet-play praise words into positive reinforcement. The clicker is the conditioned cue, treats are the jackpot, and the collar is a soft ownership reminder. Pairs naturally with the Screen OCR source so she catches what you're reading, not just what you type.",
   "author": "Built-in",
-  "version": 3,
+  "version": 4,
   "isBuiltIn": true,
   "requiresAi": false,
   "avatarPromptTemplate": "You're her puppy owner/trainer. She just said or read the word '{keyword}'. Praise or cue her, in character, in one short sentence.",
@@ -41,7 +41,7 @@
       "cooldownSeconds": 20,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.mp3", "volume": 70, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "She just earned a 'good boy'. Praise her warmly in character, one short line — she's been a very good puppy.", "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
         { "type": "Highlight" },
         { "type": "Haptic", "intensity": 0.3 },
@@ -56,7 +56,7 @@
       "cooldownSeconds": 20,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.mp3", "volume": 70, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "She just earned a 'good girl'. Praise her warmly in character, one short line — she's been a very good puppy.", "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
         { "type": "Highlight" },
         { "type": "Haptic", "intensity": 0.3 },
@@ -71,7 +71,7 @@
       "cooldownSeconds": 30,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 60, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.mp3", "volume": 60, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "The word 'sit' just appeared. Give her a short, firm sit cue in character — calm and certain, like a trainer.", "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
@@ -84,7 +84,7 @@
       "cooldownSeconds": 30,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 60, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.mp3", "volume": 60, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "The word 'stay' just appeared. Tell her to hold still, in character, one quiet line — she's a pet learning patience.", "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
@@ -97,7 +97,7 @@
       "cooldownSeconds": 45,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 60, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.mp3", "volume": 60, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "The word 'fetch' just appeared. Give her a playful fetch cue in character, one short line — make her want to chase.", "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
         { "type": "Highlight" }
       ]
@@ -110,7 +110,7 @@
       "cooldownSeconds": 60,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 80, "playCount": 2, "delayBetweenMs": 150, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.mp3", "volume": 80, "playCount": 2, "delayBetweenMs": 150, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "Jackpot — the word 'treat' just appeared. Lavish her with happy praise in character, one warm line, like she just earned the best reward.", "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
         { "type": "Highlight" },
         { "type": "Haptic", "intensity": 0.5 },
@@ -125,7 +125,7 @@
       "cooldownSeconds": 60,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.mp3", "volume": 70, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "She just thought about being 'obedient'. Reinforce that identity in character, one short line — soft, approving, possessive.", "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
         { "type": "Highlight" },
         { "type": "AddXp", "amount": 10 }
@@ -139,7 +139,7 @@
       "cooldownSeconds": 90,
       "visualEffect": "SubliminalFlash",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.wav", "volume": 60, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/clicker.mp3", "volume": 60, "playCount": 1, "duckSystemAudio": true },
         { "type": "VisualEffect", "effect": "SubliminalFlash" },
         { "type": "AvatarComment", "promptTemplate": "She just read the word 'collar'. Remind her, softly and possessively, that she's owned — one short line in character.", "fallbackPhraseCategory": "PuppyPraise", "requireAiAvailable": false },
         { "type": "Highlight" },

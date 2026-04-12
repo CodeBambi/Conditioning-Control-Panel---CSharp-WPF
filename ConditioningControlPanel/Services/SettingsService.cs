@@ -233,6 +233,26 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // Migration: drop the retired "builtin.testlab" preset if it's still
+                // stored from a prior version. Also strips its cloned triggers and
+                // any canned phrases it injected so nothing ghosts around in the UI.
+                const string RetiredTestLabId = "builtin.testlab";
+                var stored = settings.KeywordTriggerPresets
+                    .FirstOrDefault(p => p.Id == RetiredTestLabId);
+                if (stored != null)
+                {
+                    var triggerPrefix = "preset:" + RetiredTestLabId + ":";
+                    settings.KeywordTriggers.RemoveAll(t =>
+                        t.Id?.StartsWith(triggerPrefix, StringComparison.Ordinal) == true);
+
+                    var phrasePrefix = "preset:" + RetiredTestLabId + ":phrase:";
+                    settings.CustomCompanionPhrases.RemoveAll(p =>
+                        p.Id?.StartsWith(phrasePrefix, StringComparison.Ordinal) == true);
+
+                    settings.KeywordTriggerPresets.Remove(stored);
+                    App.Logger?.Information("MergeBuiltInAwarenessPresets: removed retired {Id}", RetiredTestLabId);
+                }
+
                 var dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "AwarenessPresets");
                 if (!Directory.Exists(dir))
                 {

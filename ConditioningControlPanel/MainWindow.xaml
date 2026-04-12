@@ -1949,10 +1949,17 @@
                                     </Button>
                                     <Button x:Name="BtnSubAwareness" Style="{StaticResource ExclusivesSubmenuButton}"
                                             Click="BtnSubAwareness_Click">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="👁" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                            <TextBlock Text="{loc:Str tab_awareness}" Foreground="White" VerticalAlignment="Center"/>
-                                        </StackPanel>
+                                        <DockPanel LastChildFill="True">
+                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeAwareness"
+                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
+                                            </Border>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="👁" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{loc:Str tab_awareness}" Foreground="White" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DockPanel>
                                     </Button>
                                 </StackPanel>
                             </Border>
@@ -7675,6 +7682,7 @@
 
         <!-- Awareness Engine Tab -->
         <ContentControl x:Name="AwarenessTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+          <Grid>
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <Grid Margin="28,20,28,20" MaxWidth="980" HorizontalAlignment="Center">
                     <Grid.RowDefinitions>
@@ -7704,8 +7712,18 @@
                                        FontSize="12" VerticalAlignment="Center" Margin="0,0,14,0"/>
                             <CheckBox x:Name="ChkAwarenessMaster" Style="{StaticResource ToggleStyle}"
                                       VerticalAlignment="Center"
-                                      Checked="ChkAwarenessMaster_Changed" Unchecked="ChkAwarenessMaster_Changed"
-                                      ToolTip="Master switch: turns the Awareness Engine on or off"/>
+                                      Checked="ChkAwarenessMaster_Changed" Unchecked="ChkAwarenessMaster_Changed">
+                                <CheckBox.ToolTip>
+                                    <ToolTip>
+                                        <StackPanel MaxWidth="320">
+                                            <TextBlock Text="Awareness Engine — Master Switch" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                Turns the whole Awareness system on or off. When ON, enabled signal sources (OCR + keyboard) feed words into the trigger engine and matching keywords fire their actions in real time. When OFF, nothing detects anything — installed presets stay on disk but do nothing.
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </CheckBox.ToolTip>
+                            </CheckBox>
                         </StackPanel>
                     </Grid>
 
@@ -7748,7 +7766,10 @@
                                 <DataTemplate>
                                     <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
                                             CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="150"
-                                            Cursor="Hand" Tag="{Binding Id}" MouseLeftButtonUp="AwarenessPresetCard_Click">
+                                            Cursor="Hand" Tag="{Binding Id}" MouseLeftButtonUp="AwarenessPresetCard_Click"
+                                            ToolTip="{Binding LongDescription}"
+                                            ToolTipService.ShowDuration="20000"
+                                            ToolTipService.InitialShowDelay="400">
                                         <StackPanel>
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="{Binding Icon}" FontSize="26"/>
@@ -7786,6 +7807,19 @@
                                 <TextBlock Text="SIGNAL SOURCES" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
                                            Margin="0,0,0,10"/>
                                 <Grid Margin="0,4,0,8">
+                                    <Grid.ToolTip>
+                                        <ToolTip>
+                                            <StackPanel MaxWidth="340">
+                                                <TextBlock Text="Screen OCR" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                    Scans your screen every few seconds with optical character recognition and feeds detected words into the trigger engine. This is how she notices text inside other apps — Discord, browsers, image viewers, game UIs, anything visible.
+                                                </TextBlock>
+                                                <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                    Uses modest CPU/GPU during active sessions. Turn off if you don't want screen-based triggers or want to save power.
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Grid.ToolTip>
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBlock Text="🖵" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
                                         <StackPanel VerticalAlignment="Center">
@@ -7799,6 +7833,19 @@
                                               Checked="ChkAwarenessOcr_Changed" Unchecked="ChkAwarenessOcr_Changed"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
+                                    <Grid.ToolTip>
+                                        <ToolTip>
+                                            <StackPanel MaxWidth="340">
+                                                <TextBlock Text="Keyboard Capture" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                    Listens to your keystrokes and assembles a rolling buffer of recent typing. When you type a trigger keyword, it fires immediately — no OCR delay.
+                                                </TextBlock>
+                                                <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                    Only trigger words are acted on; nothing else is stored or logged. Fastest signal source. Turn off if you don't want typing-based triggers.
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Grid.ToolTip>
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBlock Text="⌨" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
                                         <StackPanel VerticalAlignment="Center">
@@ -7826,6 +7873,19 @@
                                 <CheckBox x:Name="ChkAwarenessIgnoreOwnUi"
                                           Foreground="White" FontSize="12" Margin="0,4,0,2"
                                           Checked="ChkAwarenessIgnoreOwnUi_Changed" Unchecked="ChkAwarenessIgnoreOwnUi_Changed">
+                                    <CheckBox.ToolTip>
+                                        <ToolTip>
+                                            <StackPanel MaxWidth="340">
+                                                <TextBlock Text="Ignore CCP's own windows" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                    OCR will skip words drawn by Control Panel itself — avatar speech bubbles, subliminal flash overlays, bouncing text, and the main window. Prevents Awareness from reacting to her own voice and creating feedback loops.
+                                                </TextBlock>
+                                                <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                    Strongly recommended ON. Only turn off if you're debugging why a specific overlay isn't being detected.
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </CheckBox.ToolTip>
                                     <TextBlock Text="Ignore CCP's own windows" FontWeight="SemiBold"/>
                                 </CheckBox>
                                 <TextBlock Text="OCR skips words inside Control Panel, avatar bubbles, and subliminal flashes — so she won't react to her own voice."
@@ -7833,6 +7893,19 @@
                                 <CheckBox x:Name="ChkAwarenessLoopProtection"
                                           Foreground="White" FontSize="12" Margin="0,4,0,2"
                                           Checked="ChkAwarenessLoopProtection_Changed" Unchecked="ChkAwarenessLoopProtection_Changed">
+                                    <CheckBox.ToolTip>
+                                        <ToolTip>
+                                            <StackPanel MaxWidth="340">
+                                                <TextBlock Text="Loop protection" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                    When a trigger fires, its keyword is silenced for a few seconds. Stops a single mention on screen from firing multiple times in quick succession if OCR keeps catching it.
+                                                </TextBlock>
+                                                <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                    Also works across sources — a keyword fired via Keyboard is muted for OCR detection too, and vice versa.
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </CheckBox.ToolTip>
                                     <TextBlock Text="Loop protection" FontWeight="SemiBold"/>
                                 </CheckBox>
                                 <TextBlock Text="After a trigger fires, its keyword is muted for a few seconds so the reaction can't re-arm it."
@@ -7843,41 +7916,61 @@
                                 <CheckBox x:Name="ChkAwarenessHighlight"
                                           Foreground="White" FontSize="12" Margin="0,4,0,2"
                                           Checked="ChkAwarenessHighlight_Changed" Unchecked="ChkAwarenessHighlight_Changed">
+                                    <CheckBox.ToolTip>
+                                        <ToolTip>
+                                            <StackPanel MaxWidth="340">
+                                                <TextBlock Text="Highlight matched words on screen" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                    Draws a glowing rectangle around every OCR-detected trigger word on your screen, just long enough to see it catch your eye. Gives you a visual confirmation that Awareness is watching.
+                                                </TextBlock>
+                                                <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                    Only shows for OCR detections, not keyboard triggers. Pick the glow color from the swatches below.
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </CheckBox.ToolTip>
                                     <TextBlock Text="Highlight matched words on screen" FontWeight="SemiBold"/>
                                 </CheckBox>
                                 <TextBlock Text="Draws a glowing box around OCR-detected trigger words. Pick the glow color below."
                                            Foreground="{DynamicResource TextMutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="22,0,0,6"/>
-                                <StackPanel x:Name="AwarenessHighlightColorPanel" Orientation="Horizontal" Margin="22,0,0,0">
+                                <StackPanel x:Name="AwarenessHighlightColorPanel" Orientation="Horizontal" Margin="22,0,0,0"
+                                            ToolTip="Click a swatch to pick the highlight glow color, or type a custom hex in the box.">
                                     <TextBlock Text="Color:" Foreground="#A0A0B8" FontSize="10"
                                                VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     <Border x:Name="SwatchHighlightPink" Width="22" Height="22" CornerRadius="3"
                                             Background="#FF69B4" BorderBrush="#3A3A5A" BorderThickness="1"
                                             Margin="0,0,4,0" Cursor="Hand" Tag="#FF69B4"
+                                            ToolTip="Hot pink — CCP default"
                                             MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
                                     <Border x:Name="SwatchHighlightCyan" Width="22" Height="22" CornerRadius="3"
                                             Background="#00E5FF" BorderBrush="#3A3A5A" BorderThickness="1"
                                             Margin="0,0,4,0" Cursor="Hand" Tag="#00E5FF"
+                                            ToolTip="Electric cyan — max contrast on dark UIs"
                                             MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
                                     <Border x:Name="SwatchHighlightLime" Width="22" Height="22" CornerRadius="3"
                                             Background="#9DFF00" BorderBrush="#3A3A5A" BorderThickness="1"
                                             Margin="0,0,4,0" Cursor="Hand" Tag="#9DFF00"
+                                            ToolTip="Lime — visible on pink/purple themes"
                                             MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
                                     <Border x:Name="SwatchHighlightOrange" Width="22" Height="22" CornerRadius="3"
                                             Background="#FF8A00" BorderBrush="#3A3A5A" BorderThickness="1"
                                             Margin="0,0,4,0" Cursor="Hand" Tag="#FF8A00"
+                                            ToolTip="Amber orange — warm alternative"
                                             MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
                                     <Border x:Name="SwatchHighlightViolet" Width="22" Height="22" CornerRadius="3"
                                             Background="#B388FF" BorderBrush="#3A3A5A" BorderThickness="1"
                                             Margin="0,0,4,0" Cursor="Hand" Tag="#B388FF"
+                                            ToolTip="Soft violet — matches SissyHypno theme"
                                             MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
                                     <Border x:Name="SwatchHighlightWhite" Width="22" Height="22" CornerRadius="3"
                                             Background="#FFFFFF" BorderBrush="#3A3A5A" BorderThickness="1"
                                             Margin="0,0,8,0" Cursor="Hand" Tag="#FFFFFF"
+                                            ToolTip="Pure white — most neutral option"
                                             MouseLeftButtonDown="AwarenessHighlightSwatch_Click"/>
                                     <TextBox x:Name="TxtAwarenessHighlightHex" Width="74" FontSize="10"
                                              Background="#1E1E32" Foreground="White" BorderBrush="#3A3A5A"
                                              Padding="4,3" VerticalAlignment="Center"
-                                             ToolTip="Custom hex color (e.g. #FF00AA)"
+                                             ToolTip="Custom hex color (e.g. #FF00AA). Type and press Enter or Tab to apply."
                                              LostFocus="TxtAwarenessHighlightHex_LostFocus"
                                              KeyDown="TxtAwarenessHighlightHex_KeyDown"/>
                                 </StackPanel>
@@ -7885,14 +7978,28 @@
                                           Content="Visible in screen capture / streams"
                                           Foreground="#A0A0A0" FontSize="10" Margin="22,6,0,0"
                                           Checked="ChkAwarenessHighlightVisibleInCapture_Changed"
-                                          Unchecked="ChkAwarenessHighlightVisibleInCapture_Changed"
-                                          ToolTip="Turn off to hide highlights from OBS / recordings (default). Turn on if highlights don't show on-screen at all — some GPU drivers hide WDA_EXCLUDEFROMCAPTURE windows."/>
+                                          Unchecked="ChkAwarenessHighlightVisibleInCapture_Changed">
+                                    <CheckBox.ToolTip>
+                                        <ToolTip>
+                                            <StackPanel MaxWidth="340">
+                                                <TextBlock Text="Visible in screen capture" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                    Off (default): highlights render on your desktop but are excluded from screen capture via WDA_EXCLUDEFROMCAPTURE, so OBS, Discord, and screen recordings don't see them.
+                                                </TextBlock>
+                                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White" Margin="0,6,0,0">
+                                                    On: lets the highlights show up in recordings — useful for streaming or demos. Also a fallback if your GPU driver is one of the few that hides excluded windows from the desktop itself.
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </CheckBox.ToolTip>
+                                </CheckBox>
                             </StackPanel>
                         </Border>
                     </Grid>
 
                     <!-- ==================== ADVANCED LINK ==================== -->
-                    <Grid Grid.Row="4" Margin="0,0,0,0">
+                    <Grid Grid.Row="4" Margin="0,0,0,0"
+                          ToolTip="Opens a detailed editor for the currently installed preset where you can add/remove keywords, tweak per-trigger actions, and edit phrase pools. If no preset is installed yet, this link opens the App Info &amp; Data popup instead.">
                         <TextBlock HorizontalAlignment="Center">
                             <Hyperlink x:Name="LnkAwarenessAdvanced"
                                        Foreground="{DynamicResource PinkBrush}"
@@ -7904,6 +8011,23 @@
                     </Grid>
                 </Grid>
             </ScrollViewer>
+
+            <!-- Translucent gating overlay (only for free users) -->
+            <Border x:Name="AwarenessGate" Visibility="Collapsed"
+                    Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
+                    CornerRadius="10" IsHitTestVisible="True">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
+                               FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                    <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
+                               Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                    <Button Content="{loc:Str gate_unlock_with_patreon}"
+                            Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                            Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+                </StackPanel>
+            </Border>
+          </Grid>
         </ContentControl>
 
         <!-- Remote Control Tab — Patreon premium feature, full redesign with QR pairing -->
@@ -8222,19 +8346,19 @@
                                         <RowDefinition Height="10"/>
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
-                                    <StackPanel Grid.Row="0" Grid.Column="0">
+                                    <StackPanel Grid.Row="0" Grid.Column="0" ToolTip="{loc:Str tooltip_autonomy_interval}">
                                         <Grid><TextBlock Text="{loc:Str setting_interval}" Foreground="#AAA" FontSize="12"/><TextBlock x:Name="TxtAutonomyInterval" Text="{loc:Str label_60s}" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
                                         <Slider x:Name="SliderAutonomyInterval" Minimum="30" Maximum="300" Value="60" Height="22" ValueChanged="SliderAutonomyInterval_Changed"/>
                                     </StackPanel>
-                                    <StackPanel Grid.Row="0" Grid.Column="2">
+                                    <StackPanel Grid.Row="0" Grid.Column="2" ToolTip="{loc:Str tooltip_autonomy_cooldown}">
                                         <Grid><TextBlock Text="{loc:Str label_cooldown}" Foreground="#AAA" FontSize="12"/><TextBlock x:Name="TxtAutonomyCooldown" Text="{loc:Str label_30s}" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
                                         <Slider x:Name="SliderAutonomyCooldown" Minimum="10" Maximum="300" Value="30" Height="22" ValueChanged="SliderAutonomyCooldown_Changed"/>
                                     </StackPanel>
-                                    <StackPanel Grid.Row="2" Grid.Column="0">
+                                    <StackPanel Grid.Row="2" Grid.Column="0" ToolTip="{loc:Str tooltip_autonomy_intensity}">
                                         <Grid><TextBlock Text="{loc:Str setting_intensity}" Foreground="#AAA" FontSize="12"/><TextBlock x:Name="TxtAutonomyIntensity" Text="5" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
                                         <Slider x:Name="SliderAutonomyIntensity" Minimum="1" Maximum="10" Value="5" Height="22" ValueChanged="SliderAutonomyIntensity_Changed"/>
                                     </StackPanel>
-                                    <StackPanel Grid.Row="2" Grid.Column="2">
+                                    <StackPanel Grid.Row="2" Grid.Column="2" ToolTip="{loc:Str tooltip_autonomy_announce}">
                                         <Grid><TextBlock Text="{loc:Str label_announce}" Foreground="#AAA" FontSize="12"/><TextBlock x:Name="TxtAutonomyAnnounce" Text="50%" Foreground="{DynamicResource PinkBrush}" FontSize="12" HorizontalAlignment="Right"/></Grid>
                                         <Slider x:Name="SliderAutonomyAnnounce" Minimum="0" Maximum="100" Value="50" Height="22" ValueChanged="SliderAutonomyAnnounce_Changed"/>
                                     </StackPanel>
@@ -8256,9 +8380,9 @@
                                         <ColumnDefinition Width="16"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Grid Grid.Column="0" Margin="0,2"><TextBlock Text="{loc:Str label_idle}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyIdle" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyIdle_Changed" Unchecked="ChkAutonomyIdle_Changed"/></Grid>
-                                    <Grid Grid.Column="2" Margin="0,2"><TextBlock Text="{loc:Str label_random_2}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyRandom" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyRandom_Changed" Unchecked="ChkAutonomyRandom_Changed"/></Grid>
-                                    <Grid Grid.Column="4" Margin="0,2"><TextBlock Text="{loc:Str label_time_aware}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyTimeAware" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyTimeAware_Changed" Unchecked="ChkAutonomyTimeAware_Changed"/></Grid>
+                                    <Grid Grid.Column="0" Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_idle}"><TextBlock Text="{loc:Str label_idle}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyIdle" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyIdle_Changed" Unchecked="ChkAutonomyIdle_Changed"/></Grid>
+                                    <Grid Grid.Column="2" Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_random}"><TextBlock Text="{loc:Str label_random_2}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyRandom" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyRandom_Changed" Unchecked="ChkAutonomyRandom_Changed"/></Grid>
+                                    <Grid Grid.Column="4" Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_time_aware}"><TextBlock Text="{loc:Str label_time_aware}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyTimeAware" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyTimeAware_Changed" Unchecked="ChkAutonomyTimeAware_Changed"/></Grid>
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -8284,19 +8408,19 @@
                                     </Grid.ColumnDefinitions>
                                     <!-- Basic column -->
                                     <StackPanel Grid.Column="0">
-                                        <Grid Margin="0,2"><TextBlock x:Name="TxtAutoFlash" Text="{loc:Str tab_flashes}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                        <Grid Margin="0,2"><TextBlock x:Name="TxtAutoVideo" Text="{loc:Str tab_videos}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                        <Grid Margin="0,2"><TextBlock Text="{loc:Str label_web_videos}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center" ToolTip="{loc:Str tooltip_auto_plays_hypnotube_videos_fullscreen}"/><CheckBox x:Name="ChkAutonomyWebVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                        <Grid Margin="0,2"><TextBlock x:Name="TxtAutoSubliminal" Text="{loc:Str tab_subliminals}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                        <Grid Margin="0,2"><TextBlock Text="{loc:Str label_comments}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyComment" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                        <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_flash}"><TextBlock x:Name="TxtAutoFlash" Text="{loc:Str tab_flashes}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyFlash" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                        <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_video}"><TextBlock x:Name="TxtAutoVideo" Text="{loc:Str tab_videos}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                        <Grid Margin="0,2" ToolTip="{loc:Str tooltip_auto_plays_hypnotube_videos_fullscreen}"><TextBlock Text="{loc:Str label_web_videos}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyWebVideo" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                        <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_subliminal}"><TextBlock x:Name="TxtAutoSubliminal" Text="{loc:Str tab_subliminals}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomySubliminal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                        <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_comment}"><TextBlock Text="{loc:Str label_comments}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyComment" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                     </StackPanel>
                                     <!-- Advanced column -->
                                     <StackPanel Grid.Column="2">
-                                        <Grid Margin="0,2"><TextBlock x:Name="TxtAutoBubbles" Text="{loc:Str label_bubbles}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyBubbles" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                        <Grid Margin="0,2"><TextBlock x:Name="TxtAutoPinkFilter" Text="{loc:Str label_pink_filter_2}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyPinkFilter" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                        <Grid Margin="0,2"><TextBlock x:Name="TxtAutoLockCards" Text="{loc:Str label_lock_cards}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyLockCard" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                        <Grid Margin="0,2"><TextBlock x:Name="TxtAutoBouncing" Text="{loc:Str label_bouncing}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyBouncingText" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
-                                        <Grid Margin="0,2"><TextBlock x:Name="TxtAutoMindwipe" Text="{loc:Str label_mindwipe}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyMindWipe" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                        <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_bubbles}"><TextBlock x:Name="TxtAutoBubbles" Text="{loc:Str label_bubbles}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyBubbles" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                        <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_pink_filter}"><TextBlock x:Name="TxtAutoPinkFilter" Text="{loc:Str label_pink_filter_2}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyPinkFilter" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                        <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_lock_cards}"><TextBlock x:Name="TxtAutoLockCards" Text="{loc:Str label_lock_cards}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyLockCard" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                        <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_bouncing_text}"><TextBlock x:Name="TxtAutoBouncing" Text="{loc:Str label_bouncing}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyBouncingText" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
+                                        <Grid Margin="0,2" ToolTip="{loc:Str tooltip_autonomy_mind_wipe}"><TextBlock x:Name="TxtAutoMindwipe" Text="{loc:Str label_mindwipe}" FontSize="12" Foreground="#CCC" VerticalAlignment="Center"/><CheckBox x:Name="ChkAutonomyMindWipe" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" Checked="ChkAutonomyBehavior_Changed" Unchecked="ChkAutonomyBehavior_Changed"/></Grid>
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>

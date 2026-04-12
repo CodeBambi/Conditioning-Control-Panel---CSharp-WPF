@@ -5,7 +5,7 @@
   "description": "Temptation words → tease, scold, denial reinforcement",
   "longDescription": "She notices when you slip toward temptation. Detects edge/cum/orgasm/tease/denial language with inflection-aware patterns, comments in character, and is wired up for Chaster integration (the time-add action lights up automatically when the integration lands).",
   "author": "Built-in",
-  "version": 3,
+  "version": 4,
   "isBuiltIn": true,
   "requiresAi": true,
   "avatarPromptTemplate": "You're her strict keyholder. She just encountered the word '{keyword}'. Tease or scold her, in character, one sentence.",
@@ -41,7 +41,7 @@
       "cooldownSeconds": 45,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 75, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.mp3", "volume": 75, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "She's flirting with edging. Tease her in character, one line — playful but firm, the keyholder catching her.", "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
         { "type": "Highlight" },
         { "type": "ChasterAddTime", "minutes": 5 }
@@ -55,7 +55,7 @@
       "cooldownSeconds": 60,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 80, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.mp3", "volume": 80, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "She's thinking about cumming. Remind her she's locked, in character, one sentence — ownership, not anger.", "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
         { "type": "Highlight" },
         { "type": "ChasterAddTime", "minutes": 10 }
@@ -69,7 +69,7 @@
       "cooldownSeconds": 120,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 75, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.mp3", "volume": 75, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "She just read the word 'porn'. Scold her gently in character, one line — disapproving but amused, like a keyholder catching a slip.", "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
         { "type": "Highlight" },
         { "type": "ChasterAddTime", "minutes": 5 }
@@ -83,7 +83,7 @@
       "cooldownSeconds": 60,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 80, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.mp3", "volume": 80, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "She just thought about orgasm. Remind her of denial in character, one line — calm, possessive, certain.", "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
         { "type": "Highlight" },
         { "type": "ChasterAddTime", "minutes": 10 }
@@ -97,7 +97,7 @@
       "cooldownSeconds": 300,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.mp3", "volume": 70, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "She just thought about 'release'. Remind her the key belongs to you, one line, in character — quiet authority.", "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
         { "type": "Highlight" }
       ]
@@ -110,7 +110,7 @@
       "cooldownSeconds": 60,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 65, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.mp3", "volume": 65, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "She just read about teasing. Acknowledge it with a flirty, smug line in character — the keyholder enjoying her frustration.", "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
         { "type": "Highlight" },
         { "type": "Haptic", "intensity": 0.3 }
@@ -124,7 +124,7 @@
       "cooldownSeconds": 90,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.mp3", "volume": 70, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "She just acknowledged being 'denied'. Reward that acceptance in character, one line — soft, approving, possessive. She's being a good locked pet.", "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
         { "type": "AddXp", "amount": 8 },
         { "type": "Highlight" }
@@ -138,7 +138,7 @@
       "cooldownSeconds": 60,
       "visualEffect": "HighlightOnly",
       "actions": [
-        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.wav", "volume": 70, "playCount": 1, "duckSystemAudio": true },
+        { "type": "PlayAudio", "filePath": "AwarenessPresets/audio/lock-click.mp3", "volume": 70, "playCount": 1, "duckSystemAudio": true },
         { "type": "AvatarComment", "promptTemplate": "She just admitted she's horny. Acknowledge it smugly in character, one line — the keyholder enjoying her need.", "fallbackPhraseCategory": "ChastityShame", "requireAiAvailable": true },
         { "type": "Highlight" },
         { "type": "Haptic", "intensity": 0.4 }

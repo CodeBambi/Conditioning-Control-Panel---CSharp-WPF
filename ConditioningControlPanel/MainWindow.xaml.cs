@@ -2987,6 +2987,7 @@ namespace ConditioningControlPanel
             if (SubBadgeRemoteControl != null) SubBadgeRemoteControl.Visibility = badgeVis;
             if (SubBadgeBambiTakeover != null) SubBadgeBambiTakeover.Visibility = badgeVis;
             if (SubBadgeHaptics != null) SubBadgeHaptics.Visibility = badgeVis;
+            if (SubBadgeAwareness != null) SubBadgeAwareness.Visibility = badgeVis;
         }
 
         /// <summary>
@@ -5506,6 +5507,7 @@ namespace ConditioningControlPanel
             RefreshPremiumGate(BambiTakeoverGate);
             RefreshPremiumGate(HapticsGate);
             RefreshPremiumGate(RemoteControlGate);
+            RefreshPremiumGate(AwarenessGate);
 
             // Update AI connection status
             if (TxtAiStatus != null)
@@ -7536,6 +7538,9 @@ namespace ConditioningControlPanel
         /// </summary>
         private void SyncAwarenessTabUI()
         {
+            // Toggle the premium gating overlay based on current subscription state.
+            RefreshPremiumGate(AwarenessGate);
+
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
