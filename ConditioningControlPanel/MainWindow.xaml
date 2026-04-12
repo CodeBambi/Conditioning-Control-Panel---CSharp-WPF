@@ -686,7 +686,7 @@
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="10">
                             <Border.Effect>
-                                <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.15"/>
+                                <DropShadowEffect Color="#FFFF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.15"/>
                             </Border.Effect>
                             <ContentPresenter/>
                         </Border>

@@ -613,12 +613,19 @@ namespace ConditioningControlPanel.Services
                 var nextRandomTick = _randomTimer?.IsEnabled == true ? "active" : "STOPPED";
                 var nextIdleTick = _idleTimer?.IsEnabled == true ? "active" : "STOPPED";
 
+                var timeSinceLast = (DateTime.Now - _lastActionTime).TotalSeconds;
+                var cooldownSec = settings?.AutonomyCooldownSeconds ?? 0;
+                var timeCooldownActive = timeSinceLast < cooldownSec;
+
                 App.Logger?.Information(
-                    "AutonomyService HEARTBEAT: Enabled={Enabled}, RandomTimer={Random}, IdleTimer={Idle}, Cooldown={Cooldown}, QueueBusy={Busy}",
+                    "AutonomyService HEARTBEAT: Enabled={Enabled}, RandomTimer={Random}, IdleTimer={Idle}, Cooldown={Cooldown}, TimeCooldown={TimeCooldown} ({Elapsed:F0}s/{Required}s), QueueBusy={Busy}",
                     _isEnabled,
                     nextRandomTick,
                     nextIdleTick,
                     _isOnCooldown,
+                    timeCooldownActive,
+                    timeSinceLast,
+                    cooldownSec,
                     App.InteractionQueue?.IsBusy == true);
             };
             _heartbeatTimer.Start();
@@ -745,12 +752,18 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
-            // Check cooldown
+            // Check time-based cooldown
             var settings = App.Settings?.Current;
             if (settings == null) return false;
 
             var timeSinceLast = (DateTime.Now - _lastActionTime).TotalSeconds;
-            return timeSinceLast >= settings.AutonomyCooldownSeconds;
+            if (timeSinceLast < settings.AutonomyCooldownSeconds)
+            {
+                App.Logger?.Debug("AutonomyService: CanTakeAction=false - time cooldown ({Elapsed:F0}s / {Required}s)",
+                    timeSinceLast, settings.AutonomyCooldownSeconds);
+                return false;
+            }
+            return true;
         }
 
         /// <summary>
