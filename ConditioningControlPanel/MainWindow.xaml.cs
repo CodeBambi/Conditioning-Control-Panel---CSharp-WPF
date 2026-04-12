@@ -1453,9 +1453,17 @@ namespace ConditioningControlPanel
             // Initialize Avatar Tube Window
             InitializeAvatarTube();
 
-            // Initialize Discord Rich Presence checkboxes (both locations)
-            ChkDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
-            ChkQuickDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
+            // Initialize Discord Rich Presence checkboxes (both locations).
+            // Guard with _isLoading so the Changed handler doesn't fire the
+            // "Discord Not Linked" MessageBox during startup for users whose
+            // saved setting is enabled but who haven't linked Discord.
+            _isLoading = true;
+            try
+            {
+                ChkDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
+                ChkQuickDiscordRichPresence.IsChecked = App.Settings.Current.DiscordRichPresenceEnabled;
+            }
+            finally { _isLoading = false; }
 
             // Initialize Audio Sync checkbox and sliders
             ChkHapticAudioSync.IsChecked = App.Settings.Current.Haptics.AudioSync.Enabled;
@@ -8277,7 +8285,7 @@ namespace ConditioningControlPanel
                           $"All media content shown comes from YOUR local files and settings.\n" +
                           $"You assume full responsibility for this interaction.\n" +
                           $"You can stop the session at ANY time by clicking \"Stop Session\" or closing the app.\n" +
-                          $"The session code expires after 4 hours automatically.";
+                          $"The session stays active as long as the app is running. If the app closes without stopping the session, it expires within 4 hours.";
 
             var confirmed = WarningDialog.ShowDoubleWarning(this,
                 "Remote Control",
@@ -8349,9 +8357,9 @@ namespace ConditioningControlPanel
         private void BtnCopyRemoteLink_Click(object sender, RoutedEventArgs e)
         {
             var code = App.RemoteControl?.SessionCode;
-            var url = "https://cclabs.app/remote/";
-            if (!string.IsNullOrEmpty(code))
-                url += $"?code={code}";
+            var url = !string.IsNullOrEmpty(code)
+                ? BuildRemotePairingUrl(code)
+                : "https://cclabs.app/remote/";
             try
             {
                 System.Windows.Clipboard.SetText(url);
@@ -8405,9 +8413,18 @@ namespace ConditioningControlPanel
                 UpdateStartButtonForRemoteControl(connected);
 
                 if (connected)
+                {
+                    // Stop any in-progress local session so the remote controller
+                    // has clean state to drive.
+                    try { _sessionEngine?.StopSession(completed: false); } catch { }
+
                     ShowRemoteControlOverlay();
+                    NotifyRemoteControllerJoined();
+                }
                 else
+                {
                     HideRemoteControlOverlay();
+                }
             });
         }
 
@@ -8659,10 +8676,15 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Generates the pairing URL for the QR code from the current session code.
+        /// Uses a hash fragment so the PIN never appears in server access logs or
+        /// Referer headers. The web page parses the fragment and auto-connects.
         /// </summary>
         private string BuildRemotePairingUrl(string code)
         {
-            return $"https://cclabs.app/remote/?code={code}";
+            var pin = App.RemoteControl?.ConnectPin;
+            if (!string.IsNullOrEmpty(pin))
+                return $"https://cclabs.app/remote/#code={code}&pin={pin}";
+            return $"https://cclabs.app/remote/#code={code}";
         }
 
         /// <summary>
@@ -8926,6 +8948,47 @@ namespace ConditioningControlPanel
         {
             _trayIcon?.MinimizeToTray();
             _trayIcon?.ShowNotification("Remote Control", "Session active — minimized to tray.", System.Windows.Forms.ToolTipIcon.Info);
+        }
+
+        /// <summary>
+        /// Alerts the host that a remote controller just joined. Always pops a
+        /// tray balloon; if the window is minimized or hidden, also flashes the
+        /// taskbar icon and restores the window so the lock overlay becomes visible.
+        /// </summary>
+        private void NotifyRemoteControllerJoined()
+        {
+            var wasMinimized = this.WindowState == WindowState.Minimized || !this.IsVisible;
+
+            // Always show a tray balloon — it's a useful cue even when visible.
+            try
+            {
+                _trayIcon?.ShowNotification(
+                    Loc.Get("title_remote_controller_joined"),
+                    Loc.Get("msg_remote_controller_joined"),
+                    System.Windows.Forms.ToolTipIcon.Info);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to show remote controller tray balloon: {Error}", ex.Message);
+            }
+
+            if (wasMinimized)
+            {
+                // Flash the taskbar button so the host notices even with notifications off.
+                try { Helpers.FlashWindowHelper.Flash(this); } catch { }
+
+                // Auto-restore so the lock overlay is visible.
+                try
+                {
+                    this.Show();
+                    this.WindowState = WindowState.Normal;
+                    this.Activate();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Failed to restore window on remote connect: {Error}", ex.Message);
+                }
+            }
         }
 
         internal void RestoreFromTrayForRemote()
