@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Features
 {
     public partial class BubbleCountFeatureControl : UserControl
     {
-        private bool _isLoading;
+        private bool _isLoading = true;
 
         public BubbleCountFeatureControl()
         {
@@ -69,8 +69,18 @@ namespace ConditioningControlPanel.Features
             if (_isLoading) return;
             var s = App.Settings?.Current;
             if (s == null) return;
-            s.BubbleCountEnabled = ChkEnable.IsChecked ?? false;
+            var on = ChkEnable.IsChecked ?? false;
+            s.BubbleCountEnabled = on;
             App.Settings?.Save();
+
+            // Live-apply: start/stop bubble count service if engine is running
+            if (App.IsSessionRunning)
+            {
+                if (on)
+                    App.BubbleCount?.Start();
+                else
+                    App.BubbleCount?.Stop();
+            }
         }
 
         private void SliderFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

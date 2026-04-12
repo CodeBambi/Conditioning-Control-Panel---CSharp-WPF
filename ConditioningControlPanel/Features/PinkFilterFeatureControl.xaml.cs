@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Features
 {
     public partial class PinkFilterFeatureControl : UserControl
     {
-        private bool _isLoading;
+        private bool _isLoading = true;
 
         public PinkFilterFeatureControl()
         {

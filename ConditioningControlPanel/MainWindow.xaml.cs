@@ -11710,14 +11710,25 @@ namespace ConditioningControlPanel
 
         // --- velvet-mosaic: dashboard feature card click dispatcher ----------
 
+        private Features.FeaturePopupWindow? _activeFeaturePopup;
+
         private void ShowFeaturePopup(System.Windows.Controls.UserControl content, string title,
                                       System.Windows.Media.ImageSource? icon = null, string? glyph = null)
         {
+            // Close any existing popup before opening a new one
+            _activeFeaturePopup?.Close();
+
             var popup = new Features.FeaturePopupWindow(content, title, icon, glyph)
             {
                 Owner = this
             };
-            popup.ShowDialog();
+            popup.Closed += (_, __) =>
+            {
+                if (_activeFeaturePopup == popup)
+                    _activeFeaturePopup = null;
+            };
+            _activeFeaturePopup = popup;
+            popup.Show(); // Non-modal so bubbles and other interactions keep working
         }
 
         private void CardFlash_Click(object sender, RoutedEventArgs e) =>
@@ -11801,6 +11812,9 @@ namespace ConditioningControlPanel
                 App.Logger?.Warning(ex, "AppInfo: failed to attach account sections pre-show");
             }
 
+            // Close any existing popup before opening a new one
+            _activeFeaturePopup?.Close();
+
             var popup = new Features.FeaturePopupWindow(
                 control,
                 Localization.Loc.Get("label_app_info"),
@@ -11814,6 +11828,8 @@ namespace ConditioningControlPanel
             // handlers that read their Text/Visibility keep working.
             popup.Closed += (_, __) =>
             {
+                if (_activeFeaturePopup == popup)
+                    _activeFeaturePopup = null;
                 try { ReattachAccountSections(); }
                 catch (Exception ex)
                 {
@@ -11821,7 +11837,8 @@ namespace ConditioningControlPanel
                 }
             };
 
-            popup.ShowDialog();
+            _activeFeaturePopup = popup;
+            popup.Show();
         }
 
         private void VelvetBtnRamp_Click(object sender, RoutedEventArgs e) =>

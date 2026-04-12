@@ -10,7 +10,7 @@ namespace ConditioningControlPanel.Features
 {
     public partial class SystemFeatureControl : UserControl
     {
-        private bool _isLoading;
+        private bool _isLoading = true;
 
         public SystemFeatureControl()
         {

@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Features
 {
     public partial class FlashFeatureControl : UserControl
     {
-        private bool _isLoading;
+        private bool _isLoading = true;
 
         public FlashFeatureControl()
         {
@@ -72,10 +72,18 @@ namespace ConditioningControlPanel.Features
             if (_isLoading) return;
             var s = App.Settings?.Current;
             if (s == null) return;
-            s.FlashEnabled = ChkEnable.IsChecked ?? false;
+            var on = ChkEnable.IsChecked ?? false;
+            s.FlashEnabled = on;
             App.Settings?.Save();
-            // Note: Start/Stop of App.Flash is handled by MainWindow when the
-            // engine is running. The popup just persists the setting.
+
+            // Live-apply: start/stop flash service if engine is running
+            if (App.IsSessionRunning)
+            {
+                if (on)
+                    App.Flash?.Start();
+                else
+                    App.Flash?.Stop();
+            }
         }
 
         private void SliderFrequency_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

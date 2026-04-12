@@ -9,7 +9,7 @@ namespace ConditioningControlPanel.Features
 {
     public partial class LockCardFeatureControl : UserControl
     {
-        private bool _isLoading;
+        private bool _isLoading = true; // Prevent XAML default values from overwriting settings during InitializeComponent
 
         public LockCardFeatureControl()
         {

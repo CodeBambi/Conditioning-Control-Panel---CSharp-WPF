@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Features
 {
     public partial class BouncingTextFeatureControl : UserControl
     {
-        private bool _isLoading;
+        private bool _isLoading = true;
 
         public BouncingTextFeatureControl()
         {
@@ -62,8 +62,18 @@ namespace ConditioningControlPanel.Features
             if (_isLoading) return;
             var s = App.Settings?.Current;
             if (s == null) return;
-            s.BouncingTextEnabled = ChkEnable.IsChecked ?? false;
+            var on = ChkEnable.IsChecked ?? false;
+            s.BouncingTextEnabled = on;
             App.Settings?.Save();
+
+            // Live-apply: start/stop bouncing text if engine is running
+            if (App.IsSessionRunning)
+            {
+                if (on)
+                    App.BouncingText?.Start();
+                else
+                    App.BouncingText?.Stop();
+            }
         }
 
         private void SliderSpeed_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
