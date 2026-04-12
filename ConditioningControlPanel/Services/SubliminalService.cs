@@ -33,6 +33,7 @@ namespace ConditioningControlPanel.Services
         private AudioFileReader? _audioFile;
 
         private bool _isRunning;
+        private bool _oneShotActive; // Allow one-shot display when service not running (remote control)
         private bool _disposed;
         private int _subliminalCount;
 
@@ -123,6 +124,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public void FlashSubliminal()
         {
+            if (!_isRunning) _oneShotActive = true; // Allow display from remote control
             var pool = App.Settings.Current.SubliminalPool;
             var activeTexts = pool.Where(kvp => kvp.Value).Select(kvp => kvp.Key).ToList();
             
@@ -178,6 +180,7 @@ namespace ConditioningControlPanel.Services
             text = text.Trim();
             if (text.Length > 200) text = text.Substring(0, 200);
             text = System.Text.RegularExpressions.Regex.Replace(text, "<[^>]*>", "");
+            _oneShotActive = true; // Allow display even when service not running (remote control)
             TriggerSubliminalWithHapticPattern(text);
             App.Progression?.AddXP(10, XPSource.Subliminal);
         }
@@ -516,7 +519,9 @@ namespace ConditioningControlPanel.Services
         private void ShowSubliminalVisuals(string text)
         {
             // Guard against delayed callbacks firing after Stop() — prevents orphaned windows
-            if (!_isRunning) return;
+            // Allow one-shot from remote control even when service not running
+            if (!_isRunning && !_oneShotActive) return;
+            _oneShotActive = false;
 
             // Prevent memory explosion from too many concurrent subliminal windows
             if (_activeWindows.Count >= 15) return;

@@ -8882,6 +8882,12 @@ namespace ConditioningControlPanel
                 {
                     App.Logger?.Information("[RemoteControl] Starting main engine for remote session");
                     StartEngine();
+
+                    // Kill overlays that StartEngine activated from saved settings —
+                    // the session engine will control them based on session segments
+                    App.Overlay?.StopPinkFilter();
+                    App.Overlay?.StopSpiral();
+                    App.Logger?.Information("[RemoteControl] Cleared overlays — session engine will control them");
                 }
 
                 App.IsSessionRunning = true;
@@ -13572,9 +13578,17 @@ namespace ConditioningControlPanel
 
                 // JavaScript to find video, play it, request fullscreen, and add event handlers
                 // Posts message back to C# when video ends or fullscreen exits
+                // Retries up to 10 times (5s total) if video element isn't in the DOM yet
                 var script = @"
-                    (function() {
-                        const video = document.querySelector('video');
+                    (async function() {
+                        let video = document.querySelector('video');
+                        if (!video) {
+                            for (let i = 0; i < 10; i++) {
+                                await new Promise(r => setTimeout(r, 500));
+                                video = document.querySelector('video');
+                                if (video) break;
+                            }
+                        }
                         if (video) {
                             let notified = false;
 
@@ -13633,6 +13647,9 @@ namespace ConditioningControlPanel
                                     video.msRequestFullscreen();
                                 }
                             }).catch(e => console.log('Autoplay blocked:', e));
+                        } else {
+                            console.log('No video element found after retries');
+                            window.chrome.webview.postMessage({ type: 'videoEnded', reason: 'noVideoElement' });
                         }
                     })();
                 ";

@@ -1222,13 +1222,14 @@ namespace ConditioningControlPanel.Services
             _webVideoActive = true;
             var watchdogGen = ++_webVideoWatchdogGeneration;
 
-            // Safety watchdog: auto-reset after 5 minutes if OnWebVideoEnded never fires
-            Task.Delay(TimeSpan.FromMinutes(5)).ContinueWith(_ =>
+            // Safety watchdog: auto-reset after 30 seconds if OnWebVideoEnded never fires
+            // (page should load within ~10s; 30s is generous but doesn't block autonomy for ages)
+            Task.Delay(TimeSpan.FromSeconds(30)).ContinueWith(_ =>
             {
                 if (_webVideoActive && _webVideoWatchdogGeneration == watchdogGen)
                 {
                     _webVideoActive = false;
-                    App.Logger?.Warning("AutonomyService: Web video watchdog fired - resetting stuck _webVideoActive after 5 minutes");
+                    App.Logger?.Warning("AutonomyService: Web video watchdog fired - resetting stuck _webVideoActive after 30s");
                 }
             });
 
