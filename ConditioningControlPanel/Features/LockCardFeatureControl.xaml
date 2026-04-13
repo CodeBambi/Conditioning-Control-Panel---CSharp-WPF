@@ -93,11 +93,11 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <Button Grid.Column="0" Content="{loc:Str btn_manage_phrases}"
-                        Style="{StaticResource OutlineButton}" Click="BtnManagePhrases_Click"/>
+                        Style="{DynamicResource OutlineButton}" Click="BtnManagePhrases_Click"/>
                 <Button Grid.Column="2" Content="{loc:Str btn_test_2}"
-                        Style="{StaticResource OutlineButton}" Click="BtnTest_Click"/>
+                        Style="{DynamicResource OutlineButton}" Click="BtnTest_Click"/>
                 <Button Grid.Column="4" Content="⚙" Width="44"
-                        Style="{StaticResource OutlineButton}" Click="BtnColorSettings_Click"/>
+                        Style="{DynamicResource OutlineButton}" Click="BtnColorSettings_Click"/>
             </Grid>
         </StackPanel>
     </Grid>

@@ -79,7 +79,7 @@
                        Foreground="#50C878" FontSize="12"
                        HorizontalAlignment="Center" Margin="0,2,0,10"/>
 
-            <Button Content="{loc:Str btn_edit_phrases}" Style="{StaticResource OutlineButton}"
+            <Button Content="{loc:Str btn_edit_phrases}" Style="{DynamicResource OutlineButton}"
                     Click="BtnEditPhrases_Click"/>
         </StackPanel>
     </Grid>

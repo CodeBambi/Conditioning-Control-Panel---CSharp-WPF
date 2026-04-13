@@ -75,7 +75,7 @@
                 </Grid>
             </Border>
 
-            <Button Content="{loc:Str btn_test_now_2}" Style="{StaticResource OutlineButton}"
+            <Button Content="{loc:Str btn_test_now_2}" Style="{DynamicResource OutlineButton}"
                     Click="BtnTest_Click"/>
         </StackPanel>
     </Grid>

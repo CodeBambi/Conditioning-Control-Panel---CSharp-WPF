@@ -288,7 +288,7 @@ namespace ConditioningControlPanel.Services
         
         private void CrossfadeTimer_Tick(object? sender, EventArgs e)
         {
-            if (!_loopMode || string.IsNullOrEmpty(_loopFilePath)) return;
+            if (!_isRunning || !_loopMode || string.IsNullOrEmpty(_loopFilePath)) return;
             
             // Check for Clean Slate achievement (60 seconds of continuous loop)
             if (!_cleanSlateAchieved)
@@ -308,7 +308,7 @@ namespace ConditioningControlPanel.Services
         
         private void StartNextLoopPlayer()
         {
-            if (!_loopMode || string.IsNullOrEmpty(_loopFilePath)) return;
+            if (!_isRunning || !_loopMode || string.IsNullOrEmpty(_loopFilePath)) return;
             
             try
             {

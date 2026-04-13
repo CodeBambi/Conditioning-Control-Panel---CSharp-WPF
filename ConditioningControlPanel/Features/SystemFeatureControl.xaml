@@ -134,12 +134,12 @@
                                Foreground="{DynamicResource PinkBrush}" FontSize="12"
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                     <Button Grid.Column="1" Content="📁" Width="36"
-                            Style="{StaticResource OutlineButton}"
+                            Style="{DynamicResource OutlineButton}"
                             Padding="6,4" Margin="6,0,0,0"
                             Click="BtnSelectStartupVideo_Click"
                             ToolTip="{loc:Str tooltip_browse_for_startup_video}"/>
                     <Button Grid.Column="2" Content="✕" Width="36"
-                            Style="{StaticResource OutlineButton}"
+                            Style="{DynamicResource OutlineButton}"
                             Padding="6,4" Margin="4,0,0,0"
                             Click="BtnClearStartupVideo_Click"
                             ToolTip="{loc:Str tooltip_clear_selection_use_random}"/>
@@ -158,11 +158,11 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <Button Grid.Column="0" Content="📁 Pick Folder"
-                        Style="{StaticResource OutlineButton}"
+                        Style="{DynamicResource OutlineButton}"
                         Click="BtnPickAssets_Click"
                         ToolTip="{loc:Str tooltip_set_custom_assets_folder}"/>
                 <Button Grid.Column="2" Content="{loc:Str btn_assets}"
-                        Style="{StaticResource OutlineButton}"
+                        Style="{DynamicResource OutlineButton}"
                         Click="BtnOpenAssets_Click"
                         ToolTip="{loc:Str tooltip_open_assets_folder_images_videos_sounds}"/>
             </Grid>
@@ -184,7 +184,7 @@
                                TextWrapping="Wrap" Margin="0,2,0,0"/>
                 </StackPanel>
                 <Button Grid.Column="1" x:Name="BtnPanicKey"
-                        Style="{StaticResource OutlineButton}"
+                        Style="{DynamicResource OutlineButton}"
                         Padding="12,6" Click="BtnPanicKey_Click"/>
             </Grid>
         </Border>

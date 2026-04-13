@@ -73,7 +73,7 @@
             <!-- Select GIF -->
             <Button x:Name="BtnSelectGif"
                     Content="{loc:Str btn_select_gif}"
-                    Style="{StaticResource OutlineButton}"
+                    Style="{DynamicResource OutlineButton}"
                     Padding="12,10"
                     Click="BtnSelectGif_Click"/>
 
