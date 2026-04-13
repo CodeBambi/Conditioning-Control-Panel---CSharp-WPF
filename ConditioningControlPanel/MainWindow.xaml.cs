@@ -8137,11 +8137,21 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             bool on = ChkAwarenessKeyboard?.IsChecked == true;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
 
-            // Keyboard is the primary KeywordTriggersEnabled signal today — reuse master logic.
-            if (ChkAwarenessMaster != null && ChkAwarenessMaster.IsChecked != on)
+            // Keyboard is one signal source — toggle it independently of the master switch.
+            // If turning keyboard ON and master is OFF, turn master ON too.
+            if (on && ChkAwarenessMaster?.IsChecked != true)
             {
-                ChkAwarenessMaster.IsChecked = on; // triggers ChkAwarenessMaster_Changed
+                ChkAwarenessMaster!.IsChecked = true; // triggers ChkAwarenessMaster_Changed
+            }
+            else if (!on)
+            {
+                // Turning keyboard off — just stop the keyboard hook if nothing else needs it.
+                // Don't turn off master (other sources like OCR may still be active).
+                if (settings.PanicKeyEnabled != true && !settings.ScreenOcrEnabled)
+                    _keyboardHook?.Stop();
             }
         }
 
@@ -11549,8 +11559,8 @@ namespace ConditioningControlPanel
             TxtDetailTitle.Text = App.Mods?.MakeModAware(preset.Name) ?? preset.Name;
             TxtDetailSubtitle.Text = App.Mods?.MakeModAware(preset.Description) ?? preset.Description;
             
-            TxtDetailFlash.Text = preset.FlashEnabled 
-                ? $"Enabled | {preset.FlashFrequency}/hr | Opacity: {preset.FlashOpacity}%"
+            TxtDetailFlash.Text = preset.FlashEnabled
+                ? $"Enabled | {preset.FlashFrequency}/hr | ×{preset.SimultaneousImages} | Opacity: {preset.FlashOpacity}%"
                 : "Disabled";
                 
             TxtDetailVideo.Text = preset.MandatoryVideosEnabled 
@@ -21304,7 +21314,9 @@ namespace ConditioningControlPanel
                 dialog.SelectedPath = App.UserAssetsPath;
             }
 
-            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            // Pass MainWindow handle so the dialog appears in front (fixes silent fail from popup context)
+            var owner = new Win32WindowWrapper(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+            if (dialog.ShowDialog(owner) == System.Windows.Forms.DialogResult.OK)
             {
                 var selectedPath = dialog.SelectedPath;
                 var newPacksFolder = Path.Combine(selectedPath, ".packs");
@@ -22150,5 +22162,12 @@ namespace ConditioningControlPanel
         }
 
         #endregion
+    }
+
+    /// <summary>Thin IWin32Window wrapper so WinForms dialogs get a proper owner handle.</summary>
+    internal sealed class Win32WindowWrapper : System.Windows.Forms.IWin32Window
+    {
+        public IntPtr Handle { get; }
+        public Win32WindowWrapper(IntPtr handle) => Handle = handle;
     }
 }

@@ -197,12 +197,11 @@ namespace ConditioningControlPanel.Services
             _pollInProgress = true;
             try
             {
+                var unifiedId = App.UnifiedUserId;
+                if (string.IsNullOrEmpty(unifiedId)) return;
 
-            var unifiedId = App.UnifiedUserId;
-            if (string.IsNullOrEmpty(unifiedId)) return;
-
-            try
-            {
+                try
+                {
                 var body = JsonConvert.SerializeObject(new { unified_id = unifiedId });
                 using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/poll", body);
 
