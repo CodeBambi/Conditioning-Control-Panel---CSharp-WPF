@@ -9,6 +9,7 @@
             BorderBrush="{DynamicResource GlassBorderBrush}"
             BorderThickness="1"
             CornerRadius="12"
+            ClipToBounds="True"
             Margin="6"
             RenderTransformOrigin="0.5,0.5">
         <Border.RenderTransform>
@@ -50,7 +51,6 @@
             </EventTrigger>
         </Border.Triggers>
 
-        <Border CornerRadius="11" ClipToBounds="True">
         <Grid x:Name="ContentRoot">
             <!-- Full-bleed background image -->
             <Image x:Name="ImgIcon"
@@ -132,6 +132,5 @@
                     Visibility="Collapsed"
                     Click="BtnHelp_Click"/>
         </Grid>
-        </Border>
     </Border>
 </UserControl>
