@@ -120,16 +120,24 @@ namespace ConditioningControlPanel.Features
         {
             if (d is not FeatureCard c) return;
             var src = e.NewValue as ImageSource;
-            c.ImgIcon.Source = src;
             if (src != null)
             {
-                c.ImgIcon.Visibility = Visibility.Visible;
+                c.ImgIconHost.Background = new ImageBrush(src)
+                {
+                    Stretch = System.Windows.Media.Stretch.UniformToFill,
+                    AlignmentY = AlignmentY.Center
+                };
+                c.ImgIconHost.Visibility = Visibility.Visible;
                 c.GlyphHost.Visibility = Visibility.Collapsed;
             }
-            else if (!string.IsNullOrEmpty(c.Glyph))
+            else
             {
-                c.ImgIcon.Visibility = Visibility.Collapsed;
-                c.GlyphHost.Visibility = Visibility.Visible;
+                c.ImgIconHost.Background = null;
+                if (!string.IsNullOrEmpty(c.Glyph))
+                {
+                    c.ImgIconHost.Visibility = Visibility.Collapsed;
+                    c.GlyphHost.Visibility = Visibility.Visible;
+                }
             }
         }
 
@@ -141,7 +149,7 @@ namespace ConditioningControlPanel.Features
             if (c.Icon == null && !string.IsNullOrEmpty(glyph))
             {
                 c.GlyphHost.Visibility = Visibility.Visible;
-                c.ImgIcon.Visibility = Visibility.Collapsed;
+                c.ImgIconHost.Visibility = Visibility.Collapsed;
             }
             else if (string.IsNullOrEmpty(glyph))
             {

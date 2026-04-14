@@ -52,11 +52,9 @@
         </Border.Triggers>
 
         <Grid x:Name="ContentRoot">
-            <!-- Full-bleed background image -->
-            <Image x:Name="ImgIcon"
-                   Stretch="UniformToFill"
-                   VerticalAlignment="Center"
-                   RenderOptions.BitmapScalingMode="HighQuality"/>
+            <!-- Full-bleed background image via ImageBrush (respects parent CornerRadius) -->
+            <Border x:Name="ImgIconHost" CornerRadius="11"
+                    RenderOptions.BitmapScalingMode="HighQuality"/>
 
             <!-- Glyph fallback (for cards without an image) -->
             <Border x:Name="GlyphHost"
