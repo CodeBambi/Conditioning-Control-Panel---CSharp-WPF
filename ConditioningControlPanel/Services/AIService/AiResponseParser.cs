@@ -177,6 +177,13 @@ public class AiResponseParser : IAiResponseParser
     {
         if (string.IsNullOrWhiteSpace(json)) return json;
 
+        // Fix leading commas in arrays and objects (e.g., "effects": [ , { ... } ] or { , "prop": "val" })
+        json = Regex.Replace(json, @"(\[[ \t\r\n]*),", "$1");
+        json = Regex.Replace(json, @"(\{[ \t\r\n]*),", "$1");
+
+        // Fix double commas (e.g., "prop": "val", , "other": "val")
+        json = Regex.Replace(json, @",([ \t\r\n]*),", ",");
+
         // Fix missing quotes on property names (e.g., {response: "..."} -> {"response": "..."})
         json = Regex.Replace(json, @"([{,]\s*)([a-zA-Z0-9_]+)(\s*:)", "$1\"$2\"$3");
 
