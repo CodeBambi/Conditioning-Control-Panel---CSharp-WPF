@@ -15,7 +15,7 @@ namespace ConditioningControlPanel.Features
     /// </summary>
     public partial class SpiralFeatureControl : UserControl
     {
-        private bool _isLoading;
+        private bool _isLoading = true;
 
         public SpiralFeatureControl()
         {

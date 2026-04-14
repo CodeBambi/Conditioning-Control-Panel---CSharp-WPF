@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Features
 {
     public partial class SubliminalFeatureControl : UserControl
     {
-        private bool _isLoading;
+        private bool _isLoading = true;
 
         public SubliminalFeatureControl()
         {
@@ -68,8 +68,18 @@ namespace ConditioningControlPanel.Features
             if (_isLoading) return;
             var s = App.Settings?.Current;
             if (s == null) return;
-            s.SubliminalEnabled = ChkEnable.IsChecked ?? false;
+            var on = ChkEnable.IsChecked ?? false;
+            s.SubliminalEnabled = on;
             App.Settings?.Save();
+
+            // Live-apply: start/stop subliminal service if engine is running
+            if (App.IsSessionRunning)
+            {
+                if (on)
+                    App.Subliminal?.Start();
+                else
+                    App.Subliminal?.Stop();
+            }
         }
 
         private void SliderPerMin_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Features
 {
     public partial class BubblePopFeatureControl : UserControl
     {
-        private bool _isLoading;
+        private bool _isLoading = true;
 
         public BubblePopFeatureControl()
         {
@@ -63,8 +63,15 @@ namespace ConditioningControlPanel.Features
             var on = ChkEnable.IsChecked ?? false;
             s.BubblesEnabled = on;
             App.Settings?.Save();
-            // Note: Start/Stop of the Bubbles service is driven by the engine-running
-            // state held on MainWindow, not by the popup. We only persist the setting.
+
+            // Live-apply: start/stop bubble service if engine is running
+            if (App.IsSessionRunning)
+            {
+                if (on)
+                    App.Bubbles?.Start();
+                else
+                    App.Bubbles?.Stop();
+            }
         }
 
         private void SliderFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

@@ -92,6 +92,8 @@
   "tooltip_v5_7_1_stability_update": "v5.7.1 - Stability & Anti-Cheat Update",
   "btn_v5_8_0_is_out": "💖 v5.8.0 IS OUT! 💖",
   "tooltip_v5_8_0_airhead_awakening": "v5.8.0 - Airhead Awakening",
+  "btn_v5_8_1_is_out": "💖 v5.8.1 IS OUT! 💖",
+  "tooltip_v5_8_1_hotfix": "v5.8.1 - Hotfix",
   "label_if_you_love_the_project_please": "如果你喜欢这个项目，请",
   "label_consider_supporting_it": "考虑支持它",
   "label_a_special_thanks_to_platinum_puppets_for_prov": "特别感谢 Platinum Puppets 提供音频 ❤️",
@@ -2081,5 +2083,10 @@
   "session_spoiler_mandatory_videos": "■ 强制视频：约 {0}/小时。使用全局视频库。",
   "session_spoiler_lock_cards": "■ 锁定卡片：约 {0}/小时。{1}。",
   "session_spoiler_bubble_count_game": "■ 泡泡计数游戏：约 {0}/小时。",
-  "session_spoiler_interactive_none": "■ 互动事件：无"
+  "session_spoiler_interactive_none": "■ 互动事件：无",
+  "label_wallpaper_override": "Wallpaper Override",
+  "label_wallpaper_description": "Temporarily replaces your desktop wallpaper with a random image from your wallpapers folder. Original wallpaper is restored when disabled or app exits.",
+  "setting_enable_wallpaper_override": "Enable wallpaper override",
+  "btn_shuffle_wallpaper": "Shuffle",
+  "msg_no_wallpaper_images": "No images found. Add images (jpg, png, bmp) to your assets/wallpapers folder."
 }

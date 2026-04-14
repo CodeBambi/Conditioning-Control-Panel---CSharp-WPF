@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Features
 {
     public partial class BubbleCountFeatureControl : UserControl
     {
-        private bool _isLoading;
+        private bool _isLoading = true;
 
         public BubbleCountFeatureControl()
         {
@@ -69,8 +69,18 @@ namespace ConditioningControlPanel.Features
             if (_isLoading) return;
             var s = App.Settings?.Current;
             if (s == null) return;
-            s.BubbleCountEnabled = ChkEnable.IsChecked ?? false;
+            var on = ChkEnable.IsChecked ?? false;
+            s.BubbleCountEnabled = on;
             App.Settings?.Save();
+
+            // Live-apply: start/stop bubble count service if engine is running
+            if (App.IsSessionRunning)
+            {
+                if (on)
+                    App.BubbleCount?.Start();
+                else
+                    App.BubbleCount?.Stop();
+            }
         }
 
         private void SliderFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -108,7 +118,7 @@ namespace ConditioningControlPanel.Features
             var on = ChkStrict.IsChecked ?? false;
             if (on)
             {
-                var owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+                var owner = Application.Current.MainWindow;
                 var confirmed = WarningDialog.ShowDoubleWarning(owner,
                     "Strict Bubble Count",
                     "• You will NOT be able to skip the bubble count challenge\n" +
@@ -119,11 +129,12 @@ namespace ConditioningControlPanel.Features
 
                 if (!confirmed)
                 {
-                    ChkStrict.Checked -= ChkStrict_Changed;
-                    ChkStrict.Unchecked -= ChkStrict_Changed;
-                    ChkStrict.IsChecked = false;
-                    ChkStrict.Checked += ChkStrict_Changed;
-                    ChkStrict.Unchecked += ChkStrict_Changed;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkStrict.IsChecked = false;
+                        _isLoading = false;
+                    }));
                     return;
                 }
             }

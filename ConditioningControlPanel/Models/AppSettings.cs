@@ -2513,6 +2513,14 @@ namespace ConditioningControlPanel.Models
             set { _autonomyCanTriggerWebVideo = value; OnPropertyChanged(); }
         }
 
+        private bool _autonomyCanTriggerWallpaper = false;
+        [JsonProperty]
+        public bool AutonomyCanTriggerWallpaper
+        {
+            get => _autonomyCanTriggerWallpaper;
+            set { _autonomyCanTriggerWallpaper = value; OnPropertyChanged(); }
+        }
+
         private int _autonomyAnnouncementChance = 50;
         /// <summary>
         /// Chance (0-100%) that she announces before triggering an action
@@ -2521,6 +2529,18 @@ namespace ConditioningControlPanel.Models
         {
             get => _autonomyAnnouncementChance;
             set { _autonomyAnnouncementChance = Math.Clamp(value, 0, 100); OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region Lab — Wallpaper Override
+
+        private bool _wallpaperEnabled = false;
+        [JsonProperty]
+        public bool WallpaperEnabled
+        {
+            get => _wallpaperEnabled;
+            set { _wallpaperEnabled = value; OnPropertyChanged(); }
         }
 
         #endregion

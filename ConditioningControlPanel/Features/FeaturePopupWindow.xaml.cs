@@ -6,7 +6,7 @@ using System.Windows.Media;
 namespace ConditioningControlPanel.Features
 {
     /// <summary>
-    /// Generic modal popup window that hosts a feature UserControl.
+    /// Generic modeless popup window that hosts a feature UserControl.
     /// Borderless, pink-themed titlebar, drag-to-move, Escape-to-close, centered on owner.
     /// </summary>
     public partial class FeaturePopupWindow : Window

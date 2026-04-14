@@ -686,7 +686,7 @@
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="10">
                             <Border.Effect>
-                                <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.15"/>
+                                <DropShadowEffect Color="#FFFF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.15"/>
                             </Border.Effect>
                             <ContentPresenter/>
                         </Border>
@@ -1697,8 +1697,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v5_8_0_is_out}"
-                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v5_8_0_airhead_awakening}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v5_8_1_is_out}"
+                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v5_8_1_hotfix}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -6774,11 +6774,45 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Placeholder Card 4 -->
-                        <Border Background="#12FFFFFF" CornerRadius="12" Margin="6" BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1">
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                <TextBlock Text="{loc:Str label_coming_soon}" Foreground="#505070" FontSize="14" HorizontalAlignment="Center"/>
+                        <!-- Wallpaper Override Card (hidden until feature is ready) -->
+                        <Border CornerRadius="12" Margin="6" Padding="15" Visibility="Collapsed">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A1A32" Offset="0"/>
+                                    <GradientStop Color="#201A38" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.BorderThickness>
+                                <Thickness>2</Thickness>
+                            </Border.BorderThickness>
+                            <StackPanel>
+                                <TextBlock Text="{loc:Str label_wallpaper_override}" Foreground="White" FontWeight="Bold" FontSize="16" Margin="0,0,0,6"/>
+                                <TextBlock Text="{loc:Str label_wallpaper_description}"
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                <CheckBox x:Name="ChkWallpaperEnabled" Content="{loc:Str setting_enable_wallpaper_override}"
+                                          Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,8"
+                                          Checked="ChkWallpaperEnabled_Changed" Unchecked="ChkWallpaperEnabled_Changed"/>
+
+                                <TextBlock x:Name="TxtCurrentWallpaper" Foreground="#B0B0C8" FontSize="11"
+                                           Margin="0,0,0,8" Visibility="Collapsed"/>
+
+                                <Button x:Name="BtnShuffleWallpaper" Content="{loc:Str btn_shuffle_wallpaper}" Cursor="Hand"
+                                        Background="{DynamicResource SecondaryBrush}" Foreground="White" FontWeight="Bold" FontSize="12"
+                                        BorderThickness="0" Padding="12,8" HorizontalAlignment="Left" Visibility="Collapsed"
+                                        Click="BtnShuffleWallpaper_Click">
+                                    <Button.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="8"/>
+                                        </Style>
+                                    </Button.Resources>
+                                </Button>
                             </StackPanel>
                         </Border>
                     </UniformGrid>
@@ -9282,7 +9316,7 @@
         </Border>
 
         <!-- Remote Control Overlay (shown when controller is connected) -->
-        <Border x:Name="RemoteControlOverlay" Grid.RowSpan="6" Panel.ZIndex="999" Visibility="Collapsed" Background="#E0000000" Opacity="0">
+        <Border x:Name="RemoteControlOverlay" Grid.Row="1" Grid.RowSpan="5" Panel.ZIndex="999" Visibility="Collapsed" Background="#E0000000" Opacity="0">
             <Grid>
                 <!-- Command notification banner at top -->
                 <Border x:Name="RemoteCommandNotification" VerticalAlignment="Top" HorizontalAlignment="Center"

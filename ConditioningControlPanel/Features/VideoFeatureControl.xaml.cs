@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Features
 {
     public partial class VideoFeatureControl : UserControl
     {
-        private bool _isLoading;
+        private bool _isLoading = true;
 
         public VideoFeatureControl()
         {
@@ -72,8 +72,18 @@ namespace ConditioningControlPanel.Features
             if (_isLoading) return;
             var s = App.Settings?.Current;
             if (s == null) return;
-            s.MandatoryVideosEnabled = ChkEnable.IsChecked ?? false;
+            var on = ChkEnable.IsChecked ?? false;
+            s.MandatoryVideosEnabled = on;
             App.Settings?.Save();
+
+            // Live-apply: start/stop video service if engine is running
+            if (App.IsSessionRunning)
+            {
+                if (on)
+                    App.Video?.Start();
+                else
+                    App.Video?.Stop();
+            }
         }
 
         private void SliderPerHour_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -96,7 +106,7 @@ namespace ConditioningControlPanel.Features
             var on = ChkStrict.IsChecked ?? false;
             if (on)
             {
-                var owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+                var owner = Application.Current.MainWindow;
                 var confirmed = WarningDialog.ShowDoubleWarning(owner,
                     "Strict Lock",
                     "• You will NOT be able to skip or close videos\n" +
@@ -106,11 +116,12 @@ namespace ConditioningControlPanel.Features
 
                 if (!confirmed)
                 {
-                    ChkStrict.Checked -= ChkStrict_Changed;
-                    ChkStrict.Unchecked -= ChkStrict_Changed;
-                    ChkStrict.IsChecked = false;
-                    ChkStrict.Checked += ChkStrict_Changed;
-                    ChkStrict.Unchecked += ChkStrict_Changed;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkStrict.IsChecked = false;
+                        _isLoading = false;
+                    }));
                     return;
                 }
             }

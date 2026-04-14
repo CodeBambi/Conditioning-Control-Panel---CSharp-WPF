@@ -700,10 +700,20 @@ namespace ConditioningControlPanel
                     sessionWasPaused = true;
                 }
 
+                // Remember if autonomy was running before we stop everything
+                bool autonomyWasRunning = App.Autonomy?.IsEnabled == true;
+
                 StopEngine();
 
                 // Reset interaction queue to clear any pending queued items
                 App.InteractionQueue?.ForceReset();
+
+                // Restart autonomy if it was running — panic should skip the current action, not kill autonomy
+                if (autonomyWasRunning && !sessionWasPaused)
+                {
+                    App.Autonomy?.Start();
+                    App.Logger?.Information("Panic key: Restarted autonomy after skipping current action");
+                }
 
                 // Restore window - always show and bring to front
                 Show();
@@ -790,6 +800,129 @@ namespace ConditioningControlPanel
             if (ChkNoPanic == null) return;
             if ((ChkNoPanic.IsChecked ?? false) == disablePanic) return;
             ChkNoPanic.IsChecked = disablePanic;
+        }
+
+        /// <summary>
+        /// Applies no-panic mode change directly (for use by feature popups).
+        /// Returns true if the change was applied, false if cancelled.
+        /// </summary>
+        internal bool ApplyNoPanic(bool disablePanic, Window dialogOwner)
+        {
+            if (disablePanic)
+            {
+                var confirmed = WarningDialog.ShowDoubleWarning(dialogOwner,
+                    "Disable Panic Key",
+                    "• You will have NO emergency escape option\n" +
+                    "• The ONLY way to exit will be the Exit button\n" +
+                    "• Combined with Strict Lock, this is VERY restrictive\n" +
+                    "• Make sure you know what you're doing!");
+
+                if (!confirmed) return false;
+
+                if (App.Settings.Current.KeywordTriggersEnabled != true)
+                    _keyboardHook?.Stop();
+                App.Settings.Current.PanicKeyEnabled = false;
+                App.Settings?.Save();
+                App.Logger?.Information("Keyboard hook stopped - panic key disabled");
+            }
+            else
+            {
+                _keyboardHook?.Start();
+                App.Settings.Current.PanicKeyEnabled = true;
+                App.Settings?.Save();
+                App.Logger?.Information("Keyboard hook started - panic key enabled");
+            }
+
+            // Sync MainWindow checkbox without triggering handler
+            _isLoading = true;
+            ChkNoPanic.IsChecked = disablePanic;
+            _isLoading = false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Applies offline mode change directly (for use by feature popups).
+        /// Returns true if the change was applied, false if cancelled.
+        /// </summary>
+        internal bool ApplyOfflineMode(bool enable, Window dialogOwner)
+        {
+            if (enable)
+            {
+                if (string.IsNullOrWhiteSpace(App.Settings.Current.OfflineUsername))
+                {
+                    var dialog = new OfflineUsernameDialog();
+                    dialog.Owner = dialogOwner;
+                    dialog.Topmost = true;
+
+                    if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.Username))
+                    {
+                        App.Settings.Current.OfflineUsername = dialog.Username;
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+
+                App.Settings.Current.OfflineMode = true;
+                DisconnectNetworkServices();
+                App.Logger?.Information("Offline mode enabled with username '{Username}'",
+                    App.Settings.Current.OfflineUsername);
+            }
+            else
+            {
+                App.Settings.Current.OfflineMode = false;
+                App.Logger?.Information("Offline mode disabled");
+            }
+
+            UpdateOfflineModeUI(enable);
+            App.Settings.Save();
+
+            // Sync MainWindow checkbox without triggering handler
+            _isLoading = true;
+            ChkOfflineMode.IsChecked = enable;
+            _isLoading = false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Syncs the keyboard hook and MainWindow NoPanic checkbox after the setting changes externally.
+        /// </summary>
+        internal void SyncNoPanicState()
+        {
+            var panicEnabled = App.Settings.Current.PanicKeyEnabled;
+            if (panicEnabled)
+            {
+                _keyboardHook?.Start();
+                App.Logger?.Information("Keyboard hook started - panic key enabled");
+            }
+            else
+            {
+                if (App.Settings.Current.KeywordTriggersEnabled != true)
+                    _keyboardHook?.Stop();
+                App.Logger?.Information("Keyboard hook stopped - panic key disabled");
+            }
+
+            _isLoading = true;
+            ChkNoPanic.IsChecked = !panicEnabled;
+            _isLoading = false;
+        }
+
+        /// <summary>
+        /// Syncs the MainWindow offline mode UI after the setting changes externally.
+        /// </summary>
+        internal void SyncOfflineModeState()
+        {
+            var isOffline = App.Settings.Current.OfflineMode;
+            if (isOffline)
+                DisconnectNetworkServices();
+            UpdateOfflineModeUI(isOffline);
+
+            _isLoading = true;
+            ChkOfflineMode.IsChecked = isOffline;
+            _isLoading = false;
         }
 
         internal bool RequestToggleWindowsStartup(bool enable)
@@ -1394,6 +1527,10 @@ namespace ConditioningControlPanel
 
             // Load past quizzes list
             RefreshPastQuizzes();
+
+            // Initialize wallpaper override from settings
+            if (ChkWallpaperEnabled != null && App.Settings.Current.WallpaperEnabled)
+                ChkWallpaperEnabled.IsChecked = true;
 
             // Initialize pop quiz UI from settings
             if (ChkPopQuizEnabled != null)
@@ -4167,6 +4304,44 @@ namespace ConditioningControlPanel
         private void BtnTestPopQuiz_Click(object sender, RoutedEventArgs e)
         {
             App.PopQuiz?.TestPopQuiz();
+        }
+
+        // ============ WALLPAPER OVERRIDE HANDLERS ============
+
+        private void ChkWallpaperEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (App.Settings?.Current == null || App.Wallpaper == null) return;
+
+            var enabled = ChkWallpaperEnabled.IsChecked == true;
+            if (enabled)
+            {
+                if (!App.Wallpaper.Activate())
+                {
+                    // No images found — uncheck and notify
+                    ChkWallpaperEnabled.IsChecked = false;
+                    App.Settings.Current.WallpaperEnabled = false;
+                    MessageBox.Show(Loc.Get("msg_no_wallpaper_images"), "Wallpaper Override",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                TxtCurrentWallpaper.Text = App.Wallpaper.CurrentFilename;
+                TxtCurrentWallpaper.Visibility = Visibility.Visible;
+                BtnShuffleWallpaper.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                App.Wallpaper.Deactivate();
+                TxtCurrentWallpaper.Visibility = Visibility.Collapsed;
+                BtnShuffleWallpaper.Visibility = Visibility.Collapsed;
+            }
+            App.Settings.Current.WallpaperEnabled = enabled;
+        }
+
+        private void BtnShuffleWallpaper_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.Wallpaper == null) return;
+            App.Wallpaper.Shuffle();
+            TxtCurrentWallpaper.Text = App.Wallpaper.CurrentFilename;
         }
 
         private void OnLockdownActivated()
@@ -8205,9 +8380,14 @@ namespace ConditioningControlPanel
                 // Show consent waiver
                 if (!ShowRemoteControlWaiver(tier))
                 {
-                    _isLoading = true;
-                    ChkRemoteControlEnabled.IsChecked = false;
-                    _isLoading = false;
+                    // Defer revert so it runs after the dialog's event stack fully unwinds,
+                    // preventing WPF toggle animation from getting stuck in the ON position.
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkRemoteControlEnabled.IsChecked = false;
+                        _isLoading = false;
+                    }));
                     return;
                 }
 
@@ -8835,6 +9015,12 @@ namespace ConditioningControlPanel
                 {
                     App.Logger?.Information("[RemoteControl] Starting main engine for remote session");
                     StartEngine();
+
+                    // Kill overlays that StartEngine activated from saved settings —
+                    // the session engine will control them based on session segments
+                    App.Overlay?.StopPinkFilter();
+                    App.Overlay?.StopSpiral();
+                    App.Logger?.Information("[RemoteControl] Cleared overlays — session engine will control them");
                 }
 
                 App.IsSessionRunning = true;
@@ -8956,14 +9142,12 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Alerts the host that a remote controller just joined. Always pops a
-        /// tray balloon; if the window is minimized or hidden, also flashes the
-        /// taskbar icon and restores the window so the lock overlay becomes visible.
+        /// Alerts the host that a remote controller just joined. Pops a tray
+        /// balloon and flashes the taskbar icon if minimized — does NOT restore
+        /// the window so the host stays in control of window state.
         /// </summary>
         private void NotifyRemoteControllerJoined()
         {
-            var wasMinimized = this.WindowState == WindowState.Minimized || !this.IsVisible;
-
             // Always show a tray balloon — it's a useful cue even when visible.
             try
             {
@@ -8977,22 +9161,10 @@ namespace ConditioningControlPanel
                 App.Logger?.Debug("Failed to show remote controller tray balloon: {Error}", ex.Message);
             }
 
-            if (wasMinimized)
+            // Flash the taskbar button so the host notices even with notifications off.
+            if (this.WindowState == WindowState.Minimized || !this.IsVisible)
             {
-                // Flash the taskbar button so the host notices even with notifications off.
                 try { Helpers.FlashWindowHelper.Flash(this); } catch { }
-
-                // Auto-restore so the lock overlay is visible.
-                try
-                {
-                    this.Show();
-                    this.WindowState = WindowState.Normal;
-                    this.Activate();
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Debug("Failed to restore window on remote connect: {Error}", ex.Message);
-                }
             }
         }
 
@@ -11673,14 +11845,25 @@ namespace ConditioningControlPanel
 
         // --- velvet-mosaic: dashboard feature card click dispatcher ----------
 
+        private Features.FeaturePopupWindow? _activeFeaturePopup;
+
         private void ShowFeaturePopup(System.Windows.Controls.UserControl content, string title,
                                       System.Windows.Media.ImageSource? icon = null, string? glyph = null)
         {
+            // Close any existing popup before opening a new one
+            _activeFeaturePopup?.Close();
+
             var popup = new Features.FeaturePopupWindow(content, title, icon, glyph)
             {
                 Owner = this
             };
-            popup.ShowDialog();
+            popup.Closed += (_, __) =>
+            {
+                if (_activeFeaturePopup == popup)
+                    _activeFeaturePopup = null;
+            };
+            _activeFeaturePopup = popup;
+            popup.Show(); // Non-modal so bubbles and other interactions keep working
         }
 
         private void CardFlash_Click(object sender, RoutedEventArgs e) =>
@@ -11764,6 +11947,9 @@ namespace ConditioningControlPanel
                 App.Logger?.Warning(ex, "AppInfo: failed to attach account sections pre-show");
             }
 
+            // Close any existing popup before opening a new one
+            _activeFeaturePopup?.Close();
+
             var popup = new Features.FeaturePopupWindow(
                 control,
                 Localization.Loc.Get("label_app_info"),
@@ -11777,6 +11963,8 @@ namespace ConditioningControlPanel
             // handlers that read their Text/Visibility keep working.
             popup.Closed += (_, __) =>
             {
+                if (_activeFeaturePopup == popup)
+                    _activeFeaturePopup = null;
                 try { ReattachAccountSections(); }
                 catch (Exception ex)
                 {
@@ -11784,7 +11972,8 @@ namespace ConditioningControlPanel
                 }
             };
 
-            popup.ShowDialog();
+            _activeFeaturePopup = popup;
+            popup.Show();
         }
 
         private void VelvetBtnRamp_Click(object sender, RoutedEventArgs e) =>
@@ -13457,6 +13646,14 @@ namespace ConditioningControlPanel
                     _skipSiteToggleNavigation = true;
                     RbHypnoTube.IsChecked = true;
                 }
+                else if (!lowerUrl.Contains("bambicloud.com") && !lowerUrl.Contains("hypnotube.com"))
+                {
+                    // External URL — deselect both radio buttons so clicking either one
+                    // fires a Checked event to navigate back (RadioButton.Checked only fires
+                    // on false→true transitions, so re-clicking an already-checked button does nothing)
+                    RbBambiCloud.IsChecked = false;
+                    RbHypnoTube.IsChecked = false;
+                }
 
                 _browser.ZoomFactor = 0.5;
 
@@ -13514,9 +13711,17 @@ namespace ConditioningControlPanel
 
                 // JavaScript to find video, play it, request fullscreen, and add event handlers
                 // Posts message back to C# when video ends or fullscreen exits
+                // Retries up to 10 times (5s total) if video element isn't in the DOM yet
                 var script = @"
-                    (function() {
-                        const video = document.querySelector('video');
+                    (async function() {
+                        let video = document.querySelector('video');
+                        if (!video) {
+                            for (let i = 0; i < 10; i++) {
+                                await new Promise(r => setTimeout(r, 500));
+                                video = document.querySelector('video');
+                                if (video) break;
+                            }
+                        }
                         if (video) {
                             let notified = false;
 
@@ -13575,6 +13780,9 @@ namespace ConditioningControlPanel
                                     video.msRequestFullscreen();
                                 }
                             }).catch(e => console.log('Autoplay blocked:', e));
+                        } else {
+                            console.log('No video element found after retries');
+                            window.chrome.webview.postMessage({ type: 'videoEnded', reason: 'noVideoElement' });
                         }
                     })();
                 ";
@@ -19033,11 +19241,12 @@ namespace ConditioningControlPanel
 
                 if (!confirmed)
                 {
-                    ChkLockCardStrict.Checked -= ChkLockCardStrict_Changed;
-                    ChkLockCardStrict.Unchecked -= ChkLockCardStrict_Changed;
-                    ChkLockCardStrict.IsChecked = false;
-                    ChkLockCardStrict.Checked += ChkLockCardStrict_Changed;
-                    ChkLockCardStrict.Unchecked += ChkLockCardStrict_Changed;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkLockCardStrict.IsChecked = false;
+                        _isLoading = false;
+                    }));
                     return;
                 }
             }
@@ -19355,6 +19564,10 @@ namespace ConditioningControlPanel
                 }
 
                 RefreshAssetTree();
+
+                // Refresh pack list so button states update (the event's pack instance
+                // may differ from the one in _availablePacks)
+                await RefreshPacksAsync();
             });
         }
 
@@ -21361,11 +21574,14 @@ namespace ConditioningControlPanel
 
                 if (!confirmed)
                 {
-                    ChkStrictLock.Checked -= ChkStrictLock_Changed;
-                    ChkStrictLock.Unchecked -= ChkStrictLock_Changed;
-                    ChkStrictLock.IsChecked = false;
-                    ChkStrictLock.Checked += ChkStrictLock_Changed;
-                    ChkStrictLock.Unchecked += ChkStrictLock_Changed;
+                    // Defer revert so it runs after the dialog's event stack fully unwinds,
+                    // preventing WPF toggle animation from getting stuck in the ON position.
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkStrictLock.IsChecked = false;
+                        _isLoading = false;
+                    }));
                     return;
                 }
             }
@@ -21392,11 +21608,14 @@ namespace ConditioningControlPanel
 
                 if (!confirmed)
                 {
-                    ChkNoPanic.Checked -= ChkNoPanic_Changed;
-                    ChkNoPanic.Unchecked -= ChkNoPanic_Changed;
-                    ChkNoPanic.IsChecked = false;
-                    ChkNoPanic.Checked += ChkNoPanic_Changed;
-                    ChkNoPanic.Unchecked += ChkNoPanic_Changed;
+                    // Defer revert so it runs after the dialog's event stack fully unwinds,
+                    // preventing WPF toggle animation from getting stuck in the ON position.
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        ChkNoPanic.IsChecked = false;
+                        _isLoading = false;
+                    }));
                     return;
                 }
 

@@ -46,9 +46,10 @@ namespace ConditioningControlPanel
 
             var dialog = new WarningDialog(title, message, Loc.GetF("warning_enable_feature_confirm", feature))
             {
-                Owner = owner
+                Owner = owner,
+                Topmost = true
             };
-            
+
             return dialog.ShowDialog() == true && dialog.Confirmed;
         }
     }

@@ -231,7 +231,11 @@ namespace ConditioningControlPanel.Features
             while (current != null)
             {
                 if (ReferenceEquals(current, ancestor)) return true;
-                current = VisualTreeHelper.GetParent(current);
+                // ContentElements (e.g. Run, Hyperlink) are not part of the visual tree —
+                // VisualTreeHelper.GetParent crashes on them. Use LogicalTreeHelper instead.
+                current = current is System.Windows.Media.Visual
+                    ? VisualTreeHelper.GetParent(current)
+                    : System.Windows.LogicalTreeHelper.GetParent(current);
             }
             return false;
         }

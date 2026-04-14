@@ -489,7 +489,7 @@ public class OverlayService : IDisposable
         }
     }
 
-    private void StopPinkFilter()
+    internal void StopPinkFilter()
     {
         foreach (var window in _pinkFilterWindows.ToList())
         {
@@ -956,7 +956,7 @@ public class OverlayService : IDisposable
         }
     }
 
-    private void StopSpiral()
+    internal void StopSpiral()
     {
         _gifFrameTimer?.Stop();
         _gifFrameTimer = null;
