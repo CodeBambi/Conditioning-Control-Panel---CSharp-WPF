@@ -1314,11 +1314,11 @@ namespace ConditioningControlPanel.Models
         }
 
         // Scheduler time window
-        private string _schedulerStartTime = "16:00";
+        private string _schedulerStartTime = "00:00";
         public string SchedulerStartTime
         {
             get => _schedulerStartTime;
-            set { _schedulerStartTime = value ?? "16:00"; OnPropertyChanged(); }
+            set { _schedulerStartTime = value ?? "00:00"; OnPropertyChanged(); }
         }
 
         private string _schedulerEndTime = "22:00";

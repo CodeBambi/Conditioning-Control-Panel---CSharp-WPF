@@ -30,7 +30,7 @@ namespace ConditioningControlPanel.Services
         private float _duckAmount = 0.8f; // Default: reduce to 20%
         private long _duckGeneration; // Incremented on ForceUnduck to invalidate stale Unduck callbacks
         private System.Threading.Timer? _duckWatchdog; // Safety net: force-unduck if ducking exceeds max duration
-        private const int DuckWatchdogMs = 30_000; // 30 seconds — no single duck should last longer
+        private const int DuckWatchdogMs = 300_000; // 5 minutes — safety net for leaked duck refs, must exceed longest video
 
         private bool _disposed;
 

@@ -716,7 +716,7 @@ namespace ConditioningControlPanel.Services
             await ApplyVibrationModeAsync(spikeIntensity, 100, Settings.TargetHitMode);
 
             // Immediately resume background vibe without delay (no pause!)
-            if (_currentVideoIntensity > 0 && Settings.VideoEnabled)
+            if (_currentVideoIntensity > 0 && Settings.VideoEnabled && _activeProvider?.IsConnected == true)
             {
                 await _activeProvider.VibrateAsync(_currentVideoIntensity, 30000);
             }

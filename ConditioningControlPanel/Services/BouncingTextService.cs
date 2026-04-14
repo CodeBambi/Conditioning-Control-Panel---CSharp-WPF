@@ -208,7 +208,18 @@ public class BouncingTextService : IDisposable
     private void Animate(object? sender, EventArgs e)
     {
         if (!_isRunning) return;
-        
+
+        // Hide bouncing text while a mandatory video is playing
+        if (App.Video?.IsPlaying == true)
+        {
+            foreach (var w in _windows) w.Hide();
+            return;
+        }
+        else
+        {
+            foreach (var w in _windows) { if (!w.IsVisible) w.Show(); }
+        }
+
         // Move
         _posX += _velX;
         _posY += _velY;

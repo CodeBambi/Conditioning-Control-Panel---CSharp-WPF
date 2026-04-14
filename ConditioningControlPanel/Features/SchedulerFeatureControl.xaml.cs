@@ -37,7 +37,7 @@ namespace ConditioningControlPanel.Features
             try
             {
                 ChkEnabled.IsChecked = s.SchedulerEnabled;
-                TxtStart.Text = s.SchedulerStartTime ?? "16:00";
+                TxtStart.Text = s.SchedulerStartTime ?? "00:00";
                 TxtEnd.Text = s.SchedulerEndTime ?? "22:00";
                 DayMon.IsChecked = s.SchedulerMonday;
                 DayTue.IsChecked = s.SchedulerTuesday;

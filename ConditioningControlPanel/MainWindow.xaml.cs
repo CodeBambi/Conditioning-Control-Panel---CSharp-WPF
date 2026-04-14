@@ -582,17 +582,24 @@ namespace ConditioningControlPanel
                         outputDevice.Init(audioFile);
                         outputDevice.PlaybackStopped += (s, e) =>
                         {
-                            try
+                            // Defer disposal — disposing inside PlaybackStopped causes
+                            // "Handle is not initialized" when NAudio's internal cleanup
+                            // races with our Dispose call.
+                            Task.Run(() =>
                             {
-                                outputDevice.Dispose();
-                                audioFile.Dispose();
-                                if (_levelUpSoundDevice == outputDevice)
+                                try
                                 {
-                                    _levelUpSoundDevice = null;
-                                    _levelUpSoundFile = null;
+                                    Thread.Sleep(50); // Let NAudio finish its internal cleanup
+                                    outputDevice.Dispose();
+                                    audioFile.Dispose();
+                                    if (_levelUpSoundDevice == outputDevice)
+                                    {
+                                        _levelUpSoundDevice = null;
+                                        _levelUpSoundFile = null;
+                                    }
                                 }
-                            }
-                            catch (Exception) { }
+                                catch (Exception) { }
+                            });
                         };
 
                         _levelUpSoundDevice = outputDevice;
@@ -1187,6 +1194,29 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // Dashboard feature cards (velvet mosaic)
+                var cardMap = new (string resourcePath, Features.FeatureCard? card)[]
+                {
+                    ("features/flash.png", CardFlash),
+                    ("features/mandatory_videos.png", CardVideo),
+                    ("features/subliminal.png", CardSubliminal),
+                    ("features/spiral_overlay.png", CardSpiral),
+                    ("features/Pink_filter.png", CardPinkFilter),
+                    ("features/Bubble_pop.png", CardBubblePop),
+                    ("features/Phrase_Lock.png", CardLockCard),
+                    ("features/bouncing_text.png", CardBouncingText),
+                    ("features/Mind_Wipers.png", CardMindWipe),
+                    ("features/Bubble_count.png", CardBubbleCount),
+                };
+                foreach (var (path, card) in cardMap)
+                {
+                    if (card == null) continue;
+                    var image = ModResourceResolver.ResolveImage(path);
+                    if (image != null)
+                        card.Icon = image;
+                }
+
+                // Legacy progression tab rectangles
                 var featureMap = new (string resourcePath, System.Windows.Shapes.Rectangle? rect)[]
                 {
                     ("features/spiral_overlay.png", SpiralFeatureImage),
@@ -1210,11 +1240,14 @@ namespace ConditioningControlPanel
                 }
 
                 // Image elements in description cards + Video Haptic Sync card.
-                // These are mod-aware: a Drone mod can ship resources/features/bambi takeover.png
-                // (or vibe.png) and it'll show the dronification image instead of the bambi default.
+                // Takeover image is mod-specific: BambiSleep uses "bambi takeover.png",
+                // other mods use the generic "takeover.png" (or override via their resources/ folder).
+                var takeoverPath = App.Mods?.ActiveModId == Models.BuiltInMods.BambiSleepId
+                    ? "features/bambi takeover.png"
+                    : "features/takeover.png";
                 var descImageMap = new (string resourcePath, System.Windows.Controls.Image? img)[]
                 {
-                    ("features/bambi takeover.png", ImgBambiTakeoverDesc),
+                    (takeoverPath, ImgBambiTakeoverDesc),
                     ("features/vibe.png", ImgHapticsVibeDesc),
                     ("features/vibe.png", ImgVideoHapticSync),
                 };

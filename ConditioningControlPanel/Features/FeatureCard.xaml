@@ -50,47 +50,49 @@
             </EventTrigger>
         </Border.Triggers>
 
-        <Grid>
-            <!-- Content -->
-            <Grid x:Name="ContentRoot" Margin="10,14,10,12">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+        <Border CornerRadius="11" ClipToBounds="True">
+        <Grid x:Name="ContentRoot">
+            <!-- Full-bleed background image -->
+            <Image x:Name="ImgIcon"
+                   Stretch="UniformToFill"
+                   VerticalAlignment="Center"
+                   RenderOptions.BitmapScalingMode="HighQuality"/>
 
-                <!-- Icon / glyph area -->
-                <Grid Grid.Row="0">
-                    <Image x:Name="ImgIcon"
-                           Stretch="Uniform"
-                           MaxHeight="72"
-                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                    <Border x:Name="GlyphHost"
-                            Width="68" Height="68"
-                            CornerRadius="34"
-                            Background="{DynamicResource TransparentPinkBrush}"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Visibility="Collapsed">
-                        <TextBlock x:Name="TxtGlyph"
-                                   FontSize="32"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource PinkBrush}"/>
-                    </Border>
-                </Grid>
+            <!-- Glyph fallback (for cards without an image) -->
+            <Border x:Name="GlyphHost"
+                    Width="68" Height="68"
+                    CornerRadius="34"
+                    Background="{DynamicResource TransparentPinkBrush}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="TxtGlyph"
+                           FontSize="32"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource PinkBrush}"/>
+            </Border>
 
-                <!-- Title -->
-                <TextBlock Grid.Row="1"
-                           x:Name="TxtTitle"
+            <!-- Bottom gradient + title overlay -->
+            <Border CornerRadius="0,0,11,11"
+                    VerticalAlignment="Bottom"
+                    IsHitTestVisible="False">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="Transparent" Offset="0"/>
+                        <GradientStop Color="#60000000" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+                <TextBlock x:Name="TxtTitle"
                            Text="Feature"
-                           Margin="0,10,0,0"
+                           Margin="8,14,8,8"
                            HorizontalAlignment="Center"
                            TextAlignment="Center"
                            TextWrapping="Wrap"
                            Foreground="White"
                            FontSize="12"
                            FontWeight="SemiBold"/>
-            </Grid>
+            </Border>
 
             <!-- Active overlay: pink ring when the underlying feature is enabled -->
             <Border x:Name="ActiveBorder"
@@ -130,5 +132,6 @@
                     Visibility="Collapsed"
                     Click="BtnHelp_Click"/>
         </Grid>
+        </Border>
     </Border>
 </UserControl>

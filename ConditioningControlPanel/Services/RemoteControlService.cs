@@ -213,6 +213,10 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Warning("[RemoteControl] Session expired during poll");
                         CleanupSession();
                     }
+                    else
+                    {
+                        App.Logger?.Warning("[RemoteControl] Poll failed: {Status}", response.StatusCode);
+                    }
                     return;
                 }
 
@@ -258,6 +262,10 @@ namespace ConditioningControlPanel.Services
                 string? lastCmdId = null;
                 string? lastAction = null;
                 var commands = result["commands"] as JArray;
+                if (commands != null && commands.Count > 0)
+                {
+                    App.Logger?.Information("[RemoteControl] Poll returned {Count} command(s)", commands.Count);
+                }
                 if (commands != null)
                 {
                     foreach (var cmd in commands)

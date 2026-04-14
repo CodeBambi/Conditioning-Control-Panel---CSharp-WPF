@@ -53,7 +53,7 @@
                     <TextBlock Grid.Column="0" Text="{loc:Str setting_difficulty}"
                                Foreground="White" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     <ComboBox Grid.Column="1" x:Name="CmbDifficulty" Width="130"
-                              Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
+                              Style="{DynamicResource DarkComboBoxStyle}"
                               SelectionChanged="CmbDifficulty_Changed">
                         <ComboBoxItem Content="{loc:Str btn_easy}" Tag="0"/>
                         <ComboBoxItem Content="{loc:Str btn_medium}" Tag="1" IsSelected="True"/>

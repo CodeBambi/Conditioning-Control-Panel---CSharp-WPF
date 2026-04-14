@@ -2124,30 +2124,15 @@
                                       HelpSectionId="Subliminals"
                                       Click="CardSubliminal_Click"/>
 
-                <!-- Row 2: Progression tier 1 -->
+                <!-- Row 2: Left edge + center logo start + right edge -->
                 <features:FeatureCard Grid.Row="1" Grid.Column="0" x:Name="CardSpiral"
                                       Title="Spiral Overlay"
                                       Icon="pack://application:,,,/Resources/features/spiral_overlay.png"
                                       HelpSectionId="SpiralOverlay"
                                       Click="CardSpiral_Click"/>
-                <features:FeatureCard Grid.Row="1" Grid.Column="1" x:Name="CardPinkFilter"
-                                      Title="Pink Filter"
-                                      Icon="pack://application:,,,/Resources/features/Pink_filter.png"
-                                      HelpSectionId="PinkFilter"
-                                      Click="CardPinkFilter_Click"/>
-                <features:FeatureCard Grid.Row="1" Grid.Column="2" x:Name="CardBubblePop"
-                                      Title="Bubble Pop"
-                                      Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
-                                      HelpSectionId="BubblePop"
-                                      Click="CardBubblePop_Click"/>
-                <features:FeatureCard Grid.Row="1" Grid.Column="3" x:Name="CardLockCard"
-                                      Title="Lock Card"
-                                      Icon="pack://application:,,,/Resources/features/Phrase_Lock.png"
-                                      HelpSectionId="LockCard"
-                                      Click="CardLockCard_Click"/>
 
-                <!-- Row 3-4: Logo (2x2) + Bouncing/Mind + System/BubbleCount -->
-                <Border Grid.Row="2" Grid.RowSpan="2" Grid.Column="0" Grid.ColumnSpan="2"
+                <!-- Center logo (2x2) spanning rows 1-2, cols 1-2 -->
+                <Border Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Grid.ColumnSpan="2"
                         Background="#01000000" Margin="6"
                         Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                         ToolTip="{loc:Str tooltip_click_me_rapidly}">
@@ -2158,17 +2143,35 @@
                     </Border>
                 </Border>
 
-                <features:FeatureCard Grid.Row="2" Grid.Column="2" x:Name="CardBouncingText"
-                                      Title="Bouncing Text"
-                                      Icon="pack://application:,,,/Resources/features/bouncing_text.png"
-                                      HelpSectionId="BouncingText"
-                                      Click="CardBouncingText_Click"/>
+                <features:FeatureCard Grid.Row="1" Grid.Column="3" x:Name="CardLockCard"
+                                      Title="Lock Card"
+                                      Icon="pack://application:,,,/Resources/features/Phrase_Lock.png"
+                                      HelpSectionId="LockCard"
+                                      Click="CardLockCard_Click"/>
+
+                <!-- Row 3: Left edge + center logo continued + right edge -->
+                <features:FeatureCard Grid.Row="2" Grid.Column="0" x:Name="CardPinkFilter"
+                                      Title="Pink Filter"
+                                      Icon="pack://application:,,,/Resources/features/Pink_filter.png"
+                                      HelpSectionId="PinkFilter"
+                                      Click="CardPinkFilter_Click"/>
                 <features:FeatureCard Grid.Row="2" Grid.Column="3" x:Name="CardMindWipe"
                                       Title="Mind Wipe"
                                       Icon="pack://application:,,,/Resources/features/Mind_Wipers.png"
                                       HelpSectionId="MindWipe"
                                       Click="CardMindWipe_Click"/>
 
+                <!-- Row 4: Bottom row -->
+                <features:FeatureCard Grid.Row="3" Grid.Column="0" x:Name="CardBubblePop"
+                                      Title="Bubble Pop"
+                                      Icon="pack://application:,,,/Resources/features/Bubble_pop.png"
+                                      HelpSectionId="BubblePop"
+                                      Click="CardBubblePop_Click"/>
+                <features:FeatureCard Grid.Row="3" Grid.Column="1" x:Name="CardBouncingText"
+                                      Title="Bouncing Text"
+                                      Icon="pack://application:,,,/Resources/features/bouncing_text.png"
+                                      HelpSectionId="BouncingText"
+                                      Click="CardBouncingText_Click"/>
                 <features:FeatureCard Grid.Row="3" Grid.Column="2" x:Name="CardSystem"
                                       Title="System"
                                       Glyph="⚙"
@@ -2600,7 +2603,7 @@
             <!-- RIGHT HALF (was col 2, now col 1 — Browser / Audio / Quick Links) -->
             <Grid Grid.Column="1" Grid.Row="0" Margin="5">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
