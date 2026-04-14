@@ -17,14 +17,17 @@ public class LocalAiService : IAiService
     private List<AiCommandData> CurrentCommands { get; set; } = [];
     public MainWindow? MainWindowRef { get; set; }
     
+    private readonly IAiResponseParser _parser;
+    
     public LocalAiService()
     {
         IsAvailable = true;
         DailyRequestsRemaining = -1;
         _bambiSprite = new BambiSprite();
         AiService = new OllamaApiClient(_localUri);
-        AiService.SelectedModel = "bambi-model-v7";
+        AiService.SelectedModel = "bambi-model-v7-cow";
         _chat = new Chat(AiService);
+        _parser = new AiResponseParser(GetFallbackResponse);
     }
     
     /// <summary>
@@ -116,8 +119,17 @@ public class LocalAiService : IAiService
                 response += answerToken;
             if (string.IsNullOrEmpty(response))
                 return GetFallbackResponse();
-            response = ParseJson(response);
-            return SanitizeResponse(response);
+            
+            var parsed = _parser.Parse(response);
+            CurrentCommands = parsed.Commands;
+            
+            LogCommands();
+            foreach (var command in CurrentCommands)
+            {
+                TriggerCommand(command);
+            }
+            
+            return parsed.CleanText;
         }
         finally
         {
@@ -125,168 +137,6 @@ public class LocalAiService : IAiService
         }
     }
     
-    /// <summary>
-    /// Sanitizes AI response by removing any leaked internal metadata tags.
-    /// The AI sometimes echoes context tags that should be hidden from users.
-    /// </summary>
-    private static string SanitizeResponse(string? response)
-    {
-        if (string.IsNullOrEmpty(response))
-            return response ?? string.Empty;
-
-        // Remove context metadata tags like [Category: X | App: Y | Title: Z | Duration: Nm]
-        var sanitized = Regex.Replace(response, @"\[Category:[^\]]*\]", "", RegexOptions.IgnoreCase);
-
-        // Remove reaction category tags like [Media/Streaming] or [Gaming/Casual]
-        sanitized = Regex.Replace(sanitized, @"\[[A-Za-z]+/[A-Za-z]+\]", "", RegexOptions.IgnoreCase);
-
-        // Remove any standalone square bracket tags that look like metadata
-        sanitized = Regex.Replace(sanitized, @"\[(?:Category|App|Title|Duration|Context):[^\]]*\]", "", RegexOptions.IgnoreCase);
-
-        // Clean up any resulting double spaces or leading/trailing whitespace
-        sanitized = Regex.Replace(sanitized, @"\s{2,}", " ");
-        sanitized = sanitized.Trim();
-
-        // If sanitization removed everything meaningful, return a fallback
-        if (string.IsNullOrWhiteSpace(sanitized))
-        {
-            App.Logger.Warning("AiService: Response was entirely metadata, returning fallback");
-            return GetFallbackResponse();
-        }
-
-        return sanitized;
-    }
-
-    private string ParseJson(string response)
-    {
-        CurrentCommands = new List<AiCommandData>();
-        
-        // Sometimes the response is wrapped in markdown or has extra text
-        // Try to find the JSON object part
-        var trimmedResponse = response.Trim();
-        if (trimmedResponse.StartsWith("```json"))
-        {
-            trimmedResponse = trimmedResponse.Substring(7);
-            if (trimmedResponse.EndsWith("```"))
-                trimmedResponse = trimmedResponse.Substring(0, trimmedResponse.Length - 3);
-            trimmedResponse = trimmedResponse.Trim();
-        }
-        else if (trimmedResponse.StartsWith("```"))
-        {
-            trimmedResponse = trimmedResponse.Substring(3);
-            if (trimmedResponse.EndsWith("```"))
-                trimmedResponse = trimmedResponse.Substring(0, trimmedResponse.Length - 3);
-            trimmedResponse = trimmedResponse.Trim();
-        }
-
-        // Standard JSON processing
-        try
-        {
-            var jsonDoc = JsonDocument.Parse(trimmedResponse);
-            if (jsonDoc.RootElement.TryGetProperty("response", out var respProp))
-            {
-                var text = respProp.GetString() ?? string.Empty;
-                if (jsonDoc.RootElement.TryGetProperty("effects", out var effectsProp) && effectsProp.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var effect in effectsProp.EnumerateArray())
-                    {
-                        var cmd = AiCommandData.ParseCommand(effect.GetRawText());
-                        if (cmd != null)
-                            CurrentCommands.Add(cmd);
-                    }
-                }
-                LogCommands();
-                foreach (var command in CurrentCommands)
-                {
-                    TriggerCommand(command);
-                }
-                return text.Trim();
-            }
-        }
-        catch
-        {
-            // Fallback to old regex/extraction parsing if it's not the new format or parsing fails
-        }
-
-        return ParseOldFormat(response);
-    }
-
-    private string ParseOldFormat(string response)
-    {
-        var textOnly = response;
-        var index = 0;
-        while ((index = textOnly.IndexOf('{', index)) != -1)
-        {
-            var start = index;
-            var balance = 0;
-            var end = -1;
-            for (var i = start; i < textOnly.Length; i++)
-            {
-                if (textOnly[i] == '{') balance++;
-                else if (textOnly[i] == '}') balance--;
-
-                if (balance == 0)
-                {
-                    end = i;
-                    break;
-                }
-            }
-
-            if (end != -1)
-            {
-                var json = textOnly.Substring(start, end - start + 1);
-                try
-                {
-                    // Check if this JSON object is in the new format with "response"
-                    using (var doc = JsonDocument.Parse(json))
-                    {
-                        if (doc.RootElement.TryGetProperty("response", out var respProp))
-                        {
-                            var text = respProp.GetString() ?? string.Empty;
-                            if (doc.RootElement.TryGetProperty("effects", out var effectsProp) && effectsProp.ValueKind == JsonValueKind.Array)
-                            {
-                                foreach (var effect in effectsProp.EnumerateArray())
-                                {
-                                    var cmd = AiCommandData.ParseCommand(effect.GetRawText());
-                                    if (cmd != null)
-                                        CurrentCommands.Add(cmd);
-                                }
-                            }
-                            
-                            // Replace the JSON block with the extracted response text
-                            textOnly = textOnly.Remove(start, end - start + 1);
-                            textOnly = textOnly.Insert(start, text);
-                            index = start + text.Length;
-                            continue;
-                        }
-                    }
-
-                    var cmdOld = AiCommandData.ParseCommand(json);
-                    if (cmdOld != null)
-                    {
-                        CurrentCommands.Add(cmdOld);
-                        textOnly = textOnly.Remove(start, end - start + 1);
-                        index = start; // Stay at same position as it was replaced
-                        continue;
-                    }
-                }
-                catch
-                {
-                    // Ignore and move on
-                }
-            }
-            index++;
-        }
-
-        LogCommands();
-        foreach (var command in CurrentCommands)
-        {
-            TriggerCommand(command);
-        }
-
-        return textOnly.Trim();
-    }
-
     private void LogCommands()
     {
         foreach (var command in CurrentCommands)
