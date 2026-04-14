@@ -160,10 +160,29 @@ public class LocalAiService : IAiService
     private string ParseJson(string response)
     {
         CurrentCommands = new List<AiCommandData>();
+        
+        // Sometimes the response is wrapped in markdown or has extra text
+        // Try to find the JSON object part
+        var trimmedResponse = response.Trim();
+        if (trimmedResponse.StartsWith("```json"))
+        {
+            trimmedResponse = trimmedResponse.Substring(7);
+            if (trimmedResponse.EndsWith("```"))
+                trimmedResponse = trimmedResponse.Substring(0, trimmedResponse.Length - 3);
+            trimmedResponse = trimmedResponse.Trim();
+        }
+        else if (trimmedResponse.StartsWith("```"))
+        {
+            trimmedResponse = trimmedResponse.Substring(3);
+            if (trimmedResponse.EndsWith("```"))
+                trimmedResponse = trimmedResponse.Substring(0, trimmedResponse.Length - 3);
+            trimmedResponse = trimmedResponse.Trim();
+        }
+
         // Standard JSON processing
         try
         {
-            var jsonDoc = JsonDocument.Parse(response);
+            var jsonDoc = JsonDocument.Parse(trimmedResponse);
             if (jsonDoc.RootElement.TryGetProperty("response", out var respProp))
             {
                 var text = respProp.GetString() ?? string.Empty;
@@ -218,10 +237,34 @@ public class LocalAiService : IAiService
                 var json = textOnly.Substring(start, end - start + 1);
                 try
                 {
-                    var cmd = AiCommandData.ParseCommand(json);
-                    if (cmd != null)
+                    // Check if this JSON object is in the new format with "response"
+                    using (var doc = JsonDocument.Parse(json))
                     {
-                        CurrentCommands.Add(cmd);
+                        if (doc.RootElement.TryGetProperty("response", out var respProp))
+                        {
+                            var text = respProp.GetString() ?? string.Empty;
+                            if (doc.RootElement.TryGetProperty("effects", out var effectsProp) && effectsProp.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var effect in effectsProp.EnumerateArray())
+                                {
+                                    var cmd = AiCommandData.ParseCommand(effect.GetRawText());
+                                    if (cmd != null)
+                                        CurrentCommands.Add(cmd);
+                                }
+                            }
+                            
+                            // Replace the JSON block with the extracted response text
+                            textOnly = textOnly.Remove(start, end - start + 1);
+                            textOnly = textOnly.Insert(start, text);
+                            index = start + text.Length;
+                            continue;
+                        }
+                    }
+
+                    var cmdOld = AiCommandData.ParseCommand(json);
+                    if (cmdOld != null)
+                    {
+                        CurrentCommands.Add(cmdOld);
                         textOnly = textOnly.Remove(start, end - start + 1);
                         index = start; // Stay at same position as it was replaced
                         continue;
