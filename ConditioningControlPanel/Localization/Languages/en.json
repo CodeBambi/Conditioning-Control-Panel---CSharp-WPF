@@ -142,16 +142,10 @@
   "tooltip_your_rank_percentile_popular_girl_skill": "Your rank percentile (Popular Girl skill)",
   "label_top_0": "Top 0%",
   "label_login_with_discord_or_patreon_to_track_your_x": "Login with Discord or Patreon to track your XP!",
-  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "When enabled, clicking an image dismisses it.
-When disabled, images are click-through.",
-  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "Hydra Mode: Clicking an image spawns
-two more images instead of dismissing it.
-Creates an escalating challenge!",
+  "tooltip_when_enabled_clicking_an_image_dismisses_it_w": "When enabled, clicking an image dismisses it.\nWhen disabled, images are click-through.",
+  "tooltip_hydra_mode_clicking_an_image_spawns_two_more": "Hydra Mode: Clicking an image spawns\ntwo more images instead of dismissing it.\nCreates an escalating challenge!",
   "setting_hydra": "🐙Hydra",
-  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "Linked: Hydra spawns share the parent flash timer
-and disappear when it ends.
-Unlinked: Each hydra spawn gets its own
-fresh full-duration timer for more chaos!",
+  "tooltip_linked_hydra_spawns_share_the_parent_flash_ti": "Linked: Hydra spawns share the parent flash timer\nand disappear when it ends.\nUnlinked: Each hydra spawn gets its own\nfresh full-duration timer for more chaos!",
   "setting_linked": "🔗Linked",
   "tooltip_toggle_the_pink_sparkle_glow_effect_on_flash": "Toggle the pink sparkle glow effect on flash images.
 Golden lucky glow is always shown.",
@@ -1157,6 +1151,8 @@ Unlocks at Level 75.",
   "setting_knowledge_base": "Knowledge Base",
   "setting_screen_awareness_reactions": "Screen Awareness Reactions",
   "setting_output_rules": "Output Rules",
+  "label_ai_model_name": "AI Model Name (Ollama)",
+  "label_ai_model_name_description": "The name of the model installed in Ollama that this companion should use. (e.g. llama3, bambi-model-v7-cow)",
   "setting_global_knowledge_base_links": "Global Knowledge Base Links",
   "label_all_personalities": "(All Personalities)",
   "btn_add_link": "+ Add Link",

@@ -46,6 +46,12 @@ namespace ConditioningControlPanel.Models
         public string OutputRules { get; set; } = "";
 
         /// <summary>
+        /// The name of the AI model to use for this companion.
+        /// Defaults to "bambi-model-v7-cow".
+        /// </summary>
+        public string AiModel { get; set; } = "bambi-model-v7-cow";
+
+        /// <summary>
         /// Custom domains/apps and their categories for context awareness.
         /// Key = domain/app name, Value = category/description.
         /// </summary>
@@ -149,6 +155,8 @@ FREQUENCY RULE:
 - 80%: Chat/Tease/React to her screen.
 - 20%: Suggest a file (only if she's bored).",
 
+                AiModel = "bambi-model-v7-cow",
+
                 CustomDomains = new Dictionary<string, string>()
             };
         }
@@ -167,6 +175,7 @@ FREQUENCY RULE:
                 KnowledgeBase = KnowledgeBase,
                 ContextReactions = ContextReactions,
                 OutputRules = OutputRules,
+                AiModel = AiModel,
                 CustomDomains = new Dictionary<string, string>(CustomDomains)
             };
         }

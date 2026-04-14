@@ -132,6 +132,8 @@ namespace ConditioningControlPanel
                 ? _defaults.ContextReactions : settings.ContextReactions;
             TxtOutputRules.Text = string.IsNullOrWhiteSpace(settings.OutputRules)
                 ? _defaults.OutputRules : settings.OutputRules;
+            TxtAiModel.Text = string.IsNullOrWhiteSpace(settings.AiModel)
+                ? _defaults.AiModel : settings.AiModel;
 
             UpdateEnabledState();
             _hasUnsavedChanges = false;
@@ -149,6 +151,7 @@ namespace ConditioningControlPanel
             settings.KnowledgeBase = TxtKnowledgeBase.Text;
             settings.ContextReactions = TxtContextReactions.Text;
             settings.OutputRules = TxtOutputRules.Text;
+            settings.AiModel = TxtAiModel.Text;
 
             // Save global knowledge base links
             SaveKnowledgeLinks();
@@ -208,6 +211,11 @@ namespace ConditioningControlPanel
             TxtOutputRules.Text = _defaults.OutputRules;
         }
 
+        private void ResetAiModel_Click(object sender, RoutedEventArgs e)
+        {
+            TxtAiModel.Text = _defaults.AiModel;
+        }
+
         private void AddKnowledgeLink_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new KnowledgeLinkEditorDialog { Owner = this };
@@ -248,6 +256,7 @@ namespace ConditioningControlPanel
                 TxtKnowledgeBase.Text = _defaults.KnowledgeBase;
                 TxtContextReactions.Text = _defaults.ContextReactions;
                 TxtOutputRules.Text = _defaults.OutputRules;
+                TxtAiModel.Text = _defaults.AiModel;
             }
         }
 

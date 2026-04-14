@@ -25,9 +25,18 @@ public class LocalAiService : IAiService
         DailyRequestsRemaining = -1;
         _bambiSprite = new BambiSprite();
         AiService = new OllamaApiClient(_localUri);
-        AiService.SelectedModel = "bambi-model-v7-cow";
+        UpdateModel();
         _chat = new Chat(AiService);
         _parser = new AiResponseParser(GetFallbackResponse);
+    }
+
+    private void UpdateModel()
+    {
+        var model = App.Settings?.Current?.CompanionPrompt?.AiModel;
+        if (string.IsNullOrWhiteSpace(model))
+            model = "bambi-model-v7-cow";
+            
+        AiService.SelectedModel = model;
     }
     
     /// <summary>
@@ -109,6 +118,8 @@ public class LocalAiService : IAiService
         _isWorkingOnResponse = false;
         if (_isWorkingOnResponse) return null;
         _isWorkingOnResponse = false;
+
+        UpdateModel();
 
         try
         {
