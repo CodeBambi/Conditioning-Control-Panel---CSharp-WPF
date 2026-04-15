@@ -116,6 +116,12 @@ namespace ConditioningControlPanel.Services
                 ConnectPin = pin;
                 Tier = tier;
                 IsActive = true;
+                _consecutivePollFailures = 0;
+                _consecutivePollSuccesses = 0;
+                _totalCommandsReceived = 0;
+                _lastHealthLog = DateTime.MinValue;
+                _sessionStartTime = DateTime.UtcNow;
+                _currentPollInterval = PollIntervalSeconds;
 
                 // Start polling
                 _pollTimer = new DispatcherTimer
@@ -166,6 +172,11 @@ namespace ConditioningControlPanel.Services
         {
             _pollTimer?.Stop();
             _pollTimer = null;
+            _consecutivePollFailures = 0;
+            _consecutivePollSuccesses = 0;
+            _currentPollInterval = PollIntervalSeconds;
+            _controllerIdleSince = null;
+            _controllerAutoDisconnected = false;
             IsActive = false;
             SessionCode = null;
             ConnectPin = null;
@@ -189,6 +200,17 @@ namespace ConditioningControlPanel.Services
         }
 
         private bool _pollInProgress;
+        private int _consecutivePollFailures;
+        private int _consecutivePollSuccesses;
+        private int _totalCommandsReceived;
+        private DateTime _lastHealthLog = DateTime.MinValue;
+        private DateTime _sessionStartTime = DateTime.MinValue;
+        private double _currentPollInterval = PollIntervalSeconds;
+        private const double MaxBackoffSeconds = 60.0;
+        private const int HealthLogIntervalSeconds = 30;
+        private DateTime? _controllerIdleSince;
+        private bool _controllerAutoDisconnected;
+        private const double IdleAutoDisconnectSeconds = 120.0; // 2 minutes
 
         private async Task PollForCommandsAsync()
         {
@@ -207,11 +229,34 @@ namespace ConditioningControlPanel.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    // Session may have expired
+                    _consecutivePollFailures++;
+                    _consecutivePollSuccesses = 0;
+
                     if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                     {
                         App.Logger?.Warning("[RemoteControl] Session expired during poll");
                         CleanupSession();
+                    }
+                    else if (response.StatusCode == (System.Net.HttpStatusCode)429)
+                    {
+                        // Rate limited — exponential backoff
+                        _currentPollInterval = Math.Min(_currentPollInterval * 2, MaxBackoffSeconds);
+                        if (_pollTimer != null)
+                            _pollTimer.Interval = TimeSpan.FromSeconds(_currentPollInterval);
+                        App.Logger?.Warning("[RemoteControl] Rate limited (429), backing off to {Interval}s", _currentPollInterval);
+                    }
+                    else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                    {
+                        App.Logger?.Warning("[RemoteControl] Auth failure (401), consecutive: {Count}", _consecutivePollFailures);
+                        if (_consecutivePollFailures >= 3)
+                        {
+                            App.Logger?.Error("[RemoteControl] 3 consecutive auth failures — terminating session");
+                            CleanupSession();
+                        }
+                    }
+                    else if (_consecutivePollFailures >= 5)
+                    {
+                        App.Logger?.Error("[RemoteControl] Poll failed: {Status} (consecutive failures: {Count})", response.StatusCode, _consecutivePollFailures);
                     }
                     else
                     {
@@ -223,12 +268,64 @@ namespace ConditioningControlPanel.Services
                 var json = await response.Content.ReadAsStringAsync();
                 var result = JObject.Parse(json);
 
+                // Track success — recover from backoff if needed
+                var wasBackedOff = _currentPollInterval > PollIntervalSeconds;
+                var wasFailingConsecutively = _consecutivePollFailures > 0;
+                _consecutivePollSuccesses++;
+                _consecutivePollFailures = 0;
+
+                if (wasBackedOff)
+                {
+                    _currentPollInterval = PollIntervalSeconds;
+                    if (_pollTimer != null)
+                        _pollTimer.Interval = TimeSpan.FromSeconds(PollIntervalSeconds);
+                    App.Logger?.Information("[RemoteControl] Recovered from backoff, restoring {Interval}s poll interval", PollIntervalSeconds);
+                }
+                else if (wasFailingConsecutively && _consecutivePollSuccesses == 1)
+                {
+                    App.Logger?.Information("[RemoteControl] Poll recovered after failures");
+                }
+
+                // Periodic health log
+                var now = DateTime.UtcNow;
+                if ((now - _lastHealthLog).TotalSeconds >= HealthLogIntervalSeconds)
+                {
+                    _lastHealthLog = now;
+                    var uptime = now - _sessionStartTime;
+                    App.Logger?.Information(
+                        "[RemoteControl] Health: code={Code} uptime={Uptime} polls_ok={Successes} cmds_total={Cmds} controller={Status}",
+                        SessionCode,
+                        $"{(int)uptime.TotalMinutes}m{uptime.Seconds}s",
+                        _consecutivePollSuccesses,
+                        _totalCommandsReceived,
+                        ControllerConnected ? (ControllerIdle ? "idle" : "active") : "disconnected");
+                }
+
                 // Update controller connection status.
                 // The server only sets controller_connected=false on explicit disconnect
-                // (POST /remote/disconnect), NOT on ping staleness. This means the controller
-                // stays "connected" even if idle for long periods — which is correct for
-                // sessions that last hours with 10-20+ min idle stretches.
+                // (POST /remote/disconnect), NOT on ping staleness.
                 var connected = result["controller_connected"]?.Value<bool>() ?? false;
+                var idle = result["controller_idle"]?.Value<bool>() ?? false;
+
+                if (connected && _controllerAutoDisconnected)
+                {
+                    if (!idle)
+                    {
+                        // Controller is actively pinging again — treat as reconnect
+                        _controllerAutoDisconnected = false;
+                        _controllerIdleSince = null;
+                        // Fall through to normal connect flow below
+                    }
+                    else
+                    {
+                        // Still idle after auto-disconnect — suppress reconnect
+                        connected = false;
+                    }
+                }
+
+                if (!connected)
+                    _controllerAutoDisconnected = false;
+
                 if (connected != ControllerConnected)
                 {
                     ControllerConnected = connected;
@@ -243,19 +340,35 @@ namespace ConditioningControlPanel.Services
                     }
                     else
                     {
-                        // Controller explicitly disconnected — stop remote-triggered effects
+                        // Controller disconnected — stop remote-triggered effects
                         // but preserve the user's engine/autonomy state so they can keep going
                         StopRemoteTriggeredEffects();
                     }
                     ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
                 }
 
-                // Track idle status for UI purposes (controller still connected but not actively pinging)
-                var idle = result["controller_idle"]?.Value<bool>() ?? false;
+                // Track idle status for UI + auto-disconnect timeout
                 if (idle != ControllerIdle)
                 {
                     ControllerIdle = idle;
+                    _controllerIdleSince = idle ? DateTime.UtcNow : null;
                     ControllerIdleChanged?.Invoke(this, EventArgs.Empty);
+                }
+
+                // Auto-disconnect controller after prolonged idle
+                if (ControllerConnected && idle && _controllerIdleSince != null)
+                {
+                    var idleDuration = (DateTime.UtcNow - _controllerIdleSince.Value).TotalSeconds;
+                    if (idleDuration >= IdleAutoDisconnectSeconds)
+                    {
+                        App.Logger?.Information("[RemoteControl] Controller idle for {Seconds:F0}s — auto-disconnecting", idleDuration);
+                        _controllerAutoDisconnected = true;
+                        ControllerConnected = false;
+                        StopRemoteTriggeredEffects();
+                        ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
+                        ControllerIdle = false;
+                        ControllerIdleChanged?.Invoke(this, EventArgs.Empty);
+                    }
                 }
 
                 // Execute commands
@@ -264,7 +377,8 @@ namespace ConditioningControlPanel.Services
                 var commands = result["commands"] as JArray;
                 if (commands != null && commands.Count > 0)
                 {
-                    App.Logger?.Information("[RemoteControl] Poll returned {Count} command(s)", commands.Count);
+                    _totalCommandsReceived += commands.Count;
+                    App.Logger?.Information("[RemoteControl] Poll returned {Count} command(s), session total: {Total}", commands.Count, _totalCommandsReceived);
                 }
                 if (commands != null)
                 {
@@ -288,11 +402,14 @@ namespace ConditioningControlPanel.Services
             }
             catch (TaskCanceledException)
             {
-                // Timeout, ignore
+                _consecutivePollFailures++;
+                if (_consecutivePollFailures >= 3)
+                    App.Logger?.Warning("[RemoteControl] Poll timeout (consecutive: {Count})", _consecutivePollFailures);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "[RemoteControl] Poll error");
+                _consecutivePollFailures++;
+                App.Logger?.Warning(ex, "[RemoteControl] Poll error (consecutive: {Count})", _consecutivePollFailures);
             }
             }
             finally
