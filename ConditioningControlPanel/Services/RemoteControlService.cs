@@ -304,7 +304,8 @@ namespace ConditioningControlPanel.Services
                 // Update controller connection status.
                 // The server only sets controller_connected=false on explicit disconnect
                 // (POST /remote/disconnect), NOT on ping staleness.
-                var connected = result["controller_connected"]?.Value<bool>() ?? false;
+                var serverConnected = result["controller_connected"]?.Value<bool>() ?? false;
+                var connected = serverConnected;
                 var idle = result["controller_idle"]?.Value<bool>() ?? false;
 
                 if (connected && _controllerAutoDisconnected)
@@ -323,7 +324,10 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
-                if (!connected)
+                // Only clear auto-disconnect flag when the SERVER itself reports
+                // the controller as disconnected — NOT when our local override
+                // suppressed reconnect above (which also sets connected=false).
+                if (!serverConnected)
                     _controllerAutoDisconnected = false;
 
                 if (connected != ControllerConnected)
