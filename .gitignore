@@ -1,3 +1,13 @@
+# Project briefing (contains operational details)
+project-briefing.md
+
+# Claude Code local config
+.claude/
+ConditioningControlPanel/.claude/
+
+# Build logs
+build-output.log
+
 # Build outputs
 bin/
 obj/
