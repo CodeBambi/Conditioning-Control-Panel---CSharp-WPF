@@ -22,34 +22,29 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.8.1";
+        public const string AppVersion = "5.8.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.8.1 — Hotfix
-
-Lots of changes shipped in v5.8.0 — if you missed them, check the full patch notes here:
-👉 https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/releases/tag/v5.8.0
-
-🔧 BUG FIXES
-• Fixed autonomy permanently blocked after a failed web video
-• Fixed autonomy pulse actions skipped during takeover mode
-• Fixed autonomy not restarting after panic key skips current action
-• Fixed audio ducking getting stuck at 0% volume
-• Fixed sparkle points from bubble pops not counting toward purchases
-• Fixed remote disconnect killing the Awareness Engine instead of just stopping remote effects
-• Fixed panic key toggle and offline mode button not working in popups
-• Fixed remote session overlays, subliminal one-shot, and web video stuck state
-• Fixed & showing as &amp; in localized text
-• Fixed HelpTooltipStyle crash on dashboard tooltips
-• Fixed OAuth listener crash and HypnoTube button after external link
-• Fixed XP reset guard, sync thresholds, auth recovery, and URL normalization
+        public const string CurrentPatchNotes = @"v5.8.2 — Signed, Yours Truly
 
 ✨ FEATURES
-• Feature popups are now non-modal with live-apply toggles
-• Allow minimizing during remote control sessions
+• Auto-disconnect idle remote controllers after 2 minutes of inactivity
+
+🔧 BUG FIXES
+• Fixed remote control overlay stuck on screen after idle auto-disconnect
+• Fixed Pick Folder dialog, flash preset display, awareness keyboard decoupling
+• Fixed MindWipe loop playing when disabled
+• Fixed OutlineButton resource crash
+• Bug fixes from triage (skill points, audio crash, settings debounce, purchase auth retry)
+
+🎨 UI/UX
+• Fixed feature card image corners bleeding through rounded border
+• Dashboard mosaic restyle
+
+🔏 Starting with this release, CCP binaries are code-signed for your safety.
 
 Season: Airhead April";
 

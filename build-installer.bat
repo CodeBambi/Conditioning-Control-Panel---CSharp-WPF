@@ -7,7 +7,7 @@ echo ============================================
 echo.
 
 :: Configuration
-set VERSION=5.8.1
+set VERSION=5.8.2
 set PROJECT_DIR=ConditioningControlPanel
 set PUBLISH_DIR=%PROJECT_DIR%\bin\Release\net8.0-windows10.0.19041.0\win-x64\publish
 set INSTALLER_OUTPUT=installer-output
@@ -43,13 +43,23 @@ if errorlevel 1 (
 cd ..
 
 echo.
-echo [2.5/4] Cleaning empty locale folders from publish output...
+echo [2.5/6] Cleaning empty locale folders from publish output...
 for %%D in (cs de es fr it ja ko pl pt-BR ru tr zh-Hans zh-Hant) do (
     if exist "%PUBLISH_DIR%\%%D" rmdir /s /q "%PUBLISH_DIR%\%%D"
 )
 
 echo.
-echo [3/4] Compiling installer with Inno Setup...
+echo ============================================
+echo [3/6] CODE SIGN - Application EXE
+echo ============================================
+echo.
+echo Sign the app exe now:
+echo   C:\downloads\ActalisCodeSigner-win-x64-latest\ActalisCodeSigner.exe -fu conditioning_control_labs_srls -fp YOUR_PASSWORD -in "%PUBLISH_DIR%\ConditioningControlPanel.exe" -ts
+echo.
+pause
+
+echo.
+echo [4/6] Compiling installer with Inno Setup...
 "%ISCC_PATH%" installer.iss
 if errorlevel 1 (
     echo ERROR: Installer compilation failed!
@@ -58,10 +68,20 @@ if errorlevel 1 (
 )
 
 echo.
-echo [4/4] Build complete!
+echo ============================================
+echo [5/6] CODE SIGN - Installer EXE
+echo ============================================
+echo.
+echo Sign the installer now:
+echo   C:\downloads\ActalisCodeSigner-win-x64-latest\ActalisCodeSigner.exe -fu conditioning_control_labs_srls -fp YOUR_PASSWORD -in "%INSTALLER_OUTPUT%\ConditioningControlPanel-%VERSION%-Setup.exe" -ts
+echo.
+pause
+
+echo.
+echo [6/6] Build complete!
 echo.
 echo ============================================
-echo Installer created: %INSTALLER_OUTPUT%\ConditioningControlPanel-%VERSION%-Setup.exe
+echo Signed installer: %INSTALLER_OUTPUT%\ConditioningControlPanel-%VERSION%-Setup.exe
 echo ============================================
 echo.
 
