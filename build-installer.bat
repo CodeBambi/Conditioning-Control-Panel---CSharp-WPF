@@ -54,7 +54,7 @@ echo [3/6] CODE SIGN - Application EXE
 echo ============================================
 echo.
 echo Sign the app exe now:
-echo   C:\downloads\ActalisCodeSigner-win-x64-latest\ActalisCodeSigner.exe -fu conditioning_control_labs_srls -fp YOUR_PASSWORD -in "%PUBLISH_DIR%\ConditioningControlPanel.exe" -ts
+echo   C:\downloads\ActalisCodeSigner-win-x64-latest\ActalisCodeSigner.exe -fu YOUR_USERNAME -fp YOUR_PASSWORD -in "%PUBLISH_DIR%\ConditioningControlPanel.exe" -ts
 echo.
 pause
 
@@ -73,7 +73,7 @@ echo [5/6] CODE SIGN - Installer EXE
 echo ============================================
 echo.
 echo Sign the installer now:
-echo   C:\downloads\ActalisCodeSigner-win-x64-latest\ActalisCodeSigner.exe -fu conditioning_control_labs_srls -fp YOUR_PASSWORD -in "%INSTALLER_OUTPUT%\ConditioningControlPanel-%VERSION%-Setup.exe" -ts
+echo   C:\downloads\ActalisCodeSigner-win-x64-latest\ActalisCodeSigner.exe -fu YOUR_USERNAME -fp YOUR_PASSWORD -in "%INSTALLER_OUTPUT%\ConditioningControlPanel-%VERSION%-Setup.exe" -ts
 echo.
 pause
 
