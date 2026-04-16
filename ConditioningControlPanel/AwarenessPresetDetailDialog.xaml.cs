@@ -30,26 +30,151 @@ namespace ConditioningControlPanel
     {
         private readonly KeywordTriggerPreset _preset;
 
+        /// <summary>
+        /// True until the first successful save of a brand-new user-created preset.
+        /// While set, persist-hooks add the preset to <c>settings.KeywordTriggerPresets</c>
+        /// on first write so the card shows up in the Awareness grid.
+        /// </summary>
+        private bool _isCustomPresetUnsaved;
+
         /// <summary>True if install/uninstall state changed — caller should refresh.</summary>
         public bool Changed { get; private set; }
 
+        /// <summary>
+        /// Open an existing preset (built-in or previously-saved custom) for preview/edit.
+        /// </summary>
         public AwarenessPresetDetailDialog(KeywordTriggerPreset preset)
+            : this(preset, isNewCustomPreset: false) { }
+
+        /// <summary>
+        /// Open a preset for preview/edit. When <paramref name="isNewCustomPreset"/> is
+        /// true, the preset is treated as unsaved — editing its metadata or adding a
+        /// trigger is what persists it to settings.
+        /// </summary>
+        public AwarenessPresetDetailDialog(KeywordTriggerPreset preset, bool isNewCustomPreset)
         {
             InitializeComponent();
             _preset = preset;
+            _isCustomPresetUnsaved = isNewCustomPreset;
 
-            TxtIcon.Text = preset.Icon;
-            TxtName.Text = preset.Name;
-            TxtAuthor.Text = preset.Author;
-            TxtDescription.Text = string.IsNullOrEmpty(preset.LongDescription)
-                ? preset.Description
-                : preset.LongDescription;
+            if (preset.IsBuiltIn)
+            {
+                // Built-in presets: static header. Name/icon/description are fixed and
+                // refreshed from the JSON on version bumps, so they aren't editable.
+                TxtIcon.Text = preset.Icon;
+                TxtName.Text = preset.Name;
+                TxtAuthor.Text = preset.Author;
+                TxtDescription.Text = string.IsNullOrEmpty(preset.LongDescription)
+                    ? preset.Description
+                    : preset.LongDescription;
+            }
+            else
+            {
+                // Custom presets: editable name/icon/description. Wire LostFocus so
+                // every edit both mutates the preset AND persists (which also creates
+                // the preset in settings the first time around).
+                TxtIcon.Visibility = Visibility.Collapsed;
+                NameReadPanel.Visibility = Visibility.Collapsed;
+                TxtDescription.Visibility = Visibility.Collapsed;
+
+                TxtIconEdit.Visibility = Visibility.Visible;
+                NameEditPanel.Visibility = Visibility.Visible;
+                TxtDescriptionEdit.Visibility = Visibility.Visible;
+
+                TxtIconEdit.Text = preset.Icon;
+                TxtNameEdit.Text = preset.Name;
+                TxtDescriptionEdit.Text = string.IsNullOrEmpty(preset.LongDescription)
+                    ? preset.Description
+                    : preset.LongDescription;
+
+                TxtIconEdit.LostFocus += (_, _) =>
+                {
+                    preset.Icon = (TxtIconEdit.Text ?? "").Trim();
+                    PersistAndMaybeCreate();
+                };
+                TxtNameEdit.LostFocus += (_, _) =>
+                {
+                    var name = (TxtNameEdit.Text ?? "").Trim();
+                    preset.Name = string.IsNullOrEmpty(name) ? "Untitled preset" : name;
+                    TxtNameEdit.Text = preset.Name;
+                    PersistAndMaybeCreate();
+                };
+                TxtDescriptionEdit.LostFocus += (_, _) =>
+                {
+                    var text = (TxtDescriptionEdit.Text ?? "").Trim();
+                    preset.Description = text;
+                    preset.LongDescription = text;
+                    PersistAndMaybeCreate();
+                };
+            }
 
             if (preset.RequiresAi)
                 BrdAiBadge.Visibility = Visibility.Visible;
 
             RebuildRows();
             UpdateInstallButton();
+        }
+
+        /// <summary>
+        /// Persists settings AND, if this dialog is editing a brand-new user-created
+        /// preset, registers it in <c>settings.KeywordTriggerPresets</c> on first write.
+        /// </summary>
+        private void PersistAndMaybeCreate()
+        {
+            if (_isCustomPresetUnsaved)
+            {
+                var list = App.Settings?.Current?.KeywordTriggerPresets;
+                if (list != null && !list.Any(p => p.Id == _preset.Id))
+                    list.Add(_preset);
+                _isCustomPresetUnsaved = false;
+                Changed = true;
+            }
+            App.Settings?.Save();
+        }
+
+        /// <summary>
+        /// True when the trigger list (and "+ Add trigger" button, per-trigger delete,
+        /// keyword edit) should be usable. Installed presets are always editable;
+        /// user-authored presets are editable even when uninstalled so they can be
+        /// authored before being turned on.
+        /// </summary>
+        private bool IsEditable()
+        {
+            if (App.KeywordPresets?.IsInstalled(_preset.Id) == true) return true;
+            if (!_preset.IsBuiltIn) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// For user-created presets that are currently installed, mirror the live
+        /// cloned triggers in <c>settings.KeywordTriggers</c> back into
+        /// <c>preset.Triggers</c>. Keeps the preset source-of-truth in sync so a later
+        /// Uninstall → Install cycle preserves user edits. No-op for built-ins (their
+        /// source is owned by the JSON in <c>Resources/AwarenessPresets/</c>).
+        /// </summary>
+        private void MirrorLiveClonesToCustomSource()
+        {
+            if (_preset.IsBuiltIn) return;
+            var installed = App.KeywordPresets?.IsInstalled(_preset.Id) == true;
+            if (!installed) return;
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            var prefix = "preset:" + _preset.Id + ":";
+            var live = settings.KeywordTriggers
+                .Where(t => t?.Id?.StartsWith(prefix, StringComparison.Ordinal) == true)
+                .ToList();
+
+            var synced = new List<KeywordTrigger>();
+            foreach (var clone in live)
+            {
+                var copy = clone.Clone();
+                copy.Id = clone.Id!.Substring(prefix.Length);
+                copy.LastTriggeredAt = DateTime.MinValue;
+                synced.Add(copy);
+            }
+            _preset.Triggers = synced;
         }
 
         // ============================================================
@@ -61,6 +186,7 @@ namespace ConditioningControlPanel
             TriggerStack.Children.Clear();
 
             var installed = App.KeywordPresets?.IsInstalled(_preset.Id) == true;
+            var editable = IsEditable();
             var settings = App.Settings?.Current;
             List<KeywordTrigger> triggers;
 
@@ -75,15 +201,26 @@ namespace ConditioningControlPanel
             }
             else
             {
-                // Read-only preview of the preset definition.
+                // Uninstalled: edit preset.Triggers directly (custom presets) or
+                // show read-only preview (built-ins).
                 triggers = _preset.Triggers?.Where(t => t != null).ToList() ?? new List<KeywordTrigger>();
             }
 
             foreach (var trigger in triggers)
-                TriggerStack.Children.Add(BuildTriggerBorder(trigger, editable: installed));
+                TriggerStack.Children.Add(BuildTriggerBorder(trigger, editable));
 
-            BtnClone.Visibility = installed ? Visibility.Collapsed : Visibility.Visible;
-            TxtFooterNote.Visibility = installed ? Visibility.Visible : Visibility.Collapsed;
+            // Inline "+ Add trigger" button at the bottom of the editable list.
+            if (editable)
+                TriggerStack.Children.Add(BuildAddTriggerRow());
+            else if (triggers.Count == 0)
+                TriggerStack.Children.Add(BuildEmptyStateNotice());
+
+            // Clone-to-custom only helps for built-in previews (dumps defaults
+            // into the Exclusives editor for free tweaking). Custom presets have
+            // a Delete button instead.
+            BtnClone.Visibility = (_preset.IsBuiltIn && !installed) ? Visibility.Visible : Visibility.Collapsed;
+            BtnDeletePreset.Visibility = !_preset.IsBuiltIn ? Visibility.Visible : Visibility.Collapsed;
+            TxtFooterNote.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void UpdateInstallButton()
@@ -98,6 +235,131 @@ namespace ConditioningControlPanel
                 BtnInstall.Content = "Install";
                 BtnInstall.Background = (Brush)FindResource("PinkBrush");
             }
+        }
+
+        private FrameworkElement BuildAddTriggerRow()
+        {
+            var btn = new Button
+            {
+                Content = "＋ Add trigger",
+                Padding = new Thickness(12, 6, 12, 6),
+                Margin = new Thickness(0, 10, 0, 0),
+                Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x44)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                FontSize = 11,
+                ToolTip = "Append a fresh keyword trigger. Edit the keyword field to name it, then Add actions to define what fires.",
+            };
+            btn.Click += (_, _) => AddNewTrigger();
+            return btn;
+        }
+
+        private static FrameworkElement BuildEmptyStateNotice()
+        {
+            return new TextBlock
+            {
+                Text = "No triggers defined for this preset.",
+                Foreground = (Brush)new SolidColorBrush(Color.FromRgb(0x8A, 0x8A, 0xA0)),
+                FontStyle = FontStyles.Italic,
+                FontSize = 11,
+                Margin = new Thickness(4, 8, 0, 4),
+            };
+        }
+
+        /// <summary>
+        /// Append a new blank <see cref="KeywordTrigger"/> to the correct list
+        /// (live clones for installed presets, source list for uninstalled custom
+        /// presets) and refresh the dialog so its row appears.
+        /// </summary>
+        private void AddNewTrigger()
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            var newTrigger = new KeywordTrigger
+            {
+                Keyword = "",
+                MatchType = KeywordMatchType.PlainText,
+                Enabled = true,
+                CooldownSeconds = 30,
+                AudioVolume = 80,
+                VisualEffect = KeywordVisualEffect.SubliminalFlash,
+                HapticEnabled = false,
+                HapticIntensity = 0.3,
+                DuckAudio = true,
+                XPAward = 0,
+            };
+            // Blank trigger starts with an empty action list so users can build up
+            // exactly what they want via the per-trigger "+ Add action" menu.
+            newTrigger.Actions = new List<KeywordAction>();
+
+            var installed = App.KeywordPresets?.IsInstalled(_preset.Id) == true;
+            if (installed)
+            {
+                // Live clone list uses the "preset:<presetId>:<sourceId>" id convention.
+                var prefix = "preset:" + _preset.Id + ":";
+                var sourceId = Guid.NewGuid().ToString("N")[..8];
+                newTrigger.Id = prefix + sourceId;
+                settings.KeywordTriggers.Add(newTrigger);
+
+                // For custom presets, also add a matching source entry so
+                // uninstall→reinstall preserves this addition.
+                if (!_preset.IsBuiltIn)
+                {
+                    var sourceCopy = newTrigger.Clone();
+                    sourceCopy.Id = sourceId;
+                    _preset.Triggers ??= new List<KeywordTrigger>();
+                    _preset.Triggers.Add(sourceCopy);
+                }
+            }
+            else
+            {
+                // Uninstalled custom preset: edit the source list directly.
+                _preset.Triggers ??= new List<KeywordTrigger>();
+                _preset.Triggers.Add(newTrigger);
+            }
+
+            PersistAndMaybeCreate();
+            Changed = true;
+            RebuildRows();
+        }
+
+        /// <summary>
+        /// Remove a trigger row entirely. For installed presets this removes the
+        /// live clone from settings; for custom presets we also strip the matching
+        /// source entry so the trigger doesn't come back on Uninstall→Install.
+        /// </summary>
+        private void DeleteTrigger(KeywordTrigger trigger)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            var installed = App.KeywordPresets?.IsInstalled(_preset.Id) == true;
+            if (installed)
+            {
+                settings.KeywordTriggers.RemoveAll(t => t.Id == trigger.Id);
+
+                if (!_preset.IsBuiltIn)
+                {
+                    // Source id == live clone id with prefix stripped.
+                    var prefix = "preset:" + _preset.Id + ":";
+                    if (trigger.Id?.StartsWith(prefix, StringComparison.Ordinal) == true)
+                    {
+                        var sourceId = trigger.Id.Substring(prefix.Length);
+                        _preset.Triggers?.RemoveAll(t => t.Id == sourceId);
+                    }
+                }
+            }
+            else
+            {
+                _preset.Triggers?.RemoveAll(t => t.Id == trigger.Id);
+            }
+
+            PersistAndMaybeCreate();
+            Changed = true;
+            RebuildRows();
         }
 
         // ============================================================
@@ -119,11 +381,12 @@ namespace ConditioningControlPanel
             var stack = new StackPanel();
             border.Child = stack;
 
-            // ---- Header row: enable checkbox + keyword + add-action button ----
+            // ---- Header row: enable checkbox + keyword (editable) + add-action + delete-trigger ----
             var headerGrid = new Grid();
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // enable
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // keyword
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // add action / chips
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // delete trigger
 
             var enableBox = new CheckBox
             {
@@ -131,29 +394,47 @@ namespace ConditioningControlPanel
                 IsEnabled = editable,
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 8, 0),
+                ToolTip = "Toggle whether this keyword fires",
             };
-            enableBox.Checked += (_, _) => { trigger.Enabled = true; if (editable) App.Settings?.Save(); };
-            enableBox.Unchecked += (_, _) => { trigger.Enabled = false; if (editable) App.Settings?.Save(); };
+            enableBox.Checked += (_, _) => { trigger.Enabled = true; if (editable) PersistAndMaybeCreate(); };
+            enableBox.Unchecked += (_, _) => { trigger.Enabled = false; if (editable) PersistAndMaybeCreate(); };
             Grid.SetColumn(enableBox, 0);
             headerGrid.Children.Add(enableBox);
 
-            var keywordText = new TextBlock
-            {
-                Text = trigger.Keyword,
-                Foreground = Brushes.White,
-                FontSize = 13,
-                FontWeight = FontWeights.SemiBold,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            Grid.SetColumn(keywordText, 1);
-            headerGrid.Children.Add(keywordText);
-
             if (editable)
             {
+                // Editable keyword TextBox — LostFocus commits the change and also
+                // mirrors to the custom preset's source list so uninstall/reinstall
+                // preserves the user's word choice.
+                var keywordBox = new TextBox
+                {
+                    Text = trigger.Keyword,
+                    Foreground = Brushes.White,
+                    FontSize = 13,
+                    FontWeight = FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x32)),
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x5A)),
+                    BorderThickness = new Thickness(1),
+                    Padding = new Thickness(6, 3, 6, 3),
+                    MinWidth = 140,
+                    ToolTip = "Word or phrase that fires this trigger. Edit freely.",
+                };
+                keywordBox.LostFocus += (_, _) =>
+                {
+                    var newKeyword = (keywordBox.Text ?? "").Trim();
+                    if (newKeyword == trigger.Keyword) return;
+                    trigger.Keyword = newKeyword;
+                    PersistAndMaybeCreate();
+                };
+                Grid.SetColumn(keywordBox, 1);
+                headerGrid.Children.Add(keywordBox);
+
                 var addBtn = new Button
                 {
                     Content = "＋ Add action",
                     Padding = new Thickness(10, 4, 10, 4),
+                    Margin = new Thickness(6, 0, 0, 0),
                     Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x44)),
                     Foreground = Brushes.White,
                     BorderThickness = new Thickness(0),
@@ -163,10 +444,48 @@ namespace ConditioningControlPanel
                 addBtn.Click += (_, _) => ShowAddActionMenu(addBtn, trigger, border);
                 Grid.SetColumn(addBtn, 2);
                 headerGrid.Children.Add(addBtn);
+
+                var deleteTriggerBtn = new Button
+                {
+                    Content = "×",
+                    Width = 26,
+                    Height = 26,
+                    Margin = new Thickness(6, 0, 0, 0),
+                    Padding = new Thickness(0),
+                    Background = new SolidColorBrush(Color.FromRgb(0x40, 0x20, 0x20)),
+                    Foreground = Brushes.White,
+                    BorderThickness = new Thickness(0),
+                    Cursor = Cursors.Hand,
+                    FontSize = 14,
+                    ToolTip = "Delete this trigger from the preset",
+                };
+                deleteTriggerBtn.Click += (_, _) =>
+                {
+                    var label = string.IsNullOrWhiteSpace(trigger.Keyword) ? "(unnamed trigger)" : $"\"{trigger.Keyword}\"";
+                    var confirm = MessageBox.Show(
+                        $"Delete trigger {label}?\n\nThis removes the keyword and all its actions.",
+                        "Delete trigger",
+                        MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (confirm == MessageBoxResult.Yes)
+                        DeleteTrigger(trigger);
+                };
+                Grid.SetColumn(deleteTriggerBtn, 3);
+                headerGrid.Children.Add(deleteTriggerBtn);
             }
             else
             {
-                // Non-installed view: still show the chip summary on the right
+                // Read-only preview (built-in, not installed).
+                var keywordText = new TextBlock
+                {
+                    Text = trigger.Keyword,
+                    Foreground = Brushes.White,
+                    FontSize = 13,
+                    FontWeight = FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                Grid.SetColumn(keywordText, 1);
+                headerGrid.Children.Add(keywordText);
+
                 var chipText = new TextBlock
                 {
                     Text = BuildActionChips(trigger),
@@ -842,10 +1161,25 @@ namespace ConditioningControlPanel
         {
             if (App.KeywordPresets == null) { Close(); return; }
 
+            // New custom preset must be registered before it can be installed, otherwise
+            // KeywordTriggerPresetService.GetPreset returns null. Persist now so the
+            // preset lives in settings.KeywordTriggerPresets.
+            if (_isCustomPresetUnsaved)
+                PersistAndMaybeCreate();
+
             if (App.KeywordPresets.IsInstalled(_preset.Id))
+            {
+                // For custom presets: capture any in-place edits to the live clones
+                // back into the source list before uninstall wipes the clones. That
+                // way a later re-install keeps the user's tuning.
+                if (!_preset.IsBuiltIn)
+                    MirrorLiveClonesToCustomSource();
                 App.KeywordPresets.UninstallPreset(_preset.Id);
+            }
             else
+            {
                 App.KeywordPresets.InstallPreset(_preset.Id);
+            }
 
             Changed = true;
             RebuildRows();
@@ -859,6 +1193,41 @@ namespace ConditioningControlPanel
             Changed = true;
             MessageBox.Show($"Cloned {added} trigger(s) into your custom list.", "Cloned",
                 MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        /// <summary>
+        /// Delete a user-created preset entirely. Only offered for non-built-in
+        /// presets — built-ins would just reappear on next app launch via
+        /// <see cref="Services.SettingsService.MergeBuiltInAwarenessPresets"/>.
+        /// Uninstalls first (to clean up live clones + injected phrases) and then
+        /// removes the preset entry itself.
+        /// </summary>
+        private void BtnDeletePreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (_preset.IsBuiltIn)
+            {
+                // Guard rail — the button shouldn't even be visible for built-ins.
+                return;
+            }
+
+            var label = string.IsNullOrWhiteSpace(_preset.Name) ? "this preset" : $"\"{_preset.Name}\"";
+            var confirm = MessageBox.Show(
+                $"Delete {label}?\n\nThis removes the preset and all its triggers permanently.",
+                "Delete preset",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            // Uninstall first so cloned triggers / canned phrases are cleaned up.
+            if (App.KeywordPresets?.IsInstalled(_preset.Id) == true)
+                App.KeywordPresets.UninstallPreset(_preset.Id);
+
+            var list = App.Settings?.Current?.KeywordTriggerPresets;
+            if (list != null)
+                list.RemoveAll(p => p.Id == _preset.Id);
+            App.Settings?.Save();
+
+            Changed = true;
+            Close();
         }
 
         private void BtnClose_Click(object sender, RoutedEventArgs e)

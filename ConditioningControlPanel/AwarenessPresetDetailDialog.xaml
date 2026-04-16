@@ -107,17 +107,44 @@
 
             <!-- Header -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                <!-- Built-in: static icon + name (shown when preset.IsBuiltIn) -->
                 <TextBlock x:Name="TxtIcon" FontSize="36" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                <StackPanel VerticalAlignment="Center">
+                <StackPanel x:Name="NameReadPanel" VerticalAlignment="Center">
                     <TextBlock x:Name="TxtName" Foreground="White" FontSize="22" FontWeight="Bold"/>
                     <TextBlock x:Name="TxtAuthor" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                 </StackPanel>
+
+                <!-- Custom: editable icon + name (shown when !preset.IsBuiltIn) -->
+                <TextBox x:Name="TxtIconEdit" FontSize="28"
+                         Width="60" Height="52" MaxLength="4"
+                         Background="#1E1E32" Foreground="White"
+                         BorderBrush="#3A3A5A" BorderThickness="1"
+                         VerticalAlignment="Center" HorizontalContentAlignment="Center"
+                         VerticalContentAlignment="Center"
+                         Margin="0,0,14,0" Visibility="Collapsed"
+                         ToolTip="Emoji or short label for the card (e.g. 🎯)"/>
+                <StackPanel x:Name="NameEditPanel" VerticalAlignment="Center" Visibility="Collapsed">
+                    <TextBox x:Name="TxtNameEdit" Foreground="White" FontSize="22" FontWeight="Bold"
+                             Background="#1E1E32" BorderBrush="#3A3A5A" BorderThickness="1"
+                             Padding="4,2" MinWidth="300"
+                             ToolTip="Preset name shown on the card"/>
+                    <TextBlock Text="Custom preset" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0"/>
+                </StackPanel>
             </StackPanel>
 
-            <!-- Description -->
+            <!-- Description (read-only variant) -->
             <TextBlock Grid.Row="1" x:Name="TxtDescription"
                        Foreground="#C8C8D6" FontSize="13"
                        TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+            <!-- Description (editable variant — shown for custom presets) -->
+            <TextBox Grid.Row="1" x:Name="TxtDescriptionEdit"
+                     Foreground="White" FontSize="12"
+                     Background="#1E1E32" BorderBrush="#3A3A5A" BorderThickness="1"
+                     Padding="6,4" TextWrapping="Wrap" AcceptsReturn="True"
+                     MinHeight="44" MaxHeight="80"
+                     Margin="0,0,0,10" Visibility="Collapsed"
+                     ToolTip="Short description shown on the card"/>
 
             <!-- AI badge -->
             <Border Grid.Row="2" x:Name="BrdAiBadge" Visibility="Collapsed"
@@ -132,7 +159,9 @@
                        Margin="0,0,0,8"/>
 
             <!-- Trigger list - rows built imperatively in code-behind so each action
-                 type gets its own inline editor without needing 8 XAML DataTemplates. -->
+                 type gets its own inline editor without needing 8 XAML DataTemplates.
+                 An "+ Add trigger" button is injected at the bottom of TriggerStack
+                 when the dialog is in an editable state. -->
             <Border Grid.Row="4" Background="#1A1A2E" BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="8">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="TriggerStack" Margin="10"/>
@@ -147,6 +176,11 @@
 
             <!-- Buttons -->
             <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+                <!-- Delete is only shown for user-created presets (replaces Clone). -->
+                <Button x:Name="BtnDeletePreset" Content="Delete preset" Padding="12,8" Margin="0,0,8,0"
+                        Background="#5A3030" Foreground="White" BorderThickness="0" Cursor="Hand"
+                        Visibility="Collapsed"
+                        Click="BtnDeletePreset_Click"/>
                 <Button x:Name="BtnClone" Content="Clone to custom" Padding="12,8" Margin="0,0,8,0"
                         Background="#2A2A44" Foreground="White" BorderThickness="0" Cursor="Hand"
                         Click="BtnClone_Click"/>
