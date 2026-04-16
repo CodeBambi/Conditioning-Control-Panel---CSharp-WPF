@@ -408,6 +408,18 @@ namespace ConditioningControlPanel
             // Initialize browser when window is loaded
             Loaded += MainWindow_Loaded;
 
+            // Close the Exclusives submenu popup on Alt+Tab / focus loss.
+            // MouseLeave doesn't fire during Alt+Tab, so without this the popup
+            // stays pinned on top of whatever app the user switched to.
+            Deactivated += (_, __) =>
+            {
+                if (ExclusivesSubmenuPopup != null && ExclusivesSubmenuPopup.IsOpen)
+                {
+                    _exclusivesMenuCloseTimer?.Stop();
+                    ExclusivesSubmenuPopup.IsOpen = false;
+                }
+            };
+
             // velvet-mosaic: highlight dashboard cards whose feature is enabled, and
             // keep them in sync when settings change anywhere else.
             Loaded += (_, __) => RefreshFeatureCardActiveStates();
