@@ -30,7 +30,14 @@ namespace ConditioningControlPanel.Services
     public class RemoteControlService : IDisposable
     {
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
-        private const double PollIntervalSeconds = 3.0;
+        // 5s gives comfortable headroom under the server's 40/min per-user poll cap
+        // (12/min steady-state) while keeping perceived latency negligible.
+        private const double PollIntervalSeconds = 5.0;
+        // Status pushes are throttled — the controller UI doesn't need 3s-fresh status.
+        // Push immediately on command execution or controller-connected state change.
+        private const double StatusPushIntervalSeconds = 15.0;
+        // When a status push hits 429, skip subsequent pushes for this long.
+        private const double StatusBackoffSeconds = 60.0;
 
         private readonly HttpClient _httpClient;
         private DispatcherTimer? _pollTimer;
@@ -122,6 +129,8 @@ namespace ConditioningControlPanel.Services
                 _lastHealthLog = DateTime.MinValue;
                 _sessionStartTime = DateTime.UtcNow;
                 _currentPollInterval = PollIntervalSeconds;
+                _lastStatusPushUtc = DateTime.MinValue;
+                _statusBackoffUntil = DateTime.MinValue;
 
                 // Start polling
                 _pollTimer = new DispatcherTimer
@@ -177,6 +186,8 @@ namespace ConditioningControlPanel.Services
             _currentPollInterval = PollIntervalSeconds;
             _controllerIdleSince = null;
             _controllerAutoDisconnected = false;
+            _lastStatusPushUtc = DateTime.MinValue;
+            _statusBackoffUntil = DateTime.MinValue;
             IsActive = false;
             SessionCode = null;
             ConnectPin = null;
@@ -211,6 +222,8 @@ namespace ConditioningControlPanel.Services
         private DateTime? _controllerIdleSince;
         private bool _controllerAutoDisconnected;
         private const double IdleAutoDisconnectSeconds = 120.0; // 2 minutes
+        private DateTime _lastStatusPushUtc = DateTime.MinValue;
+        private DateTime _statusBackoffUntil = DateTime.MinValue;
 
         private async Task PollForCommandsAsync()
         {
@@ -243,7 +256,7 @@ namespace ConditioningControlPanel.Services
                         _currentPollInterval = Math.Min(_currentPollInterval * 2, MaxBackoffSeconds);
                         if (_pollTimer != null)
                             _pollTimer.Interval = TimeSpan.FromSeconds(_currentPollInterval);
-                        App.Logger?.Warning("[RemoteControl] Rate limited (429), backing off to {Interval}s", _currentPollInterval);
+                        App.Logger?.Warning("[RemoteControl] Rate limited (429) [code={Code}], backing off to {Interval}s", SessionCode ?? "?", _currentPollInterval);
                     }
                     else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                     {
@@ -330,7 +343,8 @@ namespace ConditioningControlPanel.Services
                 if (!serverConnected)
                     _controllerAutoDisconnected = false;
 
-                if (connected != ControllerConnected)
+                var controllerConnectedChanged = connected != ControllerConnected;
+                if (controllerConnectedChanged)
                 {
                     ControllerConnected = connected;
                     if (connected)
@@ -401,8 +415,15 @@ namespace ConditioningControlPanel.Services
                     }
                 }
 
-                // Always send status so the remote controller sees current CCP state
-                await SendStatusAsync(lastCmdId, lastAction);
+                // Throttle status pushes. Push immediately on command execution or
+                // controller-connected state change; otherwise only every ~15s.
+                // This roughly halves client→server traffic and keeps us well under
+                // the server's per-user 40/min cap on both /poll and /status.
+                var statusDue = (DateTime.UtcNow - _lastStatusPushUtc).TotalSeconds >= StatusPushIntervalSeconds;
+                if (lastCmdId != null || controllerConnectedChanged || statusDue)
+                {
+                    await SendStatusAsync(lastCmdId, lastAction);
+                }
             }
             catch (TaskCanceledException)
             {
@@ -424,6 +445,9 @@ namespace ConditioningControlPanel.Services
 
         private async Task SendStatusAsync(string? lastCmdId = null, string? lastAction = null)
         {
+            // Skip while we're in backoff from a previous 429 on /status.
+            if (DateTime.UtcNow < _statusBackoffUntil) return;
+
             var unifiedId = App.UnifiedUserId;
             if (string.IsNullOrEmpty(unifiedId)) return;
 
@@ -459,6 +483,27 @@ namespace ConditioningControlPanel.Services
                 });
 
                 using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/status", body);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (response.StatusCode == (System.Net.HttpStatusCode)429)
+                    {
+                        _statusBackoffUntil = DateTime.UtcNow.AddSeconds(StatusBackoffSeconds);
+                        App.Logger?.Warning(
+                            "[RemoteControl] Status push rate limited (429) [code={Code}] — suppressing status pushes for {Seconds}s",
+                            SessionCode ?? "?", StatusBackoffSeconds);
+                    }
+                    else
+                    {
+                        App.Logger?.Warning(
+                            "[RemoteControl] Status push failed: {Status} [code={Code}]",
+                            response.StatusCode, SessionCode ?? "?");
+                    }
+                }
+                else
+                {
+                    _lastStatusPushUtc = DateTime.UtcNow;
+                }
             }
             catch (Exception ex)
             {
