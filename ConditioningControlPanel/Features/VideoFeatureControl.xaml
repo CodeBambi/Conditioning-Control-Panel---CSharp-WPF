@@ -123,14 +123,14 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Button Grid.Column="0" Content="{loc:Str btn_phrases}"
-                            Style="{StaticResource OutlineButton}" Click="BtnManageAttention_Click"/>
+                            Style="{DynamicResource OutlineButton}" Click="BtnManageAttention_Click"/>
                     <Button Grid.Column="2" Content="{loc:Str btn_style}"
-                            Style="{StaticResource OutlineButton}" Click="BtnAttentionStyle_Click"/>
+                            Style="{DynamicResource OutlineButton}" Click="BtnAttentionStyle_Click"/>
                 </Grid>
             </StackPanel>
         </Border>
 
-        <Button Content="{loc:Str btn_test_2}" Style="{StaticResource OutlineButton}"
+        <Button Content="{loc:Str btn_test_2}" Style="{DynamicResource OutlineButton}"
                 Click="BtnTestVideo_Click"/>
     </StackPanel>
 </UserControl>

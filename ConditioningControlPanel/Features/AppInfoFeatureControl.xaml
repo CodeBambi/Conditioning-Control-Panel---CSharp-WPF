@@ -29,13 +29,13 @@
         <StackPanel x:Name="ExternalSectionsHost" Margin="0,0,0,8"/>
 
         <Button x:Name="BtnCheckUpdates" Content="{loc:Str btn_check_updates}"
-                Style="{StaticResource OutlineButton}"
+                Style="{DynamicResource OutlineButton}"
                 Padding="14,12" FontSize="14"
                 Click="BtnCheckUpdates_Click"
                 Margin="0,0,0,8"/>
 
         <Button x:Name="BtnReportBug" Content="{loc:Str btn_report_bug}"
-                Style="{StaticResource OutlineButton}"
+                Style="{DynamicResource OutlineButton}"
                 Padding="14,12" FontSize="14"
                 Click="BtnReportBug_Click"/>
     </StackPanel>

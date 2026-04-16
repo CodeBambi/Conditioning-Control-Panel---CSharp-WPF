@@ -117,10 +117,10 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Button Grid.Column="0" Content="📝 Messages"
-                    Style="{StaticResource OutlineButton}" Click="BtnManageMessages_Click"
+                    Style="{DynamicResource OutlineButton}" Click="BtnManageMessages_Click"
                     ToolTip="{loc:Str tooltip_edit_subliminal_messages}"/>
             <Button Grid.Column="2" Content="⚙ Advanced"
-                    Style="{StaticResource OutlineButton}" Click="BtnAdvanced_Click"
+                    Style="{DynamicResource OutlineButton}" Click="BtnAdvanced_Click"
                     ToolTip="{loc:Str tooltip_advanced_subliminal_visual_settings}"/>
         </Grid>
     </StackPanel>
