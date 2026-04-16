@@ -358,9 +358,11 @@ namespace ConditioningControlPanel.Services
                     }
                     else
                     {
-                        // Controller disconnected — stop remote-triggered effects
-                        // but preserve the user's engine/autonomy state so they can keep going
-                        StopRemoteTriggeredEffects();
+                        // Controller disconnected. By default we leave effects running
+                        // so a new controller can see the current state and the sub
+                        // isn't snapped to a halt mid-session. Opt-in setting stops them.
+                        if (App.Settings?.Current?.StopEffectsOnRemoteDisconnect == true)
+                            StopRemoteTriggeredEffects();
                     }
                     ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
                 }
@@ -382,7 +384,8 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Information("[RemoteControl] Controller idle for {Seconds:F0}s — auto-disconnecting", idleDuration);
                         _controllerAutoDisconnected = true;
                         ControllerConnected = false;
-                        StopRemoteTriggeredEffects();
+                        if (App.Settings?.Current?.StopEffectsOnRemoteDisconnect == true)
+                            StopRemoteTriggeredEffects();
                         ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
                         ControllerIdle = false;
                         ControllerIdleChanged?.Invoke(this, EventArgs.Empty);

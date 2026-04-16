@@ -8855,6 +8855,14 @@ namespace ConditioningControlPanel
             _isLoading = false;
         }
 
+        private void ChkStopEffectsOnRemoteDisconnect_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (App.Settings?.Current == null) return;
+            App.Settings.Current.StopEffectsOnRemoteDisconnect = ChkStopEffectsOnRemoteDisconnect.IsChecked ?? false;
+            App.Settings.Save();
+        }
+
         private async Task StopRemoteControl()
         {
             if (App.RemoteControl != null)
@@ -16526,6 +16534,7 @@ namespace ConditioningControlPanel
             ChkStartHidden.IsChecked = s.StartMinimized;
             ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
             ChkOfflineMode.IsChecked = s.OfflineMode;
+            ChkStopEffectsOnRemoteDisconnect.IsChecked = s.StopEffectsOnRemoteDisconnect;
 
             // Update UI for offline mode state (disable login buttons, browser, etc.)
             if (s.OfflineMode)

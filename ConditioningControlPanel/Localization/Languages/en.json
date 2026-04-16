@@ -31,6 +31,8 @@
   "label_remote_controller_info": "Connected controller",
   "label_remote_no_commands": "No commands received yet",
   "label_remote_idle": "Idle — no controller connected",
+  "label_remote_stop_on_disconnect": "Stop effects when controller disconnects",
+  "desc_remote_stop_on_disconnect": "Off by default: effects keep running after a controller leaves so a new controller can see the current state. Turn on to snap everything off on disconnect.",
   "submenu_premium_badge": "✨ Premium",
   "gate_premium_locked": "Patreon Premium Feature",
   "gate_premium_subtitle": "Unlock to interact with the controls below",

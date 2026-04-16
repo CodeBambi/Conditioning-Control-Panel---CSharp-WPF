@@ -2978,6 +2978,23 @@ namespace ConditioningControlPanel.Models
 
         #endregion
 
+        #region Remote Control
+
+        private bool _stopEffectsOnRemoteDisconnect;
+        /// <summary>
+        /// When true, all effects started by a remote controller stop immediately
+        /// when the controller disconnects. When false (default), effects continue
+        /// running so a new controller can see the current state and the session
+        /// doesn't snap to a halt. The sub can always hit stop/panic manually.
+        /// </summary>
+        public bool StopEffectsOnRemoteDisconnect
+        {
+            get => _stopEffectsOnRemoteDisconnect;
+            set { _stopEffectsOnRemoteDisconnect = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
         #region Validation
 
         /// <summary>

@@ -8320,6 +8320,29 @@
                                 </Border>
                             </Grid>
 
+                            <!-- Behavior: stop effects when controller disconnects -->
+                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
+                                    BorderThickness="1" CornerRadius="10" Padding="20,14" Margin="0,0,0,16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Str label_remote_stop_on_disconnect}" Foreground="White"
+                                                   FontSize="14" FontWeight="Bold"/>
+                                        <TextBlock Text="{loc:Str desc_remote_stop_on_disconnect}"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                                   TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="1" x:Name="ChkStopEffectsOnRemoteDisconnect"
+                                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Margin="16,0,0,0"
+                                              Checked="ChkStopEffectsOnRemoteDisconnect_Changed"
+                                              Unchecked="ChkStopEffectsOnRemoteDisconnect_Changed"/>
+                                </Grid>
+                            </Border>
+
                             <!-- Stop session button -->
                             <Button x:Name="BtnStopRemote" Content="{loc:Str btn_stop_session}" Background="#FF4444"
                                     Foreground="White" FontWeight="Bold" FontSize="14" Padding="18,10"
