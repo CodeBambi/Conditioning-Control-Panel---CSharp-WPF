@@ -22,13 +22,13 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.8.2";
+        public const string AppVersion = "5.8.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.8.2 — Signed, Yours Truly
+        public const string CurrentPatchNotes = @"v5.8.3 — Signed, Yours Truly
 
 ✨ FEATURES
 • Auto-disconnect idle remote controllers after 2 minutes of inactivity
