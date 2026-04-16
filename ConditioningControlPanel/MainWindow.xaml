@@ -7726,6 +7726,7 @@
                         <RowDefinition Height="Auto"/> <!-- Header -->
                         <RowDefinition Height="Auto"/> <!-- Pulse -->
                         <RowDefinition Height="Auto"/> <!-- Presets -->
+                        <RowDefinition Height="Auto"/> <!-- Timing (two sliders) -->
                         <RowDefinition Height="Auto"/> <!-- Sources + Safety (two columns) -->
                         <RowDefinition Height="Auto"/> <!-- Advanced link -->
                     </Grid.RowDefinitions>
@@ -7793,44 +7794,92 @@
                                        HorizontalAlignment="Right"
                                        Foreground="{DynamicResource TextDimBrush}" FontSize="10" FontStyle="Italic"/>
                         </Grid>
-                        <ItemsControl x:Name="AwarenessPresetItems">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel HorizontalAlignment="Stretch"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48" BorderThickness="1"
-                                            CornerRadius="10" Padding="16,14" Margin="0,0,12,12" Width="218" Height="150"
-                                            Cursor="Hand" Tag="{Binding Id}" MouseLeftButtonUp="AwarenessPresetCard_Click"
-                                            ToolTip="{Binding LongDescription}"
-                                            ToolTipService.ShowDuration="20000"
-                                            ToolTipService.InitialShowDelay="400">
-                                        <StackPanel>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding Icon}" FontSize="26"/>
-                                                <Border Background="#2A1A3E" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                                        CornerRadius="4" Padding="5,1" Margin="8,4,0,0" VerticalAlignment="Center"
-                                                        Visibility="{Binding RequiresAi, Converter={StaticResource BoolToVisibility}}">
-                                                    <TextBlock Text="AI" Foreground="{DynamicResource PinkBrush}" FontSize="9" FontWeight="Bold"/>
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Text="{Binding Name}" Foreground="White" FontSize="14" FontWeight="Bold" Margin="0,6,0,2"/>
-                                            <TextBlock Text="{Binding Description}"
-                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
-                                            <TextBlock Text="✓ Installed" Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                                       FontWeight="Bold" Margin="0,8,0,0"
-                                                       Visibility="{Binding MasterEnabled, Converter={StaticResource BoolToVisibility}}"/>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <!-- Cards are built imperatively in MainWindow.RefreshAwarenessPresetCards
+                             so the trailing "+ New Preset" card can share the wrap flow with the
+                             real preset cards. -->
+                        <WrapPanel x:Name="AwarenessPresetItems" HorizontalAlignment="Stretch"/>
+                    </StackPanel>
+
+                    <!-- ==================== TIMING ==================== -->
+                    <StackPanel Grid.Row="3" Margin="0,0,0,14">
+                        <TextBlock Text="TIMING" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
+                                   Margin="4,0,4,10"/>
+                        <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
+                                BorderThickness="1" CornerRadius="10" Padding="18,14">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="14"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Col 0: global effect cooldown -->
+                                <StackPanel Grid.Column="0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="Cooldown between effects" Foreground="White" FontSize="12" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"/>
+                                        <Button Style="{StaticResource HelpButtonStyle}" Margin="6,0,0,0">
+                                            <Button.ToolTip>
+                                                <ToolTip>
+                                                    <StackPanel MaxWidth="340">
+                                                        <TextBlock Text="Cooldown between effects" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                            Minimum delay between any two Awareness reactions, from ANY trigger. Keeps her from spamming effects when lots of trigger words end up on screen or in your typing at once.
+                                                        </TextBlock>
+                                                        <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                            Lower = more reactive, higher = calmer pacing. 10s is the default. Max 180s.
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </ToolTip>
+                                            </Button.ToolTip>
+                                        </Button>
+                                    </StackPanel>
+                                    <Grid>
+                                        <Slider x:Name="SliderAwarenessGlobalCooldown" Minimum="1" Maximum="180"
+                                                TickFrequency="1" IsSnapToTickEnabled="True"
+                                                ValueChanged="SliderAwarenessGlobalCooldown_ValueChanged"/>
+                                        <TextBlock x:Name="TxtAwarenessGlobalCooldown" Text="10s"
+                                                   Foreground="{DynamicResource PinkBrush}" FontSize="10"
+                                                   HorizontalAlignment="Right" IsHitTestVisible="False"/>
+                                    </Grid>
+                                </StackPanel>
+
+                                <!-- Col 2: same-word cooldown -->
+                                <StackPanel Grid.Column="2">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="Same-word cooldown" Foreground="White" FontSize="12" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"/>
+                                        <Button Style="{StaticResource HelpButtonStyle}" Margin="6,0,0,0">
+                                            <Button.ToolTip>
+                                                <ToolTip>
+                                                    <StackPanel MaxWidth="340">
+                                                        <TextBlock Text="Same-word cooldown" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
+                                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
+                                                            Minimum gap before the SAME word can fire again, regardless of which trigger caught it. Stops a single word on screen from re-triggering on every OCR scan.
+                                                        </TextBlock>
+                                                        <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
+                                                            Independent of the "cooldown between effects" above — a different word can still fire within this window. 15s default. Max 180s.
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </ToolTip>
+                                            </Button.ToolTip>
+                                        </Button>
+                                    </StackPanel>
+                                    <Grid>
+                                        <Slider x:Name="SliderAwarenessSameWordCooldown" Minimum="1" Maximum="180"
+                                                TickFrequency="1" IsSnapToTickEnabled="True"
+                                                ValueChanged="SliderAwarenessSameWordCooldown_ValueChanged"/>
+                                        <TextBlock x:Name="TxtAwarenessSameWordCooldown" Text="15s"
+                                                   Foreground="{DynamicResource PinkBrush}" FontSize="10"
+                                                   HorizontalAlignment="Right" IsHitTestVisible="False"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
                     </StackPanel>
 
                     <!-- ==================== SOURCES + SAFETY ==================== -->
-                    <Grid Grid.Row="3" Margin="0,0,0,14">
+                    <Grid Grid.Row="4" Margin="0,0,0,14">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="14"/>
@@ -8035,7 +8084,7 @@
                     </Grid>
 
                     <!-- ==================== ADVANCED LINK ==================== -->
-                    <Grid Grid.Row="4" Margin="0,0,0,0"
+                    <Grid Grid.Row="5" Margin="0,0,0,0"
                           ToolTip="Opens a detailed editor for the currently installed preset where you can add/remove keywords, tweak per-trigger actions, and edit phrase pools. If no preset is installed yet, this link opens the App Info &amp; Data popup instead.">
                         <TextBlock HorizontalAlignment="Center">
                             <Hyperlink x:Name="LnkAwarenessAdvanced"

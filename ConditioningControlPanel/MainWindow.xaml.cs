@@ -7263,6 +7263,34 @@ namespace ConditioningControlPanel
             App.Settings.Current.KeywordGlobalCooldownSeconds = value;
         }
 
+        private void SliderAwarenessGlobalCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtAwarenessGlobalCooldown == null) return;
+            var value = (int)SliderAwarenessGlobalCooldown.Value;
+            TxtAwarenessGlobalCooldown.Text = $"{value}s";
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.KeywordGlobalCooldownSeconds = value;
+                App.Settings.Save();
+                // Mirror into the Settings-tab slider so both controls stay in sync
+                // even if the Settings tab has already been bound this session.
+                if (SliderKeywordGlobalCooldown != null && (int)SliderKeywordGlobalCooldown.Value != value)
+                    SliderKeywordGlobalCooldown.Value = value;
+            }
+        }
+
+        private void SliderAwarenessSameWordCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtAwarenessSameWordCooldown == null) return;
+            var value = (int)SliderAwarenessSameWordCooldown.Value;
+            TxtAwarenessSameWordCooldown.Text = $"{value}s";
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.KeywordPerKeywordCooldownSeconds = value;
+                App.Settings.Save();
+            }
+        }
+
         private void SliderKeywordSessionMultiplier_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading || TxtKeywordSessionMultiplier == null) return;
@@ -7772,6 +7800,19 @@ namespace ConditioningControlPanel
                 if (ChkAwarenessHighlight != null) ChkAwarenessHighlight.IsChecked = settings.KeywordHighlightEnabled;
                 if (ChkAwarenessHighlightVisibleInCapture != null) ChkAwarenessHighlightVisibleInCapture.IsChecked = settings.OcrHighlightVisibleInCapture;
                 SyncAwarenessHighlightSwatchUi();
+
+                if (SliderAwarenessGlobalCooldown != null)
+                {
+                    var v = Math.Clamp(settings.KeywordGlobalCooldownSeconds, 1, 180);
+                    SliderAwarenessGlobalCooldown.Value = v;
+                    if (TxtAwarenessGlobalCooldown != null) TxtAwarenessGlobalCooldown.Text = $"{v}s";
+                }
+                if (SliderAwarenessSameWordCooldown != null)
+                {
+                    var v = Math.Clamp(settings.KeywordPerKeywordCooldownSeconds, 1, 180);
+                    SliderAwarenessSameWordCooldown.Value = v;
+                    if (TxtAwarenessSameWordCooldown != null) TxtAwarenessSameWordCooldown.Text = $"{v}s";
+                }
 
                 UpdateAwarenessStatusIndicator(masterOn);
             }
@@ -8333,18 +8374,214 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Rebinds the Awareness tab preset card grid from the current preset service state.
-        /// Called on tab open and after any install/uninstall so the "installed" pip updates.
+        /// Rebuilds the Awareness tab preset card grid from the current preset service
+        /// state. Cards are generated imperatively so that a trailing "+ New Preset"
+        /// tile can share the wrap flow with the real preset cards.
+        ///
+        /// Called on tab open and after any install/uninstall/create/delete so the
+        /// "installed" pip and card list stay in sync.
         /// </summary>
         public void RefreshAwarenessPresetCards()
         {
             if (AwarenessPresetItems == null) return;
+            AwarenessPresetItems.Children.Clear();
+
             var presets = App.KeywordPresets?.VisiblePresets;
-            // Reassign to force re-bind even if the underlying list reference didn't change
-            AwarenessPresetItems.ItemsSource = null;
-            AwarenessPresetItems.ItemsSource = presets;
+            if (presets != null)
+            {
+                foreach (var preset in presets)
+                {
+                    if (preset == null) continue;
+                    AwarenessPresetItems.Children.Add(BuildAwarenessPresetCard(preset));
+                }
+            }
+
+            // Trailing "New Preset" card — starts a fresh user-authored preset.
+            AwarenessPresetItems.Children.Add(BuildNewPresetCard());
 
             UpdateAwarenessAdvancedLinkText();
+        }
+
+        /// <summary>
+        /// Imperative version of the old DataTemplate card markup. Produces the same
+        /// pink-accented tile with icon, name, description, AI badge, and ✓ Installed
+        /// indicator. Click routes to <see cref="AwarenessPresetCard_Click"/>.
+        /// </summary>
+        private System.Windows.Controls.Border BuildAwarenessPresetCard(KeywordTriggerPreset preset)
+        {
+            var card = new System.Windows.Controls.Border
+            {
+                Background = (System.Windows.Media.Brush)FindResource("SurfaceBgBrush"),
+                BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x2E, 0x2E, 0x48)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(16, 14, 16, 14),
+                Margin = new Thickness(0, 0, 12, 12),
+                Width = 218,
+                Height = 150,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Tag = preset.Id,
+                ToolTip = preset.LongDescription,
+            };
+            System.Windows.Controls.ToolTipService.SetShowDuration(card, 20000);
+            System.Windows.Controls.ToolTipService.SetInitialShowDelay(card, 400);
+            card.MouseLeftButtonUp += AwarenessPresetCard_Click;
+
+            var stack = new System.Windows.Controls.StackPanel();
+            card.Child = stack;
+
+            // Top row: emoji + optional AI badge.
+            var topRow = new System.Windows.Controls.StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+            };
+            stack.Children.Add(topRow);
+
+            topRow.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = preset.Icon,
+                FontSize = 26,
+            });
+
+            if (preset.RequiresAi)
+            {
+                topRow.Children.Add(new System.Windows.Controls.Border
+                {
+                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x2A, 0x1A, 0x3E)),
+                    BorderBrush = (System.Windows.Media.Brush)FindResource("PinkBrush"),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(5, 1, 5, 1),
+                    Margin = new Thickness(8, 4, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Child = new System.Windows.Controls.TextBlock
+                    {
+                        Text = "AI",
+                        Foreground = (System.Windows.Media.Brush)FindResource("PinkBrush"),
+                        FontSize = 9,
+                        FontWeight = FontWeights.Bold,
+                    },
+                });
+            }
+
+            // Name.
+            stack.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = preset.Name,
+                Foreground = System.Windows.Media.Brushes.White,
+                FontSize = 14,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 6, 0, 2),
+            });
+
+            // Description (trimmed by card size).
+            stack.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = preset.Description,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+            });
+
+            if (preset.MasterEnabled)
+            {
+                stack.Children.Add(new System.Windows.Controls.TextBlock
+                {
+                    Text = "✓ Installed",
+                    Foreground = (System.Windows.Media.Brush)FindResource("PinkBrush"),
+                    FontSize = 10,
+                    FontWeight = FontWeights.Bold,
+                    Margin = new Thickness(0, 8, 0, 0),
+                });
+            }
+
+            return card;
+        }
+
+        /// <summary>
+        /// Dashed-border "+ New Preset" tile that sits at the end of the preset grid
+        /// and kicks off the user-authored preset flow.
+        /// </summary>
+        private System.Windows.Controls.Border BuildNewPresetCard()
+        {
+            var card = new System.Windows.Controls.Border
+            {
+                Background = System.Windows.Media.Brushes.Transparent,
+                BorderBrush = (System.Windows.Media.Brush)FindResource("PinkBrush"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(16, 14, 16, 14),
+                Margin = new Thickness(0, 0, 12, 12),
+                Width = 218,
+                Height = 150,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = "Create your own keyword preset. You pick the words and what happens when they fire.",
+            };
+            card.MouseLeftButtonUp += NewPresetCard_Click;
+
+            var stack = new System.Windows.Controls.StackPanel
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            card.Child = stack;
+
+            stack.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = "＋",
+                FontSize = 40,
+                FontWeight = FontWeights.Light,
+                Foreground = (System.Windows.Media.Brush)FindResource("PinkBrush"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+            });
+            stack.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = "New Preset",
+                Foreground = System.Windows.Media.Brushes.White,
+                FontSize = 13,
+                FontWeight = FontWeights.SemiBold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 6, 0, 0),
+            });
+            stack.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = "Pick your own words",
+                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
+                FontSize = 10,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 2, 0, 0),
+            });
+
+            return card;
+        }
+
+        /// <summary>
+        /// Entry point for user-authored presets. Stages an unsaved preset shell and
+        /// opens the detail dialog in "new" mode — the first metadata edit or trigger
+        /// add is what commits it to settings.
+        /// </summary>
+        private void NewPresetCard_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var preset = new KeywordTriggerPreset
+            {
+                Id = "custom." + Guid.NewGuid().ToString("N")[..8],
+                Name = "My Preset",
+                Icon = "✨",
+                Description = "",
+                LongDescription = "",
+                Author = "You",
+                Version = 1,
+                IsBuiltIn = false,
+                RequiresAi = false,
+                MasterEnabled = false,
+                Triggers = new List<KeywordTrigger>(),
+            };
+
+            var dlg = new AwarenessPresetDetailDialog(preset, isNewCustomPreset: true) { Owner = this };
+            dlg.ShowDialog();
+
+            if (dlg.Changed)
+                RefreshAwarenessPresetCards();
         }
 
         /// <summary>
