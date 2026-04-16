@@ -9301,6 +9301,9 @@ namespace ConditioningControlPanel
                 {
                     _sessionEngine = new Services.SessionEngine(this);
                     _sessionEngine.SessionCompleted += OnSessionCompleted;
+                    _sessionEngine.ProgressUpdated += OnSessionProgressUpdated;
+                    _sessionEngine.PhaseChanged += OnSessionPhaseChanged;
+                    _sessionEngine.SessionStarted += OnSessionStarted;
                     _sessionEngine.SessionStopped += OnSessionStopped;
                 }
 
@@ -12278,6 +12281,14 @@ namespace ConditioningControlPanel
 
         private void BtnStartSession_Click(object sender, RoutedEventArgs e)
         {
+            // The button doubles as Start/Stop — state dictates which path to run.
+            // This also makes us resilient to any stale/duplicate Click subscriptions.
+            if (_sessionEngine?.IsRunning == true)
+            {
+                BtnStopSession_Click(sender, e);
+                return;
+            }
+
             if (_selectedSession == null || !_selectedSession.IsAvailable) return;
 
             var confirmed = ShowStyledDialog(
@@ -12399,8 +12410,9 @@ namespace ConditioningControlPanel
             Dispatcher.Invoke(() =>
             {
                 BtnStartSession.Content = Loc.Get("btn_stop_session_2");
-                BtnStartSession.Click -= BtnStartSession_Click;
-                BtnStartSession.Click += BtnStopSession_Click;
+                // Note: BtnStartSession_Click now dispatches to Stop when a session is running,
+                // so we no longer swap Click delegates (which caused duplicate-handler bugs
+                // when remote-started sessions skipped the Started event subscription).
 
                 // Update Start button to show session info
                 var session = _sessionEngine?.CurrentSession;
@@ -12435,8 +12447,8 @@ namespace ConditioningControlPanel
                 StopEngine();
 
                 BtnStartSession.Content = Loc.Get("btn_start_session");
-                BtnStartSession.Click -= BtnStopSession_Click;
-                BtnStartSession.Click += BtnStartSession_Click;
+                // Click handler is unchanged — BtnStartSession_Click dispatches based on
+                // _sessionEngine.IsRunning, so no subscription swap is needed.
 
                 // Reset Start button to normal state
                 TxtStartIcon.Text = "▶";
