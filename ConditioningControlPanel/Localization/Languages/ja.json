@@ -1101,6 +1101,7 @@
   "label_edit_the_prompts_that_control_how_your_compan": "コンパニオンの思考と応答を制御するプロンプトを編集。変更はウィンドウを閉じると自動保存されます。",
   "btn_enable_custom_prompts": "カスタムプロンプトを有効にする",
   "label_uncheck_to_use_default_prompts": "（チェックを外すとデフォルトプロンプトを使用）",
+  "label_check_to_use_local_AI": "（チェックを付けるとローカルAIを使用）",
   "setting_personality_normal_mode": "パーソナリティ（通常モード）",
   "setting_explicit_topic_handling": "過激なトピックの扱い",
   "setting_slut_mode_personality": "スラットモードパーソナリティ",
