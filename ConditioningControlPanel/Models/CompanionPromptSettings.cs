@@ -10,6 +10,7 @@ namespace ConditioningControlPanel.Models
         /// Whether to use custom prompt settings instead of defaults.
         /// </summary>
         public bool UseCustomPrompt { get; set; } = false;
+        public bool UseLocalAi { get; set; } = false;
 
         /// <summary>
         /// The companion's core personality in normal mode.
@@ -169,6 +170,7 @@ FREQUENCY RULE:
             return new CompanionPromptSettings
             {
                 UseCustomPrompt = UseCustomPrompt,
+                UseLocalAi = UseLocalAi,
                 Personality = Personality,
                 ExplicitReaction = ExplicitReaction,
                 SlutModePersonality = SlutModePersonality,

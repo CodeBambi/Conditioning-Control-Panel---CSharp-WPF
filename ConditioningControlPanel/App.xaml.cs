@@ -748,7 +748,7 @@ namespace ConditioningControlPanel
             Achievements?.Progress?.AwardDeferredStreakBonus();
 
             splash.SetProgress(0.85, "Initializing companion...");
-            Ai = new LocalAiService();
+            Ai = new AiServiceStrategy();
             Commands = new AiCommandService();
             WindowAwareness = new WindowAwarenessService();
             Patreon = new PatreonService();

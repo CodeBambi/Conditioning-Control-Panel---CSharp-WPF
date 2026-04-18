@@ -40,17 +40,6 @@ public class LocalAiService : IAiService
         _parser = new AiResponseParser(GetFallbackResponse);
         _knowledgeService = new KnowledgeService();
         _promptService = new PromptService();
-        App.Video.VideoEnded += OnVideoEnded;
-    }
-
-    private async void OnVideoEnded(object? sender, EventArgs e)
-    {
-        var messageEventArgs = (MessageEventArgs) e;
-        var reply = await GetVideoDoneReaction(messageEventArgs.Message);
-        if (!string.IsNullOrEmpty(reply))
-        {
-            AvatarTubeWindow.ShowAvatarLine(reply);
-        }
     }
 
     private void UpdateModel()

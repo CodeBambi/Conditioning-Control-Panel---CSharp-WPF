@@ -118,6 +118,7 @@ namespace ConditioningControlPanel
             var settings = App.Settings?.Current?.CompanionPrompt ?? new CompanionPromptSettings();
 
             ChkUseCustom.IsChecked = settings.UseCustomPrompt;
+            ChkUseLocal.IsChecked = settings.UseLocalAi;
 
             // Load values, falling back to defaults if empty
             TxtPersonality.Text = string.IsNullOrWhiteSpace(settings.Personality)
@@ -145,6 +146,7 @@ namespace ConditioningControlPanel
 
             var settings = App.Settings.Current.CompanionPrompt;
             settings.UseCustomPrompt = ChkUseCustom.IsChecked == true;
+            settings.UseLocalAi = ChkUseLocal.IsChecked == true;
             settings.Personality = TxtPersonality.Text;
             settings.ExplicitReaction = TxtExplicitReaction.Text;
             settings.SlutModePersonality = TxtSlutMode.Text;
@@ -166,8 +168,12 @@ namespace ConditioningControlPanel
         private void UpdateEnabledState()
         {
             var isEnabled = ChkUseCustom.IsChecked == true;
-            ContentPanel.IsEnabled = isEnabled;
-            ContentPanel.Opacity = isEnabled ? 1.0 : 0.5;
+            var isLocalAi = ChkUseLocal.IsChecked == true;
+            ContentPanel.IsEnabled = isEnabled && !isLocalAi;
+            ContentPanel.Opacity = isEnabled && !isLocalAi ? 1.0 : 0.5;
+            
+            LocalPanel.IsEnabled = isEnabled && isLocalAi;
+            LocalPanel.Opacity = isEnabled && isLocalAi ? 1.0 : 0.5;
         }
 
         private void ChkUseCustom_Changed(object sender, RoutedEventArgs e)

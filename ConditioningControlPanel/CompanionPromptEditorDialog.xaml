@@ -96,234 +96,252 @@
                 <TextBlock Text="{loc:Str label_edit_the_prompts_that_control_how_your_compan}"
                            Foreground="#808080" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/>
 
-                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                    <CheckBox x:Name="ChkUseCustom" Content="{loc:Str btn_enable_custom_prompts}"
-                              Foreground="White" VerticalContentAlignment="Center"
-                              Checked="ChkUseCustom_Changed" Unchecked="ChkUseCustom_Changed"/>
-                    <TextBlock Text="{loc:Str label_uncheck_to_use_default_prompts}"
-                               Foreground="#606060" FontSize="11"
-                               VerticalAlignment="Center" Margin="10,0,0,0"/>
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <CheckBox x:Name="ChkUseCustom" Content="{loc:Str btn_enable_custom_prompts}"
+                                  Foreground="White" VerticalContentAlignment="Center"
+                                  Checked="ChkUseCustom_Changed" Unchecked="ChkUseCustom_Changed"/>
+                        <TextBlock Text="{loc:Str label_uncheck_to_use_default_prompts}"
+                                   Foreground="#606060" FontSize="11"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <CheckBox x:Name="ChkUseLocal" Content="{loc:Str btn_enable_custom_prompts}"
+                                  Foreground="White" VerticalContentAlignment="Center"
+                                  Checked="ChkUseCustom_Changed" Unchecked="ChkUseCustom_Changed"/>
+                        <TextBlock Text="{loc:Str label_check_to_use_local_AI}"
+                                   Foreground="#606060" FontSize="11"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </StackPanel>
                 </StackPanel>
             </StackPanel>
         </Border>
 
         <!-- Scrollable Content -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20">
-            <StackPanel x:Name="ContentPanel">
-
-                <!-- Section 1: Personality -->
-                <Expander IsExpanded="True" Margin="0,0,0,15">
-                    <Expander.Header>
-                        <TextBlock Text="{loc:Str setting_personality_normal_mode}" Style="{StaticResource SectionHeader}"/>
-                    </Expander.Header>
-                    <StackPanel Margin="0,10,0,0">
-                        <TextBlock Style="{StaticResource SectionDescription}">
-                            Define who your companion is. Their vibe, tone, and what topics they like to talk about.
-                            This is used when Slut Mode is OFF.
-                        </TextBlock>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtPersonality" Style="{StaticResource PromptTextBox}"
-                                     Height="120" TextChanged="OnTextChanged"/>
-                            <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
-                                    VerticalAlignment="Top" Margin="5,0,0,0"
-                                    Click="ResetPersonality_Click"/>
-                        </Grid>
-                    </StackPanel>
-                </Expander>
-
-                <!-- Section 2: Explicit Reaction -->
-                <Expander IsExpanded="False" Margin="0,0,0,15">
-                    <Expander.Header>
-                        <TextBlock Text="{loc:Str setting_explicit_topic_handling}" Style="{StaticResource SectionHeader}"/>
-                    </Expander.Header>
-                    <StackPanel Margin="0,10,0,0">
-                        <TextBlock Style="{StaticResource SectionDescription}">
-                            How should your companion react when you mention explicit topics in Normal Mode?
-                            (In Slut Mode, this is ignored and they respond explicitly.)
-                        </TextBlock>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtExplicitReaction" Style="{StaticResource PromptTextBox}"
-                                     Height="100" TextChanged="OnTextChanged"/>
-                            <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
-                                    VerticalAlignment="Top" Margin="5,0,0,0"
-                                    Click="ResetExplicitReaction_Click"/>
-                        </Grid>
-                    </StackPanel>
-                </Expander>
-
-                <!-- Section 3: Slut Mode -->
-                <Expander IsExpanded="False" Margin="0,0,0,15">
-                    <Expander.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{loc:Str setting_slut_mode_personality}" Style="{StaticResource SectionHeader}"/>
-                            <TextBlock Text="{loc:Str label_patreon}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+            <StackPanel>
+                <StackPanel x:Name="LocalPanel">
+                    <!-- Section 7: AI Model Name -->
+                    <Expander IsExpanded="False" Margin="0,0,0,15">
+                        <Expander.Header>
+                            <TextBlock Text="{loc:Str label_ai_model_name}" Style="{StaticResource SectionHeader}"/>
+                        </Expander.Header>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource SectionDescription}" Text="{loc:Str label_ai_model_name_description}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtAiModel" Style="{StaticResource PromptTextBox}"
+                                         Height="40" VerticalContentAlignment="Center" TextChanged="OnTextChanged" AcceptsReturn="False"/>
+                                <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
+                                        VerticalAlignment="Top" Margin="5,0,0,0"
+                                        Click="ResetAiModel_Click"/>
+                            </Grid>
                         </StackPanel>
-                    </Expander.Header>
-                    <StackPanel Margin="0,10,0,0">
-                        <TextBlock Style="{StaticResource SectionDescription}">
-                            Define the companion's personality when Slut Mode is enabled.
-                            This is more explicit and trigger-heavy. Requires Patreon Premium.
-                        </TextBlock>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtSlutMode" Style="{StaticResource PromptTextBox}"
-                                     Height="140" TextChanged="OnTextChanged"/>
-                            <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
-                                    VerticalAlignment="Top" Margin="5,0,0,0"
-                                    Click="ResetSlutMode_Click"/>
-                        </Grid>
-                    </StackPanel>
-                </Expander>
+                    </Expander>
+                </StackPanel>
+                <StackPanel x:Name="ContentPanel">
 
-                <!-- Section 4: Knowledge Base -->
-                <Expander IsExpanded="False" Margin="0,0,0,15">
-                    <Expander.Header>
-                        <TextBlock Text="{loc:Str setting_knowledge_base}" Style="{StaticResource SectionHeader}"/>
-                    </Expander.Header>
-                    <StackPanel Margin="0,10,0,0">
-                        <TextBlock Style="{StaticResource SectionDescription}">
-                            Files, videos, and resources your companion knows about and can recommend.
-                            List audio files, video series, creators, etc.
-                        </TextBlock>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtKnowledgeBase" Style="{StaticResource PromptTextBox}"
-                                     Height="140" TextChanged="OnTextChanged"/>
-                            <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
-                                    VerticalAlignment="Top" Margin="5,0,0,0"
-                                    Click="ResetKnowledgeBase_Click"/>
-                        </Grid>
-                    </StackPanel>
-                </Expander>
-
-                <!-- Section 5: Context Reactions -->
-                <Expander IsExpanded="False" Margin="0,0,0,15">
-                    <Expander.Header>
-                        <TextBlock Text="{loc:Str setting_screen_awareness_reactions}" Style="{StaticResource SectionHeader}"/>
-                    </Expander.Header>
-                    <StackPanel Margin="0,10,0,0">
-                        <TextBlock Style="{StaticResource SectionDescription}">
-                            How your companion reacts to different apps and websites you're viewing.
-                            The companion receives context like [App: Chrome | Title: Reddit - r/BambiSleep].
-                        </TextBlock>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtContextReactions" Style="{StaticResource PromptTextBox}"
-                                     Height="180" TextChanged="OnTextChanged"/>
-                            <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
-                                    VerticalAlignment="Top" Margin="5,0,0,0"
-                                    Click="ResetContextReactions_Click"/>
-                        </Grid>
-                    </StackPanel>
-                </Expander>
-
-                <!-- Section 6: Output Rules -->
-                <Expander IsExpanded="False" Margin="0,0,0,15">
-                    <Expander.Header>
-                        <TextBlock Text="{loc:Str setting_output_rules}" Style="{StaticResource SectionHeader}"/>
-                    </Expander.Header>
-                    <StackPanel Margin="0,10,0,0">
-                        <TextBlock Style="{StaticResource SectionDescription}">
-                            Control how long responses are, emoji usage, and response frequency.
-                            Keep responses short for a texting feel.
-                        </TextBlock>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtOutputRules" Style="{StaticResource PromptTextBox}"
-                                     Height="100" TextChanged="OnTextChanged"/>
-                            <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
-                                    VerticalAlignment="Top" Margin="5,0,0,0"
-                                    Click="ResetOutputRules_Click"/>
-                        </Grid>
-                    </StackPanel>
-                </Expander>
-
-                <!-- Section 7: AI Model Name -->
-                <Expander IsExpanded="False" Margin="0,0,0,15">
-                    <Expander.Header>
-                        <TextBlock Text="{loc:Str label_ai_model_name}" Style="{StaticResource SectionHeader}"/>
-                    </Expander.Header>
-                    <StackPanel Margin="0,10,0,0">
-                        <TextBlock Style="{StaticResource SectionDescription}" Text="{loc:Str label_ai_model_name_description}"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtAiModel" Style="{StaticResource PromptTextBox}"
-                                     Height="40" VerticalContentAlignment="Center" TextChanged="OnTextChanged" AcceptsReturn="False"/>
-                            <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
-                                    VerticalAlignment="Top" Margin="5,0,0,0"
-                                    Click="ResetAiModel_Click"/>
-                        </Grid>
-                    </StackPanel>
-                </Expander>
-
-                <!-- Section 8: Global Knowledge Base Links -->
-                <Expander IsExpanded="False" Margin="0,0,0,15">
-                    <Expander.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{loc:Str setting_global_knowledge_base_links}" Style="{StaticResource SectionHeader}"/>
-                            <TextBlock Text="{loc:Str label_all_personalities}" Foreground="#50C878" FontSize="11"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    
+                    <!-- Section 1: Personality -->
+                    <Expander IsExpanded="True" Margin="0,0,0,15">
+                        <Expander.Header>
+                            <TextBlock Text="{loc:Str setting_personality_normal_mode}" Style="{StaticResource SectionHeader}"/>
+                        </Expander.Header>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource SectionDescription}">
+                                Define who your companion is. Their vibe, tone, and what topics they like to talk about.
+                                This is used when Slut Mode is OFF.
+                            </TextBlock>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtPersonality" Style="{StaticResource PromptTextBox}"
+                                         Height="120" TextChanged="OnTextChanged"/>
+                                <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
+                                        VerticalAlignment="Top" Margin="5,0,0,0"
+                                        Click="ResetPersonality_Click"/>
+                            </Grid>
                         </StackPanel>
-                    </Expander.Header>
-                    <StackPanel Margin="0,10,0,0">
-                        <TextBlock Style="{StaticResource SectionDescription}">
-                            Add URLs to hypno content that your companion knows about and can recommend.
-                            These links apply to ALL personalities, regardless of which preset is active.
-                        </TextBlock>
+                    </Expander>
 
-                        <!-- Links List -->
-                        <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="4" Padding="8" Margin="0,0,0,8">
-                            <ListBox x:Name="LstKnowledgeLinks" Height="120"
-                                     Background="Transparent" BorderThickness="0"
-                                     Foreground="White" FontSize="11"
-                                     SelectionMode="Single">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Margin="0,2">
-                                            <TextBlock Text="{Binding Title}" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="{Binding Url}" Foreground="#707070" FontSize="10"/>
-                                            <TextBlock Text="{Binding Description}" Foreground="#A0A0A0" FontSize="10"
-                                                       TextWrapping="Wrap" Visibility="{Binding Description, Converter={StaticResource NullToCollapsedConverter}}"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Border>
-
-                        <!-- Add/Remove Buttons -->
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="{loc:Str btn_add_link}" Style="{StaticResource ResetButton}"
-                                    Padding="12,6" Click="AddKnowledgeLink_Click"/>
-                            <Button Content="{loc:Str btn_remove_selected}" Style="{StaticResource ResetButton}"
-                                    Padding="12,6" Margin="8,0,0,0" Click="RemoveKnowledgeLink_Click"/>
+                    <!-- Section 2: Explicit Reaction -->
+                    <Expander IsExpanded="False" Margin="0,0,0,15">
+                        <Expander.Header>
+                            <TextBlock Text="{loc:Str setting_explicit_topic_handling}" Style="{StaticResource SectionHeader}"/>
+                        </Expander.Header>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource SectionDescription}">
+                                How should your companion react when you mention explicit topics in Normal Mode?
+                                (In Slut Mode, this is ignored and they respond explicitly.)
+                            </TextBlock>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtExplicitReaction" Style="{StaticResource PromptTextBox}"
+                                         Height="100" TextChanged="OnTextChanged"/>
+                                <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
+                                        VerticalAlignment="Top" Margin="5,0,0,0"
+                                        Click="ResetExplicitReaction_Click"/>
+                            </Grid>
                         </StackPanel>
-                    </StackPanel>
-                </Expander>
+                    </Expander>
 
+                    <!-- Section 3: Slut Mode -->
+                    <Expander IsExpanded="False" Margin="0,0,0,15">
+                        <Expander.Header>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{loc:Str setting_slut_mode_personality}" Style="{StaticResource SectionHeader}"/>
+                                <TextBlock Text="{loc:Str label_patreon}" Foreground="{DynamicResource SecondaryBrush}" FontSize="11"
+                                           VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            </StackPanel>
+                        </Expander.Header>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource SectionDescription}">
+                                Define the companion's personality when Slut Mode is enabled.
+                                This is more explicit and trigger-heavy. Requires Patreon Premium.
+                            </TextBlock>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtSlutMode" Style="{StaticResource PromptTextBox}"
+                                         Height="140" TextChanged="OnTextChanged"/>
+                                <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
+                                        VerticalAlignment="Top" Margin="5,0,0,0"
+                                        Click="ResetSlutMode_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Section 4: Knowledge Base -->
+                    <Expander IsExpanded="False" Margin="0,0,0,15">
+                        <Expander.Header>
+                            <TextBlock Text="{loc:Str setting_knowledge_base}" Style="{StaticResource SectionHeader}"/>
+                        </Expander.Header>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource SectionDescription}">
+                                Files, videos, and resources your companion knows about and can recommend.
+                                List audio files, video series, creators, etc.
+                            </TextBlock>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtKnowledgeBase" Style="{StaticResource PromptTextBox}"
+                                         Height="140" TextChanged="OnTextChanged"/>
+                                <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
+                                        VerticalAlignment="Top" Margin="5,0,0,0"
+                                        Click="ResetKnowledgeBase_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Section 5: Context Reactions -->
+                    <Expander IsExpanded="False" Margin="0,0,0,15">
+                        <Expander.Header>
+                            <TextBlock Text="{loc:Str setting_screen_awareness_reactions}" Style="{StaticResource SectionHeader}"/>
+                        </Expander.Header>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource SectionDescription}">
+                                How your companion reacts to different apps and websites you're viewing.
+                                The companion receives context like [App: Chrome | Title: Reddit - r/BambiSleep].
+                            </TextBlock>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtContextReactions" Style="{StaticResource PromptTextBox}"
+                                         Height="180" TextChanged="OnTextChanged" />
+                                <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
+                                        VerticalAlignment="Top" Margin="5,0,0,0"
+                                        Click="ResetContextReactions_Click" />
+                            </Grid>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Section 6: Output Rules -->
+                    <Expander IsExpanded="False" Margin="0,0,0,15">
+                        <Expander.Header>
+                            <TextBlock Text="{loc:Str setting_output_rules}" Style="{StaticResource SectionHeader}" />
+                        </Expander.Header>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource SectionDescription}">
+                                Control how long responses are, emoji usage, and response frequency.
+                                Keep responses short for a texting feel.
+                            </TextBlock>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtOutputRules" Style="{StaticResource PromptTextBox}"
+                                         Height="100" TextChanged="OnTextChanged" />
+                                <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
+                                        VerticalAlignment="Top" Margin="5,0,0,0"
+                                        Click="ResetOutputRules_Click" />
+                            </Grid>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- Section 8: Global Knowledge Base Links -->
+                    <Expander IsExpanded="False" Margin="0,0,0,15">
+                        <Expander.Header>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{loc:Str setting_global_knowledge_base_links}"
+                                           Style="{StaticResource SectionHeader}" />
+                                <TextBlock Text="{loc:Str label_all_personalities}" Foreground="#50C878" FontSize="11"
+                                           VerticalAlignment="Center" Margin="8,0,0,0" />
+                            </StackPanel>
+                        </Expander.Header>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource SectionDescription}">
+                                Add URLs to hypno content that your companion knows about and can recommend.
+                                These links apply to ALL personalities, regardless of which preset is active.
+                            </TextBlock>
+
+                            <!-- Links List -->
+                            <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="4" Padding="8"
+                                    Margin="0,0,0,8">
+                                <ListBox x:Name="LstKnowledgeLinks" Height="120"
+                                         Background="Transparent" BorderThickness="0"
+                                         Foreground="White" FontSize="11"
+                                         SelectionMode="Single">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,2">
+                                                <TextBlock Text="{Binding Title}" Foreground="{DynamicResource PinkBrush}"
+                                                           FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Url}" Foreground="#707070" FontSize="10" />
+                                                <TextBlock Text="{Binding Description}" Foreground="#A0A0A0" FontSize="10"
+                                                           TextWrapping="Wrap"
+                                                           Visibility="{Binding Description, Converter={StaticResource NullToCollapsedConverter}}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+
+                            <!-- Add/Remove Buttons -->
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="{loc:Str btn_add_link}" Style="{StaticResource ResetButton}"
+                                        Padding="12,6" Click="AddKnowledgeLink_Click" />
+                                <Button Content="{loc:Str btn_remove_selected}" Style="{StaticResource ResetButton}"
+                                        Padding="12,6" Margin="8,0,0,0" Click="RemoveKnowledgeLink_Click" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Expander>
+
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
 
