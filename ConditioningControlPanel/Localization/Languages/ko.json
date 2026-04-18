@@ -1100,6 +1100,7 @@
   "label_active": "활성:",
   "label_edit_the_prompts_that_control_how_your_compan": "컴패니언의 사고와 응답 방식을 제어하는 프롬프트를 편집해요. 이 창을 닫으면 변경 사항이 자동으로 저장돼요.",
   "btn_enable_custom_prompts": "커스텀 프롬프트 활성화",
+  "btn_enable_local_AI_prompts": "로컬 AI 프롬프트 활성화",
   "label_uncheck_to_use_default_prompts": "(기본 프롬프트를 사용하려면 체크 해제)",
   "label_check_to_use_local_AI": "(체크를 해제하면 로컬 AI를 사용)",
   "setting_personality_normal_mode": "성격 (일반 모드)",

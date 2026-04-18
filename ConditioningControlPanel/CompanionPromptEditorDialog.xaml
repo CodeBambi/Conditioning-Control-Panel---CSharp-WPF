@@ -106,7 +106,7 @@
                                    VerticalAlignment="Center" Margin="10,0,0,0"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                        <CheckBox x:Name="ChkUseLocal" Content="{loc:Str btn_enable_custom_prompts}"
+                        <CheckBox x:Name="ChkUseLocal" Content="{loc:Str btn_enable_local_AI_prompts}"
                                   Foreground="White" VerticalContentAlignment="Center"
                                   Checked="ChkUseCustom_Changed" Unchecked="ChkUseCustom_Changed"/>
                         <TextBlock Text="{loc:Str label_check_to_use_local_AI}"

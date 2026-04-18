@@ -1082,6 +1082,7 @@
   "label_active": "Активно:",
   "label_edit_the_prompts_that_control_how_your_compan": "Редактируй промпты, определяющие поведение и ответы компаньона. Изменения сохраняются автоматически при закрытии окна.",
   "btn_enable_custom_prompts": "Включить свои промпты",
+  "btn_enable_local_AI_prompts": "Включить промпты локального ИИ",
   "label_uncheck_to_use_default_prompts": "(Сними галочку для стандартных промптов)",
   "label_check_to_use_local_AI": "(Поставь галочку для использования локального ИИ)",
   "setting_personality_normal_mode": "Личность (обычный режим)",

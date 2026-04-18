@@ -1100,6 +1100,7 @@
   "label_active": "活跃：",
   "label_edit_the_prompts_that_control_how_your_compan": "编辑控制伙伴思考和回复方式的提示词。关闭此窗口时更改将自动保存。",
   "btn_enable_custom_prompts": "启用自定义提示词",
+  "btn_enable_local_AI_prompts": "启用本地 AI 提示词",
   "label_uncheck_to_use_default_prompts": "（取消勾选以使用默认提示词）",
   "label_check_to_use_local_AI": "（勾选以使用本地 AI）",
   "setting_personality_normal_mode": "个性（正常模式）",
